@@ -1,3 +1,19 @@
+# Standard library imports
+import json
+import logging
+import os
+import pickle
+import platform
+import queue
+import subprocess
+import threading
+import time
+from datetime import datetime, timedelta
+from dataclasses import dataclass
+from enum import Enum
+from typing import Dict, List, Optional, Tuple, Any, TYPE_CHECKING
+
+# GUI imports
 import tkinter as tk
 from tkinter import ttk, scrolledtext, messagebox
 
@@ -21,14 +37,6 @@ try:
 except ImportError:
     print("WARNING: numpy not available - using basic math operations")
     np = None
-from datetime import datetime, timedelta
-import threading
-import time
-import json
-import logging
-from dataclasses import dataclass
-from typing import Dict, List, Optional, Tuple, Any, TYPE_CHECKING
-from enum import Enum
 
 # TYPE_CHECKING imports for proper type annotations
 if TYPE_CHECKING:
@@ -36,28 +44,17 @@ if TYPE_CHECKING:
 else:
     # Runtime fallback to avoid import errors
     DataFrame = Any
-import queue
-import os
-import pickle
-import subprocess
-import platform
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
 
-def serialize_datetime(obj):
-    """Convert datetime objects to ISO strings for JSON serialization"""
-    if isinstance(obj, datetime):
-        return obj.isoformat()
-    return obj
-
-def serialize_datetime_dict(data):
-    """Recursively convert datetime objects in nested dictionaries to ISO strings"""
+def serialize_datetime_objects(data):
+    """Convert datetime objects to ISO strings for JSON serialization (supports nested structures)"""
     if isinstance(data, dict):
-        return {k: serialize_datetime_dict(v) for k, v in data.items()}
+        return {k: serialize_datetime_objects(v) for k, v in data.items()}
     elif isinstance(data, list):
-        return [serialize_datetime_dict(item) for item in data]
+        return [serialize_datetime_objects(item) for item in data]
     elif isinstance(data, datetime):
         return data.isoformat()
     return data
@@ -84,19 +81,28 @@ class InputValidator:
     """Input validation utility class"""
     
     @staticmethod
+    def _validate_numeric(value, name: str, allow_types=(int, float)):
+        """Common numeric validation helper"""
+        if not isinstance(value, allow_types):
+            raise ValidationError(f"{name} must be numeric, got {type(value)}")
+        return float(value)
+    
+    @staticmethod
+    def _validate_positive(value: float, name: str):
+        """Common positive number validation helper"""
+        if value <= 0:
+            raise ValidationError(f"{name} must be positive, got {value}")
+    
+    @staticmethod
     def validate_volume(volume: float, min_volume: float = 0.01, max_volume: float = 100.0) -> float:
         """Validate trading volume with MT5 compatibility"""
-        if not isinstance(volume, (int, float)):
-            raise ValidationError(f"Volume must be numeric, got {type(volume)}")
+        volume = InputValidator._validate_numeric(volume, "Volume")
+        InputValidator._validate_positive(volume, "Volume")
         
-        volume = float(volume)
-        if volume <= 0:
-            raise ValidationError(f"Volume must be positive, got {volume}")
+        # Apply limits with auto-correction
         if volume < min_volume:
-            # Round up to minimum instead of failing
             volume = min_volume
         if volume > max_volume:
-            # Cap at maximum instead of failing
             volume = max_volume
         
         # Round to 2 decimal places for MT5 compatibility
@@ -125,12 +131,9 @@ class InputValidator:
     @staticmethod
     def validate_price(price: float, min_price: float = 0.0001) -> float:
         """Validate price values"""
-        if not isinstance(price, (int, float)):
-            raise ValidationError(f"Price must be numeric, got {type(price)}")
+        price = InputValidator._validate_numeric(price, "Price")
+        InputValidator._validate_positive(price, "Price")
         
-        price = float(price)
-        if price <= 0:
-            raise ValidationError(f"Price must be positive, got {price}")
         if price < min_price:
             raise ValidationError(f"Price {price} below minimum {min_price}")
         
@@ -148,7 +151,6 @@ class InputValidator:
         
         return direction
 
-@dataclass
 @dataclass
 class Signal:
     """Signal data structure"""
@@ -1721,10 +1723,6 @@ class TradingSystem:
             self.log(f"Error calculating risk-based volume: {str(e)}", "ERROR")
             return self.base_lot_size
 
-    def calculate_lot_size(self, signal: Signal) -> float:
-        """Calculate dynamic lot size - wrapper for new method"""
-        return self.calculate_dynamic_lot_size(signal)
-
     # 🎯 Zone-Based Trading System Methods
     
     def _get_positions_hash(self) -> str:
@@ -2222,7 +2220,7 @@ class TradingSystem:
                 raise ValidationError("Circuit breaker is open")
             
             # Calculate and validate lot size
-            lot_size = self.calculate_lot_size(signal)
+            lot_size = self.calculate_dynamic_lot_size(signal)
             lot_size = InputValidator.validate_volume(lot_size)
             
             # Validate order type
@@ -2704,7 +2702,7 @@ class TradingSystem:
                 congestion_score = candidate['zone_congestion'] * 10  # 10 points per excess position
                 
                 # Volume match with signal
-                signal_volume = self.calculate_lot_size(signal)
+                signal_volume = self.calculate_dynamic_lot_size(signal)
                 volume_diff = abs(signal_volume - pos.volume)
                 volume_score = max(0, 20 - (volume_diff * 100))  # Max 20 points
                 
@@ -2853,7 +2851,7 @@ class TradingSystem:
                 return 0  # ไม่ปิดถ้ากำไรต่ำเกินไป
             
             # 2. Volume match score (20 points)
-            signal_volume = self.calculate_lot_size(signal)
+            signal_volume = self.calculate_dynamic_lot_size(signal)
             volume_diff = abs(signal_volume - position.volume)
             volume_match = max(0, 1 - (volume_diff / max(signal_volume, position.volume)))
             score += volume_match * 20
@@ -4728,9 +4726,9 @@ class TradingSystem:
                 "checksum": None,  # Will be calculated
                 
                 # Position tracking (with validation and datetime serialization)
-                "position_tracker": serialize_datetime_dict(self.position_tracker if isinstance(self.position_tracker, dict) else {}),
-                "active_hedges": serialize_datetime_dict(self.active_hedges if isinstance(self.active_hedges, dict) else {}),
-                "hedge_pairs": serialize_datetime_dict(self.hedge_pairs if isinstance(self.hedge_pairs, dict) else {}),
+                "position_tracker": serialize_datetime_objects(self.position_tracker if isinstance(self.position_tracker, dict) else {}),
+                "active_hedges": serialize_datetime_objects(self.active_hedges if isinstance(self.active_hedges, dict) else {}),
+                "hedge_pairs": serialize_datetime_objects(self.hedge_pairs if isinstance(self.hedge_pairs, dict) else {}),
                 
                 # Statistics (with defaults)
                 "total_signals": getattr(self, 'total_signals', 0),
@@ -4751,7 +4749,7 @@ class TradingSystem:
                 "group_profit_captured": getattr(self, 'group_profit_captured', 0.0),
                 
                 # Hedge analytics
-                "hedge_analytics": serialize_datetime_dict(getattr(self, 'hedge_analytics', {})),
+                "hedge_analytics": serialize_datetime_objects(getattr(self, 'hedge_analytics', {})),
                 
                 # Portfolio info
                 "portfolio_health": getattr(self, 'portfolio_health', 100.0),
