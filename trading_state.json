@@ -1,0 +1,161 @@
+{
+  "timestamp": "2025-09-02T15:57:57.031505",
+  "version": "3.1",
+  "checksum": "c515fd3cecf9ef770e487ff2209d4795",
+  "position_tracker": {
+    "28285104": {
+      "birth_time": "2025-09-02T15:37:43.790192",
+      "initial_price": 3497.53,
+      "max_profit": -32.66,
+      "min_profit": -44.72,
+      "role_history": [
+        "SACRIFICE"
+      ],
+      "efficiency_history": [
+        "poor"
+      ],
+      "peak_profit_per_lot": -1633.0,
+      "contribution_score": 0.0,
+      "hold_score": 80,
+      "adaptive_target": 5.76
+    },
+    "28292893": {
+      "birth_time": "2025-09-02T15:37:43.790192",
+      "initial_price": 3495.91,
+      "max_profit": -58.84,
+      "min_profit": -82.96,
+      "role_history": [
+        "SACRIFICE"
+      ],
+      "efficiency_history": [
+        "poor"
+      ],
+      "peak_profit_per_lot": -1471.0,
+      "contribution_score": 0.0,
+      "hold_score": 70,
+      "adaptive_target": 4.319999999999999
+    },
+    "28306816": {
+      "birth_time": "2025-09-02T15:37:43.790192",
+      "initial_price": 3489.14,
+      "max_profit": -15.88,
+      "min_profit": -27.94,
+      "role_history": [
+        "SACRIFICE"
+      ],
+      "efficiency_history": [
+        "poor"
+      ],
+      "peak_profit_per_lot": -794.0,
+      "contribution_score": 0.0,
+      "hold_score": 80,
+      "adaptive_target": 5.76
+    },
+    "28311377": {
+      "birth_time": "2025-09-02T15:37:43.790192",
+      "initial_price": 3486.2,
+      "max_profit": -5.0,
+      "min_profit": -11.03,
+      "role_history": [
+        "SACRIFICE"
+      ],
+      "efficiency_history": [
+        "poor"
+      ],
+      "peak_profit_per_lot": -500.0,
+      "contribution_score": 0.0,
+      "hold_score": 80,
+      "adaptive_target": 5.76
+    },
+    "28320030": {
+      "birth_time": "2025-09-02T15:37:43.790192",
+      "initial_price": 3484.22,
+      "max_profit": -9.06,
+      "min_profit": -27.15,
+      "role_history": [
+        "SACRIFICE"
+      ],
+      "efficiency_history": [
+        "poor"
+      ],
+      "peak_profit_per_lot": -302.0,
+      "contribution_score": 0.0,
+      "hold_score": 70,
+      "adaptive_target": 4.319999999999999
+    },
+    "28332190": {
+      "birth_time": "2025-09-02T15:37:43.790192",
+      "initial_price": 3475.49,
+      "max_profit": -0.52,
+      "min_profit": -24.64,
+      "role_history": [
+        "SACRIFICE",
+        "HG"
+      ],
+      "efficiency_history": [
+        "poor"
+      ],
+      "peak_profit_per_lot": -13.0,
+      "contribution_score": 0.0,
+      "hold_score": 80,
+      "adaptive_target": 5.76
+    },
+    "28334123": {
+      "birth_time": "2025-09-02T15:37:43.790192",
+      "initial_price": 3479.76,
+      "max_profit": 1.44,
+      "min_profit": -4.59,
+      "role_history": [
+        "HG",
+        "SUPPORT",
+        "HG",
+        "SUPPORT",
+        "HG",
+        "SACRIFICE",
+        "HG",
+        "SACRIFICE"
+      ],
+      "efficiency_history": [
+        "poor",
+        "fair",
+        "poor",
+        "fair",
+        "good",
+        "fair",
+        "poor"
+      ],
+      "peak_profit_per_lot": 144.0,
+      "contribution_score": 0.0,
+      "hold_score": 80,
+      "adaptive_target": 5.76
+    }
+  },
+  "active_hedges": {},
+  "hedge_pairs": {},
+  "total_signals": 28,
+  "successful_signals": 29,
+  "last_signal_time": "2025-09-02T15:50:40.956732",
+  "total_redirects": 1,
+  "successful_redirects": 1,
+  "redirect_profit_captured": 5.3,
+  "last_redirect_time": "2025-09-02T14:50:08.623303",
+  "total_pair_closes": 5,
+  "successful_pair_closes": 5,
+  "pair_profit_captured": 19.96,
+  "total_group_closes": 0,
+  "group_profit_captured": 0.0,
+  "hedge_analytics": {
+    "total_hedges_created": 0,
+    "successful_recoveries": 0,
+    "total_recovery_profit": 0.0,
+    "avg_recovery_time_hours": 0.0,
+    "hedge_effectiveness": 0.0,
+    "active_hedge_pairs": 0
+  },
+  "portfolio_health": 0,
+  "base_lot": 0.01,
+  "smart_router_enabled": true,
+  "pair_closing_enabled": true,
+  "hedge_system_enabled": true,
+  "drawdown_management_enabled": true
+}
