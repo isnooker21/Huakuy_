@@ -172,8 +172,8 @@ class Position:
     current_price: float
     profit: float
     profit_per_lot: float
-    role: str  # MAIN, HG, SUPPORT, SACRIFICE
-    efficiency: str  # excellent, good, fair, poor
+    role: str = "UNKNOWN"  # MAIN, HG, SUPPORT, SACRIFICE
+    efficiency: str = "fair"  # excellent, good, fair, poor
 
 class OrderRole(Enum):
     MAIN = "MAIN"
@@ -237,6 +237,10 @@ class TradingSystem:
 
         # 🎯 Zone-Based Trading System Configuration
         self.zone_size_pips = 25  # ขนาด zone (pips)
+        
+        # 🐛 Debug flags
+        self.debug_distance_calculation = False  # เปิดเพื่อ debug การคำนวณระยะ
+        self.debug_position_tracking = False  # เปิดเพื่อ debug การ track positions
         self.max_positions_per_zone = 3  # จำกัดไม้ต่อ zone
         self.min_position_distance_pips = 15  # ระยะห่างขั้นต่ำระหว่างไม้
         self.force_zone_diversification = True  # บังคับกระจาย
@@ -283,12 +287,12 @@ class TradingSystem:
         self.selected_terminal = None
         self.terminal_scan_in_progress = False
 
-        # 🛡️ Anti-Exposure Protection System
+        # 🛡️ Anti-Exposure Protection System (IMPROVED)
         self.anti_exposure_enabled = True
         self.max_exposure_distance = 150  # pips (1.5 points for XAUUSD)
-        self.exposure_warning_distance = 100  # pips
+        self.exposure_warning_distance = 50   # ลดจาก 100 → 50 pips
         self.auto_hedge_enabled = True
-        self.hedge_trigger_distance = 120  # pips
+        self.hedge_trigger_distance = 30     # ลดจาก 120 → 30 pips (ทำงานเร็วขึ้นมาก!)
         
         # 🎯 Support/Resistance Detection
         self.sr_detection_enabled = True
@@ -304,11 +308,16 @@ class TradingSystem:
         self.max_hedge_volume = 5.0
         self.hedge_distance_multiplier = 1.5
         
-        # 🛠️ Advanced Drawdown Management (NEW)
+        # 🛠️ Advanced Drawdown Management (IMPROVED)
         self.drawdown_management_enabled = True
-        self.drawdown_trigger_pips = 150  # เริ่มคิดหาทางแก้ที่ 150 pips
-        self.critical_drawdown_pips = 250  # ถือว่าวิกฤตที่ 250 pips
-        self.emergency_drawdown_pips = 350  # ต้องแก้ทันทีที่ 350 pips
+        self.drawdown_trigger_pips = 50   # ลดจาก 150 → 50 pips (ทำงานเร็วขึ้น)
+        self.critical_drawdown_pips = 100 # ลดจาก 250 → 100 pips  
+        self.emergency_drawdown_pips = 150 # ลดจาก 350 → 150 pips
+        
+        # 🔄 Portfolio Balance Protection
+        self.balance_protection_enabled = True
+        self.min_balance_ratio = 0.2  # อย่างน้อย 20:80 หรือ 80:20
+        self.balance_preference_when_stuck = "HEDGE_SUPPORT"  # สร้าง hedge เพื่อช่วยไม้ที่ติด
         
         # 🎯 Dynamic Hedge Strategy
         self.hedge_strategy = "SMART_RECOVERY"  # IMMEDIATE, SMART_RECOVERY, AVERAGING, HYBRID
@@ -425,17 +434,55 @@ class TradingSystem:
         self.recent_volatility = 1.0  # Default volatility level
 
     def log(self, message: str, level: str = "INFO"):
-        """Thread-safe logging"""
+        """Enhanced thread-safe logging with better formatting"""
         timestamp = datetime.now().strftime("%H:%M:%S")
-        log_message = f"[{timestamp}] {level}: {message}"
+        
+        # Enhanced formatting with emojis and better spacing
+        level_icons = {
+            "INFO": "ℹ️ ",
+            "WARNING": "⚠️ ",
+            "ERROR": "❌",
+            "SUCCESS": "✅",
+            "DEBUG": "🐛"
+        }
+        
+        icon = level_icons.get(level, "📝")
+        
+        # Clean and format message
+        clean_message = message.strip()
+        
+        # Better formatting for different message types
+        if "position" in clean_message.lower() and "tracking" in clean_message.lower():
+            # Position tracking messages
+            log_message = f"[{timestamp}] {icon} POSITION: {clean_message}"
+        elif "closing" in clean_message.lower() or "close" in clean_message.lower():
+            # Closing system messages  
+            log_message = f"[{timestamp}] 🎯 CLOSING: {clean_message}"
+        elif "signal" in clean_message.lower():
+            # Signal messages
+            log_message = f"[{timestamp}] 📡 SIGNAL: {clean_message}"
+        elif "balance" in clean_message.lower() or "profit" in clean_message.lower():
+            # Balance/profit messages
+            log_message = f"[{timestamp}] 💰 FINANCE: {clean_message}"
+        elif level == "ERROR":
+            # Error messages with more context
+            log_message = f"[{timestamp}] {icon} ERROR: {clean_message}"
+        elif level == "WARNING":
+            # Warning messages
+            log_message = f"[{timestamp}] {icon} WARN: {clean_message}"
+        else:
+            # General messages
+            log_message = f"[{timestamp}] {icon} {clean_message}"
+        
         self.log_queue.put(log_message)
         
+        # Also log to Python logger
         if level == "ERROR":
-            logger.error(message)
+            logger.error(clean_message)
         elif level == "WARNING":
-            logger.warning(message)
+            logger.warning(clean_message)
         else:
-            logger.info(message)
+            logger.info(clean_message)
 
     def detect_broker_filling_type(self) -> int:
         """Auto-detect broker's supported filling type"""
@@ -2893,7 +2940,7 @@ class TradingSystem:
     def calculate_adaptive_profit_target(self, position: Position) -> float:
         """คำนวณเป้าหมายกำไรแบบปรับตัว (เป็น %)"""
         try:
-            base_target_pct = self.profit_harvest_threshold_percent
+            base_target_pct = getattr(self, 'profit_harvest_threshold_percent', 8.0)
             
             # ปรับตาม portfolio health
             if self.portfolio_health < 40:
@@ -2902,8 +2949,11 @@ class TradingSystem:
                 base_target_pct *= 1.3
             
             # ปรับตาม balance
-            if self.will_improve_balance_by_closing(position):
-                base_target_pct *= 0.75
+            try:
+                if self.will_improve_balance_by_closing(position):
+                    base_target_pct *= 0.75
+            except Exception:
+                pass  # ไม่ต้องปรับถ้า error
             
             # ปรับตาม volatility
             if hasattr(self, 'recent_volatility'):
@@ -2915,7 +2965,7 @@ class TradingSystem:
             return max(2.0, min(20.0, base_target_pct))
             
         except Exception as e:
-            return self.profit_harvest_threshold_percent
+            return getattr(self, 'profit_harvest_threshold_percent', 8.0)
 
     def calculate_balance_after_close(self, position: Position, current_buy_ratio: float) -> float:
         """คำนวณ balance หลังจากปิด position"""
@@ -3032,9 +3082,48 @@ class TradingSystem:
     def track_position_lifecycle(self, position: Position):
         """ติดตามวงจรชีวิตของแต่ละ position"""
         try:
+            # Debug logging
+            if self.debug_position_tracking:
+                self.log(f"🐛 Tracking position: {position}", "DEBUG")
+                self.log(f"🐛 Current tracker keys: {list(self.position_tracker.keys())}", "DEBUG")
+                
+            # ตรวจสอบว่า position เป็น object ที่ถูกต้อง
+            if position is None:
+                self.log("Position is None", "ERROR")
+                return
+                
+            if not isinstance(position, Position):
+                self.log(f"Invalid position type: {type(position)}", "ERROR")
+                return
+            
+            # ตรวจสอบ required attributes
+            required_attrs = ['ticket', 'open_price', 'profit', 'profit_per_lot']
+            for attr in required_attrs:
+                if not hasattr(position, attr):
+                    self.log(f"Position missing required attribute: {attr}", "ERROR")
+                    return
+                if getattr(position, attr) is None:
+                    self.log(f"Position {attr} is None", "ERROR")
+                    return
+            
             ticket = position.ticket
             
-            if (ticket not in self.position_tracker) and (str(ticket) not in self.position_tracker):
+            # ตรวจสอบ ticket validity
+            if not isinstance(ticket, (int, str)) or ticket == 0:
+                self.log(f"Invalid ticket format: {ticket} (type: {type(ticket)})", "ERROR")
+                return
+                
+            if not hasattr(position, 'role') or position.role is None:
+                position.role = "UNKNOWN"
+                
+            if not hasattr(position, 'efficiency') or position.efficiency is None:
+                position.efficiency = "fair"
+            
+            # สร้างหรือดึง tracker (ใช้ get() เพื่อความปลอดภัย)
+            if ticket not in self.position_tracker:
+                if self.debug_position_tracking:
+                    self.log(f"🐛 Creating new tracker for ticket {ticket}", "DEBUG")
+                    
                 self.position_tracker[ticket] = {
                     'birth_time': datetime.now().isoformat(),
                     'initial_price': position.open_price,
@@ -3045,30 +3134,73 @@ class TradingSystem:
                     'peak_profit_per_lot': position.profit_per_lot,
                     'contribution_score': 0.0,
                     'hold_score': 50,
-                    'adaptive_target': self.profit_harvest_threshold
+                    'adaptive_target': getattr(self, 'profit_harvest_threshold_percent', 8.0)
                 }
+                
+                if self.debug_position_tracking:
+                    self.log(f"🐛 Tracker created successfully for {ticket}", "DEBUG")
             
-            tracker = self.position_tracker[ticket]
+            # ใช้ get() เพื่อป้องกัน KeyError
+            tracker = self.position_tracker.get(ticket)
+            if tracker is None:
+                self.log(f"ERROR: Tracker for {ticket} is None after creation!", "ERROR")
+                self.log(f"ERROR: Available keys: {list(self.position_tracker.keys())}", "ERROR")
+                # สร้างใหม่อีกครั้งเป็น fallback
+                self.position_tracker[ticket] = {
+                    'birth_time': datetime.now().isoformat(),
+                    'initial_price': position.open_price,
+                    'max_profit': position.profit,
+                    'min_profit': position.profit,
+                    'role_history': [position.role],
+                    'efficiency_history': [position.efficiency],
+                    'peak_profit_per_lot': position.profit_per_lot,
+                    'contribution_score': 0.0,
+                    'hold_score': 50,
+                    'adaptive_target': 8.0
+                }
+                tracker = self.position_tracker[ticket]
+                self.log(f"WARNING: Created emergency fallback tracker for {ticket}", "WARNING")
             
-            # อัพเดทข้อมูล
-            tracker['max_profit'] = max(tracker['max_profit'], position.profit)
-            tracker['min_profit'] = min(tracker['min_profit'], position.profit)
-            tracker['peak_profit_per_lot'] = max(tracker['peak_profit_per_lot'], position.profit_per_lot)
+            # อัพเดทข้อมูล (ป้องกัน None values)
+            if position.profit is not None:
+                tracker['max_profit'] = max(tracker.get('max_profit', 0), position.profit)
+                tracker['min_profit'] = min(tracker.get('min_profit', 0), position.profit)
             
-            # คำนวณ adaptive target
-            tracker['adaptive_target'] = self.calculate_adaptive_profit_target(position)
+            if position.profit_per_lot is not None:
+                tracker['peak_profit_per_lot'] = max(tracker.get('peak_profit_per_lot', 0), position.profit_per_lot)
             
-            # คำนวณ hold score
-            tracker['hold_score'] = self.calculate_hold_score(position, tracker)
+            # คำนวณ adaptive target (ป้องกัน error)
+            try:
+                tracker['adaptive_target'] = self.calculate_adaptive_profit_target(position)
+            except Exception as target_error:
+                self.log(f"Error calculating adaptive target for {ticket}: {target_error}", "WARNING")
+                tracker['adaptive_target'] = getattr(self, 'profit_harvest_threshold_percent', 8.0)
             
-            # อัพเดทประวัติ
-            if tracker['role_history'][-1] != position.role:
-                tracker['role_history'].append(position.role)
-            if tracker['efficiency_history'][-1] != position.efficiency:
-                tracker['efficiency_history'].append(position.efficiency)
+            # คำนวณ hold score (ป้องกัน error)
+            try:
+                tracker['hold_score'] = self.calculate_hold_score(position, tracker)
+            except Exception as score_error:
+                self.log(f"Error calculating hold score for {ticket}: {score_error}", "WARNING")
+                tracker['hold_score'] = 50
+            
+            # อัพเดทประวัติ (ป้องกัน empty list)
+            if tracker.get('role_history') and len(tracker['role_history']) > 0:
+                if tracker['role_history'][-1] != position.role:
+                    tracker['role_history'].append(position.role)
+            else:
+                tracker['role_history'] = [position.role]
+                
+            if tracker.get('efficiency_history') and len(tracker['efficiency_history']) > 0:
+                if tracker['efficiency_history'][-1] != position.efficiency:
+                    tracker['efficiency_history'].append(position.efficiency)
+            else:
+                tracker['efficiency_history'] = [position.efficiency]
                 
         except Exception as e:
-            self.log(f"Error tracking position {position.ticket}: {str(e)}", "ERROR")
+            import traceback
+            error_details = traceback.format_exc()
+            self.log(f"Error tracking position {position.ticket}: {type(e).__name__}: {str(e)}", "ERROR")
+            self.log(f"Full traceback: {error_details}", "DEBUG")
 
 
 
@@ -3076,7 +3208,7 @@ class TradingSystem:
         """คำนวณคะแนนการถือ position (ใช้เปอร์เซ็นต์)"""
         try:
             score = 50
-            adaptive_target_pct = tracker.get('adaptive_target', self.profit_harvest_threshold_percent)
+            adaptive_target_pct = tracker.get('adaptive_target', getattr(self, 'profit_harvest_threshold_percent', 8.0))
             
             # 1. Profit factor (ใช้เปอร์เซ็นต์)
             profit_percent = (position.profit_per_lot / position.open_price) * 100 if position.open_price > 0 else 0
@@ -3101,8 +3233,11 @@ class TradingSystem:
                 score += 15
             
             # 3. Balance factor
-            if self.will_improve_balance_by_closing(position):
-                score -= 10
+            try:
+                if self.will_improve_balance_by_closing(position):
+                    score -= 10
+            except Exception as balance_error:
+                self.log(f"Warning: Could not calculate balance factor for hold score: {balance_error}", "WARNING")
             
             # 4. Age factor
             try:
@@ -3122,7 +3257,7 @@ class TradingSystem:
 
 
     def smart_position_management(self):
-        """ระบบจัดการ position อัจฉริยะ (เพิ่ม hedge management)"""
+        """ระบบจัดการ position อัจฉริยะ (เพิ่ม balance protection)"""
         if not self.mt5_connected or not self.positions:
             return
         
@@ -3130,6 +3265,10 @@ class TradingSystem:
             # ติดตามทุก position
             for position in self.positions:
                 self.track_position_lifecycle(position)
+            
+            # 0. ตรวจสอบและสร้าง Balance Support ก่อน (ใหม่!)
+            if self.balance_protection_enabled:
+                self.smart_balance_management()
             
             # 1. ระบบจัดการ drawdown & hedge ก่อน
             self.drawdown_management_system()
@@ -3146,6 +3285,69 @@ class TradingSystem:
         except Exception as e:
             self.log(f"Error in smart position management: {str(e)}", "ERROR")
 
+    def smart_balance_management(self):
+        """🔄 ระบบจัดการสมดุลอัจฉริยะ - สร้าง hedge เพื่อช่วยไม้ที่ติด"""
+        try:
+            # คำนวณ balance ปัจจุบัน
+            total_volume = self.buy_volume + self.sell_volume
+            if total_volume <= 0:
+                return
+                
+            buy_ratio = self.buy_volume / total_volume
+            
+            # หาไม้ที่ติดมากที่สุด
+            stuck_positions = []
+            for pos in self.positions:
+                if pos.profit < -20:  # ขาดทุนเกิน $20
+                    distance = self.calculate_position_distance_from_market(pos)
+                    stuck_positions.append((pos, distance))
+            
+            if not stuck_positions:
+                return
+                
+            # เรียงตาม distance (ไกลสุดก่อน)
+            stuck_positions.sort(key=lambda x: x[1], reverse=True)
+            most_stuck_pos, max_distance = stuck_positions[0]
+            
+            # ตรวจสอบว่า imbalance หรือไม่
+            is_imbalanced = buy_ratio < self.min_balance_ratio or buy_ratio > (1 - self.min_balance_ratio)
+            
+            # ถ้า imbalance และมีไม้ติดเยอะ
+            if is_imbalanced and max_distance > 30:
+                # สร้าง support hedge เพื่อช่วยไม้ที่ติด
+                self.create_balance_support_hedge(most_stuck_pos, buy_ratio)
+                
+        except Exception as e:
+            self.log(f"Error in smart balance management: {str(e)}", "ERROR")
+
+    def create_balance_support_hedge(self, stuck_position: Position, current_buy_ratio: float):
+        """🛡️ สร้าง hedge เพื่อช่วยไม้ที่ติดและสร้างสมดุล"""
+        try:
+            # ถ้าไม้ BUY ติดเยอะ และ BUY มากเกินไป → สร้าง SELL hedge
+            if stuck_position.type == "BUY" and current_buy_ratio > 0.7:
+                hedge_volume = stuck_position.volume * 0.8  # hedge 80% ของไม้ที่ติด
+                hedge_type = "SELL"
+                self.log(f"🔄 Creating BALANCE SUPPORT: SELL hedge {hedge_volume:.2f} lots for stuck BUY #{stuck_position.ticket}", "INFO")
+                
+            # ถ้าไม้ SELL ติดเยอะ และ SELL มากเกินไป → สร้าง BUY hedge  
+            elif stuck_position.type == "SELL" and current_buy_ratio < 0.3:
+                hedge_volume = stuck_position.volume * 0.8  # hedge 80% ของไม้ที่ติด
+                hedge_type = "BUY"
+                self.log(f"🔄 Creating BALANCE SUPPORT: BUY hedge {hedge_volume:.2f} lots for stuck SELL #{stuck_position.ticket}", "INFO")
+                
+            else:
+                return  # ไม่ต้องสร้าง hedge
+            
+            # สร้าง hedge โดยใช้ระบบ auto hedge
+            success = self.execute_auto_hedge(stuck_position, "BALANCE_SUPPORT")
+            if success:
+                self.log(f"✅ Balance support hedge created successfully", "SUCCESS")
+            else:
+                self.log(f"❌ Failed to create balance support hedge", "ERROR")
+                
+        except Exception as e:
+            self.log(f"Error creating balance support hedge: {str(e)}", "ERROR")
+
     def execute_flexible_closes(self):
         """ปิด position แบบยืดหยุ่น"""
         try:
@@ -3161,6 +3363,13 @@ class TradingSystem:
 
             # เรียงจากไกลสุด → ใกล้สุด
             sorted_positions = sorted(positions_with_distance, key=lambda x: x[1], reverse=True)
+            
+            # Debug: แสดงการเรียงลำดับ
+            if sorted_positions and len(sorted_positions) > 1:
+                self.log("📊 Position sorting by distance (farthest first):", "INFO")
+                for i, (pos, dist) in enumerate(sorted_positions[:5]):  # แสดงแค่ 5 ตัวแรก
+                    profit_pct = (pos.profit_per_lot / pos.open_price) * 100 if pos.open_price > 0 else 0
+                    self.log(f"   {i+1}. Ticket #{pos.ticket}: {dist:.1f} pips, Profit: {profit_pct:.2f}%", "INFO")
             
             for position, distance in sorted_positions:
                 if closes_this_cycle >= max_closes:
@@ -3203,6 +3412,11 @@ class TradingSystem:
                     reason = f"Position optimization: {profit_percent:.2f}%"
                 
                 if should_close:
+                    # 🔄 เพิ่มการตรวจสอบ Portfolio Balance ก่อนปิด
+                    if self.will_hurt_portfolio_balance(position):
+                        self.log(f"🛡️ PROTECTED: #{position.ticket} - Closing would hurt portfolio balance", "WARNING")
+                        continue
+                    
                     success = self.close_position_smart(position, reason)
                     if success:
                         closes_this_cycle += 1
@@ -3210,6 +3424,52 @@ class TradingSystem:
                 
         except Exception as e:
             self.log(f"Error executing flexible closes: {str(e)}", "ERROR")
+
+    def will_hurt_portfolio_balance(self, position: Position) -> bool:
+        """🔄 ตรวจสอบว่าการปิด position นี้จะทำลายสมดุลพอร์ตไหม"""
+        try:
+            # คำนวณ volume หลังปิด position นี้
+            remaining_buy_volume = self.buy_volume
+            remaining_sell_volume = self.sell_volume
+            
+            if position.type == "BUY":
+                remaining_buy_volume -= position.volume
+            else:
+                remaining_sell_volume -= position.volume
+            
+            total_remaining = remaining_buy_volume + remaining_sell_volume
+            
+            # ถ้าไม่มีไม้เหลือเลย ให้ปิดได้
+            if total_remaining <= 0:
+                return False
+            
+            # คำนวณ ratio หลังปิด
+            remaining_buy_ratio = remaining_buy_volume / total_remaining
+            
+            # ตรวจสอบว่าจะทำให้ imbalance มากเกินไปไหม
+            imbalance_threshold = 0.8  # 80:20 เป็นขีดจำกัด
+            
+            # ถ้าปิด BUY แล้วเหลือ BUY น้อยเกินไป
+            if position.type == "BUY" and remaining_buy_ratio < (1 - imbalance_threshold):
+                # แต่ถ้ามี BUY ที่ขาดทุนเยอะ ให้ปิด SELL ได้เพื่อสร้างสมดุล
+                losing_buy_positions = [p for p in self.positions if p.type == "BUY" and p.profit < -50]
+                if len(losing_buy_positions) >= 3:  # มี BUY ขาดทุนเยอะ
+                    return False  # ให้ปิด SELL ได้
+                return True
+            
+            # ถ้าปิด SELL แล้วเหลือ SELL น้อยเกินไป
+            if position.type == "SELL" and remaining_buy_ratio > imbalance_threshold:
+                # แต่ถ้ามี SELL ที่ขาดทุนเยอะ ให้ปิด BUY ได้เพื่อสร้างสมดุล
+                losing_sell_positions = [p for p in self.positions if p.type == "SELL" and p.profit < -50]
+                if len(losing_sell_positions) >= 3:  # มี SELL ขาดทุนเยอะ
+                    return False  # ให้ปิด BUY ได้
+                return True
+                
+            return False  # ปิดได้ปกติ
+            
+        except Exception as e:
+            self.log(f"Error checking portfolio balance impact: {str(e)}", "ERROR")
+            return False  # ถ้า error ให้ปิดได้
 
     def close_position_smart(self, position: Position, reason: str) -> bool:
         """ปิด position อย่างชาญฉลาด"""
@@ -3705,14 +3965,41 @@ class TradingSystem:
     def calculate_position_distance_from_market(self, position):
         """คำนวณระยะห่างเป็น pips จาก market price ล่าสุด"""
         try:
+            # ตรวจสอบ MT5 connection
+            if not self.mt5_connected or not MT5_AVAILABLE:
+                return 0
+                
             current_tick = mt5.symbol_info_tick(self.symbol)
             if not current_tick:
+                self.log(f"Warning: Cannot get current tick for {self.symbol}", "WARNING")
                 return 0
             
-            current_price = current_tick.bid
-            distance_pips = abs(position.open_price - current_price) * 100
-            return distance_pips
-        except:
+            # เลือก price ที่เหมาะสมตามประเภท position
+            if position.type == "BUY":
+                # BUY positions ปิดที่ bid price
+                current_price = current_tick.bid
+            else:
+                # SELL positions ปิดที่ ask price  
+                current_price = current_tick.ask
+            
+            # คำนวณระยะห่างเป็น pips
+            # สำหรับ XAUUSD: 1 pip = 0.1, ดังนั้นคูณ 10
+            if "XAU" in self.symbol or "GOLD" in self.symbol.upper():
+                distance_pips = abs(position.open_price - current_price) * 10
+            else:
+                # สำหรับ major pairs อื่นๆ
+                distance_pips = abs(position.open_price - current_price) * 10000
+            
+            # Debug log สำหรับตรวจสอบการคำนวณ
+            if hasattr(self, 'debug_distance_calculation') and self.debug_distance_calculation:
+                self.log(f"🔍 Distance calc: Ticket #{position.ticket}, "
+                        f"Open: {position.open_price}, Current: {current_price}, "
+                        f"Distance: {distance_pips:.2f} pips", "DEBUG")
+            
+            return round(distance_pips, 2)
+            
+        except Exception as e:
+            self.log(f"Error calculating position distance: {str(e)}", "ERROR")
             return 0
 
     def calculate_profit_percent(self, position: Position) -> float:
@@ -6631,21 +6918,26 @@ class TradingGUI:
             # Create minimal trading system fallback
             self.trading_system = self.create_fallback_trading_system()
         
-        # Modern Professional Color Scheme
+        # Enhanced Modern Professional Color Scheme
         self.COLORS = {
             'bg_primary': '#1a1a1a',     # Main background
             'bg_secondary': '#2d2d2d',   # Card backgrounds
             'bg_accent': '#3a3a3a',      # Button/component backgrounds
+            'bg_highlight': '#404040',   # Highlighted elements
             'accent_blue': '#0078d4',    # Primary action color
             'accent_green': '#107c10',   # Success/profit color
             'accent_red': '#d13438',     # Error/loss color
             'accent_orange': '#ff8c00',  # Warning color
+            'accent_purple': '#8b5cf6',  # Monitor/analysis color
+            'accent_cyan': '#06b6d4',    # Info/data color
             'text_primary': '#ffffff',   # Primary text
             'text_secondary': '#cccccc', # Secondary text
             'text_muted': '#999999',     # Muted text
             'border': '#404040',         # Borders and separators
             'hover': '#4a4a4a',          # Hover states
-            'card_shadow': '#0f0f0f'     # Card shadow effect
+            'card_shadow': '#0f0f0f',    # Card shadow effect
+            'gradient_start': '#2d2d2d', # Gradient start
+            'gradient_end': '#1a1a1a'    # Gradient end
         }
         
         # Animation and status tracking
@@ -6880,6 +7172,27 @@ class TradingGUI:
                  background=[('active', '#cc0000'),
                            ('pressed', '#990000')])
         
+        # Monitor button style (special purple theme)
+        style.configure('Monitor.TButton',
+                       font=('Segoe UI', 10, 'bold'),
+                       borderwidth=0,
+                       focuscolor='none',
+                       background=self.COLORS['accent_purple'],
+                       foreground=self.COLORS['text_primary'])
+        
+        style.map('Monitor.TButton',
+                 background=[('active', '#7c3aed'),
+                           ('pressed', '#6d28d9')])
+        
+        # Monitor hover button style
+        style.configure('MonitorHover.TButton',
+                       font=('Segoe UI', 10, 'bold'),
+                       borderwidth=1,
+                       focuscolor='none',
+                       relief='solid',
+                       background='#7c3aed',
+                       foreground='#ffffff')
+        
         # Modern Entry style
         style.configure('Modern.TEntry',
                        font=('Segoe UI', 9),
@@ -6937,6 +7250,48 @@ class TradingGUI:
                        foreground=self.COLORS['text_primary'],
                        borderwidth=1,
                        relief='solid')
+        
+        # Modern Notebook (for tabs)
+        style.configure('Modern.TNotebook',
+                       background=self.COLORS['bg_primary'],
+                       borderwidth=0)
+        
+        style.configure('Modern.TNotebook.Tab',
+                       background=self.COLORS['bg_accent'],
+                       foreground=self.COLORS['text_secondary'],
+                       padding=[20, 8],
+                       font=('Segoe UI', 10, 'bold'))
+        
+        style.map('Modern.TNotebook.Tab',
+                 background=[('selected', self.COLORS['accent_purple']),
+                           ('active', self.COLORS['bg_highlight'])],
+                 foreground=[('selected', self.COLORS['text_primary']),
+                           ('active', self.COLORS['text_primary'])])
+        
+        # Value labels (for important numbers)
+        style.configure('Value.TLabel',
+                       font=('Segoe UI', 9, 'bold'),
+                       background=self.COLORS['bg_secondary'],
+                       foreground=self.COLORS['accent_cyan'])
+        
+        # Modern checkbutton
+        style.configure('Modern.TCheckbutton',
+                       font=('Segoe UI', 9),
+                       background=self.COLORS['bg_secondary'],
+                       foreground=self.COLORS['text_secondary'],
+                       focuscolor='none')
+        
+        # Modern LabelFrame
+        style.configure('Modern.TLabelframe',
+                       background=self.COLORS['bg_secondary'],
+                       foreground=self.COLORS['text_primary'],
+                       borderwidth=1,
+                       relief='solid')
+        
+        style.configure('Modern.TLabelframe.Label',
+                       background=self.COLORS['bg_secondary'],
+                       foreground=self.COLORS['text_primary'],
+                       font=('Segoe UI', 9, 'bold'))
 
     def create_modern_header(self):
         """Create modern header with app title, version, and animated connection status"""
@@ -7079,13 +7434,17 @@ class TradingGUI:
         self.terminal_info_label.pack(fill='x')
 
     def create_trading_card(self, parent):
-        """Create trading control card"""
-        card_content = self.create_card(parent, "▶️ Trading Control", width=280, height=180)
+        """Create enhanced trading control card"""
+        card_content = self.create_card(parent, "⚡ Trading Control", width=320, height=280)
         card_content.card_container.pack(side='left', padx=(0, 12), fill='y')
         
-        # Trading buttons
-        btn_frame = tk.Frame(card_content, bg=self.COLORS['bg_secondary'])
-        btn_frame.pack(fill='x', pady=(0, 8))
+        # === MAIN TRADING CONTROLS ===
+        main_controls_frame = ttk.LabelFrame(card_content, text="🎮 Main Controls", style='Modern.TLabelframe')
+        main_controls_frame.pack(fill='x', pady=(0, 8))
+        
+        # Trading buttons - improved layout
+        btn_frame = tk.Frame(main_controls_frame, bg=self.COLORS['bg_secondary'])
+        btn_frame.pack(fill='x', pady=5)
         
         self.start_btn = ttk.Button(btn_frame, text="▶️ Start Trading", 
                                    command=self.start_trading, style='Success.TButton')
@@ -7095,39 +7454,59 @@ class TradingGUI:
                                   command=self.stop_trading, style='Danger.TButton')
         self.stop_btn.pack(side='right', fill='x', expand=True)
         
-        # Base lot size input
-        lot_frame = tk.Frame(card_content, bg=self.COLORS['bg_secondary'])
-        lot_frame.pack(fill='x', pady=(0, 6))
+        # Settings in a grid layout
+        settings_frame = tk.Frame(main_controls_frame, bg=self.COLORS['bg_secondary'])
+        settings_frame.pack(fill='x', pady=(0, 5))
         
-        lot_label = ttk.Label(lot_frame, text="Base Lot:", style='Status.TLabel')
-        lot_label.pack(side='left')
-        
+        # Base lot size
+        ttk.Label(settings_frame, text="Base Lot:", style='Status.TLabel').grid(row=0, column=0, sticky='w', padx=(5,0))
         self.lot_size_var = tk.StringVar(value="0.01")
-        self.lot_size_entry = ttk.Entry(lot_frame, textvariable=self.lot_size_var, 
-                                       width=8, style='Modern.TEntry')
-        self.lot_size_entry.pack(side='right')
+        self.lot_size_entry = ttk.Entry(settings_frame, textvariable=self.lot_size_var, 
+                                       width=10, style='Modern.TEntry')
+        self.lot_size_entry.grid(row=0, column=1, sticky='e', padx=(0,5))
         self.lot_size_entry.bind('<Return>', self.update_lot_size)
         
-        # Max positions setting
-        pos_frame = tk.Frame(card_content, bg=self.COLORS['bg_secondary'])
-        pos_frame.pack(fill='x', pady=(0, 6))
-        
-        pos_label = ttk.Label(pos_frame, text="Max Pos:", style='Status.TLabel')
-        pos_label.pack(side='left')
-        
+        # Max positions
+        ttk.Label(settings_frame, text="Max Positions:", style='Status.TLabel').grid(row=1, column=0, sticky='w', padx=(5,0))
         self.max_pos_var = tk.StringVar(value="50")
-        self.max_pos_entry = ttk.Entry(pos_frame, textvariable=self.max_pos_var, 
-                                      width=8, style='Modern.TEntry')
-        self.max_pos_entry.pack(side='right')
+        self.max_pos_entry = ttk.Entry(settings_frame, textvariable=self.max_pos_var, 
+                                      width=10, style='Modern.TEntry')
+        self.max_pos_entry.grid(row=1, column=1, sticky='e', padx=(0,5))
         self.max_pos_entry.bind('<Return>', self.update_max_positions)
         
-        # Emergency stop button
-        emergency_frame = tk.Frame(card_content, bg=self.COLORS['bg_secondary'])
+        # Configure grid weights
+        settings_frame.columnconfigure(0, weight=1)
+        settings_frame.columnconfigure(1, weight=0)
+        
+        # === DEBUG TOOLS ===
+        debug_frame = ttk.LabelFrame(card_content, text="🔧 Debug Tools", style='Modern.TLabelframe')
+        debug_frame.pack(fill='x', pady=(0, 8))
+        
+        # Debug controls in a compact layout
+        debug_controls = tk.Frame(debug_frame, bg=self.COLORS['bg_secondary'])
+        debug_controls.pack(fill='x', pady=5)
+        
+        self.debug_distance_var = tk.BooleanVar(value=False)
+        self.debug_distance_check = ttk.Checkbutton(debug_controls, text="🐛 Distance Debug", 
+                                                   variable=self.debug_distance_var,
+                                                   command=self.toggle_debug_distance,
+                                                   style='Modern.TCheckbutton')
+        self.debug_distance_check.pack(side='left', padx=(5, 15))
+        
+        self.debug_tracking_var = tk.BooleanVar(value=False)
+        self.debug_tracking_check = ttk.Checkbutton(debug_controls, text="🐛 Tracking Debug", 
+                                                   variable=self.debug_tracking_var,
+                                                   command=self.toggle_debug_tracking,
+                                                   style='Modern.TCheckbutton')
+        self.debug_tracking_check.pack(side='left')
+        
+        # === EMERGENCY CONTROLS ===
+        emergency_frame = ttk.LabelFrame(card_content, text="🚨 Emergency", style='Modern.TLabelframe')
         emergency_frame.pack(fill='x')
         
         self.emergency_btn = ttk.Button(emergency_frame, text="🚨 EMERGENCY STOP", 
                                        command=self.emergency_stop, style='Emergency.TButton')
-        self.emergency_btn.pack(fill='x')
+        self.emergency_btn.pack(fill='x', pady=5)
 
     def create_live_stats_card(self, parent):
         """Create live statistics card"""
@@ -7914,6 +8293,531 @@ class TradingGUI:
             messagebox.showerror("Error", "Invalid max positions value")
             self.max_pos_var.set(str(self.trading_system.max_positions))
     
+    def toggle_debug_distance(self):
+        """Toggle debug mode for distance calculation"""
+        try:
+            debug_enabled = self.debug_distance_var.get()
+            self.trading_system.debug_distance_calculation = debug_enabled
+            
+            if debug_enabled:
+                self.trading_system.log("🐛 Debug distance calculation ENABLED", "INFO")
+            else:
+                self.trading_system.log("🐛 Debug distance calculation DISABLED", "INFO")
+                
+        except Exception as e:
+            self.trading_system.log(f"Error toggling debug mode: {str(e)}", "ERROR")
+    
+    def toggle_debug_tracking(self):
+        """Toggle debug mode for position tracking"""
+        try:
+            debug_enabled = self.debug_tracking_var.get()
+            self.trading_system.debug_position_tracking = debug_enabled
+            
+            if debug_enabled:
+                self.trading_system.log("🐛 Debug position tracking ENABLED", "INFO")
+            else:
+                self.trading_system.log("🐛 Debug position tracking DISABLED", "INFO")
+                
+        except Exception as e:
+            self.trading_system.log(f"Error toggling debug tracking: {str(e)}", "ERROR")
+
+
+
+
+
+
+
+    def emergency_stop(self):
+        """Emergency stop - immediately halt all trading and close positions"""
+        try:
+            # Stop trading immediately
+            self.trading_system.trading_active = False
+            self.start_btn.config(state='normal')
+            self.stop_btn.config(state='disabled')
+            
+            # Log emergency stop
+            self.trading_system.log("🚨 EMERGENCY STOP ACTIVATED", "WARNING")
+            
+            # Show confirmation dialog
+            result = messagebox.askyesno("Emergency Stop", 
+                                       "Emergency stop activated!\n\nDo you want to close all open positions?")
+            
+            if result and self.trading_system.mt5_connected:
+                # Close all positions (this would need MT5 implementation)
+                self.trading_system.log("Attempting to close all positions...", "WARNING")
+                # Note: Actual position closing would require MT5 implementation
+                
+            messagebox.showwarning("Emergency Stop", "All trading activities have been halted!")
+            
+        except Exception as e:
+            self.trading_system.log(f"Error during emergency stop: {str(e)}", "ERROR")
+            messagebox.showerror("Error", f"Emergency stop failed: {str(e)}")
+
+    def update_positions_display(self):
+        """Update positions in the modern treeview"""
+        try:
+            # Clear existing items
+            if hasattr(self, 'positions_tree'):
+                for item in self.positions_tree.get_children():
+                    self.positions_tree.delete(item)
+                    
+                # Get current positions from trading system
+                positions = self.trading_system.positions
+                
+                # Add positions to tree
+                for pos in positions:
+                    profit_color = 'green' if pos.profit > 0 else 'red' if pos.profit < 0 else 'black'
+                    self.positions_tree.insert('', 'end', values=(
+                        pos.ticket,
+                        pos.type,
+                        pos.volume,
+                        f"{pos.open_price:.5f}",
+                        f"{pos.current_price:.5f}",
+                        f"${pos.profit:.2f}",
+                        f"{(pos.profit / abs(pos.open_price * pos.volume * 100000)) * 100:.2f}%" if pos.open_price != 0 else "0%",
+                        pos.role,
+                        pos.efficiency
+                    ), tags=(profit_color,))
+                    
+        except Exception as e:
+            self.trading_system.log(f"Error updating positions display: {str(e)}", "ERROR")
+
+    def update_status_display(self):
+        """Update status labels with current trading information"""
+        try:
+            # Update account info if available
+            if hasattr(self, 'account_balance_label') and self.trading_system.mt5_connected:
+                if hasattr(self.trading_system, 'get_account_info'):
+                    account_info = self.trading_system.get_account_info()
+                    if account_info:
+                        self.account_balance_label.config(text=f"${account_info.get('balance', 0):.2f}")
+                else:
+                    # Fallback display
+                    self.account_balance_label.config(text="Connected")
+                    
+        except Exception as e:
+            self.trading_system.log(f"Error updating status display: {str(e)}", "ERROR")
+
+    def auto_scan_symbols(self):
+        """Auto scan for available symbols"""
+        try:
+            if self.trading_system.mt5_connected:
+                if hasattr(self.trading_system, 'get_available_symbols'):
+                    symbols = self.trading_system.get_available_symbols()
+                    self.trading_system.log(f"Found {len(symbols)} available symbols", "INFO")
+                else:
+                    # Fallback - just log that MT5 is connected
+                    self.trading_system.log("MT5 connected - symbol scanning not implemented", "INFO")
+            else:
+                self.trading_system.log("MT5 not connected for symbol scanning", "WARNING")
+        except Exception as e:
+            self.trading_system.log(f"Auto-scan error: {e}", "ERROR")
+
+    def safe_auto_scan_terminals(self):
+        """Safely auto-scan terminals without blocking GUI"""
+        try:
+            if hasattr(self, 'auto_scan_terminals'):
+                # Run in a separate thread to avoid blocking
+                import threading
+                scan_thread = threading.Thread(target=self.auto_scan_terminals, daemon=True)
+                scan_thread.start()
+                self.trading_system.log("Auto-scan started in background thread", "INFO")
+            else:
+                self.trading_system.log("Auto-scan method not available", "WARNING")
+        except Exception as e:
+            self.trading_system.log(f"Auto-scan error: {e}", "ERROR")
+
+    def update_loop(self):
+        """Enhanced GUI update loop with better error handling"""
+        try:
+            # Skip updates if MT5 is not connected to reduce CPU load
+            if hasattr(self.trading_system, 'mt5_connected') and not self.trading_system.mt5_connected:
+                # Only update log display when not connected
+                self.update_log_display()
+            else:
+                # Full update when connected
+                if hasattr(self.trading_system, 'update_positions'):
+                    self.trading_system.update_positions()
+                if hasattr(self, 'update_positions_display'):
+                    self.update_positions_display()
+                if hasattr(self, 'update_log_display'):
+                    self.update_log_display()
+            
+        except Exception as e:
+            # Use trading system logger if available, fallback to print
+            if hasattr(self, 'trading_system'):
+                self.trading_system.log(f"GUI update error: {str(e)}", "ERROR")
+            else:
+                print(f"GUI update error: {str(e)}")
+        
+        # Schedule next update (reduced frequency for better stability)
+        if hasattr(self, 'root') and self.root:
+            self.root.after(2500, self.update_loop)
+
+    def update_log_display(self):
+        """Update log display with enhanced formatting"""
+        try:
+            if not hasattr(self, 'log_text'):
+                return
+                
+            while True:
+                message = self.trading_system.log_queue.get_nowait()
+                
+                # Insert message with appropriate styling
+                self.log_text.insert(tk.END, message + "\n")
+                
+                # Apply syntax highlighting
+                lines = self.log_text.get("1.0", tk.END).split('\n')
+                current_line = len(lines) - 2  # -2 because of the trailing newline
+                
+                if current_line > 0:
+                    line_start = f"{current_line}.0"
+                    line_end = f"{current_line}.end"
+                    
+                    # Apply tags based on content
+                    if "ERROR" in message:
+                        self.log_text.tag_add("ERROR", line_start, line_end)
+                    elif "WARNING" in message or "WARN" in message:
+                        self.log_text.tag_add("WARNING", line_start, line_end)
+                    elif "✅" in message or "SUCCESS" in message:
+                        self.log_text.tag_add("SUCCESS", line_start, line_end)
+                    elif any(icon in message for icon in ["🎯", "📡", "💰", "ℹ️"]):
+                        self.log_text.tag_add("INFO", line_start, line_end)
+                
+                self.log_text.see(tk.END)
+                
+        except queue.Empty:
+            pass
+        except Exception as e:
+            print(f"Error updating log display: {str(e)}")
+
+    def retry_full_gui(self):
+        """Retry loading the full GUI from fallback mode"""
+        try:
+            self.root.destroy()
+            self.setup_gui()
+            self.gui_components_loaded = True
+            messagebox.showinfo("Success", "Full GUI loaded successfully!")
+        except Exception as e:
+            messagebox.showerror("Error", f"Failed to load full GUI: {e}")
+            self.setup_fallback_gui()
+
+    def run(self):
+        """Start the modern GUI application"""
+        self.trading_system.log("🏆 Modern AI Gold Grid Trading System v3.0 Started")
+        self.trading_system.log("🎨 Professional GUI Interface Loaded")
+        self.trading_system.log("🔌 Ready for MT5 connection")
+        self.root.mainloop()
+
+def main():
+    """Main application entry point with comprehensive error handling"""
+    print("🚀 Starting Huakuy Trading System...")
+    print(f"📦 MT5 Available: {MT5_AVAILABLE}")
+    print(f"📦 Pandas Available: {pd is not None}")
+    print(f"📦 NumPy Available: {np is not None}")
+    
+    try:
+        print("🔄 Creating GUI application...")
+        app = TradingGUI()
+        
+        print("🎯 Starting application main loop...")
+        app.run()
+        
+    except ImportError as e:
+        error_msg = f"Missing required dependency: {str(e)}"
+        print(f"❌ {error_msg}")
+        try:
+            messagebox.showerror("Dependency Error", error_msg)
+        except:
+            print("Could not show error dialog - tkinter may not be available")
+            
+    except Exception as e:
+        error_msg = f"Application failed to start: {str(e)}"
+        print(f"❌ {error_msg}")
+        print("📊 Error details:")
+        import traceback
+        traceback.print_exc()
+        
+        try:
+            messagebox.showerror("Critical Error", error_msg)
+        except:
+            print("Could not show error dialog")
+    
+    print("🏁 Application terminated")
+
+if __name__ == "__main__":
+    main()
+
+    def update_monitor_data(self):
+        """Update all monitor data"""
+        try:
+            if not hasattr(self, 'monitor_window') or not self.monitor_window.winfo_exists():
+                return
+                
+            # Update overview tab
+            self.update_overview_data()
+            
+            # Update closing analysis
+            self.update_closing_analysis()
+            
+            # Update smart routing
+            self.update_routing_data()
+            
+            # Update live monitoring
+            self.update_live_activity()
+            
+            # Schedule next update
+            self.monitor_update_job = self.monitor_window.after(2000, self.update_monitor_data)
+            
+        except Exception as e:
+            self.trading_system.log(f"Error updating monitor data: {str(e)}", "ERROR")
+
+    def update_overview_data(self):
+        """Update overview tab data"""
+        try:
+            positions = self.trading_system.positions
+            
+            # Update summary
+            buy_positions = [p for p in positions if p.type == "BUY"]
+            sell_positions = [p for p in positions if p.type == "SELL"]
+            total_profit = sum(p.profit for p in positions)
+            
+            buy_volume = sum(p.volume for p in buy_positions)
+            sell_volume = sum(p.volume for p in sell_positions)
+            total_volume = buy_volume + sell_volume
+            buy_ratio = (buy_volume / total_volume * 100) if total_volume > 0 else 50
+            sell_ratio = 100 - buy_ratio
+            
+            # Update summary labels
+            self.summary_labels['total_positions'].config(text=str(len(positions)))
+            self.summary_labels['buy_positions'].config(text=str(len(buy_positions)))
+            self.summary_labels['sell_positions'].config(text=str(len(sell_positions)))
+            self.summary_labels['total_profit'].config(text=f"${total_profit:.2f}")
+            self.summary_labels['portfolio_health'].config(text=f"{self.trading_system.portfolio_health:.1f}%")
+            self.summary_labels['balance_ratio'].config(text=f"{buy_ratio:.0f}:{sell_ratio:.0f}")
+            
+            # Update positions table
+            # Clear existing items
+            for item in self.positions_tree.get_children():
+                self.positions_tree.delete(item)
+            
+            # Add current positions
+            for position in positions:
+                # Calculate additional data
+                profit_percent = (position.profit_per_lot / position.open_price) * 100 if position.open_price > 0 else 0
+                distance = self.trading_system.calculate_position_distance_from_market(position)
+                
+                # Get hold score from tracker
+                tracker = self.trading_system.position_tracker.get(position.ticket, {})
+                hold_score = tracker.get('hold_score', 50)
+                
+                # Format values
+                values = (
+                    str(position.ticket),
+                    position.type,
+                    f"{position.volume:.2f}",
+                    f"{position.open_price:.2f}",
+                    f"{position.current_price:.2f}",
+                    f"${position.profit:.2f}",
+                    f"{profit_percent:.2f}%",
+                    f"{distance:.1f}",
+                    position.role,
+                    f"{hold_score}/100"
+                )
+                
+                # Color coding based on profit
+                tags = ()
+                if position.profit > 0:
+                    tags = ('profit',)
+                elif position.profit < 0:
+                    tags = ('loss',)
+                
+                self.positions_tree.insert('', 'end', values=values, tags=tags)
+            
+            # Configure tags for colors
+            self.positions_tree.tag_configure('profit', foreground='#107c10')
+            self.positions_tree.tag_configure('loss', foreground='#d13438')
+            
+        except Exception as e:
+            self.trading_system.log(f"Error updating overview data: {str(e)}", "ERROR")
+
+    def update_closing_analysis(self):
+        """Update closing analysis tab"""
+        try:
+            # Clear previous analysis
+            self.closing_analysis_text.delete(1.0, tk.END)
+            
+            # Analyze closing candidates
+            positions = self.trading_system.positions
+            profitable_positions = [p for p in positions if p.profit > 0]
+            
+            if not profitable_positions:
+                self.closing_analysis_text.insert(tk.END, "📊 No profitable positions available for closing analysis.\n\n")
+                return
+            
+            # Sort by distance (farthest first) - same as system logic
+            positions_with_distance = []
+            for pos in profitable_positions:
+                distance = self.trading_system.calculate_position_distance_from_market(pos)
+                positions_with_distance.append((pos, distance))
+            
+            sorted_positions = sorted(positions_with_distance, key=lambda x: x[1], reverse=True)
+            
+            self.closing_analysis_text.insert(tk.END, "🎯 CLOSING ANALYSIS - Current Candidates\n")
+            self.closing_analysis_text.insert(tk.END, "=" * 60 + "\n\n")
+            
+            for i, (position, distance) in enumerate(sorted_positions[:10]):  # Top 10 candidates
+                profit_percent = (position.profit_per_lot / position.open_price) * 100 if position.open_price > 0 else 0
+                tracker = self.trading_system.position_tracker.get(position.ticket, {})
+                hold_score = tracker.get('hold_score', 50)
+                
+                # Determine closing likelihood
+                likelihood = "LOW"
+                reason = "Below thresholds"
+                
+                if profit_percent >= 8.0:
+                    likelihood = "HIGH"
+                    reason = "Target reached (8%+)"
+                elif profit_percent >= 6.0 and hold_score <= 25 and self.trading_system.portfolio_health < 60:
+                    likelihood = "HIGH"
+                    reason = "Portfolio concern"
+                elif self.trading_system.portfolio_health < 25 and profit_percent > 4.0 and hold_score <= 30:
+                    likelihood = "VERY HIGH"
+                    reason = "Emergency mode"
+                elif len(positions) > self.trading_system.max_positions * 0.9 and profit_percent > 5.0 and hold_score <= 20:
+                    likelihood = "MEDIUM"
+                    reason = "Position optimization"
+                
+                self.closing_analysis_text.insert(tk.END, f"#{i+1} Ticket {position.ticket} ({position.type})\n")
+                self.closing_analysis_text.insert(tk.END, f"   💰 Profit: ${position.profit:.2f} ({profit_percent:.2f}%)\n")
+                self.closing_analysis_text.insert(tk.END, f"   📏 Distance: {distance:.1f} pips\n")
+                self.closing_analysis_text.insert(tk.END, f"   🎯 Hold Score: {hold_score}/100\n")
+                self.closing_analysis_text.insert(tk.END, f"   📊 Role: {position.role} | Efficiency: {position.efficiency}\n")
+                self.closing_analysis_text.insert(tk.END, f"   🚦 Close Likelihood: {likelihood}\n")
+                self.closing_analysis_text.insert(tk.END, f"   💭 Reason: {reason}\n")
+                self.closing_analysis_text.insert(tk.END, "\n")
+            
+            # Update statistics
+            closes_today = getattr(self.trading_system, 'closes_today', 0)
+            self.closing_stats_labels['closes_today'].config(text=str(closes_today))
+            
+        except Exception as e:
+            self.trading_system.log(f"Error updating closing analysis: {str(e)}", "ERROR")
+
+    def update_routing_data(self):
+        """Update smart routing tab"""
+        try:
+            # Update routing status
+            router_enabled = "Yes" if self.trading_system.smart_router_enabled else "No"
+            self.routing_status_labels['router_enabled'].config(text=router_enabled)
+            
+            # Update balance ratio
+            total_volume = self.trading_system.buy_volume + self.trading_system.sell_volume
+            if total_volume > 0:
+                buy_ratio = self.trading_system.buy_volume / total_volume * 100
+                sell_ratio = 100 - buy_ratio
+                balance_text = f"{buy_ratio:.0f}:{sell_ratio:.0f}"
+            else:
+                balance_text = "50:50"
+            self.routing_status_labels['balance_ratio'].config(text=balance_text)
+            
+            # Update redirect mode
+            if hasattr(self.trading_system, 'last_redirect_time') and self.trading_system.last_redirect_time:
+                redirect_mode = "Active"
+            else:
+                redirect_mode = "Normal"
+            self.routing_status_labels['redirect_mode'].config(text=redirect_mode)
+            
+            # Last redirect time
+            if hasattr(self.trading_system, 'last_redirect_time') and self.trading_system.last_redirect_time:
+                last_redirect = self.trading_system.last_redirect_time.strftime("%H:%M:%S")
+            else:
+                last_redirect = "Never"
+            self.routing_status_labels['last_redirect'].config(text=last_redirect)
+            
+        except Exception as e:
+            self.trading_system.log(f"Error updating routing data: {str(e)}", "ERROR")
+
+    def update_live_activity(self):
+        """Update live activity feed"""
+        try:
+            # Add current activity
+            current_time = datetime.now().strftime("%H:%M:%S")
+            
+            # Check for recent activities
+            positions_count = len(self.trading_system.positions)
+            portfolio_health = self.trading_system.portfolio_health
+            
+            activity_msg = f"[{current_time}] 📊 Portfolio Status: {positions_count} positions, Health: {portfolio_health:.1f}%\n"
+            
+            # Add to activity log
+            self.activity_text.insert(tk.END, activity_msg)
+            
+            # Auto-scroll if enabled
+            if self.auto_scroll_var.get():
+                self.activity_text.see(tk.END)
+            
+            # Limit text size (keep last 1000 lines)
+            lines = self.activity_text.get(1.0, tk.END).split('\n')
+            if len(lines) > 1000:
+                self.activity_text.delete(1.0, f"{len(lines)-1000}.0")
+            
+        except Exception as e:
+            self.trading_system.log(f"Error updating live activity: {str(e)}", "ERROR")
+
+    def refresh_monitor_data(self):
+        """Manually refresh monitor data"""
+        try:
+            self.update_monitor_data()
+            self.trading_system.log("📊 Monitor data refreshed", "INFO")
+        except Exception as e:
+            self.trading_system.log(f"Error refreshing monitor data: {str(e)}", "ERROR")
+
+    def clear_activity_log(self):
+        """Clear activity log"""
+        try:
+            self.activity_text.delete(1.0, tk.END)
+            self.activity_text.insert(tk.END, f"[{datetime.now().strftime('%H:%M:%S')}] 📋 Activity log cleared\n")
+        except Exception as e:
+            self.trading_system.log(f"Error clearing activity log: {str(e)}", "ERROR")
+
+    def export_monitor_data(self):
+        """Export monitor data to file"""
+        try:
+            from tkinter import filedialog
+            filename = filedialog.asksaveasfilename(
+                defaultextension=".txt",
+                filetypes=[("Text files", "*.txt"), ("All files", "*.*")]
+            )
+            if filename:
+                with open(filename, 'w') as f:
+                    f.write("Position Monitor Data Export\n")
+                    f.write(f"Exported at: {datetime.now()}\n")
+                    f.write("=" * 50 + "\n\n")
+                    
+                    # Export positions data
+                    for position in self.trading_system.positions:
+                        f.write(f"Ticket: {position.ticket}\n")
+                        f.write(f"Type: {position.type}\n")
+                        f.write(f"Volume: {position.volume}\n")
+                        f.write(f"Profit: ${position.profit:.2f}\n")
+                        f.write(f"Role: {position.role}\n")
+                        f.write("-" * 30 + "\n")
+                
+                self.trading_system.log(f"📊 Monitor data exported to {filename}", "INFO")
+        except Exception as e:
+            self.trading_system.log(f"Error exporting monitor data: {str(e)}", "ERROR")
+
+    def close_position_monitor(self):
+        """Close position monitor window"""
+        try:
+            if hasattr(self, 'monitor_update_job') and self.monitor_update_job:
+                self.monitor_window.after_cancel(self.monitor_update_job)
+            self.monitor_window.destroy()
+            self.trading_system.log("📊 Position Monitor closed", "INFO")
+        except Exception as e:
+            self.trading_system.log(f"Error closing position monitor: {str(e)}", "ERROR")
+
     def emergency_stop(self):
         """Emergency stop - immediately halt all trading and close positions"""
         try:
