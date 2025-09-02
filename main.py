@@ -237,6 +237,9 @@ class TradingSystem:
 
         # 🎯 Zone-Based Trading System Configuration
         self.zone_size_pips = 25  # ขนาด zone (pips)
+        
+        # 🐛 Debug flags
+        self.debug_distance_calculation = False  # เปิดเพื่อ debug การคำนวณระยะ
         self.max_positions_per_zone = 3  # จำกัดไม้ต่อ zone
         self.min_position_distance_pips = 15  # ระยะห่างขั้นต่ำระหว่างไม้
         self.force_zone_diversification = True  # บังคับกระจาย
@@ -2400,13 +2403,14 @@ class TradingSystem:
                     current_price = pos.price_open
                     profit_per_lot = 0
                 
-                # Classify efficiency with error handling
+                # Classify efficiency with error handling (ใช้เปอร์เซ็นต์)
                 try:
-                    if profit_per_lot > 100:
+                    profit_percent = (profit_per_lot / pos.price_open) * 100 if pos.price_open > 0 else 0
+                    if profit_percent > 8.0:
                         efficiency = "excellent"
-                    elif profit_per_lot > 50:
+                    elif profit_percent > 4.0:
                         efficiency = "good"
-                    elif profit_per_lot > 0:
+                    elif profit_percent > 0:
                         efficiency = "fair"
                     else:
                         efficiency = "poor"
@@ -2461,18 +2465,21 @@ class TradingSystem:
             self.log(f"Error updating positions: {str(e)}", "ERROR")
 
     def assign_position_role(self, position, profit_per_lot: float) -> str:
-        """Assign role to position based on performance"""
+        """Assign role to position based on performance (ใช้เปอร์เซ็นต์)"""
         try:
             # Validate profit_per_lot is a valid number
             if not isinstance(profit_per_lot, (int, float)) or profit_per_lot != profit_per_lot:  # Check for NaN
                 self.log(f"Warning: Invalid profit_per_lot {profit_per_lot} for position {getattr(position, 'ticket', 'unknown')}", "WARNING")
                 return OrderRole.SUPPORT.value
             
-            if profit_per_lot > 100:
+            # คำนวณเป็นเปอร์เซ็นต์
+            profit_percent = (profit_per_lot / position.price_open) * 100 if position.price_open > 0 else 0
+            
+            if profit_percent > 8.0:
                 return OrderRole.MAIN.value
-            elif profit_per_lot > 0:
+            elif profit_percent > 0:
                 return OrderRole.SUPPORT.value
-            elif profit_per_lot > -50:
+            elif profit_percent > -4.0:
                 return OrderRole.HEDGE_GUARD.value
             else:
                 return OrderRole.SACRIFICE.value
@@ -2678,8 +2685,9 @@ class TradingSystem:
                 if zone_idx in zones:
                     zone_positions = zones[zone_idx]['positions']
                     for pos in zone_positions:
-                        # Only consider profitable positions
-                        if pos.profit > self.min_profit_for_redirect_close:
+                        # Only consider profitable positions (ใช้เปอร์เซ็นต์)
+                        profit_percent = (pos.profit_per_lot / pos.open_price) * 100 if pos.open_price > 0 else 0
+                        if profit_percent > self.min_profit_for_redirect_close_percent:
                             candidates.append({
                                 'position': pos,
                                 'zone_index': zone_idx,
@@ -2755,8 +2763,9 @@ class TradingSystem:
                     
                     # Find a profitable position of opposite type
                     for pos in zone_positions:
+                        profit_percent = (pos.profit_per_lot / pos.open_price) * 100 if pos.open_price > 0 else 0
                         if (pos.type != signal.direction and 
-                            pos.profit > self.min_profit_for_redirect_close):
+                            profit_percent > self.min_profit_for_redirect_close_percent):
                             
                             result.update({
                                 'should_redirect': True,
@@ -2896,7 +2905,7 @@ class TradingSystem:
                 base_target_pct *= 1.3
             
             # ปรับตาม balance
-            if self.can_improve_balance_by_closing(position):
+            if self.will_improve_balance_by_closing(position):
                 base_target_pct *= 0.75
             
             # ปรับตาม volatility
@@ -2933,14 +2942,14 @@ class TradingSystem:
             # Changed from 0.8/0.2 to 0.85/0.15 to allow more signals through
             if signal.direction == 'BUY' and buy_ratio > 0.85:
                 sell_positions = [p for p in self.positions if p.type == "SELL"]
-                profitable_sells = [p for p in sell_positions if p.profit_per_lot > self.min_profit_for_redirect_close]
+                profitable_sells = [p for p in sell_positions if (p.profit_per_lot / p.open_price) * 100 > self.min_profit_for_redirect_close_percent]
                 if not profitable_sells:
                     self.log(f"⏭️ Skipping BUY signal - extreme imbalance and no profitable SELLs")
                     return True
             
             elif signal.direction == 'SELL' and buy_ratio < 0.15:
                 buy_positions = [p for p in self.positions if p.type == "BUY"]
-                profitable_buys = [p for p in buy_positions if p.profit_per_lot > self.min_profit_for_redirect_close]
+                profitable_buys = [p for p in buy_positions if (p.profit_per_lot / p.open_price) * 100 > self.min_profit_for_redirect_close_percent]
                 if not profitable_buys:
                     self.log(f"⏭️ Skipping SELL signal - extreme imbalance and no profitable BUYs")
                     return True
@@ -3064,49 +3073,18 @@ class TradingSystem:
         except Exception as e:
             self.log(f"Error tracking position {position.ticket}: {str(e)}", "ERROR")
 
-    def calculate_adaptive_profit_target(self, position: Position) -> float:
-        """คำนวณเป้าหมายกำไรแบบปรับตัว"""
-        try:
-            base_target = self.profit_harvest_threshold
-            
-            # ปรับตาม portfolio health
-            if self.portfolio_health < 40:
-                base_target *= 0.6
-            elif self.portfolio_health > 80:
-                base_target *= 1.3
-            
-            # ปรับตาม balance (ถ้าช่วย balance ได้ ลดเป้า)
-            total_volume = self.buy_volume + self.sell_volume
-            if total_volume > 0:
-                buy_ratio = self.buy_volume / total_volume
-                if abs(buy_ratio - 0.5) > self.balance_tolerance:
-                    if self.can_improve_balance_by_closing(position):
-                        base_target *= 0.75
-            
-            # ปรับตาม market volatility
-            if hasattr(self, 'recent_volatility'):
-                if self.recent_volatility > 2.0:
-                    base_target *= 0.8
-                elif self.recent_volatility < 0.5:
-                    base_target *= 1.2
-            
-            # ปรับตามจำนวน positions
-            if len(self.positions) > self.max_positions * 0.8:
-                base_target *= 0.9
-            
-            return max(20.0, min(100.0, base_target))
-            
-        except Exception as e:
-            return self.profit_harvest_threshold
+
 
     def calculate_hold_score(self, position: Position, tracker: dict) -> int:
-        """คำนวณคะแนนการถือ position"""
+        """คำนวณคะแนนการถือ position (ใช้เปอร์เซ็นต์)"""
         try:
             score = 50
-            adaptive_target = tracker.get('adaptive_target', self.profit_harvest_threshold)
+            adaptive_target_pct = tracker.get('adaptive_target', self.profit_harvest_threshold_percent)
             
-            # 1. Profit factor
-            profit_ratio = position.profit_per_lot / adaptive_target
+            # 1. Profit factor (ใช้เปอร์เซ็นต์)
+            profit_percent = (position.profit_per_lot / position.open_price) * 100 if position.open_price > 0 else 0
+            profit_ratio = profit_percent / adaptive_target_pct if adaptive_target_pct > 0 else 0
+            
             if profit_ratio >= 1.2:
                 score -= 35
             elif profit_ratio >= 1.0:
@@ -3126,7 +3104,7 @@ class TradingSystem:
                 score += 15
             
             # 3. Balance factor
-            if self.can_improve_balance_by_closing(position):
+            if self.will_improve_balance_by_closing(position):
                 score -= 10
             
             # 4. Age factor
@@ -3145,26 +3123,6 @@ class TradingSystem:
         except Exception as e:
             return 50
 
-    def can_improve_balance_by_closing(self, position: Position) -> bool:
-        """ตรวจสอบว่าการปิดจะช่วย balance ได้หรือไม่"""
-        try:
-            if len(self.positions) <= 1:
-                return False
-            
-            total_volume = self.buy_volume + self.sell_volume
-            if total_volume <= position.volume:
-                return False
-            
-            current_buy_ratio = self.buy_volume / total_volume
-            new_buy_ratio = self.calculate_balance_after_close(position, current_buy_ratio)
-            
-            current_distance = abs(current_buy_ratio - 0.5)
-            new_distance = abs(new_buy_ratio - 0.5)
-            
-            return new_distance < current_distance
-            
-        except:
-            return False
 
     def smart_position_management(self):
         """ระบบจัดการ position อัจฉริยะ (เพิ่ม hedge management)"""
@@ -3197,39 +3155,62 @@ class TradingSystem:
             closes_this_cycle = 0
             max_closes = 2 if self.gentle_management else 3
             
-            for position in self.positions:
+            # เรียง positions ตามระยะห่าง (ไกลสุดก่อน)
+            positions_with_distance = []
+            for pos in self.positions:
+                if pos.profit > 0:  # เฉพาะไม้ที่มีกำไร
+                    distance = self.calculate_position_distance_from_market(pos)
+                    positions_with_distance.append((pos, distance))
+
+            # เรียงจากไกลสุด → ใกล้สุด
+            sorted_positions = sorted(positions_with_distance, key=lambda x: x[1], reverse=True)
+            
+            # Debug: แสดงการเรียงลำดับ
+            if sorted_positions and len(sorted_positions) > 1:
+                self.log("📊 Position sorting by distance (farthest first):", "INFO")
+                for i, (pos, dist) in enumerate(sorted_positions[:5]):  # แสดงแค่ 5 ตัวแรก
+                    profit_pct = (pos.profit_per_lot / pos.open_price) * 100 if pos.open_price > 0 else 0
+                    self.log(f"   {i+1}. Ticket #{pos.ticket}: {dist:.1f} pips, Profit: {profit_pct:.2f}%", "INFO")
+            
+            for position, distance in sorted_positions:
                 if closes_this_cycle >= max_closes:
                     break
                 
+                # ห้ามปิดไม้ที่ขาดทุน
+                if position.profit <= 0:
+                    continue
+                
                 tracker = self.position_tracker.get(position.ticket, {})
                 hold_score = tracker.get('hold_score', 50)
-                adaptive_target = tracker.get('adaptive_target', self.profit_harvest_threshold)
+                
+                # คำนวณกำไรเป็นเปอร์เซ็นต์ต่อ lot
+                profit_percent = (position.profit_per_lot / position.open_price) * 100
                 
                 should_close = False
                 reason = ""
                 
-                # เงื่อนไขการปิดแบบยืดหยุ่น
-                if position.profit_per_lot >= adaptive_target * 1.3 and hold_score <= 15:
+                # เงื่อนไขการปิดแบบยืดหยุ่น (ใช้เปอร์เซ็นต์)
+                if profit_percent >= 8.0 and position.profit > 0:  # ไม่ปิดติดลบ
                     should_close = True
-                    reason = f"Exceed target 130%: {position.profit_per_lot:.1f}$"
+                    reason = f"Target reached: {profit_percent:.2f}% (Distance: {distance:.1f} pips)"
                 
-                elif (position.profit_per_lot >= adaptive_target and 
+                elif (profit_percent >= 6.0 and 
                       hold_score <= 25 and 
                       self.portfolio_health < 60):
                     should_close = True
-                    reason = f"Target reached + Portfolio concern"
+                    reason = f"Portfolio concern: {profit_percent:.2f}%"
                 
                 elif (self.portfolio_health < self.emergency_mode_threshold and 
-                      position.profit_per_lot > 30 and 
+                      profit_percent > 4.0 and 
                       hold_score <= 30):
                     should_close = True
-                    reason = "Emergency profit-taking"
+                    reason = f"Emergency mode: {profit_percent:.2f}%"
                 
                 elif (len(self.positions) > self.max_positions * 0.9 and
-                      position.profit_per_lot > 40 and
+                      profit_percent > 5.0 and
                       hold_score <= 20):
                     should_close = True
-                    reason = "Position count optimization"
+                    reason = f"Position optimization: {profit_percent:.2f}%"
                 
                 if should_close:
                     success = self.close_position_smart(position, reason)
@@ -3731,6 +3712,46 @@ class TradingSystem:
         except Exception as e:
             self.log(f"Error debugging market conditions: {str(e)}", "ERROR")
 
+    def calculate_position_distance_from_market(self, position):
+        """คำนวณระยะห่างเป็น pips จาก market price ล่าสุด"""
+        try:
+            # ตรวจสอบ MT5 connection
+            if not self.mt5_connected or not MT5_AVAILABLE:
+                return 0
+                
+            current_tick = mt5.symbol_info_tick(self.symbol)
+            if not current_tick:
+                self.log(f"Warning: Cannot get current tick for {self.symbol}", "WARNING")
+                return 0
+            
+            # เลือก price ที่เหมาะสมตามประเภท position
+            if position.type == "BUY":
+                # BUY positions ปิดที่ bid price
+                current_price = current_tick.bid
+            else:
+                # SELL positions ปิดที่ ask price  
+                current_price = current_tick.ask
+            
+            # คำนวณระยะห่างเป็น pips
+            # สำหรับ XAUUSD: 1 pip = 0.1, ดังนั้นคูณ 10
+            if "XAU" in self.symbol or "GOLD" in self.symbol.upper():
+                distance_pips = abs(position.open_price - current_price) * 10
+            else:
+                # สำหรับ major pairs อื่นๆ
+                distance_pips = abs(position.open_price - current_price) * 10000
+            
+            # Debug log สำหรับตรวจสอบการคำนวณ
+            if hasattr(self, 'debug_distance_calculation') and self.debug_distance_calculation:
+                self.log(f"🔍 Distance calc: Ticket #{position.ticket}, "
+                        f"Open: {position.open_price}, Current: {current_price}, "
+                        f"Distance: {distance_pips:.2f} pips", "DEBUG")
+            
+            return round(distance_pips, 2)
+            
+        except Exception as e:
+            self.log(f"Error calculating position distance: {str(e)}", "ERROR")
+            return 0
+
     def calculate_profit_percent(self, position: Position) -> float:
         """คำนวณกำไรเป็น % ต่อ lot"""
         try:
@@ -4062,13 +4083,22 @@ class TradingSystem:
         try:
             positions = pair_data['positions']
             
+            # กรองเฉพาะ positions ที่ไม่ขาดทุน
+            profitable_positions = [pos for pos in positions if pos.profit > 0]
+            
+            if len(profitable_positions) != len(positions):
+                self.log(f"⚠️ Pair close: Skipping {len(positions) - len(profitable_positions)} losing positions")
+                if len(profitable_positions) == 0:
+                    self.log("❌ Pair close CANCELLED: All positions are losing")
+                    return False
+            
             success_count = 0
-            for position in positions:
+            for position in profitable_positions:
                 if self.close_position_smart(position, f"Pair close: {pair_data['net_profit_percent']:.1f}%"):
                     success_count += 1
                     time.sleep(0.5)  # หน่วงเล็กน้อย
             
-            if success_count == len(positions):
+            if success_count == len(profitable_positions):
                 self.total_pair_closes += 1
                 self.successful_pair_closes += 1
                 self.pair_profit_captured += pair_data['net_profit']
@@ -4077,7 +4107,7 @@ class TradingSystem:
                 self.log(f"   Net profit: ${pair_data['net_profit']:.2f} ({pair_data['net_profit_percent']:.1f}%)")
                 return True
             else:
-                self.log(f"❌ Pair close PARTIAL: {success_count}/{len(positions)} positions closed")
+                self.log(f"❌ Pair close PARTIAL: {success_count}/{len(profitable_positions)} positions closed")
                 return False
                 
         except Exception as e:
@@ -4089,22 +4119,31 @@ class TradingSystem:
         try:
             positions = group_data['positions']
             
+            # กรองเฉพาะ positions ที่ไม่ขาดทุน
+            profitable_positions = [pos for pos in positions if pos.profit > 0]
+            
+            if len(profitable_positions) != len(positions):
+                self.log(f"⚠️ Group close: Skipping {len(positions) - len(profitable_positions)} losing positions")
+                if len(profitable_positions) == 0:
+                    self.log("❌ Group close CANCELLED: All positions are losing")
+                    return False
+            
             success_count = 0
-            for position in positions:
+            for position in profitable_positions:
                 if self.close_position_smart(position, f"Group close: {group_data['avg_profit_percent']:.1f}%"):
                     success_count += 1
                     time.sleep(0.5)  # หน่วงเล็กน้อย
             
-            if success_count >= len(positions) * 0.8:  # 80% สำเร็จถือว่าโอเค
+            if success_count >= len(profitable_positions) * 0.8:  # 80% สำเร็จถือว่าโอเค
                 self.total_group_closes += 1
                 self.group_profit_captured += group_data['net_profit']
                 
                 self.log(f"✅ Group close SUCCESS: {group_data['reason']}")
                 self.log(f"   Net profit: ${group_data['net_profit']:.2f} ({group_data['avg_profit_percent']:.1f}%)")
-                self.log(f"   Positions closed: {success_count}/{len(positions)}")
+                self.log(f"   Positions closed: {success_count}/{len(profitable_positions)}")
                 return True
             else:
-                self.log(f"❌ Group close FAILED: {success_count}/{len(positions)} positions closed")
+                self.log(f"❌ Group close FAILED: {success_count}/{len(profitable_positions)} positions closed")
                 return False
                 
         except Exception as e:
@@ -7119,6 +7158,17 @@ class TradingGUI:
         self.max_pos_entry.pack(side='right')
         self.max_pos_entry.bind('<Return>', self.update_max_positions)
         
+        # Debug mode toggle
+        debug_frame = tk.Frame(card_content, bg=self.COLORS['bg_secondary'])
+        debug_frame.pack(fill='x', pady=(0, 6))
+        
+        self.debug_distance_var = tk.BooleanVar(value=False)
+        self.debug_distance_check = ttk.Checkbutton(debug_frame, text="🐛 Debug Distance", 
+                                                   variable=self.debug_distance_var,
+                                                   command=self.toggle_debug_distance,
+                                                   style='Modern.TCheckbutton')
+        self.debug_distance_check.pack(anchor='w')
+        
         # Emergency stop button
         emergency_frame = tk.Frame(card_content, bg=self.COLORS['bg_secondary'])
         emergency_frame.pack(fill='x')
@@ -7912,6 +7962,20 @@ class TradingGUI:
             messagebox.showerror("Error", "Invalid max positions value")
             self.max_pos_var.set(str(self.trading_system.max_positions))
     
+    def toggle_debug_distance(self):
+        """Toggle debug mode for distance calculation"""
+        try:
+            debug_enabled = self.debug_distance_var.get()
+            self.trading_system.debug_distance_calculation = debug_enabled
+            
+            if debug_enabled:
+                self.trading_system.log("🐛 Debug distance calculation ENABLED", "INFO")
+            else:
+                self.trading_system.log("🐛 Debug distance calculation DISABLED", "INFO")
+                
+        except Exception as e:
+            self.trading_system.log(f"Error toggling debug mode: {str(e)}", "ERROR")
+
     def emergency_stop(self):
         """Emergency stop - immediately halt all trading and close positions"""
         try:
