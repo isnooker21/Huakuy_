@@ -590,6 +590,318 @@ class TradingSystem:
         except Exception as e:
             self.mt5_connected = False
             self.log(f"❌ Error connecting to MT5: {str(e)}", "ERROR")
+    
+    def _check_mt5_readiness(self) -> dict:
+        """🔍 ตรวจสอบความพร้อมใช้งานของ MT5 Terminal"""
+        try:
+            if not MT5_AVAILABLE or not mt5 or not self.mt5_connected:
+                return {
+                    'ready': False,
+                    'error': 'MT5 not available or not connected',
+                    'details': {
+                        'mt5_available': MT5_AVAILABLE,
+                        'mt5_module': mt5 is not None,
+                        'mt5_connected': getattr(self, 'mt5_connected', False)
+                    }
+                }
+            
+            # ตรวจสอบ Terminal Info
+            try:
+                terminal_info = mt5.terminal_info()
+                if not terminal_info:
+                    return {
+                        'ready': False,
+                        'error': 'Cannot get MT5 terminal info',
+                        'details': {'terminal_info': 'None'}
+                    }
+                
+                if not terminal_info.connected:
+                    return {
+                        'ready': False,
+                        'error': 'MT5 Terminal not connected',
+                        'details': {'terminal_connected': False}
+                    }
+                
+                if not terminal_info.trade_allowed:
+                    return {
+                        'ready': False,
+                        'error': 'MT5 Terminal not ready for trading',
+                        'details': {
+                            'trade_allowed': False,
+                            'terminal_connected': terminal_info.connected
+                        }
+                    }
+                
+            except Exception as terminal_error:
+                return {
+                    'ready': False,
+                    'error': f'Error checking terminal info: {str(terminal_error)}',
+                    'details': {'terminal_check_error': str(terminal_error)}
+                }
+            
+            # ตรวจสอบ Account Info
+            try:
+                account_info = mt5.account_info()
+                if not account_info:
+                    return {
+                        'ready': False,
+                        'error': 'Cannot get MT5 account info',
+                        'details': {'account_info': 'None'}
+                    }
+                
+            except Exception as account_error:
+                return {
+                    'ready': False,
+                    'error': f'Error checking account info: {str(account_error)}',
+                    'details': {'account_check_error': str(account_error)}
+                }
+            
+            # ตรวจสอบ Symbol Info
+            try:
+                symbol_info = mt5.symbol_info(self.symbol)
+                if not symbol_info:
+                    return {
+                        'ready': False,
+                        'error': f'Symbol {self.symbol} not available',
+                        'details': {'symbol_info': 'None'}
+                    }
+                
+                if not symbol_info.visible:
+                    return {
+                        'ready': False,
+                        'error': f'Symbol {self.symbol} not visible in Market Watch',
+                        'details': {
+                            'symbol_visible': False,
+                            'symbol_name': self.symbol
+                        }
+                    }
+                
+            except Exception as symbol_error:
+                return {
+                    'ready': False,
+                    'error': f'Error checking symbol info: {str(symbol_error)}',
+                    'details': {'symbol_check_error': str(symbol_error)}
+                }
+            
+            return {
+                'ready': True,
+                'error': None,
+                'details': {
+                    'terminal_connected': True,
+                    'trade_allowed': True,
+                    'account_available': True,
+                    'symbol_available': True,
+                    'symbol_visible': True
+                }
+            }
+            
+        except Exception as e:
+            return {
+                'ready': False,
+                'error': f'Unexpected error in MT5 readiness check: {str(e)}',
+                'details': {'unexpected_error': str(e)}
+            }
+    
+    def _auto_reconnect_mt5(self) -> bool:
+        """🔄 พยายามเชื่อมต่อ MT5 ใหม่อัตโนมัติเมื่อเกิดปัญหา"""
+        try:
+            self.log("🔄 Attempting to reconnect to MT5...", "INFO")
+            
+            # ปิดการเชื่อมต่อเดิม (ถ้ามี)
+            if self.mt5_connected and mt5:
+                try:
+                    mt5.shutdown()
+                    self.log("📴 MT5 connection closed", "INFO")
+                except Exception as shutdown_error:
+                    self.log(f"⚠️ Error during MT5 shutdown: {str(shutdown_error)}", "WARNING")
+            
+            # รอสักครู่
+            time.sleep(2)
+            
+            # พยายามเชื่อมต่อใหม่
+            if MT5_AVAILABLE and mt5:
+                if mt5.initialize():
+                    self.mt5_connected = True
+                    self.log("✅ MT5 reconnected successfully!", "INFO")
+                    
+                    # ตรวจสอบความพร้อมใช้งาน
+                    readiness_check = self._check_mt5_readiness()
+                    if readiness_check['ready']:
+                        self.log("🎯 MT5 is now ready for trading", "SUCCESS")
+                        return True
+                    else:
+                        self.log(f"⚠️ MT5 reconnected but not ready: {readiness_check['error']}", "WARNING")
+                        return False
+                else:
+                    self.mt5_connected = False
+                    self.log("❌ Failed to reinitialize MT5", "ERROR")
+                    return False
+            else:
+                self.mt5_connected = False
+                self.log("❌ MT5 not available for reconnection", "ERROR")
+                return False
+                
+        except Exception as e:
+            self.mt5_connected = False
+            self.log(f"❌ Error during MT5 reconnection: {str(e)}", "ERROR")
+            return False
+    
+    def _smart_mt5_order_with_retry(self, order_type: str, price: float, volume: float, reason: str, max_retries: int = 2) -> dict:
+        """🧠 ส่งคำสั่ง MT5 แบบฉลาดพร้อม retry และ auto-reconnection"""
+        for attempt in range(max_retries + 1):
+            try:
+                # ตรวจสอบความพร้อมใช้งาน
+                mt5_readiness = self._check_mt5_readiness()
+                if not mt5_readiness['ready']:
+                    if attempt < max_retries:
+                        self.log(f"⚠️ MT5 not ready (attempt {attempt + 1}/{max_retries + 1}): {mt5_readiness['error']}", "WARNING")
+                        
+                        # พยายามเชื่อมต่อใหม่
+                        if self._auto_reconnect_mt5():
+                            self.log("🔄 MT5 reconnected, retrying order...", "INFO")
+                            continue
+                        else:
+                            error_msg = f"MT5 reconnection failed: {mt5_readiness['error']}"
+                            self._log_mt5_error(error_msg, "RECONNECTION_FAILED")
+                            return {'success': False, 'error': error_msg}
+                    else:
+                        error_msg = f"MT5 not ready after {max_retries + 1} attempts: {mt5_readiness['error']}"
+                        self._log_mt5_error(error_msg, "MULTIPLE_ATTEMPTS_FAILED")
+                        return {'success': False, 'error': error_msg}
+                
+                # ส่งคำสั่ง
+                result = self._open_direct_mt5_order(order_type, price, volume, reason)
+                
+                if result.get('success'):
+                    return result
+                else:
+                    if attempt < max_retries:
+                        self.log(f"⚠️ Order failed (attempt {attempt + 1}/{max_retries + 1}): {result.get('error', 'Unknown error')}", "WARNING")
+                        
+                        # ถ้าเป็นปัญหา MT5 connection ให้ลองเชื่อมต่อใหม่
+                        if 'MT5' in result.get('error', ''):
+                            if self._auto_reconnect_mt5():
+                                self.log("🔄 MT5 reconnected, retrying order...", "INFO")
+                                continue
+                    
+                    # Log error ก่อนส่งคืน
+                    error_msg = result.get('error', 'Unknown error')
+                    self._log_mt5_error(f"Order failed after {attempt + 1} attempts: {error_msg}", "ORDER_FAILED")
+                    return result
+                    
+            except Exception as e:
+                if attempt < max_retries:
+                    self.log(f"⚠️ Unexpected error (attempt {attempt + 1}/{max_retries + 1}): {str(e)}", "WARNING")
+                    time.sleep(1)  # รอสักครู่ก่อน retry
+                    continue
+                else:
+                    error_msg = f"Order failed after {max_retries + 1} attempts: {str(e)}"
+                    self._log_mt5_error(error_msg, "UNEXPECTED_ERROR")
+                    return {'success': False, 'error': str(e)}
+        
+        error_msg = f'Order failed after {max_retries + 1} attempts'
+        self._log_mt5_error(error_msg, "MAX_ATTEMPTS_EXCEEDED")
+        return {'success': False, 'error': error_msg}
+    
+    def _log_mt5_error(self, error_msg: str, error_type: str = "GENERAL"):
+        """📝 บันทึก error ของ MT5 พร้อมข้อมูลเพิ่มเติม"""
+        try:
+            self.mt5_error_count += 1
+            self.mt5_last_error_time = datetime.now()
+            
+            # สร้าง error log entry
+            error_entry = {
+                'timestamp': self.mt5_last_error_time.isoformat(),
+                'error_type': error_type,
+                'error_message': error_msg,
+                'mt5_status': {
+                    'connected': getattr(self, 'mt5_connected', False),
+                    'available': MT5_AVAILABLE,
+                    'module_loaded': mt5 is not None
+                },
+                'system_status': {
+                    'positions_count': len(self.positions) if self.positions else 0,
+                    'trading_active': getattr(self, 'trading_active', False)
+                }
+            }
+            
+            # เพิ่ม error entry ลงใน system alerts
+            if hasattr(self, 'system_alerts'):
+                self.system_alerts.append(error_entry)
+                # เก็บแค่ max_alerts ล่าสุด
+                if len(self.system_alerts) > self.max_alerts:
+                    self.system_alerts = self.system_alerts[-self.max_alerts:]
+            
+            # Log error พร้อมข้อมูลเพิ่มเติม
+            self.log(f"🚨 MT5 Error #{self.mt5_error_count} ({error_type}): {error_msg}", "ERROR")
+            self.log(f"🔍 MT5 Status: Connected={error_entry['mt5_status']['connected']}, Available={error_entry['mt5_status']['available']}", "DEBUG")
+            
+        except Exception as e:
+            # Fallback logging ถ้า error logging ล้มเหลว
+            self.log(f"Error logging MT5 error: {str(e)}", "ERROR")
+    
+    def _get_mt5_health_status(self) -> dict:
+        """🏥 ตรวจสอบสถานะสุขภาพของ MT5"""
+        try:
+            health_status = {
+                'overall_health': 'UNKNOWN',
+                'connection_status': 'UNKNOWN',
+                'trading_readiness': 'UNKNOWN',
+                'error_summary': {},
+                'recommendations': []
+            }
+            
+            # ตรวจสอบการเชื่อมต่อพื้นฐาน
+            if not MT5_AVAILABLE:
+                health_status['connection_status'] = 'FAILED'
+                health_status['overall_health'] = 'CRITICAL'
+                health_status['error_summary']['library'] = 'MT5 library not available'
+                health_status['recommendations'].append('Install MetaTrader5 Python package')
+                return health_status
+            
+            if not mt5:
+                health_status['connection_status'] = 'FAILED'
+                health_status['overall_health'] = 'CRITICAL'
+                health_status['error_summary']['module'] = 'MT5 module not loaded'
+                health_status['recommendations'].append('Check MT5 import and initialization')
+                return health_status
+            
+            if not self.mt5_connected:
+                health_status['connection_status'] = 'DISCONNECTED'
+                health_status['overall_health'] = 'POOR'
+                health_status['error_summary']['connection'] = 'MT5 not connected'
+                health_status['recommendations'].append('Reconnect to MT5 Terminal')
+                return health_status
+            
+            # ตรวจสอบความพร้อมใช้งาน
+            readiness_check = self._check_mt5_readiness()
+            if readiness_check['ready']:
+                health_status['connection_status'] = 'CONNECTED'
+                health_status['trading_readiness'] = 'READY'
+                health_status['overall_health'] = 'GOOD'
+            else:
+                health_status['connection_status'] = 'CONNECTED_BUT_NOT_READY'
+                health_status['trading_readiness'] = 'NOT_READY'
+                health_status['overall_health'] = 'POOR'
+                health_status['error_summary']['readiness'] = readiness_check['error']
+                health_status['recommendations'].append('Check MT5 Terminal settings and permissions')
+            
+            # ตรวจสอบ error history
+            if hasattr(self, 'mt5_error_count') and self.mt5_error_count > 0:
+                health_status['error_summary']['recent_errors'] = f'{self.mt5_error_count} errors since last reset'
+                if self.mt5_error_count > 5:
+                    health_status['recommendations'].append('High error count detected - consider restarting MT5 Terminal')
+            
+            return health_status
+            
+        except Exception as e:
+            return {
+                'overall_health': 'ERROR',
+                'connection_status': 'ERROR',
+                'trading_readiness': 'ERROR',
+                'error_summary': {'health_check_error': str(e)},
+                'recommendations': ['System error during health check']
+            }
 
         # 🎯 Smart Pair/Group Closing System (เปลี่ยนเป็น %)
         self.pair_closing_enabled = True
@@ -656,6 +968,13 @@ class TradingSystem:
         self.last_health_check = None
         self.system_alerts = []
         self.max_alerts = 50  # Keep last 50 alerts
+        
+        # 🆕 MT5 Error Tracking & Recovery
+        self.mt5_error_count = 0
+        self.mt5_last_error_time = None
+        self.mt5_recovery_attempts = 0
+        self.mt5_auto_recovery_enabled = True
+        self.mt5_health_check_enabled = True
         
         # Performance metrics
         self.performance_metrics = {
@@ -3696,8 +4015,8 @@ class TradingSystem:
                             })
                             continue
                         
-                        # เปิดไม้
-                        position_result = self._open_direct_mt5_order(
+                        # เปิดไม้ด้วยระบบ Smart MT5 Order
+                        position_result = self._smart_mt5_order_with_retry(
                             action['position_type'],
                             action['target_price'],
                             action['volume'],
@@ -6412,7 +6731,7 @@ class TradingSystem:
             emergency_volume = min(0.01, self.base_volume * 0.5)  # ใช้ volume เล็ก
             
             # 🆕 เปิดไม้ใหม่โดยตรงผ่าน MT5 (ไม่ผ่านระบบหลัก)
-            order_result = self._open_direct_mt5_order('SELL', target_price, emergency_volume, action.get('reason', 'Smart distribution - SELL'))
+            order_result = self._smart_mt5_order_with_retry('SELL', target_price, emergency_volume, action.get('reason', 'Smart distribution - SELL'))
             
             if order_result.get('success'):
                 self.log(f"✅ Smart Distribution SELL opened: {target_price:.5f}, Volume: {emergency_volume}", "INFO")
@@ -6441,7 +6760,7 @@ class TradingSystem:
             emergency_volume = min(0.01, self.base_volume * 0.5)  # ใช้ volume เล็ก
             
             # 🆕 เปิดไม้ใหม่โดยตรงผ่าน MT5 (ไม่ผ่านระบบหลัก)
-            order_result = self._open_direct_mt5_order('BUY', target_price, emergency_volume, action.get('reason', 'Smart distribution - BUY'))
+            order_result = self._smart_mt5_order_with_retry('BUY', target_price, emergency_volume, action.get('reason', 'Smart distribution - BUY'))
             
             if order_result.get('success'):
                 self.log(f"✅ Smart Distribution BUY opened: {target_price:.5f}, Volume: {emergency_volume}", "INFO")
@@ -6469,9 +6788,18 @@ class TradingSystem:
                     self.log(warning, "WARNING")
                 return {'success': False, 'error': smart_check['reason']}
             
-            # ตรวจสอบว่า MT5 พร้อมใช้งาน
-            if not MT5_AVAILABLE or not mt5 or not self.mt5_connected:
-                return {'success': False, 'error': 'MT5 not available or not connected'}
+            # 🔍 Enhanced MT5 Connection & Readiness Check using dedicated function
+            mt5_readiness = self._check_mt5_readiness()
+            if not mt5_readiness['ready']:
+                error_msg = f"MT5 not ready: {mt5_readiness['error']}"
+                self.log(f"❌ {error_msg}", "ERROR")
+                
+                # Log detailed readiness information for debugging
+                details = mt5_readiness.get('details', {})
+                for key, value in details.items():
+                    self.log(f"🔍 {key}: {value}", "DEBUG")
+                
+                return {'success': False, 'error': error_msg}
             
             # สร้าง order request
             request = {
@@ -6490,7 +6818,19 @@ class TradingSystem:
             # ส่ง order
             result = mt5.order_send(request)
             
-            if result and result.retcode == mt5.TRADE_RETCODE_DONE:
+            # 🆕 Enhanced Result Validation
+            if result is None:
+                error_msg = "MT5 order_send returned None - Terminal may not be ready"
+                self.log(f"❌ {error_msg}", "ERROR")
+                return {'success': False, 'error': error_msg}
+            
+            # ตรวจสอบว่า result มี attribute ที่จำเป็น
+            if not hasattr(result, 'retcode'):
+                error_msg = f"Invalid MT5 order result: missing retcode attribute. Result type: {type(result)}"
+                self.log(f"❌ {error_msg}", "ERROR")
+                return {'success': False, 'error': error_msg}
+            
+            if result.retcode == mt5.TRADE_RETCODE_DONE:
                 # 🆕 อัปเดตเวลาที่เปิดไม้ล่าสุด
                 self.last_position_opened = datetime.now()
                 
@@ -6503,12 +6843,19 @@ class TradingSystem:
                     'message': f'Smart Distribution {order_type} opened successfully'
                 }
             else:
-                error_msg = f"MT5 order failed: {result.retcode} - {result.comment}"
+                # 🆕 Enhanced Error Handling
+                error_msg = f"MT5 order failed: {result.retcode} - {getattr(result, 'comment', 'No comment')}"
                 self.log(f"❌ {error_msg}", "ERROR")
+                
+                # 🆕 Log additional error details for debugging
+                if hasattr(result, 'retcode'):
+                    self.log(f"🔍 Order Result Details - Retcode: {result.retcode}, Order: {getattr(result, 'order', 'N/A')}", "DEBUG")
+                
                 return {'success': False, 'error': error_msg}
                 
         except Exception as e:
-            self.log(f"Error opening direct MT5 order: {str(e)}", "ERROR")
+            error_msg = f"Error opening direct MT5 order: {str(e)}"
+            self._log_mt5_error(error_msg, "ORDER_OPENING_ERROR")
             return {'success': False, 'error': str(e)}
     
     def _find_optimal_sell_distribution_price(self) -> float:
@@ -16904,7 +17251,7 @@ class TradingSystem:
                 current_price = self.get_current_price()
                 if current_price:
                     # สร้าง SELL ที่ราคาปัจจุบัน
-                    result = self._open_direct_mt5_order(
+                    result = self._smart_mt5_order_with_retry(
                         "SELL", 
                         current_price, 
                         0.1,  # 0.1 lots
@@ -16919,7 +17266,7 @@ class TradingSystem:
                 current_price = self.get_current_price()
                 if current_price:
                     # สร้าง BUY ที่ราคาปัจจุบัน
-                    result = self._open_direct_mt5_order(
+                    result = self._smart_mt5_order_with_retry(
                         "BUY", 
                         current_price, 
                         0.1,  # 0.1 lots
@@ -17092,7 +17439,7 @@ class TradingSystem:
             hedge_type = "SELL" if worst_position.type == "BUY" else "BUY"
             hedge_volume = worst_position.volume * 0.5  # ครึ่งหนึ่งของไม้ที่ขาดทุน
             
-            result = self._open_direct_mt5_order(
+            result = self._smart_mt5_order_with_retry(
                 hedge_type,
                 current_price,
                 hedge_volume,
