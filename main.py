@@ -189,7 +189,22 @@ class TradingSystem:
         self.base_lot = 0.01
         self.max_positions = 50
         self.min_margin_level = 200.0
-        self.signal_cooldown = 60  # seconds
+        # 🎯 Fixed Timing Configuration (CONFLICT RESOLVED)
+        self.system_timing = {
+            'signal_cooldown': 60,           # 60 วินาที - การเปิดสัญญาณใหม่
+            'redirect_cooldown': 45,         # 45 วินาที - การ redirect (ลดลงจาก 30)
+            'efficiency_check': 60,          # 60 วินาที - ตรวจสอบประสิทธิภาพ (เพิ่มขึ้นจาก 30)
+            'connection_check': 30,          # 30 วินาที - ตรวจสอบการเชื่อมต่อ
+            'edge_closing_interval': 120,    # 120 วินาที - การปิดไม้ขอบ
+            'hedge_analysis_interval': 90,   # 90 วินาที - การวิเคราะห์ hedge
+            'portfolio_analysis_interval': 180  # 180 วินาที - การวิเคราะห์ portfolio
+        }
+        
+        # 🚫 GROUP CLOSING ONLY MODE (NEW)
+        self.group_closing_only = True  # เปิดใช้งาน group closing เท่านั้น
+        self.individual_closing_disabled = True  # ปิด individual closing
+        
+        self.signal_cooldown = self.system_timing['signal_cooldown']
         self.max_signals_per_hour = 40
         
         # Trading statistics
@@ -207,6 +222,42 @@ class TradingSystem:
         # GUI components
         self.root = None
         self.log_queue = queue.Queue()
+        
+        # 🎨 Enhanced Logging System (NEW)
+        self.log_categories = {
+            'SYSTEM': '🔧',
+            'TRADING': '💰',
+            'AI': '🧠',
+            'RISK': '⚠️',
+            'SIGNAL': '📡',
+            'ORDER': '📋',
+            'PORTFOLIO': '📊',
+            'HEALTH': '🏥',
+            'COORDINATOR': '🎯',
+            'PERFORMANCE': '⚡',
+            'ERROR': '❌',
+            'SUCCESS': '✅',
+            'WARNING': '⚠️',
+            'INFO': 'ℹ️'
+        }
+        
+        self.log_levels = {
+            'DEBUG': 0,
+            'INFO': 1,
+            'WARNING': 2,
+            'ERROR': 3,
+            'CRITICAL': 4
+        }
+        
+        self.current_log_level = 'INFO'
+        self.log_format = 'enhanced'  # 'simple', 'enhanced', 'detailed'
+        self.log_colors_enabled = True
+        self.log_statistics = {
+            'total_logs': 0,
+            'by_category': {},
+            'by_level': {},
+            'recent_logs': []
+        }
         
         # 🧠 Smart Signal Router & Position Management
         self.position_tracker = {}
@@ -242,7 +293,7 @@ class TradingSystem:
         self.debug_distance_calculation = False  # เปิดเพื่อ debug การคำนวณระยะ
         self.debug_position_tracking = False  # เปิดเพื่อ debug การ track positions
         self.max_positions_per_zone = 5  # จำกัดไม้ต่อ zone (ป้องกันการกระจุกตัว)
-        self.min_position_distance_pips = 8   # ระยะห่างขั้นต่ำ 8 pips (ป้องกันการใกล้กันเกินไป)
+        self.min_position_distance_pips = 5   # ระยะห่างขั้นต่ำ 5 pips (ปรับให้ยืดหยุ่นขึ้น)
         self.force_zone_diversification = True  # เปิดการบังคับกระจาย (ป้องกันการกระจุกตัว)
         
         # 🧠 Smart Opening Rules (ยืดหยุ่นขึ้น)
@@ -309,11 +360,56 @@ class TradingSystem:
         self.market_reversal_history = []
         self.portfolio_performance_history = []
         
-        # AI Configuration
-        self.ai_margin_warning_threshold = 0.75  # ยืดหยุ่นขึ้น
-        self.ai_margin_caution_threshold = 0.85  # ยืดหยุ่นขึ้น
-        self.ai_margin_danger_threshold = 0.60   # ยืดหยุ่นขึ้น
-        self.ai_margin_emergency_threshold = 0.40  # ยืดหยุ่นขึ้น
+        # 🎯 System Priority Management (NEW)
+        self.system_priority = {
+            'EMERGENCY': 1,           # ฉุกเฉิน - สูงสุด
+            'SAFETY': 2,              # ความปลอดภัย
+            'RISK_MANAGEMENT': 3,     # จัดการความเสี่ยง
+            'TRADING': 4,             # การเทรด
+            'OPTIMIZATION': 5         # การปรับปรุง - ต่ำสุด
+        }
+        
+        # 🎯 System State Management (NEW)
+        self.system_states = {
+            'smart_router': 'idle',
+            'edge_closing': 'idle',
+            'hedge_system': 'idle',
+            'ai_analysis': 'idle',
+            'risk_management': 'idle',
+            'portfolio_optimization': 'idle'
+        }
+        
+        # 🎯 System Coordinator (NEW)
+        self.system_coordinator_enabled = True
+        self.active_systems = set()
+        self.system_locks = {}
+        self.system_timeouts = {
+            'smart_router': 30,
+            'edge_closing': 60,
+            'hedge_system': 45,
+            'ai_analysis': 20,
+            'risk_management': 15,
+            'portfolio_optimization': 30
+        }
+        
+        # 🎯 Conflict Resolution Rules (NEW)
+        self.conflict_rules = {
+            'emergency_vs_trading': 'emergency_wins',
+            'hedge_vs_closing': 'closing_wins',
+            'ai_vs_traditional': 'ai_wins_with_fallback',
+            'optimization_vs_safety': 'safety_wins'
+        }
+        
+        # 🎯 Fixed AI Configuration (CONFLICT RESOLVED)
+        self.ai_margin_thresholds = {
+            'emergency': 0.40,    # 40% - ฉุกเฉิน (ต่ำสุด)
+            'danger': 0.50,       # 50% - อันตราย
+            'warning': 0.70,      # 70% - เตือน
+            'caution': 0.85       # 85% - ระวัง (สูงสุด)
+        }
+        
+        # 🎯 Single AI Confidence Threshold (CONFLICT RESOLVED)
+        self.ai_confidence_threshold = 0.65  # ใช้ค่าเดียวที่เหมาะสม
         
         # Circuit breaker state
         self.circuit_breaker_open = False
@@ -586,96 +682,432 @@ class TradingSystem:
         self.last_hedge_time = None  # Track last hedge execution time
         self.recent_volatility = 1.0  # Default volatility level
 
-    def log(self, message: str, level: str = "INFO"):
-        """🎨 Enhanced thread-safe logging with beautiful formatting"""
-        timestamp = datetime.now().strftime("%H:%M:%S")
-        
-        # 🎨 Enhanced formatting with smart emojis and colors
-        level_icons = {
-            "INFO": "ℹ️",
-            "WARNING": "⚠️", 
-            "ERROR": "❌",
-            "SUCCESS": "✅",
-            "DEBUG": "🐛"
-        }
-        
-        # 🧠 Smart category detection with enhanced emojis
-        category_icons = {
-            "TRADE": "💰",
-            "SIGNAL": "📡", 
-            "POSITION": "📊",
-            "CLOSING": "🎯",
-            "HEDGE": "🔄",
-            "AI": "🤖",
-            "MARGIN": "🏦",
-            "RECOVERY": "🧠",
-            "BASKET": "🧮",
-            "BALANCE": "⚖️",
-            "PROFIT": "💵",
-            "SYSTEM": "⚙️",
-            "CONNECTION": "🔗",
-            "ZONE": "🗺️"
-        }
-        
-        # 🎯 Auto-detect category from message content
-        clean_message = message.strip()
-        message_lower = clean_message.lower()
-        
-        # Smart category detection
-        if any(keyword in message_lower for keyword in ["buy", "sell", "order", "execute", "trade"]):
-            category = "TRADE"
-        elif any(keyword in message_lower for keyword in ["signal", "zone", "analysis", "strength"]):
-            category = "SIGNAL"
-        elif any(keyword in message_lower for keyword in ["position", "ticket", "close", "tracking"]):
-            category = "POSITION"
-        elif any(keyword in message_lower for keyword in ["hedge", "balance", "support", "volume"]):
-            category = "HEDGE"
-        elif any(keyword in message_lower for keyword in ["ai", "margin", "risk", "assessment"]):
-            category = "AI"
-        elif any(keyword in message_lower for keyword in ["basket", "optimal", "score", "combination"]):
-            category = "BASKET"
-        elif any(keyword in message_lower for keyword in ["recovery", "smart", "emergency"]):
-            category = "RECOVERY"
-        elif any(keyword in message_lower for keyword in ["profit", "loss", "p&l", "equity"]):
-            category = "PROFIT"
-        elif any(keyword in message_lower for keyword in ["connect", "mt5", "terminal", "broker"]):
-            category = "CONNECTION"
-        elif any(keyword in message_lower for keyword in ["system", "start", "stop", "status"]):
-            category = "SYSTEM"
-        else:
-            category = "INFO"
-        
-        # 🎨 Get appropriate icons
-        level_icon = level_icons.get(level, "📝")
-        category_icon = category_icons.get(category, "ℹ️")
-        
-        # 🎯 Create beautiful formatted message
-        if level == "ERROR":
-            log_message = f"{timestamp} {level_icon} {category_icon} ERROR: {clean_message}"
-        elif level == "WARNING":
-            log_message = f"{timestamp} {level_icon} {category_icon} WARN: {clean_message}"
-        elif level == "SUCCESS":
-            log_message = f"{timestamp} {level_icon} {category_icon} {clean_message}"
-        elif level == "DEBUG":
-            log_message = f"{timestamp} {level_icon} {category_icon} DEBUG: {clean_message}"
-        else:
-            # 🎨 Special formatting for different categories
-            if category == "AI":
-                log_message = f"{timestamp} {category_icon} {clean_message}"
-            elif category == "BASKET":
-                log_message = f"{timestamp} {category_icon} {clean_message}"
-            elif category == "RECOVERY":
-                log_message = f"{timestamp} {category_icon} {clean_message}"
-            elif category == "TRADE":
-                log_message = f"{timestamp} {category_icon} {clean_message}"
+    def log(self, message: str, level: str = "INFO", category: str = None):
+        """🎨 Enhanced logging with categories, colors, and better formatting"""
+        try:
+            # Auto-detect category if not provided
+            if category is None:
+                category = self._detect_log_category(message)
+            
+            # Get emoji for category
+            emoji = self.log_categories.get(category, 'ℹ️')
+            
+            # Check if we should log this level
+            if self.log_levels.get(level, 1) < self.log_levels.get(self.current_log_level, 1):
+                return
+            
+            # Format timestamp
+            timestamp = datetime.now().strftime("%H:%M:%S")
+            
+            # Format message based on format type
+            if self.log_format == 'simple':
+                formatted_message = f"{emoji} {message}"
+            elif self.log_format == 'enhanced':
+                formatted_message = f"{emoji} [{timestamp}] [{category}] {message}"
+            elif self.log_format == 'detailed':
+                formatted_message = f"{emoji} [{timestamp}] [{level}] [{category}] {message}"
             else:
-                log_message = f"{timestamp} {category_icon} {clean_message}"
+                formatted_message = f"{emoji} [{timestamp}] {message}"
+            
+            # Add colors if enabled
+            if self.log_colors_enabled:
+                formatted_message = self._add_log_colors(formatted_message, level, category)
+            
+            # Update statistics
+            self._update_log_statistics(category, level, message)
+            
+            # Add to queue for GUI
+            if hasattr(self, 'log_queue'):
+                self.log_queue.put(formatted_message)
+            
+            # Print to console
+            print(formatted_message)
+            
+        except Exception as e:
+            print(f"Logging error: {str(e)}")
+
+    def _detect_log_category(self, message: str) -> str:
+        """🔍 Auto-detect log category from message content"""
+        message_upper = message.upper()
         
-        # 📤 Add to queue for GUI update
-        self.log_queue.put(log_message)
+        if any(word in message_upper for word in ['ERROR', 'FAILED', 'CRITICAL', 'EXCEPTION']):
+            return 'ERROR'
+        elif any(word in message_upper for word in ['WARNING', 'CAUTION', 'ALERT']):
+            return 'WARNING'
+        elif any(word in message_upper for word in ['SUCCESS', 'COMPLETED', 'PASSED', 'DONE']):
+            return 'SUCCESS'
+        elif any(word in message_upper for word in ['AI', 'PREDICTION', 'ANALYSIS', 'INTELLIGENCE']):
+            return 'AI'
+        elif any(word in message_upper for word in ['SIGNAL', 'ROUTER', 'ROUTING']):
+            return 'SIGNAL'
+        elif any(word in message_upper for word in ['ORDER', 'EXECUTE', 'EXECUTION', 'TRADE']):
+            return 'ORDER'
+        elif any(word in message_upper for word in ['PORTFOLIO', 'POSITION', 'BALANCE', 'EQUITY']):
+            return 'PORTFOLIO'
+        elif any(word in message_upper for word in ['HEALTH', 'SYSTEM', 'MONITOR', 'CHECK']):
+            return 'HEALTH'
+        elif any(word in message_upper for word in ['COORDINATOR', 'CONFLICT', 'RESOLUTION']):
+            return 'COORDINATOR'
+        elif any(word in message_upper for word in ['PERFORMANCE', 'OPTIMIZATION', 'OPTIMIZE']):
+            return 'PERFORMANCE'
+        elif any(word in message_upper for word in ['RISK', 'MARGIN', 'DRAWDOWN', 'EXPOSURE']):
+            return 'RISK'
+        elif any(word in message_upper for word in ['TRADING', 'BUY', 'SELL', 'CLOSE']):
+            return 'TRADING'
+        else:
+            return 'INFO'
+
+    def _add_log_colors(self, message: str, level: str, category: str) -> str:
+        """🎨 Add colors to log messages"""
+        try:
+            # Color codes for different levels
+            colors = {
+                'ERROR': '\033[91m',      # Red
+                'WARNING': '\033[93m',    # Yellow
+                'SUCCESS': '\033[92m',    # Green
+                'INFO': '\033[94m',       # Blue
+                'DEBUG': '\033[95m',      # Magenta
+                'RESET': '\033[0m'        # Reset
+            }
+            
+            # Category-specific colors
+            category_colors = {
+                'AI': '\033[96m',         # Cyan
+                'SIGNAL': '\033[95m',     # Magenta
+                'ORDER': '\033[93m',      # Yellow
+                'PORTFOLIO': '\033[92m',  # Green
+                'HEALTH': '\033[94m',     # Blue
+                'COORDINATOR': '\033[91m', # Red
+                'PERFORMANCE': '\033[96m', # Cyan
+                'RISK': '\033[93m',       # Yellow
+                'TRADING': '\033[92m'     # Green
+            }
+            
+            # Add colors
+            color = colors.get(level, colors['INFO'])
+            category_color = category_colors.get(category, '')
+            reset = colors['RESET']
+            
+            if category_color:
+                return f"{color}{category_color}{message}{reset}"
+            else:
+                return f"{color}{message}{reset}"
+                
+        except Exception:
+            return message  # Return original if coloring fails
+
+    def _update_log_statistics(self, category: str, level: str, message: str):
+        """📊 Update log statistics"""
+        try:
+            self.log_statistics['total_logs'] += 1
+            
+            # Update category count
+            if category not in self.log_statistics['by_category']:
+                self.log_statistics['by_category'][category] = 0
+            self.log_statistics['by_category'][category] += 1
+            
+            # Update level count
+            if level not in self.log_statistics['by_level']:
+                self.log_statistics['by_level'][level] = 0
+            self.log_statistics['by_level'][level] += 1
+            
+            # Update recent logs (keep last 50)
+            self.log_statistics['recent_logs'].append({
+                'timestamp': datetime.now().isoformat(),
+                'category': category,
+                'level': level,
+                'message': message[:100]  # Truncate long messages
+            })
+            
+            if len(self.log_statistics['recent_logs']) > 50:
+                self.log_statistics['recent_logs'] = self.log_statistics['recent_logs'][-50:]
+                
+        except Exception:
+            pass  # Ignore statistics errors
+
+    def set_log_format(self, format_type: str = 'enhanced'):
+        """🎨 ตั้งค่ารูปแบบ log"""
+        valid_formats = ['simple', 'enhanced', 'detailed']
+        if format_type in valid_formats:
+            self.log_format = format_type
+            self.log(f"Log format changed to: {format_type}", "INFO", "SYSTEM")
+        else:
+            self.log(f"Invalid log format: {format_type}. Valid formats: {valid_formats}", "WARNING", "SYSTEM")
+
+    def set_log_level(self, level: str = 'INFO'):
+        """📊 ตั้งค่าระดับ log"""
+        valid_levels = list(self.log_levels.keys())
+        if level in valid_levels:
+            self.current_log_level = level
+            self.log(f"Log level changed to: {level}", "INFO", "SYSTEM")
+        else:
+            self.log(f"Invalid log level: {level}. Valid levels: {valid_levels}", "WARNING", "SYSTEM")
+
+    def toggle_log_colors(self, enabled: bool = None):
+        """🎨 เปิด/ปิดสีใน log"""
+        if enabled is None:
+            self.log_colors_enabled = not self.log_colors_enabled
+        else:
+            self.log_colors_enabled = enabled
         
-        # 🖥️ Console output
-        print(log_message)
+        status = "enabled" if self.log_colors_enabled else "disabled"
+        self.log(f"Log colors {status}", "INFO", "SYSTEM")
+
+    def get_log_statistics(self) -> dict:
+        """📊 รับสถิติ log"""
+        return {
+            'total_logs': self.log_statistics['total_logs'],
+            'by_category': self.log_statistics['by_category'].copy(),
+            'by_level': self.log_statistics['by_level'].copy(),
+            'recent_logs': self.log_statistics['recent_logs'].copy(),
+            'current_settings': {
+                'format': self.log_format,
+                'level': self.current_log_level,
+                'colors_enabled': self.log_colors_enabled
+            }
+        }
+
+    def print_log_summary(self):
+        """📋 แสดงสรุป log"""
+        try:
+            stats = self.get_log_statistics()
+            
+            print("\n" + "="*60)
+            print("📊 LOG SUMMARY REPORT")
+            print("="*60)
+            
+            # Basic stats
+            print(f"📈 Total Logs: {stats['total_logs']}")
+            print(f"🎨 Format: {stats['current_settings']['format']}")
+            print(f"📊 Level: {stats['current_settings']['level']}")
+            print(f"🎨 Colors: {'✅ Enabled' if stats['current_settings']['colors_enabled'] else '❌ Disabled'}")
+            
+            # Category breakdown
+            if stats['by_category']:
+                print(f"\n📋 By Category:")
+                for category, count in sorted(stats['by_category'].items(), key=lambda x: x[1], reverse=True):
+                    emoji = self.log_categories.get(category, '📝')
+                    print(f"   {emoji} {category}: {count}")
+            
+            # Level breakdown
+            if stats['by_level']:
+                print(f"\n📊 By Level:")
+                for level, count in sorted(stats['by_level'].items(), key=lambda x: x[1], reverse=True):
+                    print(f"   📝 {level}: {count}")
+            
+            # Recent logs
+            if stats['recent_logs']:
+                print(f"\n🕒 Recent Logs (Last 10):")
+                for log_entry in stats['recent_logs'][-10:]:
+                    timestamp = log_entry['timestamp'][11:19]  # Extract time only
+                    emoji = self.log_categories.get(log_entry['category'], '📝')
+                    print(f"   {emoji} [{timestamp}] {log_entry['category']}: {log_entry['message']}")
+            
+            print("="*60)
+            print("✅ Log Summary Complete")
+            print("="*60 + "\n")
+            
+        except Exception as e:
+            self.log(f"Error printing log summary: {str(e)}", "ERROR", "SYSTEM")
+
+    def filter_logs(self, category: str = None, level: str = None, keyword: str = None) -> list:
+        """🔍 กรอง log ตามเงื่อนไข"""
+        try:
+            filtered_logs = []
+            
+            for log_entry in self.log_statistics['recent_logs']:
+                # Filter by category
+                if category and log_entry['category'] != category:
+                    continue
+                
+                # Filter by level
+                if level and log_entry['level'] != level:
+                    continue
+                
+                # Filter by keyword
+                if keyword and keyword.lower() not in log_entry['message'].lower():
+                    continue
+                
+                filtered_logs.append(log_entry)
+            
+            return filtered_logs
+            
+        except Exception as e:
+            self.log(f"Error filtering logs: {str(e)}", "ERROR", "SYSTEM")
+            return []
+
+    def clear_log_statistics(self):
+        """🧹 ล้างสถิติ log"""
+        self.log_statistics = {
+            'total_logs': 0,
+            'by_category': {},
+            'by_level': {},
+            'recent_logs': []
+        }
+        self.log("Log statistics cleared", "INFO", "SYSTEM")
+
+    def show_log_dashboard(self):
+        """📊 แสดง Log Dashboard แบบ Real-time"""
+        try:
+            import os
+            import time
+            
+            # Clear screen
+            os.system('cls' if os.name == 'nt' else 'clear')
+            
+            while True:
+                # Get current statistics
+                stats = self.get_log_statistics()
+                
+                # Header
+                print("\n" + "="*80)
+                print("🎯 HUAKUY TRADING SYSTEM - LOG DASHBOARD")
+                print("="*80)
+                print(f"🕒 Last Updated: {datetime.now().strftime('%H:%M:%S')}")
+                print(f"📊 Total Logs: {stats['total_logs']}")
+                print("="*80)
+                
+                # Category Overview
+                print("\n📋 LOG CATEGORIES:")
+                if stats['by_category']:
+                    for category, count in sorted(stats['by_category'].items(), key=lambda x: x[1], reverse=True):
+                        emoji = self.log_categories.get(category, '📝')
+                        percentage = (count / stats['total_logs'] * 100) if stats['total_logs'] > 0 else 0
+                        bar = "█" * int(percentage / 5) + "░" * (20 - int(percentage / 5))
+                        print(f"   {emoji} {category:<15} {count:>3} ({percentage:>5.1f}%) {bar}")
+                else:
+                    print("   📝 No logs yet")
+                
+                # Level Overview
+                print("\n📊 LOG LEVELS:")
+                if stats['by_level']:
+                    for level, count in sorted(stats['by_level'].items(), key=lambda x: x[1], reverse=True):
+                        percentage = (count / stats['total_logs'] * 100) if stats['total_logs'] > 0 else 0
+                        bar = "█" * int(percentage / 5) + "░" * (20 - int(percentage / 5))
+                        print(f"   📝 {level:<10} {count:>3} ({percentage:>5.1f}%) {bar}")
+                else:
+                    print("   📝 No logs yet")
+                
+                # Recent Logs
+                print("\n🕒 RECENT LOGS (Last 15):")
+                if stats['recent_logs']:
+                    for log_entry in stats['recent_logs'][-15:]:
+                        timestamp = log_entry['timestamp'][11:19]
+                        emoji = self.log_categories.get(log_entry['category'], '📝')
+                        level_emoji = "❌" if log_entry['level'] == 'ERROR' else "⚠️" if log_entry['level'] == 'WARNING' else "✅" if log_entry['level'] == 'SUCCESS' else "ℹ️"
+                        message = log_entry['message'][:60] + "..." if len(log_entry['message']) > 60 else log_entry['message']
+                        print(f"   {emoji} {level_emoji} [{timestamp}] {log_entry['category']:<12} {message}")
+                else:
+                    print("   📝 No recent logs")
+                
+                # System Status
+                print("\n🎮 SYSTEM STATUS:")
+                print(f"   🎨 Format: {stats['current_settings']['format']}")
+                print(f"   📊 Level: {stats['current_settings']['level']}")
+                print(f"   🎨 Colors: {'✅ Enabled' if stats['current_settings']['colors_enabled'] else '❌ Disabled'}")
+                
+                # Controls
+                print("\n🎮 CONTROLS:")
+                print("   Press 'q' + Enter to quit dashboard")
+                print("   Press 'r' + Enter to refresh now")
+                print("   Press 'c' + Enter to clear statistics")
+                print("   Press 'f' + Enter to change format")
+                print("   Press 'l' + Enter to change level")
+                print("   Press 't' + Enter to toggle colors")
+                
+                # Auto-refresh every 5 seconds
+                print(f"\n⏰ Auto-refresh in 5 seconds... (Press any key to interrupt)")
+                
+                # Non-blocking input check
+                import select
+                import sys
+                
+                if os.name == 'nt':  # Windows
+                    import msvcrt
+                    start_time = time.time()
+                    while time.time() - start_time < 5:
+                        if msvcrt.kbhit():
+                            key = msvcrt.getch().decode('utf-8').lower()
+                            if key == 'q':
+                                return
+                            elif key == 'r':
+                                break
+                            elif key == 'c':
+                                self.clear_log_statistics()
+                                break
+                            elif key == 'f':
+                                self._change_log_format_interactive()
+                                break
+                            elif key == 'l':
+                                self._change_log_level_interactive()
+                                break
+                            elif key == 't':
+                                self.toggle_log_colors()
+                                break
+                        time.sleep(0.1)
+                else:  # Unix/Linux/Mac
+                    start_time = time.time()
+                    while time.time() - start_time < 5:
+                        if select.select([sys.stdin], [], [], 0.1)[0]:
+                            key = sys.stdin.readline().strip().lower()
+                            if key == 'q':
+                                return
+                            elif key == 'r':
+                                break
+                            elif key == 'c':
+                                self.clear_log_statistics()
+                                break
+                            elif key == 'f':
+                                self._change_log_format_interactive()
+                                break
+                            elif key == 'l':
+                                self._change_log_level_interactive()
+                                break
+                            elif key == 't':
+                                self.toggle_log_colors()
+                                break
+                        time.sleep(0.1)
+                
+        except KeyboardInterrupt:
+            print("\n\n👋 Dashboard closed by user")
+        except Exception as e:
+            self.log(f"Error in log dashboard: {str(e)}", "ERROR", "SYSTEM")
+
+    def _change_log_format_interactive(self):
+        """🎨 เปลี่ยน log format แบบ interactive"""
+        print("\n🎨 Available Log Formats:")
+        print("   1. simple   - Just emoji and message")
+        print("   2. enhanced - Emoji, timestamp, category, message")
+        print("   3. detailed - Emoji, timestamp, level, category, message")
+        
+        try:
+            choice = input("Enter format number (1-3): ").strip()
+            formats = {'1': 'simple', '2': 'enhanced', '3': 'detailed'}
+            if choice in formats:
+                self.set_log_format(formats[choice])
+            else:
+                print("❌ Invalid choice")
+        except:
+            print("❌ Input error")
+
+    def _change_log_level_interactive(self):
+        """📊 เปลี่ยน log level แบบ interactive"""
+        print("\n📊 Available Log Levels:")
+        print("   1. DEBUG    - All messages")
+        print("   2. INFO     - Info and above")
+        print("   3. WARNING  - Warnings and above")
+        print("   4. ERROR    - Errors only")
+        print("   5. CRITICAL - Critical only")
+        
+        try:
+            choice = input("Enter level number (1-5): ").strip()
+            levels = {'1': 'DEBUG', '2': 'INFO', '3': 'WARNING', '4': 'ERROR', '5': 'CRITICAL'}
+            if choice in levels:
+                self.set_log_level(levels[choice])
+            else:
+                print("❌ Invalid choice")
+        except:
+            print("❌ Input error")
 
     def detect_broker_filling_type(self) -> int:
         """Auto-detect broker's supported filling type"""
@@ -718,7 +1150,8 @@ class TradingSystem:
     def connect_mt5(self, max_retries: int = 3, retry_delay: float = 2.0) -> bool:
         """Connect to MetaTrader 5 with retry mechanism and validation"""
         if not MT5_AVAILABLE:
-            self.log("MT5 not available - running in simulation mode", "WARNING")
+            self.log("❌ MT5 module not available - Please install MetaTrader5 package", "ERROR")
+            self.log("   Run: pip install MetaTrader5", "INFO")
             self.mt5_connected = False
             return False
             
@@ -1517,9 +1950,9 @@ class TradingSystem:
         return recommendations
 
     def activate_emergency_position_management(self):
-        """🚨 เปิดใช้งาน Emergency Position Management"""
+        """🚨 เปิดใช้งาน Emergency Position Management - GROUP CLOSING ONLY"""
         try:
-            self.log("🚨 ACTIVATING EMERGENCY POSITION MANAGEMENT", "ERROR")
+            self.log("🚨 ACTIVATING EMERGENCY POSITION MANAGEMENT (GROUP CLOSING)", "ERROR")
             
             # 1. หาไม้ที่เสี่ยงมากที่สุด
             risk_analysis = self.monitor_position_risk()
@@ -1532,24 +1965,25 @@ class TradingSystem:
             # 2. เรียงตาม risk score (เสี่ยงมากที่สุดก่อน)
             high_risk_positions.sort(key=lambda x: x['risk_score'], reverse=True)
             
-            # 3. ปิดไม้ที่เสี่ยงมากที่สุด 3 ตัวแรก
-            positions_to_close = high_risk_positions[:3]
+            # 3. สร้างกลุ่ม emergency closing (แทนการปิดเดี่ยว)
+            emergency_positions = [item['position'] for item in high_risk_positions[:5]]  # 5 ตัวแรก
             
-            self.log(f"🚨 Emergency Closing: {len(positions_to_close)} high-risk positions", "ERROR")
+            self.log(f"🚨 Emergency Group Closing: {len(emergency_positions)} high-risk positions", "ERROR")
             
-            for risk_item in positions_to_close:
-                position = risk_item['position']
-                risk_score = risk_item['risk_score']
-                
-                self.log(f"🚨 Emergency Closing Position {position.ticket}: Risk Score {risk_score:.1f}", "ERROR")
-                
-                # ปิด position
-                if hasattr(self, 'close_position_smart'):
-                    close_result = self.close_position_smart(position.ticket)
-                    if close_result.get('success'):
-                        self.log(f"✅ Emergency Closed Position {position.ticket}", "SUCCESS")
-                    else:
-                        self.log(f"❌ Failed to Emergency Close Position {position.ticket}", "ERROR")
+            # 4. ใช้ Smart Edge Closing System แทน individual closing
+            if len(emergency_positions) >= 2:
+                edge_result = self.smart_edge_closing_system("🚨 Emergency High-Risk Group Closing")
+                if edge_result['success']:
+                    self.log(f"✅ Emergency Group Close SUCCESS: {edge_result['positions_closed']} positions", "SUCCESS")
+                else:
+                    self.log(f"❌ Emergency Group Close FAILED: {edge_result.get('error', 'Unknown error')}", "ERROR")
+            else:
+                # ถ้ามีแค่ 1 ตัว ให้ใช้ flexible closing
+                flexible_result = self.execute_smart_flexible_closing("🚨 Emergency Single Position")
+                if flexible_result['success']:
+                    self.log(f"✅ Emergency Flexible Close SUCCESS: {flexible_result['positions_closed']} positions", "SUCCESS")
+                else:
+                    self.log(f"❌ Emergency Flexible Close FAILED: {flexible_result.get('error', 'Unknown error')}", "ERROR")
             
             # 4. ปรับ trading parameters
             self.max_signals_per_hour = 5  # ลดการเปิดไม้ใหม่
@@ -1593,7 +2027,8 @@ class TradingSystem:
             if self.positions:
                 return sum(p.current_price for p in self.positions) / len(self.positions)
             
-            return 3500.0  # Default price for XAUUSD
+            # ไม่มี positions และไม่มี MT5 - ใช้ราคาเริ่มต้น
+            return 2000.00  # Default price for XAUUSD
             
         except Exception as e:
             self.log(f"Error getting current price: {str(e)}", "ERROR")
@@ -2025,13 +2460,28 @@ class TradingSystem:
             # AI-inspired scoring
             signal_confidence = self.calculate_ai_confidence(patterns)
             
+            # ⚡ เพิ่มการตรวจจับสัญญาณเร็วขึ้น
             if signal_confidence['should_trade']:
+                # ปรับ confidence threshold ให้ต่ำลงเพื่อตรวจจับสัญญาณเร็วขึ้น
+                if signal_confidence['confidence'] >= 0.55:  # ลดจาก 0.65 เป็น 0.55
+                    return Signal(
+                        timestamp=datetime.now(),
+                        symbol=self.symbol,
+                        direction=signal_confidence['direction'],
+                        strength=signal_confidence['strength'],
+                        reason=f"🤖 AI Pattern: {signal_confidence['pattern_name']} (Conf: {signal_confidence['confidence']:.1%})",
+                        price=df.iloc[-1]['close']
+                    )
+            
+            # ⚡ เพิ่มการตรวจจับสัญญาณจาก momentum เร็ว
+            if patterns['momentum_score'] > 0.7:  # Momentum สูง
+                direction = 'SELL' if patterns['momentum_score'] < 0.3 else 'BUY'
                 return Signal(
                     timestamp=datetime.now(),
                     symbol=self.symbol,
-                    direction=signal_confidence['direction'],
-                    strength=signal_confidence['strength'],
-                    reason=f"🤖 AI Pattern: {signal_confidence['pattern_name']} (Conf: {signal_confidence['confidence']:.1%})",
+                    direction=direction,
+                    strength=min(3.0, patterns['momentum_score'] * 4),
+                    reason=f"⚡ Fast Momentum: {direction} (Momentum: {patterns['momentum_score']:.2f})",
                     price=df.iloc[-1]['close']
                 )
             
@@ -2039,6 +2489,61 @@ class TradingSystem:
             
         except Exception as e:
             self.log(f"Error in advanced analysis: {str(e)}", "ERROR")
+            return None
+
+    def detect_fast_momentum_signal(self, df: DataFrame) -> Optional[Signal]:
+        """⚡ ตรวจจับสัญญาณเร็วจาก momentum แบบ real-time"""
+        try:
+            if df is None or len(df) < 5:
+                return None
+            
+            # วิเคราะห์ 5 แท่งล่าสุด
+            recent_5 = df.tail(5)
+            
+            # คำนวณ momentum เร็ว
+            price_changes = recent_5['close'].diff().dropna()
+            recent_momentum = price_changes.tail(3).mean()
+            
+            # คำนวณ volume momentum (ถ้ามี)
+            volume_momentum = 0
+            if 'volume' in df.columns:
+                try:
+                    volume_changes = recent_5['volume'].diff().dropna()
+                    volume_momentum = volume_changes.tail(3).mean()
+                except:
+                    volume_momentum = 0
+            
+            # คำนวณ price range momentum แทน volume
+            price_range = recent_5['high'] - recent_5['low']
+            range_momentum = price_range.tail(3).mean()
+            avg_range = price_range.mean()
+            
+            # ตรวจสอบสัญญาณเร็ว
+            if abs(recent_momentum) > 0.5:  # Price momentum สูง
+                direction = 'SELL' if recent_momentum < 0 else 'BUY'
+                strength = min(2.5, abs(recent_momentum) * 3)
+                
+                # เพิ่ม range confirmation (แทน volume)
+                if range_momentum > avg_range * 1.2:  # Range เพิ่มขึ้น
+                    strength += 0.5
+                
+                # เพิ่ม volume confirmation (ถ้ามี)
+                if volume_momentum > 0:
+                    strength += 0.3
+                
+                return Signal(
+                    timestamp=datetime.now(),
+                    symbol=self.symbol,
+                    direction=direction,
+                    strength=strength,
+                    reason=f"⚡ Fast Momentum: {direction} (Price: {recent_momentum:.3f}, Range: {range_momentum:.3f})",
+                    price=df.iloc[-1]['close']
+                )
+            
+            return None
+            
+        except Exception as e:
+            self.log(f"Error in fast momentum detection: {str(e)}", "ERROR")
             return None
 
     def calculate_trend_strength(self, df: DataFrame) -> float:
@@ -2128,8 +2633,11 @@ class TradingSystem:
             # Determine direction
             direction = 'BUY' if direction_votes['BUY'] > direction_votes['SELL'] else 'SELL'
             
+            # ⚡ ปรับ threshold ให้ต่ำลงเพื่อตอบสนองเร็วขึ้น
+            should_trade_threshold = 0.55  # ลดจาก 0.65 เป็น 0.55
+            
             return {
-                'should_trade': confidence_score > 0.65,
+                'should_trade': confidence_score > should_trade_threshold,
                 'confidence': confidence_score,
                 'direction': direction,
                 'strength': min(3.0, max(0.5, confidence_score * 4)),
@@ -2314,7 +2822,7 @@ class TradingSystem:
             return str(len(self.positions) if self.positions else 0)
 
     def analyze_position_zones(self) -> dict:
-        """แบ่ง positions ตาม price zones และวิเคราะห์การกระจาย - with caching"""
+        """แบ่ง positions ตาม price zones และวิเคราะห์การกระจาย - Enhanced with BUY/SELL Balance Analysis"""
         try:
             # Check cache validity first
             current_time = datetime.now()
@@ -2335,8 +2843,11 @@ class TradingSystem:
                     'distribution_score': 100.0, 
                     'clustered_zones': [], 
                     'empty_zones': [],
+                    'imbalanced_zones': [],
+                    'balanced_zones': [],
                     'total_zones_used': 0,
                     'current_price': 0.0,
+                    'balance_score': 100.0,
                     'cached': False
                 }
                 # Cache empty result too
@@ -2356,10 +2867,14 @@ class TradingSystem:
                 # Fallback to average of position prices
                 current_price = sum(p.current_price for p in self.positions) / len(self.positions)
             
-            # Group positions by zones
+            # Group positions by zones with Dynamic Zone Sizing
             zones = {}
-            # For XAUUSD: 1 pip = 0.1 point, so 25 pips = 2.5 points
-            zone_size = self.zone_size_pips * 0.1  # Convert pips to price units for XAUUSD
+            
+            # 🆕 Dynamic Zone Size Calculation based on market volatility and price movement
+            base_zone_size = self.zone_size_pips * 0.1  # Base: 25 pips = 2.5 points for XAUUSD
+            zone_size = self._calculate_dynamic_zone_size(current_price, base_zone_size)
+            
+            self.log(f"📏 Dynamic Zone Size: {zone_size/0.1:.1f} pips (Base: {base_zone_size/0.1:.1f} pips)", "INFO")
             
             for position in self.positions:
                 # Calculate zone index based on price difference from current price
@@ -2371,8 +2886,13 @@ class TradingSystem:
                         'positions': [],
                         'buy_count': 0,
                         'sell_count': 0,
+                        'buy_volume': 0.0,
+                        'sell_volume': 0.0,
                         'total_volume': 0.0,
                         'avg_price': 0.0,
+                        'balance_ratio': 0.0,
+                        'is_balanced': False,
+                        'imbalance_severity': 'NONE',
                         'zone_range': (
                             current_price + (zone_index * zone_size),
                             current_price + ((zone_index + 1) * zone_size)
@@ -2384,13 +2904,78 @@ class TradingSystem:
                 
                 if position.type == 'BUY':
                     zones[zone_index]['buy_count'] += 1
+                    zones[zone_index]['buy_volume'] += position.volume
                 else:
                     zones[zone_index]['sell_count'] += 1
+                    zones[zone_index]['sell_volume'] += position.volume
             
-            # Calculate average price for each zone
-            for zone_data in zones.values():
+            # Enhanced zone analysis with balance calculation
+            imbalanced_zones = []
+            balanced_zones = []
+            
+            for zone_index, zone_data in zones.items():
+                # Calculate average price
                 if zone_data['positions']:
                     zone_data['avg_price'] = sum(p.open_price for p in zone_data['positions']) / len(zone_data['positions'])
+                
+                # 🆕 Enhanced Balance Metrics with Dynamic Market Direction Consideration
+                total_count = zone_data['buy_count'] + zone_data['sell_count']
+                if total_count > 0:
+                    buy_ratio = zone_data['buy_count'] / total_count
+                    sell_ratio = zone_data['sell_count'] / total_count
+                    
+                    # 🆕 Dynamic Balance Thresholds based on Market Direction and Zone Position
+                    balance_thresholds = self._calculate_dynamic_balance_thresholds(zone_index, current_price, zone_data)
+                    
+                    # Balance ratio (closer to optimal ratio is better)
+                    optimal_buy_ratio = balance_thresholds['optimal_buy_ratio']
+                    zone_data['balance_ratio'] = 1 - abs(buy_ratio - optimal_buy_ratio)  # Higher is better
+                    zone_data['optimal_buy_ratio'] = optimal_buy_ratio
+                    zone_data['balance_thresholds'] = balance_thresholds
+                    
+                    # 🆕 Flexible Balance Check (ปรับตาม market direction)
+                    min_acceptable = balance_thresholds['min_buy_ratio']
+                    max_acceptable = balance_thresholds['max_buy_ratio']
+                    zone_data['is_balanced'] = min_acceptable <= buy_ratio <= max_acceptable
+                    
+                    # 🆕 Dynamic Imbalance Severity (ปรับตาม zone position และ market trend)
+                    severe_threshold = balance_thresholds['severe_threshold']
+                    moderate_threshold = balance_thresholds['moderate_threshold']
+                    
+                    if buy_ratio >= severe_threshold or sell_ratio >= severe_threshold:
+                        zone_data['imbalance_severity'] = 'SEVERE'
+                        imbalanced_zones.append({
+                            'zone_index': zone_index,
+                            'zone_data': zone_data,
+                            'dominant_type': 'BUY' if buy_ratio > optimal_buy_ratio else 'SELL',
+                            'imbalance_ratio': max(buy_ratio, sell_ratio),
+                            'needed_type': 'SELL' if buy_ratio > optimal_buy_ratio else 'BUY',
+                            'positions_needed': max(1, abs(zone_data['buy_count'] - int(total_count * optimal_buy_ratio))),
+                            'balance_thresholds': balance_thresholds
+                        })
+                    elif buy_ratio >= moderate_threshold or sell_ratio >= moderate_threshold:
+                        zone_data['imbalance_severity'] = 'MODERATE'
+                        imbalanced_zones.append({
+                            'zone_index': zone_index,
+                            'zone_data': zone_data,
+                            'dominant_type': 'BUY' if buy_ratio > optimal_buy_ratio else 'SELL',
+                            'imbalance_ratio': max(buy_ratio, sell_ratio),
+                            'needed_type': 'SELL' if buy_ratio > optimal_buy_ratio else 'BUY',
+                            'positions_needed': 1,
+                            'balance_thresholds': balance_thresholds
+                        })
+                    else:
+                        zone_data['imbalance_severity'] = 'MILD'
+                    
+                    if zone_data['is_balanced']:
+                        balanced_zones.append({
+                            'zone_index': zone_index,
+                            'zone_data': zone_data,
+                            'balance_score': zone_data['balance_ratio'] * 2  # Convert to 0-1 scale
+                        })
+            
+            # Calculate overall balance score
+            balance_score = self._calculate_overall_balance_score(zones)
             
             # Calculate distribution score and identify issues
             distribution_score = self.calculate_zone_distribution_score(zones)
@@ -2400,8 +2985,11 @@ class TradingSystem:
             result = {
                 'zones': zones,
                 'distribution_score': distribution_score,
+                'balance_score': balance_score,
                 'clustered_zones': clustered_zones,
                 'empty_zones': empty_zones,
+                'imbalanced_zones': imbalanced_zones,
+                'balanced_zones': balanced_zones,
                 'total_zones_used': len(zones),
                 'current_price': current_price,
                 'cached': False
@@ -2420,7 +3008,1043 @@ class TradingSystem:
             
         except Exception as e:
             self.log(f"Error analyzing position zones: {str(e)}", "ERROR")
-            return {'zones': {}, 'distribution_score': 0.0, 'clustered_zones': [], 'empty_zones': [], 'cached': False}
+            return {
+                'zones': {}, 
+                'distribution_score': 0.0, 
+                'balance_score': 0.0,
+                'clustered_zones': [], 
+                'empty_zones': [],
+                'imbalanced_zones': [],
+                'balanced_zones': [],
+                'total_zones_used': 0,
+                'current_price': 0.0,
+                'cached': False,
+                'error': str(e)
+            }
+
+    def _calculate_overall_balance_score(self, zones: dict) -> float:
+        """💯 คำนวณคะแนนความสมดุลโดยรวมของทุกโซน"""
+        try:
+            if not zones:
+                return 100.0
+            
+            total_balance_score = 0.0
+            zone_count = len(zones)
+            
+            for zone_data in zones.values():
+                # คำนวณคะแนนสมดุลของแต่ละโซน (0-100)
+                balance_ratio = zone_data.get('balance_ratio', 0.0)
+                zone_balance_score = balance_ratio * 200  # Convert to 0-100 scale (0.5 * 200 = 100)
+                zone_balance_score = min(100.0, zone_balance_score)  # Cap at 100
+                
+                total_balance_score += zone_balance_score
+            
+            # คำนวณค่าเฉลี่ย
+            overall_score = total_balance_score / zone_count
+            
+            # ปรับคะแนนตามจำนวนโซนที่ไม่สมดุล
+            imbalanced_count = sum(1 for zone_data in zones.values() 
+                                 if zone_data.get('imbalance_severity', 'NONE') in ['SEVERE', 'MODERATE'])
+            
+            if imbalanced_count > 0:
+                penalty = min(30, imbalanced_count * 10)  # สูงสุด 30 คะแนน
+                overall_score = max(0, overall_score - penalty)
+            
+            return overall_score
+            
+        except Exception as e:
+            self.log(f"Error calculating overall balance score: {str(e)}", "ERROR")
+            return 0.0
+
+    def _calculate_dynamic_zone_size(self, current_price: float, base_zone_size: float) -> float:
+        """📏 คำนวณขนาดโซนแบบยืดหยุ่นตามความผันผวนของตลาด"""
+        try:
+            # Base zone size (default)
+            zone_size = base_zone_size
+            
+            # 1. ปรับตาม volatility ของตลาด
+            if len(self.positions) >= 5:
+                # คำนวณ price range ของไม้ที่มีอยู่
+                prices = [p.open_price for p in self.positions]
+                price_range = max(prices) - min(prices)
+                avg_price = sum(prices) / len(prices)
+                
+                # คำนวณ volatility ratio
+                volatility_ratio = price_range / avg_price if avg_price > 0 else 0
+                
+                # ปรับขนาดโซนตาม volatility
+                if volatility_ratio > 0.02:  # High volatility (> 2%)
+                    zone_size = base_zone_size * 1.5  # ขยายโซนใหญ่ขึ้น
+                    self.log(f"📏 High volatility detected ({volatility_ratio:.3f}) - Expanding zones", "INFO")
+                elif volatility_ratio < 0.005:  # Low volatility (< 0.5%)
+                    zone_size = base_zone_size * 0.7  # ลดขนาดโซน
+                    self.log(f"📏 Low volatility detected ({volatility_ratio:.3f}) - Shrinking zones", "INFO")
+            
+            # 2. ปรับตามจำนวนไม้ในระบบ
+            position_count = len(self.positions) if self.positions else 0
+            if position_count > 30:
+                zone_size *= 1.2  # มีไม้เยอะ ขยายโซน
+            elif position_count < 10:
+                zone_size *= 0.8  # มีไม้น้อย ลดโซน
+            
+            # จำกัดขนาดโซนไม่ให้เกินหรือต่ำกว่าขีดจำกัด
+            min_zone_size = base_zone_size * 0.5  # ขั้นต่ำ 50% ของ base
+            max_zone_size = base_zone_size * 2.0  # สูงสุด 200% ของ base
+            
+            zone_size = max(min_zone_size, min(zone_size, max_zone_size))
+            
+            return zone_size
+            
+        except Exception as e:
+            self.log(f"Error calculating dynamic zone size: {str(e)}", "ERROR")
+            return base_zone_size
+
+    def _calculate_dynamic_balance_thresholds(self, zone_index: int, current_price: float, zone_data: dict) -> dict:
+        """⚖️ คำนวณเกณฑ์สมดุลแบบยืดหยุ่นตามตำแหน่งโซนและทิศทางตลาด"""
+        try:
+            # Default balanced thresholds (50:50)
+            optimal_buy_ratio = 0.5
+            min_buy_ratio = 0.3
+            max_buy_ratio = 0.7
+            moderate_threshold = 0.75
+            severe_threshold = 0.85
+            
+            # 🆕 Dynamic adjustment based on zone position
+            if zone_index > 0:  # โซนบน (ราคาสูงกว่าปัจจุบัน)
+                # โซนบนควรมี SELL มากกว่า (เพื่อรอราคาลง)
+                if zone_index >= 2:  # โซนบนมาก
+                    optimal_buy_ratio = 0.3  # 30:70 (BUY:SELL)
+                    min_buy_ratio = 0.2
+                    max_buy_ratio = 0.4
+                else:  # โซนบนปานกลาง
+                    optimal_buy_ratio = 0.4  # 40:60 (BUY:SELL)
+                    min_buy_ratio = 0.25
+                    max_buy_ratio = 0.55
+                    
+            elif zone_index < 0:  # โซนล่าง (ราคาต่ำกว่าปัจจุบัน)
+                # โซนล่างควรมี BUY มากกว่า (เพื่อรอราคาขึ้น)
+                if zone_index <= -2:  # โซนล่างมาก
+                    optimal_buy_ratio = 0.7  # 70:30 (BUY:SELL)
+                    min_buy_ratio = 0.6
+                    max_buy_ratio = 0.8
+                else:  # โซนล่างปานกลาง
+                    optimal_buy_ratio = 0.6  # 60:40 (BUY:SELL)
+                    min_buy_ratio = 0.45
+                    max_buy_ratio = 0.75
+            
+            # 🆕 Market trend adjustment (ถ้ามีข้อมูล trend)
+            market_bias = self._detect_market_bias()
+            
+            if market_bias == 'BULLISH':
+                # ตลาดขาขึ้น - เพิ่ม BUY bias
+                optimal_buy_ratio = min(0.8, optimal_buy_ratio + 0.1)
+                max_buy_ratio = min(0.9, max_buy_ratio + 0.1)
+            elif market_bias == 'BEARISH':
+                # ตลาดขาลง - เพิ่ม SELL bias  
+                optimal_buy_ratio = max(0.2, optimal_buy_ratio - 0.1)
+                min_buy_ratio = max(0.1, min_buy_ratio - 0.1)
+            
+            # 🆕 Position density adjustment
+            total_positions = zone_data.get('buy_count', 0) + zone_data.get('sell_count', 0)
+            if total_positions >= 4:  # โซนที่มีไม้เยอะ ใช้เกณฑ์เข้มงวดขึ้น
+                moderate_threshold = 0.7
+                severe_threshold = 0.8
+            
+            return {
+                'optimal_buy_ratio': optimal_buy_ratio,
+                'min_buy_ratio': min_buy_ratio,
+                'max_buy_ratio': max_buy_ratio,
+                'moderate_threshold': moderate_threshold,
+                'severe_threshold': severe_threshold,
+                'market_bias': market_bias,
+                'zone_position': 'UPPER' if zone_index > 0 else 'LOWER' if zone_index < 0 else 'MIDDLE'
+            }
+            
+        except Exception as e:
+            self.log(f"Error calculating dynamic balance thresholds: {str(e)}", "ERROR")
+            return {
+                'optimal_buy_ratio': 0.5,
+                'min_buy_ratio': 0.3,
+                'max_buy_ratio': 0.7,
+                'moderate_threshold': 0.75,
+                'severe_threshold': 0.85,
+                'market_bias': 'NEUTRAL',
+                'zone_position': 'MIDDLE'
+            }
+
+    def _detect_market_bias(self) -> str:
+        """📈 ตรวจจับ bias ของตลาดจากการกระจายตัวของไม้"""
+        try:
+            if not self.positions or len(self.positions) < 5:
+                return 'NEUTRAL'
+            
+            # วิเคราะห์จากไม้ล่าสุด
+            recent_positions = sorted(self.positions, key=lambda x: x.ticket)[-10:]  # 10 ไม้ล่าสุด
+            
+            buy_count = sum(1 for p in recent_positions if p.type == 'BUY')
+            sell_count = len(recent_positions) - buy_count
+            
+            if buy_count > sell_count * 1.5:
+                return 'BULLISH'
+            elif sell_count > buy_count * 1.5:
+                return 'BEARISH'
+            
+            # วิเคราะห์จากการกระจายราคา
+            current_price = self.get_current_price()
+            if current_price > 0:
+                above_current = sum(1 for p in self.positions if p.open_price > current_price)
+                below_current = sum(1 for p in self.positions if p.open_price < current_price)
+                
+                if above_current > below_current * 1.3:
+                    return 'BEARISH'  # ไม้ส่วนใหญ่อยู่เหนือราคาปัจจุบัน = คาดว่าจะลง
+                elif below_current > above_current * 1.3:
+                    return 'BULLISH'  # ไม้ส่วนใหญ่อยู่ใต้ราคาปัจจุบัน = คาดว่าจะขึ้น
+            
+            return 'NEUTRAL'
+            
+        except Exception as e:
+            self.log(f"Error detecting market bias: {str(e)}", "ERROR")
+            return 'NEUTRAL'
+
+    def smart_zone_balance_system(self, reason: str = "Zone Balance") -> dict:
+        """🎯 ระบบสร้างสมดุล BUY/SELL ในโซนแบบชาญฉลาด - Integrated with Edge Closing"""
+        try:
+            self.log(f"🎯 Starting Smart Zone Balance System: {reason}")
+            
+            # 1. วิเคราะห์โซนปัจจุบัน
+            zone_analysis = self.analyze_position_zones()
+            
+            if not zone_analysis['zones']:
+                self.log("❌ No zones found for balancing", "WARNING")
+                return {
+                    'success': False,
+                    'positions_created': 0,
+                    'zones_balanced': 0,
+                    'error': 'No zones found'
+                }
+            
+            # 2. ตรวจสอบความจำเป็นในการปรับสมดุล
+            balance_score = zone_analysis['balance_score']
+            imbalanced_zones = zone_analysis['imbalanced_zones']
+            
+            self.log(f"💯 Current Balance Score: {balance_score:.1f}%", "INFO")
+            self.log(f"⚖️ Imbalanced Zones: {len(imbalanced_zones)}", "INFO")
+            
+            if balance_score >= 80 and len(imbalanced_zones) == 0:
+                self.log("✅ All zones are well balanced - no action needed", "SUCCESS")
+                return {
+                    'success': True,
+                    'positions_created': 0,
+                    'zones_balanced': 0,
+                    'balance_score': balance_score,
+                    'message': 'Already well balanced'
+                }
+            
+            # 3. ประสานงานกับระบบปิดไม้ขอบ
+            edge_coordination = self._coordinate_with_edge_closing_system(zone_analysis)
+            
+            # 4. สร้างแผนการปรับสมดุล
+            balance_plan = self._create_zone_balance_plan(imbalanced_zones, edge_coordination)
+            
+            if not balance_plan['actions']:
+                self.log("❌ No viable balance actions found", "WARNING")
+                return {
+                    'success': False,
+                    'positions_created': 0,
+                    'zones_balanced': 0,
+                    'error': 'No viable actions'
+                }
+            
+            # 5. ดำเนินการปรับสมดุล
+            execution_result = self._execute_zone_balance_plan(balance_plan)
+            
+            # 6. ประเมินผลลัพธ์
+            final_analysis = self.analyze_position_zones()
+            final_balance_score = final_analysis['balance_score']
+            improvement = final_balance_score - balance_score
+            
+            result = {
+                'success': execution_result['success'],
+                'positions_created': execution_result['positions_created'],
+                'zones_balanced': execution_result['zones_balanced'],
+                'balance_score_before': balance_score,
+                'balance_score_after': final_balance_score,
+                'improvement': improvement,
+                'actions_executed': execution_result['actions_executed'],
+                'edge_coordination': edge_coordination
+            }
+            
+            if result['success']:
+                self.log(f"🎯 Zone Balance Success: +{improvement:.1f}% improvement", "SUCCESS")
+                self.log(f"   📊 Positions Created: {result['positions_created']}", "SUCCESS")
+                self.log(f"   ⚖️ Zones Balanced: {result['zones_balanced']}", "SUCCESS")
+            else:
+                error_msg = execution_result.get('error', 'Unknown error')
+                self.log(f"❌ Zone Balance Failed: {error_msg}", "ERROR")
+            
+            return result
+            
+        except Exception as e:
+            self.log(f"Error in smart zone balance system: {str(e)}", "ERROR")
+            return {
+                'success': False,
+                'positions_created': 0,
+                'zones_balanced': 0,
+                'error': str(e)
+            }
+
+    def _coordinate_with_edge_closing_system(self, zone_analysis: dict) -> dict:
+        """🔗 ประสานงานกับระบบปิดไม้ขอบ"""
+        try:
+            coordination = {
+                'edge_zones_identified': [],
+                'can_create_edge_positions': False,
+                'edge_closing_opportunity': False,
+                'recommended_actions': []
+            }
+            
+            zones = zone_analysis['zones']
+            if not zones:
+                return coordination
+            
+            # หาโซนขอบ (โซนที่มี index สูงสุดและต่ำสุด)
+            zone_indices = list(zones.keys())
+            min_zone = min(zone_indices)
+            max_zone = max(zone_indices)
+            
+            # ตรวจสอบโซนขอบบน
+            if max_zone in zones:
+                upper_edge_zone = zones[max_zone]
+                coordination['edge_zones_identified'].append({
+                    'zone_index': max_zone,
+                    'zone_type': 'upper_edge',
+                    'zone_data': upper_edge_zone,
+                    'is_balanced': upper_edge_zone.get('is_balanced', False)
+                })
+            
+            # ตรวจสอบโซนขอบล่าง
+            if min_zone in zones:
+                lower_edge_zone = zones[min_zone]
+                coordination['edge_zones_identified'].append({
+                    'zone_index': min_zone,
+                    'zone_type': 'lower_edge',
+                    'zone_data': lower_edge_zone,
+                    'is_balanced': lower_edge_zone.get('is_balanced', False)
+                })
+            
+            # ประเมินโอกาสในการสร้างไม้ขอบ
+            total_positions = sum(len(zone_data['positions']) for zone_data in zones.values())
+            if total_positions < self.max_total_positions - 5:  # เหลือที่ว่างอย่างน้อย 5 ไม้
+                coordination['can_create_edge_positions'] = True
+            
+            # ประเมินโอกาสการปิดไม้ขอบ
+            edge_positions = []
+            for edge_zone in coordination['edge_zones_identified']:
+                edge_positions.extend(edge_zone['zone_data']['positions'])
+            
+            if edge_positions:
+                # ตรวจสอบว่ามีไม้ขอบที่มีกำไรหรือไม่
+                profitable_edge = [p for p in edge_positions if p.profit > 5]
+                if len(profitable_edge) >= 2:
+                    coordination['edge_closing_opportunity'] = True
+                    coordination['recommended_actions'].append({
+                        'action': 'consider_edge_closing',
+                        'reason': f'Found {len(profitable_edge)} profitable edge positions'
+                    })
+            
+            return coordination
+            
+        except Exception as e:
+            self.log(f"Error coordinating with edge closing system: {str(e)}", "ERROR")
+            return {'edge_zones_identified': [], 'can_create_edge_positions': False}
+
+    def _create_zone_balance_plan(self, imbalanced_zones: list, edge_coordination: dict) -> dict:
+        """📋 สร้างแผนการปรับสมดุลโซน"""
+        try:
+            plan = {
+                'actions': [],
+                'priority_zones': [],
+                'total_positions_needed': 0,
+                'estimated_volume': 0.0
+            }
+            
+            if not imbalanced_zones:
+                return plan
+            
+            # เรียงลำดับโซนตามความรุนแรงของการไม่สมดุล
+            sorted_zones = sorted(imbalanced_zones, 
+                                key=lambda x: (
+                                    1 if x['zone_data'].get('imbalance_severity', 'MILD') == 'SEVERE' else 2,
+                                    -x['imbalance_ratio']
+                                ))
+            
+            for zone_info in sorted_zones[:3]:  # จำกัดไม่เกิน 3 โซนต่อครั้ง
+                zone_index = zone_info['zone_index']
+                zone_data = zone_info['zone_data']
+                needed_type = zone_info['needed_type']
+                positions_needed = zone_info['positions_needed']
+                
+                # คำนวณตำแหน่งที่เหมาะสม
+                target_price = self._calculate_optimal_position_price_for_zone(
+                    zone_index, zone_data, needed_type, edge_coordination
+                )
+                
+                if target_price:
+                    # คำนวณ volume ที่เหมาะสม
+                    base_volume = 0.1  # Default volume
+                    smart_volume = self._calculate_smart_volume_for_zone_balance(
+                        zone_data, needed_type, base_volume
+                    )
+                    
+                    action = {
+                        'action_type': 'create_position',
+                        'zone_index': zone_index,
+                        'position_type': needed_type,
+                        'target_price': target_price,
+                        'volume': smart_volume,
+                        'priority': 1 if zone_info['zone_data'].get('imbalance_severity', 'MILD') == 'SEVERE' else 2,
+                        'reason': f"Balance {zone_info['zone_data'].get('imbalance_severity', 'MILD')} imbalance in zone {zone_index}",
+                        'expected_balance_improvement': positions_needed * 10  # Rough estimate
+                    }
+                    
+                    plan['actions'].append(action)
+                    plan['total_positions_needed'] += positions_needed
+                    plan['estimated_volume'] += smart_volume
+                    
+                    plan['priority_zones'].append({
+                        'zone_index': zone_index,
+                        'severity': zone_info['zone_data'].get('imbalance_severity', 'MILD'),
+                        'action': action
+                    })
+            
+            # เรียงลำดับ actions ตาม priority
+            plan['actions'].sort(key=lambda x: x['priority'])
+            
+            return plan
+            
+        except Exception as e:
+            self.log(f"Error creating zone balance plan: {str(e)}", "ERROR")
+            return {'actions': [], 'priority_zones': [], 'total_positions_needed': 0}
+
+    def _calculate_optimal_position_price_for_zone(self, zone_index: int, zone_data: dict, 
+                                                   position_type: str, edge_coordination: dict) -> float:
+        """💰 คำนวณราคาที่เหมาะสมสำหรับ position ใหม่ในโซน - ปรับให้ BUY ต่ำกว่า SELL"""
+        try:
+            zone_range = zone_data['zone_range']
+            zone_min, zone_max = zone_range
+            
+            # หาตำแหน่งที่ไม่ชนกับไม้ที่มีอยู่
+            existing_prices = [p.open_price for p in zone_data['positions']]
+            existing_buy_prices = [p.open_price for p in zone_data['positions'] if p.type == 'BUY']
+            existing_sell_prices = [p.open_price for p in zone_data['positions'] if p.type == 'SELL']
+            
+            # 🆕 ปรับตรรกะตาม position_type และ zone_index
+            if position_type == 'BUY':
+                # BUY ควรอยู่ในส่วนล่างของโซน (ใกล้ zone_min)
+                if zone_index < 0:  # โซนล่าง - BUY ควรอยู่ที่นี่
+                    target_price = zone_min + (zone_max - zone_min) * 0.3  # ใกล้ด้านล่าง
+                else:  # โซนบน - BUY ควรอยู่ต่ำสุดในโซน
+                    target_price = zone_min + (zone_max - zone_min) * 0.1  # ด้านล่างสุด
+                    
+                # หลีกเลี่ยง SELL positions ที่มีอยู่
+                if existing_sell_prices:
+                    min_sell_in_zone = min(existing_sell_prices)
+                    target_price = min(target_price, min_sell_in_zone - 0.005)  # ต่ำกว่า SELL อย่างน้อย 5 pips
+                    
+            else:  # SELL
+                # SELL ควรอยู่ในส่วนบนของโซน (ใกล้ zone_max)
+                if zone_index > 0:  # โซนบน - SELL ควรอยู่ที่นี่
+                    target_price = zone_min + (zone_max - zone_min) * 0.7  # ใกล้ด้านบน
+                else:  # โซนล่าง - SELL ควรอยู่สูงสุดในโซน
+                    target_price = zone_min + (zone_max - zone_min) * 0.9  # ด้านบนสุด
+                    
+                # หลีกเลี่ยง BUY positions ที่มีอยู่
+                if existing_buy_prices:
+                    max_buy_in_zone = max(existing_buy_prices)
+                    target_price = max(target_price, max_buy_in_zone + 0.005)  # สูงกว่า BUY อย่างน้อย 5 pips
+            
+            # ปรับตำแหน่งให้ไม่ชนกับไม้เก่าของ type เดียวกัน
+            safe_distance = 0.005  # 5 pips
+            attempts = 10
+            
+            for attempt in range(attempts):
+                test_price = target_price + (attempt * safe_distance * (1 if attempt % 2 == 0 else -1))
+                
+                # ตรวจสอบว่าอยู่ในโซนหรือไม่
+                if zone_min <= test_price <= zone_max:
+                    # ตรวจสอบระยะห่างจากไม้เก่า
+                    min_distance = min([abs(test_price - ep) for ep in existing_prices], default=safe_distance)
+                    
+                    if min_distance >= safe_distance:
+                        self.log(f"💰 Optimal price for {position_type} in zone {zone_index}: {test_price:.5f} (Distance from others: {min_distance:.5f})", "INFO")
+                        return test_price
+            
+            # ถ้าหาไม่ได้ ให้ใช้ขอบโซนตามตรรกะใหม่
+            if position_type == 'BUY':
+                fallback_price = zone_min + (zone_max - zone_min) * 0.3  # BUY ใกล้ขอบล่าง
+            else:
+                fallback_price = zone_min + (zone_max - zone_min) * 0.7  # SELL ใกล้ขอบบน
+                
+            self.log(f"💰 Fallback price for {position_type} in zone {zone_index}: {fallback_price:.5f} (Zone: {zone_min:.5f}-{zone_max:.5f})", "WARNING")
+            return fallback_price
+            
+        except Exception as e:
+            self.log(f"Error calculating optimal position price: {str(e)}", "ERROR")
+            return None
+
+    def _calculate_smart_volume_for_zone_balance(self, zone_data: dict, position_type: str, base_volume: float) -> float:
+        """📊 คำนวณ volume ที่ฉลาดสำหรับการปรับสมดุลโซน"""
+        try:
+            # คำนวณ volume เฉลี่ยในโซน
+            existing_volumes = [p.volume for p in zone_data['positions']]
+            avg_volume = sum(existing_volumes) / len(existing_volumes) if existing_volumes else base_volume
+            
+            # ปรับ volume ตามความไม่สมดุล
+            imbalance_severity = zone_data.get('imbalance_severity', 'MILD')
+            
+            if imbalance_severity == 'SEVERE':
+                multiplier = 1.2  # เพิ่ม volume เพื่อปรับสมดุลเร็วขึ้น
+            elif imbalance_severity == 'MODERATE':
+                multiplier = 1.1
+            else:
+                multiplier = 1.0
+            
+            # ปรับตาม volume เฉลี่ยในโซน
+            smart_volume = min(avg_volume * multiplier, base_volume * 1.5)  # จำกัดไม่เกิน 1.5 เท่า
+            smart_volume = max(smart_volume, 0.01)  # ขั้นต่ำ 0.01 lots
+            
+            return round(smart_volume, 2)
+            
+        except Exception as e:
+            self.log(f"Error calculating smart volume: {str(e)}", "ERROR")
+            return base_volume
+
+    def _close_positions_group(self, positions: list, reason: str) -> dict:
+        """🎯 ปิดไม้แบบกลุ่มจริงผ่าน MT5 batch operations"""
+        try:
+            result = {
+                'closed_positions': [],
+                'failed_positions': [],
+                'total_profit': 0.0,
+                'success': False
+            }
+            
+            if not positions:
+                return result
+            
+            if not MT5_AVAILABLE or not mt5 or not self.mt5_connected:
+                self.log("❌ MT5 not available for group closing", "ERROR")
+                return result
+            
+            self.log(f"🎯 GROUP CLOSING: Processing {len(positions)} positions simultaneously", "INFO")
+            
+            # เตรียม batch requests สำหรับปิดไม้พร้อมกัน
+            close_requests = []
+            position_map = {}  # เก็บ mapping ระหว่าง request กับ position
+            
+            for position in positions:
+                try:
+                    # สร้าง close request สำหรับแต่ละ position
+                    close_type = mt5.ORDER_TYPE_SELL if position.type == 'BUY' else mt5.ORDER_TYPE_BUY
+                    
+                    request = {
+                        "action": mt5.TRADE_ACTION_DEAL,
+                        "symbol": self.symbol,
+                        "volume": position.volume,
+                        "type": close_type,
+                        "position": position.ticket,
+                        "magic": self.magic_number,
+                        "comment": f"Group_Close_{reason}",
+                        "type_time": mt5.ORDER_TIME_GTC,
+                        "type_filling": mt5.ORDER_FILLING_IOC,
+                    }
+                    
+                    close_requests.append(request)
+                    position_map[len(close_requests) - 1] = position
+                    
+                except Exception as e:
+                    self.log(f"❌ Error preparing close request for {position.ticket}: {str(e)}", "ERROR")
+                    result['failed_positions'].append(position.ticket)
+            
+            # ส่ง batch requests พร้อมกัน
+            if close_requests:
+                self.log(f"🚀 Sending {len(close_requests)} close orders simultaneously", "INFO")
+                
+                # ส่งคำสั่งปิดพร้อมกันทั้งหมด
+                for i, request in enumerate(close_requests):
+                    try:
+                        position = position_map[i]
+                        
+                        # ส่งคำสั่งปิด
+                        close_result = mt5.order_send(request)
+                        
+                        if close_result and close_result.retcode == mt5.TRADE_RETCODE_DONE:
+                            result['closed_positions'].append(position.ticket)
+                            result['total_profit'] += position.profit
+                            self.log(f"✅ Group Close Success: {position.ticket} | Profit: ${position.profit:.2f}", "SUCCESS")
+                        else:
+                            error_msg = f"MT5 Error: {close_result.retcode if close_result else 'No response'}"
+                            result['failed_positions'].append(position.ticket)
+                            self.log(f"❌ Group Close Failed: {position.ticket} | {error_msg}", "ERROR")
+                            
+                    except Exception as e:
+                        result['failed_positions'].append(position.ticket)
+                        self.log(f"❌ Group Close Exception: {position.ticket} | {str(e)}", "ERROR")
+                
+                # รอให้ MT5 ประมวลผลเสร็จ
+                time.sleep(0.5)
+                
+                # ตรวจสอบผลลัพธ์รวม
+                success_count = len(result['closed_positions'])
+                total_count = len(positions)
+                
+                if success_count > 0:
+                    result['success'] = True
+                    success_rate = (success_count / total_count) * 100
+                    self.log(f"🎯 GROUP CLOSING COMPLETED: {success_count}/{total_count} positions ({success_rate:.1f}% success)", "SUCCESS")
+                else:
+                    self.log(f"❌ GROUP CLOSING FAILED: 0/{total_count} positions closed", "ERROR")
+            
+            return result
+            
+        except Exception as e:
+            self.log(f"Error in group closing: {str(e)}", "ERROR")
+            return {
+                'closed_positions': [],
+                'failed_positions': [pos.ticket for pos in positions],
+                'total_profit': 0.0,
+                'success': False,
+                'error': str(e)
+            }
+
+    def _execute_zone_balance_plan(self, balance_plan: dict) -> dict:
+        """🎯 ดำเนินการตามแผนการปรับสมดุลโซน"""
+        try:
+            result = {
+                'success': False,
+                'positions_created': 0,
+                'zones_balanced': 0,
+                'actions_executed': [],
+                'failed_actions': []
+            }
+            
+            # 🆕 ตรวจสอบ MT5 connection - ถ้าไม่มีให้พยายามเชื่อมต่อใหม่
+            if not MT5_AVAILABLE or not mt5 or not self.mt5_connected:
+                self.log("⚠️ MT5 not available - Attempting to reconnect...", "WARNING")
+                
+                # พยายามเชื่อมต่อ MT5 ใหม่
+                if self.connect_mt5():
+                    self.log("✅ MT5 reconnected successfully", "SUCCESS")
+                else:
+                    self.log("❌ Failed to connect MT5 - Zone Balance cannot create real positions", "ERROR")
+                    return {
+                        'success': False,
+                        'positions_created': 0,
+                        'zones_balanced': 0,
+                        'actions_executed': [],
+                        'failed_actions': [],
+                        'error': 'MT5 connection failed - cannot create real positions'
+                    }
+            
+            # 🆕 Debug: ตรวจสอบ balance_plan structure
+            if not isinstance(balance_plan, dict):
+                self.log(f"❌ Invalid balance_plan type: {type(balance_plan)}", "ERROR")
+                return {**result, 'error': f'Invalid balance_plan type: {type(balance_plan)}'}
+            
+            if 'actions' not in balance_plan:
+                self.log(f"❌ Missing 'actions' key in balance_plan: {list(balance_plan.keys())}", "ERROR")
+                return {**result, 'error': 'Missing actions key in balance_plan'}
+                
+            actions = balance_plan['actions']
+            if not actions:
+                self.log("⚠️ No actions to execute in balance plan", "WARNING")
+                return {**result, 'error': 'No actions in balance plan'}
+            
+            self.log(f"🎯 Executing {len(actions)} balance actions", "INFO")
+            
+            # 🆕 Debug: แสดงรายละเอียด actions
+            for i, action in enumerate(actions):
+                self.log(f"   Action {i+1}: {action.get('action_type', 'Unknown')} - {action.get('reason', 'No reason')}", "INFO")
+            
+            for action in actions:
+                try:
+                    # 🆕 Debug: ตรวจสอบ action structure
+                    if not isinstance(action, dict):
+                        error_msg = f"Invalid action type: {type(action)}"
+                        self.log(f"❌ {error_msg}", "ERROR")
+                        result['failed_actions'].append({'action': action, 'error': error_msg})
+                        continue
+                    
+                    required_keys = ['action_type', 'position_type', 'target_price', 'volume', 'reason']
+                    missing_keys = [key for key in required_keys if key not in action]
+                    if missing_keys:
+                        error_msg = f"Missing required keys: {missing_keys}"
+                        self.log(f"❌ Action missing keys: {error_msg}", "ERROR")
+                        result['failed_actions'].append({'action': action, 'error': error_msg})
+                        continue
+                    
+                    if action['action_type'] == 'create_position':
+                        # 🆕 Debug: แสดงรายละเอียด action
+                        self.log(f"🔍 Processing action: {action['position_type']} at {action['target_price']:.5f} vol {action['volume']:.2f}", "INFO")
+                        
+                        # ตรวจสอบเงื่อนไขก่อนเปิดไม้
+                        if not self._can_create_balance_position(action):
+                            self.log(f"🚫 Cannot create balance position: {action['reason']}", "WARNING")
+                            result['failed_actions'].append({
+                                'action': action,
+                                'error': 'Conditions not met'
+                            })
+                            continue
+                        
+                        # เปิดไม้
+                        position_result = self._open_direct_mt5_order(
+                            action['position_type'],
+                            action['target_price'],
+                            action['volume'],
+                            f"Zone Balance: {action['reason']}"
+                        )
+                        
+                        if position_result.get('success'):
+                            result['positions_created'] += 1
+                            result['actions_executed'].append({
+                                'action': action,
+                                'result': position_result
+                            })
+                            
+                            self.log(f"✅ Balance position created: {action['position_type']} at {action['target_price']:.5f}", "SUCCESS")
+                        else:
+                            result['failed_actions'].append({
+                                'action': action,
+                                'error': position_result.get('error', 'Unknown error')
+                            })
+                            self.log(f"❌ Failed to create balance position: {position_result.get('error', 'Unknown')}", "ERROR")
+                
+                except Exception as e:
+                    result['failed_actions'].append({
+                        'action': action,
+                        'error': str(e)
+                    })
+                    self.log(f"❌ Error executing action: {str(e)}", "ERROR")
+            
+            # คำนวณจำนวนโซนที่ได้รับการปรับสมดุล
+            try:
+                unique_zones = set()
+                for executed_action in result['actions_executed']:
+                    if isinstance(executed_action, dict) and 'action' in executed_action:
+                        action_data = executed_action['action']
+                        if 'zone_index' in action_data:
+                            unique_zones.add(action_data['zone_index'])
+                result['zones_balanced'] = len(unique_zones)
+            except Exception as e:
+                self.log(f"Error calculating zones_balanced: {str(e)}", "ERROR")
+                result['zones_balanced'] = 0
+            
+            result['success'] = result['positions_created'] > 0
+            
+            return result
+            
+        except Exception as e:
+            self.log(f"Error executing zone balance plan: {str(e)}", "ERROR")
+            return {
+                'success': False,
+                'positions_created': 0,
+                'zones_balanced': 0,
+                'error': str(e)
+            }
+
+    def _can_create_balance_position(self, action: dict) -> bool:
+        """🔍 ตรวจสอบว่าสามารถสร้าง balance position ได้หรือไม่"""
+        try:
+            # 🆕 Debug: ตรวจสอบ action structure
+            if not isinstance(action, dict):
+                self.log(f"❌ Invalid action type in _can_create_balance_position: {type(action)}", "ERROR")
+                return False
+                
+            if 'target_price' not in action:
+                self.log(f"❌ Missing target_price in action: {list(action.keys())}", "ERROR")
+                return False
+            
+            # 1. ตรวจสอบจำนวนไม้รวม
+            positions_count = len(self.positions) if self.positions else 0
+            max_positions = getattr(self, 'max_total_positions', 50)  # Default fallback
+            
+            if positions_count >= max_positions - 2:
+                self.log(f"🚫 Too many positions: {positions_count}/{max_positions}", "WARNING")
+                return False
+            
+            # 2. ตรวจสอบ margin
+            try:
+                if MT5_AVAILABLE and mt5 and self.mt5_connected:
+                    account_info = mt5.account_info()
+                    if account_info and hasattr(account_info, 'margin') and account_info.margin > 0:
+                        margin_level = (account_info.equity / account_info.margin) * 100
+                        if margin_level < 200:  # Margin level ต่ำกว่า 200%
+                            self.log(f"🚫 Low margin level: {margin_level:.1f}%", "WARNING")
+                            return False
+            except Exception as margin_error:
+                self.log(f"Warning: Could not check margin level: {str(margin_error)}", "WARNING")
+                # ไม่ block การทำงานถ้าตรวจสอบ margin ไม่ได้
+            
+            # 3. ตรวจสอบการกระจุกตัว
+            try:
+                target_price = float(action['target_price'])
+                if self.check_position_clustering(target_price):
+                    self.log(f"🚫 Position clustering detected at {target_price:.5f}", "WARNING")
+                    return False
+            except Exception as clustering_error:
+                self.log(f"Warning: Could not check clustering: {str(clustering_error)}", "WARNING")
+                # ไม่ block การทำงานถ้าตรวจสอบ clustering ไม่ได้
+            
+            # 4. ตรวจสอบ balance โดยรวม
+            try:
+                current_balance = self._get_current_balance()
+                if current_balance < 50:  # Balance ต่ำกว่า $50
+                    self.log(f"🚫 Low balance: ${current_balance:.2f}", "WARNING")
+                    return False
+            except Exception as balance_error:
+                self.log(f"Warning: Could not check balance: {str(balance_error)}", "WARNING")
+                # ไม่ block การทำงานถ้าตรวจสอบ balance ไม่ได้
+            
+            return True
+            
+        except Exception as e:
+            self.log(f"Error checking balance position conditions: {str(e)}", "ERROR")
+            return False
+
+    def integrated_zone_edge_management_system(self, reason: str = "Integrated Management") -> dict:
+        """🔗 ระบบจัดการโซนและขอบแบบบูรณาการ - ออกไม้ + ปิดไม้ในระบบเดียว"""
+        try:
+            self.log(f"🔗 Starting Integrated Zone-Edge Management: {reason}")
+            
+            # 1. วิเคราะห์สถานการณ์รวม
+            zone_analysis = self.analyze_position_zones()
+            recovery_assessment = self._assess_portfolio_recovery_needs()
+            
+            management_result = {
+                'success': False,
+                'zone_balance_result': None,
+                'edge_closing_result': None,
+                'total_actions': 0,
+                'overall_improvement': 0.0,
+                'strategy_used': 'NONE'
+            }
+            
+            # 2. ตัดสินใจกลยุทธ์หลัก
+            strategy = self._determine_integrated_strategy(zone_analysis, recovery_assessment)
+            management_result['strategy_used'] = strategy['name']
+            
+            self.log(f"🎯 Selected Strategy: {strategy['name']} - {strategy['description']}", "INFO")
+            
+            # 3. ดำเนินการตามกลยุทธ์
+            if strategy['name'] == 'EDGE_CLOSING_PRIORITY':
+                # ปิดไม้ขอบก่อน แล้วค่อยปรับสมดุลโซน
+                edge_result = self.smart_edge_closing_system(f"{reason}_EdgeFirst")
+                management_result['edge_closing_result'] = edge_result
+                management_result['total_actions'] += edge_result.get('positions_closed', 0)
+                
+                if edge_result.get('success'):
+                    # หลังปิดไม้ขอบแล้ว ตรวจสอบว่าต้องปรับสมดุลโซนหรือไม่
+                    updated_analysis = self.analyze_position_zones()
+                    if updated_analysis['balance_score'] < 70:
+                        balance_result = self.smart_zone_balance_system(f"{reason}_BalanceAfterEdge")
+                        management_result['zone_balance_result'] = balance_result
+                        management_result['total_actions'] += balance_result.get('positions_created', 0)
+                
+            elif strategy['name'] == 'ZONE_BALANCE_PRIORITY':
+                # ปรับสมดุลโซนก่อน แล้วค่อยดูการปิดไม้ขอบ
+                balance_result = self.smart_zone_balance_system(f"{reason}_BalanceFirst")
+                management_result['zone_balance_result'] = balance_result
+                management_result['total_actions'] += balance_result.get('positions_created', 0)
+                
+                if balance_result.get('success'):
+                    # หลังปรับสมดุลแล้ว ตรวจสอบโอกาสปิดไม้ขอบ
+                    updated_recovery = self._assess_portfolio_recovery_needs()
+                    if updated_recovery['priority'] in ['HIGH', 'CRITICAL']:
+                        edge_result = self.smart_edge_closing_system(f"{reason}_EdgeAfterBalance")
+                        management_result['edge_closing_result'] = edge_result
+                        management_result['total_actions'] += edge_result.get('positions_closed', 0)
+                
+            elif strategy['name'] == 'SIMULTANEOUS_ACTION':
+                # ทำทั้งสองอย่างพร้อมกัน (สำหรับสถานการณ์ที่ต้องการความเร็ว)
+                balance_result = self.smart_zone_balance_system(f"{reason}_Simultaneous")
+                edge_result = self.smart_edge_closing_system(f"{reason}_Simultaneous")
+                
+                management_result['zone_balance_result'] = balance_result
+                management_result['edge_closing_result'] = edge_result
+                management_result['total_actions'] += (
+                    balance_result.get('positions_created', 0) + 
+                    edge_result.get('positions_closed', 0)
+                )
+            
+            # 4. ประเมินผลลัพธ์รวม
+            final_analysis = self.analyze_position_zones()
+            final_recovery = self._assess_portfolio_recovery_needs()
+            
+            initial_balance_score = zone_analysis.get('balance_score', 0)
+            final_balance_score = final_analysis.get('balance_score', 0)
+            balance_improvement = final_balance_score - initial_balance_score
+            
+            initial_recovery_score = recovery_assessment.get('recovery_score', 0)
+            final_recovery_score = final_recovery.get('recovery_score', 0)
+            recovery_improvement = initial_recovery_score - final_recovery_score  # Lower is better
+            
+            management_result['overall_improvement'] = balance_improvement + (recovery_improvement * 0.5)
+            management_result['success'] = management_result['total_actions'] > 0 and management_result['overall_improvement'] > 0
+            
+            # 5. รายงานผลลัพธ์
+            if management_result['success']:
+                self.log(f"🔗 Integrated Management Success!", "SUCCESS")
+                self.log(f"   📊 Total Actions: {management_result['total_actions']}", "SUCCESS")
+                self.log(f"   📈 Balance Improvement: +{balance_improvement:.1f}%", "SUCCESS")
+                self.log(f"   💊 Recovery Improvement: -{recovery_improvement:.1f} points", "SUCCESS")
+                self.log(f"   🎯 Strategy: {strategy['name']}", "SUCCESS")
+            else:
+                self.log(f"❌ Integrated Management: Limited success", "WARNING")
+            
+            return management_result
+            
+        except Exception as e:
+            self.log(f"Error in integrated zone-edge management: {str(e)}", "ERROR")
+            return {
+                'success': False,
+                'total_actions': 0,
+                'error': str(e)
+            }
+
+    def _determine_integrated_strategy(self, zone_analysis: dict, recovery_assessment: dict) -> dict:
+        """🧠 ตัดสินใจกลยุทธ์การจัดการแบบบูรณาการ"""
+        try:
+            balance_score = zone_analysis.get('balance_score', 100)
+            recovery_priority = recovery_assessment.get('priority', 'LOW')
+            recovery_score = recovery_assessment.get('recovery_score', 0)
+            imbalanced_zones = len(zone_analysis.get('imbalanced_zones', []))
+            
+            # กลยุทธ์ 1: ปิดไม้ขอบมีความสำคัญ (Recovery เร่งด่วน)
+            if recovery_priority == 'CRITICAL' or recovery_score >= 50:
+                return {
+                    'name': 'EDGE_CLOSING_PRIORITY',
+                    'description': 'Critical recovery needed - prioritize edge closing first',
+                    'priority': 1
+                }
+            
+            # กลยุทธ์ 2: ปรับสมดุลโซนมีความสำคัญ (Balance แย่มาก)
+            if balance_score < 40 or imbalanced_zones >= 3:
+                return {
+                    'name': 'ZONE_BALANCE_PRIORITY',
+                    'description': 'Poor zone balance - prioritize zone balancing first',
+                    'priority': 1
+                }
+            
+            # กลยุทธ์ 3: ทำพร้อมกัน (สถานการณ์ปานกลาง)
+            if recovery_priority == 'HIGH' and balance_score < 60:
+                return {
+                    'name': 'SIMULTANEOUS_ACTION',
+                    'description': 'Moderate issues - execute both actions simultaneously',
+                    'priority': 2
+                }
+            
+            # กลยุทธ์ 4: ปรับสมดุลโซนเป็นหลัก (สถานการณ์ปกติ)
+            if balance_score < 70 or imbalanced_zones > 0:
+                return {
+                    'name': 'ZONE_BALANCE_PRIORITY',
+                    'description': 'Normal situation - focus on zone balance maintenance',
+                    'priority': 3
+                }
+            
+            # กลยุทธ์ 5: ปิดไม้ขอบเป็นหลัก (Balance ดีแล้ว)
+            return {
+                'name': 'EDGE_CLOSING_PRIORITY',
+                'description': 'Good balance - focus on edge closing opportunities',
+                'priority': 3
+            }
+            
+        except Exception as e:
+            self.log(f"Error determining integrated strategy: {str(e)}", "ERROR")
+            return {
+                'name': 'ZONE_BALANCE_PRIORITY',
+                'description': 'Fallback to zone balance priority',
+                'priority': 3
+            }
+
+    def auto_zone_balance_monitor(self) -> dict:
+        """🤖 ระบบติดตามและปรับสมดุลโซนแบบอัตโนมัติ"""
+        try:
+            self.log("🤖 Auto Zone Balance Monitor Started")
+            
+            # ตรวจสอบเงื่อนไขการทำงาน
+            if not self.positions or len(self.positions) < 3:
+                return {
+                    'success': False,
+                    'reason': 'Insufficient positions for zone balancing',
+                    'positions_count': len(self.positions) if self.positions else 0
+                }
+            
+            # วิเคราะห์โซนปัจจุบัน
+            zone_analysis = self.analyze_position_zones()
+            balance_score = zone_analysis.get('balance_score', 100)
+            imbalanced_zones = zone_analysis.get('imbalanced_zones', [])
+            
+            self.log(f"🤖 Balance Monitor: Score={balance_score:.1f}%, Imbalanced={len(imbalanced_zones)}")
+            
+            # เงื่อนไข 1: Balance score ต่ำกว่า 60%
+            if balance_score < 60:
+                self.log(f"⚠️ Low balance score: {balance_score:.1f}% - Activating zone balance", "WARNING")
+                return self.integrated_zone_edge_management_system("Auto Monitor: Low Balance Score")
+            
+            # เงื่อนไข 2: มีโซนไม่สมดุลมากกว่า 2 โซน
+            if len(imbalanced_zones) > 2:
+                self.log(f"⚠️ Multiple imbalanced zones: {len(imbalanced_zones)} - Activating zone balance", "WARNING")
+                return self.integrated_zone_edge_management_system("Auto Monitor: Multiple Imbalanced Zones")
+            
+            # เงื่อนไข 3: มีโซนที่ไม่สมดุลรุนแรง
+            severe_imbalanced = [z for z in imbalanced_zones if z['zone_data'].get('imbalance_severity') == 'SEVERE']
+            if severe_imbalanced:
+                self.log(f"⚠️ Severe imbalance detected: {len(severe_imbalanced)} zones - Activating zone balance", "WARNING")
+                return self.integrated_zone_edge_management_system("Auto Monitor: Severe Imbalance")
+            
+            # เงื่อนไข 4: ตรวจสอบโอกาสการปรับปรุง
+            if balance_score < 80 and len(imbalanced_zones) > 0:
+                # ตรวจสอบว่าสามารถปรับปรุงได้หรือไม่
+                if len(self.positions) < self.max_total_positions - 3:  # เหลือที่ว่างอย่างน้อย 3 ไม้
+                    self.log(f"🎯 Improvement opportunity: Balance={balance_score:.1f}% - Activating zone balance", "INFO")
+                    return self.integrated_zone_edge_management_system("Auto Monitor: Improvement Opportunity")
+            
+            return {
+                'success': False,
+                'reason': 'No conditions met for zone balancing',
+                'balance_score': balance_score,
+                'imbalanced_zones_count': len(imbalanced_zones)
+            }
+            
+        except Exception as e:
+            self.log(f"Error in auto zone balance monitor: {str(e)}", "ERROR")
+            return {
+                'success': False,
+                'error': str(e)
+            }
+
+    def manual_zone_balance(self, strategy: str = "Manual") -> dict:
+        """👤 ระบบปรับสมดุลโซนแบบ Manual"""
+        try:
+            self.log(f"👤 Manual Zone Balance: {strategy}")
+            
+            # เรียกใช้ระบบจัดการแบบบูรณาการ
+            result = self.integrated_zone_edge_management_system(f"Manual_{strategy}")
+            
+            if result['success']:
+                self.log(f"✅ Manual Zone Balance Success: {result['total_actions']} actions", "SUCCESS")
+            else:
+                error_msg = result.get('error', 'Unknown error')
+                self.log(f"❌ Manual Zone Balance Failed: {error_msg}", "WARNING")
+            
+            return result
+            
+        except Exception as e:
+            self.log(f"Error in manual zone balance: {str(e)}", "ERROR")
+            return {
+                'success': False,
+                'error': str(e)
+            }
 
     def _analyze_advanced_distribution(self, zones: dict) -> dict:
         """🧠 Advanced Distribution Analysis สำหรับ Smart Distribution"""
@@ -2500,36 +4124,40 @@ class TradingSystem:
             # 🆕 เพิ่ม Buy/Sell Separation Analysis (สำคัญมาก!)
             buy_sell_separation = 0
             if buy_positions and sell_positions:
-                # หา Buy ที่ต่ำสุด และ Sell ที่สูงสุด
-                min_buy_price = min(p.open_price for p in buy_positions)
-                max_sell_price = max(p.open_price for p in sell_positions)
-                buy_sell_separation = (min_buy_price - max_sell_price) * 1000  # Convert to points (1000 not 10000!)
+                # 🆕 แก้ไขตรรกะ: BUY ต้องอยู่ต่ำกว่า SELL (ตามหลักการ trading)
+                # หา Buy ที่สูงสุด และ Sell ที่ต่ำสุด เพื่อดู gap ระหว่างกลุ่ม
+                max_buy_price = max(p.open_price for p in buy_positions)
+                min_sell_price = min(p.open_price for p in sell_positions)
+                buy_sell_separation = (min_sell_price - max_buy_price) * 100  # Convert to pips (หาร 10 แทนที่จะคูณ 1000)
                 
-                # วิเคราะห์ Buy/Sell separation (ปรับให้สมเหตุสมผล)
-                if buy_sell_separation > 500:  # 500 points = 50 pips
+                # วิเคราะห์ Buy/Sell separation (ใช้ pips แทน points)
+                if buy_sell_separation > 50:  # 50 pips
                     separation_quality = 'EMERGENCY'
-                    separation_message = f'CRITICAL: Buy/Sell separation {buy_sell_separation:.0f} points - Immediate action needed!'
-                elif buy_sell_separation > 300:  # 300 points = 30 pips
+                    separation_message = f'CRITICAL: Buy/Sell separation {buy_sell_separation:.1f} pips - Immediate action needed!'
+                elif buy_sell_separation > 30:  # 30 pips
                     separation_quality = 'POOR'
-                    separation_message = f'POOR: Buy/Sell separation {buy_sell_separation:.0f} points - Action needed'
-                elif buy_sell_separation > 100:  # 100 points = 10 pips
+                    separation_message = f'POOR: Buy/Sell separation {buy_sell_separation:.1f} pips - Action needed'
+                elif buy_sell_separation > 10:  # 10 pips
                     separation_quality = 'MEDIUM'
-                    separation_message = f'MEDIUM: Buy/Sell separation {buy_sell_separation:.0f} points - Monitor closely'
+                    separation_message = f'MEDIUM: Buy/Sell separation {buy_sell_separation:.1f} pips - Monitor closely'
+                elif buy_sell_separation < 0:  # BUY อยู่สูงกว่า SELL = ผิดปกติ
+                    separation_quality = 'EMERGENCY'
+                    separation_message = f'CRITICAL: BUY positions above SELL by {abs(buy_sell_separation):.1f} pips - Fix immediately!'
                 else:
                     separation_quality = 'GOOD'
-                    separation_message = f'GOOD: Buy/Sell separation {buy_sell_separation:.0f} points'
+                    separation_message = f'GOOD: Buy/Sell separation {buy_sell_separation:.1f} pips'
                 
                 # เพิ่มข้อมูล separation ใน advanced_analysis
                 advanced_analysis['buy_sell_separation'] = {
-                    'separation_points': buy_sell_separation,
+                    'separation_pips': buy_sell_separation,  # เปลี่ยนจาก points เป็น pips
                     'separation_quality': separation_quality,
-                    'min_buy_price': min_buy_price,
-                    'max_sell_price': max_sell_price,
+                    'max_buy_price': max_buy_price,  # เปลี่ยนจาก min_buy_price
+                    'min_sell_price': min_sell_price,  # เปลี่ยนจาก max_sell_price
                     'message': separation_message
                 }
                 
                 # 🆕 เพิ่ม Debug Log สำหรับ Buy/Sell Separation
-                self.log(f"🔍 Buy/Sell Separation Analysis: {buy_sell_separation:.0f} points | Quality: {separation_quality} | Min BUY: {min_buy_price:.2f} | Max SELL: {max_sell_price:.2f}", "INFO")
+                self.log(f"🔍 Buy/Sell Separation Analysis: {buy_sell_separation:.1f} pips | Quality: {separation_quality} | Max BUY: {max_buy_price:.2f} | Min SELL: {min_sell_price:.2f}", "INFO")
             
             # ตรวจสอบ BUY/SELL imbalance (ปรับให้ยืดหยุ่นขึ้น)
             imbalance_threshold = 0.55  # ลดจาก 0.6 เป็น 0.55
@@ -2540,20 +4168,20 @@ class TradingSystem:
             # 🆕 ปรับ distribution quality assessment ให้ใช้ Buy/Sell Separation (สำคัญมาก!)
             if 'buy_sell_separation' in advanced_analysis:
                 separation_quality = advanced_analysis['buy_sell_separation']['separation_quality']
-                separation_points = advanced_analysis['buy_sell_separation']['separation_points']
+                separation_pips = advanced_analysis['buy_sell_separation']['separation_pips']
                 
                 if separation_quality == 'EMERGENCY':
                     advanced_analysis['distribution_quality'] = 'EMERGENCY'
                     advanced_analysis['needs_distribution_improvement'] = True
-                    advanced_analysis['message'] = f'EMERGENCY: Buy/Sell separation {separation_points:.0f} points - Immediate action needed!'
+                    advanced_analysis['message'] = f'EMERGENCY: Buy/Sell separation {separation_pips:.1f} pips - Immediate action needed!'
                 elif separation_quality == 'POOR':
                     advanced_analysis['distribution_quality'] = 'POOR'
                     advanced_analysis['needs_distribution_improvement'] = True
-                    advanced_analysis['message'] = f'POOR: Buy/Sell separation {separation_points:.0f} points - Action needed'
+                    advanced_analysis['message'] = f'POOR: Buy/Sell separation {separation_pips:.1f} pips - Action needed'
                 elif separation_quality == 'MEDIUM':
                     advanced_analysis['distribution_quality'] = 'MEDIUM'
                     advanced_analysis['needs_distribution_improvement'] = True
-                    advanced_analysis['message'] = f'MEDIUM: Buy/Sell separation {separation_points:.0f} points - Monitor closely'
+                    advanced_analysis['message'] = f'MEDIUM: Buy/Sell separation {separation_pips:.1f} pips - Monitor closely'
                 else:
                     # ใช้ logic เดิมถ้า separation ดี
                     if len(poor_gaps) > len(good_gaps) or is_imbalanced:
@@ -2620,56 +4248,61 @@ class TradingSystem:
                 # 🆕 เพิ่ม Buy/Sell Separation Actions (สำคัญมาก!)
                 if 'buy_sell_separation' in advanced_analysis:
                     separation_quality = advanced_analysis['buy_sell_separation']['separation_quality']
-                    separation_points = advanced_analysis['buy_sell_separation']['separation_points']
+                    separation_pips = advanced_analysis['buy_sell_separation']['separation_pips']
+                    max_buy_price = advanced_analysis['buy_sell_separation']['max_buy_price']
+                    min_sell_price = advanced_analysis['buy_sell_separation']['min_sell_price']
                     
                     if separation_quality == 'EMERGENCY':
-                        # 🚨 EMERGENCY: ระยะห่าง Buy/Sell เกิน 500 points
+                        # 🚨 EMERGENCY: ระยะห่าง Buy/Sell เกิน 50 pips หรือ BUY อยู่สูงกว่า SELL
                         advanced_analysis['optimal_distribution_actions'].append({
                             'action': 'EMERGENCY_BUY_SELL_BALANCE',
-                            'reason': f'CRITICAL: Buy/Sell separation {separation_points:.0f} points - Immediate action needed!',
+                            'reason': f'CRITICAL: Buy/Sell separation {separation_pips:.1f} pips - Immediate action needed!',
                             'priority': 'EMERGENCY',
-                            'separation_points': separation_points,
-                            'target_reduction': 300  # ลดลงเหลือ 300 points
+                            'separation_pips': separation_pips,
+                            'target_reduction_pips': 30  # ลดลงเหลือ 30 pips
                         })
                         
-                        # เพิ่ม actions เฉพาะเจาะจง (แก้ไขให้ถูกต้อง)
-                        if buy_ratio > sell_ratio:
-                            # BUY heavy - เปิด SELL ใหม่เพื่อลดระยะห่าง
+                        # 🆕 เพิ่ม actions เฉพาะเจาะจง (แก้ไขตรรกะให้ถูกต้อง)
+                        if separation_pips < 0:
+                            # BUY อยู่สูงกว่า SELL = ผิดปกติมาก ต้องแก้ไขทันที
+                            advanced_analysis['optimal_distribution_actions'].append({
+                                'action': 'FIX_INVERTED_POSITIONS',
+                                'reason': f'CRITICAL: BUY positions above SELL by {abs(separation_pips):.1f} pips - Fix immediately!',
+                                'priority': 'EMERGENCY',
+                                'target_action': 'Close high BUY positions and low SELL positions'
+                            })
+                        elif buy_ratio > sell_ratio:
+                            # BUY heavy - เติม SELL ใหม่ระหว่าง max_buy_price และ min_sell_price
+                            gap_middle = (max_buy_price + min_sell_price) / 2
                             advanced_analysis['optimal_distribution_actions'].append({
                                 'action': 'OPEN_SELL_TO_REDUCE_SEPARATION',
-                                'reason': f'BUY heavy - Open SELL to reduce {separation_points:.0f} points separation',
+                                'reason': f'BUY heavy - Open SELL between BUY and SELL groups ({separation_pips:.1f} pips gap)',
                                 'priority': 'EMERGENCY',
-                                'target_price_range': 'Near lowest BUY positions'
+                                'target_price': gap_middle,
+                                'target_price_range': f'Between {max_buy_price:.2f} and {min_sell_price:.2f}'
                             })
                         else:
-                            # SELL heavy - เปิด BUY ใหม่เพื่อลดระยะห่าง
+                            # SELL heavy - เติม BUY ใหม่ระหว่าง max_buy_price และ min_sell_price
+                            gap_middle = (max_buy_price + min_sell_price) / 2
                             advanced_analysis['optimal_distribution_actions'].append({
                                 'action': 'OPEN_BUY_TO_REDUCE_SEPARATION',
-                                'reason': f'SELL heavy - Open BUY to reduce {separation_points:.0f} points separation',
+                                'reason': f'SELL heavy - Open BUY between BUY and SELL groups ({separation_pips:.1f} pips gap)',
                                 'priority': 'EMERGENCY',
-                                'target_price_range': 'Near highest SELL positions'
-                            })
-                        
-                        # 🆕 เพิ่ม EMERGENCY_BUY_SELL_BALANCE Action (สำคัญมาก!)
-                        advanced_analysis['optimal_distribution_actions'].append({
-                            'action': 'EMERGENCY_BUY_SELL_BALANCE',
-                            'reason': f'CRITICAL: Buy/Sell separation {separation_points:.0f} points - Immediate action needed!',
-                            'priority': 'EMERGENCY',
-                            'separation_points': separation_points,
-                            'target_reduction': 300  # ลดลงเหลือ 300 points
+                                'target_price': gap_middle,
+                                'target_price_range': f'Between {max_buy_price:.2f} and {min_sell_price:.2f}'
                         })
                         
                         # 🆕 เพิ่ม Debug Log สำหรับ Action Logic
-                        self.log(f"🔍 Action Logic Debug: BUY ratio {buy_ratio:.1%} vs SELL ratio {sell_ratio:.1%} | Action: {'OPEN_SELL' if buy_ratio > sell_ratio else 'OPEN_BUY'}", "INFO")
+                        self.log(f"🔍 Action Logic Debug: BUY ratio {buy_ratio:.1%} vs SELL ratio {sell_ratio:.1%} | Separation: {separation_pips:.1f} pips | Max BUY: {max_buy_price:.2f} | Min SELL: {min_sell_price:.2f}", "INFO")
                         
                     elif separation_quality == 'POOR':
-                        # ⚠️ POOR: ระยะห่าง Buy/Sell เกิน 300 points
+                        # ⚠️ POOR: ระยะห่าง Buy/Sell เกิน 30 pips
                         advanced_analysis['optimal_distribution_actions'].append({
                             'action': 'REDUCE_BUY_SELL_SEPARATION',
-                            'reason': f'POOR: Buy/Sell separation {separation_points:.0f} points - Action needed',
+                            'reason': f'POOR: Buy/Sell separation {separation_pips:.1f} pips - Action needed',
                             'priority': 'HIGH',
-                            'separation_points': separation_points,
-                            'target_reduction': 200  # ลดลงเหลือ 200 points
+                            'separation_pips': separation_pips,
+                            'target_reduction_pips': 20  # ลดลงเหลือ 20 pips
                         })
                         
                         # เพิ่ม actions เฉพาะเจาะจง
@@ -2689,12 +4322,12 @@ class TradingSystem:
                             })
                         
                     elif separation_quality == 'MEDIUM':
-                        # 📊 MEDIUM: ระยะห่าง Buy/Sell เกิน 100 points
+                        # 📊 MEDIUM: ระยะห่าง Buy/Sell เกิน 10 pips
                         advanced_analysis['optimal_distribution_actions'].append({
                             'action': 'MONITOR_BUY_SELL_SEPARATION',
-                            'reason': f'MEDIUM: Buy/Sell separation {separation_points:.0f} points - Monitor closely',
+                            'reason': f'MEDIUM: Buy/Sell separation {separation_pips:.1f} pips - Monitor closely',
                             'priority': 'MEDIUM',
-                            'separation_points': separation_points
+                            'separation_pips': separation_pips
                         })
                 
                 # 🆕 เพิ่ม BUY/SELL Balance Actions (เดิม)
@@ -2751,7 +4384,7 @@ class TradingSystem:
             return {'error': str(e)}
 
     def calculate_zone_distribution_score(self, zones: dict) -> float:
-        """คำนวณคะแนนการกระจายตัวของ zones (0-100)"""
+        """🚀 Enhanced Zone Distribution Score - คำนวณคะแนนการกระจายโซนอย่างฉลาด"""
         try:
             if not zones:
                 return 100.0
@@ -2762,23 +4395,23 @@ class TradingSystem:
             
             score = 100.0
             
-            # 1. Penalize overcrowded zones (40 points)
+            # 1. Penalize overcrowded zones (30 points)
             overcrowded_penalty = 0
             for zone_data in zones.values():
                 position_count = len(zone_data['positions'])
                 if position_count > self.max_positions_per_zone:
-                    overcrowded_penalty += (position_count - self.max_positions_per_zone) * 10
+                    overcrowded_penalty += (position_count - self.max_positions_per_zone) * 8
             
-            score -= min(40, overcrowded_penalty)
+            score -= min(30, overcrowded_penalty)
             
-            # 2. Reward even distribution (30 points)
+            # 2. Reward even distribution (25 points)
             zone_counts = [len(zone['positions']) for zone in zones.values()]
             avg_per_zone = sum(zone_counts) / len(zone_counts)
             variance = sum((count - avg_per_zone) ** 2 for count in zone_counts) / len(zone_counts)
-            distribution_score = max(0, 30 - (variance * 5))
-            score = score - 30 + distribution_score
+            distribution_score = max(0, 25 - (variance * 4))
+            score = score - 25 + distribution_score
             
-            # 3. Penalize clustering (30 points)
+            # 3. Penalize clustering (20 points)
             clustering_penalty = 0
             zone_indices = sorted(zones.keys())
             consecutive_zones = 0
@@ -2787,15 +4420,262 @@ class TradingSystem:
                     consecutive_zones += 1
             
             if consecutive_zones > 2:  # More than 2 consecutive zones
-                clustering_penalty = (consecutive_zones - 2) * 10
+                clustering_penalty = (consecutive_zones - 2) * 8
             
-            score -= min(30, clustering_penalty)
+            score -= min(20, clustering_penalty)
+            
+            # 4. Reward edge zone presence (15 points) - สำคัญสำหรับการปิดแบบขอบ
+            edge_zones = self.identify_edge_zones(zones)
+            edge_score = min(15, len(edge_zones) * 7.5)  # 7.5 points per edge zone
+            score += edge_score
+            
+            # 5. Reward zone coverage (10 points) - ครอบคลุมหลายโซน
+            zone_coverage = min(10, len(zones))  # 1 point per zone, max 10
+            score += zone_coverage
             
             return max(0.0, min(100.0, score))
             
         except Exception as e:
-            self.log(f"Error calculating zone distribution score: {str(e)}", "ERROR")
+            self.log(f"Error calculating enhanced zone distribution score: {str(e)}", "ERROR")
             return 50.0
+
+    def identify_edge_zones(self, zones: dict) -> list:
+        """🎯 ระบุโซนขอบ (edge zones) สำหรับการปิดแบบขอบ"""
+        try:
+            if not zones:
+                return []
+            
+            zone_indices = list(zones.keys())
+            if len(zone_indices) < 2:
+                return []
+            
+            # หาโซนที่สูงที่สุดและต่ำที่สุด
+            min_zone = min(zone_indices)
+            max_zone = max(zone_indices)
+            
+            edge_zones = []
+            
+            # เพิ่มโซนขอบล่าง (โซนที่มีราคาต่ำที่สุด)
+            if min_zone in zones:
+                edge_zones.append({
+                    'zone_index': min_zone,
+                    'type': 'lower_edge',
+                    'positions': zones[min_zone]['positions'],
+                    'position_count': len(zones[min_zone]['positions'])
+                })
+            
+            # เพิ่มโซนขอบบน (โซนที่มีราคาสูงที่สุด)
+            if max_zone in zones and max_zone != min_zone:
+                edge_zones.append({
+                    'zone_index': max_zone,
+                    'type': 'upper_edge',
+                    'positions': zones[max_zone]['positions'],
+                    'position_count': len(zones[max_zone]['positions'])
+                })
+            
+            return edge_zones
+            
+        except Exception as e:
+            self.log(f"Error identifying edge zones: {str(e)}", "ERROR")
+            return []
+
+    def calculate_zone_coverage_percentage(self, zones: dict) -> float:
+        """📊 คำนวณเปอร์เซ็นต์การครอบคลุมโซน"""
+        try:
+            if not zones:
+                return 0.0
+            
+            # คำนวณช่วงโซนที่ใช้งาน
+            zone_indices = list(zones.keys())
+            if len(zone_indices) < 2:
+                return 20.0  # Base coverage for single zone
+            
+            min_zone = min(zone_indices)
+            max_zone = max(zone_indices)
+            total_range = max_zone - min_zone + 1
+            
+            # คำนวณเปอร์เซ็นต์การครอบคลุม
+            coverage = (len(zones) / total_range) * 100
+            
+            return min(100.0, coverage)
+            
+        except Exception as e:
+            self.log(f"Error calculating zone coverage: {str(e)}", "ERROR")
+            return 0.0
+
+    def find_optimal_zone_for_new_position(self, signal, current_zones: dict) -> dict:
+        """🎯 หาโซนที่เหมาะสมที่สุดสำหรับ position ใหม่"""
+        try:
+            if not current_zones:
+                return {
+                    'success': True,
+                    'zone_type': 'new_zone',
+                    'reason': 'No existing zones - create first zone',
+                    'priority_level': 'high'
+                }
+            
+            # วิเคราะห์โซนปัจจุบัน
+            zone_indices = list(current_zones.keys())
+            min_zone = min(zone_indices)
+            max_zone = max(zone_indices)
+            
+            # หาโซนที่มี positions น้อยที่สุด
+            min_positions = float('inf')
+            best_zone = None
+            
+            for zone_idx, zone_data in current_zones.items():
+                position_count = len(zone_data['positions'])
+                if position_count < self.max_positions_per_zone and position_count < min_positions:
+                    min_positions = position_count
+                    best_zone = zone_idx
+            
+            # ถ้ามีโซนว่าง ให้ใช้โซนนั้น
+            if best_zone is not None:
+                return {
+                    'success': True,
+                    'zone_index': best_zone,
+                    'zone_type': 'existing_zone',
+                    'reason': f'Use existing zone {best_zone} with {min_positions} positions',
+                    'priority_level': 'medium'
+                }
+            
+            # ถ้าทุกโซนเต็ม ให้สร้างโซนขอบใหม่
+            if signal.direction == 'BUY':
+                # สำหรับ BUY ให้สร้างโซนบน
+                new_zone = max_zone + 1
+                zone_type = 'upper_edge'
+            else:
+                # สำหรับ SELL ให้สร้างโซนล่าง
+                new_zone = min_zone - 1
+                zone_type = 'lower_edge'
+            
+            return {
+                'success': True,
+                'zone_index': new_zone,
+                'zone_type': zone_type,
+                'reason': f'Create new {zone_type} zone for {signal.direction}',
+                'priority_level': 'high'
+            }
+            
+        except Exception as e:
+            self.log(f"Error finding optimal zone for new position: {str(e)}", "ERROR")
+            return {
+                'success': False,
+                'reason': f'Error: {str(e)}',
+                'priority_level': 'low'
+            }
+
+    def calculate_smart_lot_size_for_zone(self, base_lot: float, zone_info: dict) -> float:
+        """🎯 คำนวณ lot size ที่ฉลาดตามความสำคัญของโซน"""
+        try:
+            if not zone_info or not zone_info.get('success'):
+                return base_lot
+            
+            zone_type = zone_info.get('zone_type', 'existing_zone')
+            priority_level = zone_info.get('priority_level', 'medium')
+            
+            # ปรับ lot size ตามประเภทโซน
+            multiplier = 1.0
+            
+            if zone_type == 'upper_edge' or zone_type == 'lower_edge':
+                # โซนขอบสำคัญสำหรับการปิด - เพิ่ม lot size
+                multiplier = 1.3
+            elif zone_type == 'new_zone':
+                # โซนใหม่ - เพิ่ม lot size เล็กน้อย
+                multiplier = 1.1
+            elif zone_type == 'existing_zone':
+                # โซนที่มีอยู่ - ใช้ lot size ปกติ
+                multiplier = 1.0
+            
+            # ปรับตามระดับความสำคัญ
+            if priority_level == 'high':
+                multiplier *= 1.2
+            elif priority_level == 'low':
+                multiplier *= 0.8
+            
+            # คำนวณ lot size ใหม่
+            smart_lot = base_lot * multiplier
+            
+            # จำกัดไม่ให้เกิน 2 เท่าของ base lot
+            smart_lot = min(smart_lot, base_lot * 2.0)
+            
+            # จำกัดไม่ให้น้อยกว่า 0.5 เท่าของ base lot
+            smart_lot = max(smart_lot, base_lot * 0.5)
+            
+            return round(smart_lot, 2)
+            
+        except Exception as e:
+            self.log(f"Error calculating smart lot size for zone: {str(e)}", "ERROR")
+            return base_lot
+
+    def generate_zone_distribution_report(self, zones: dict) -> dict:
+        """📊 สร้างรายงานการกระจายโซนที่ละเอียด"""
+        try:
+            if not zones:
+                return {
+                    'total_zones': 0,
+                    'total_positions': 0,
+                    'distribution_score': 100.0,
+                    'edge_zones': [],
+                    'coverage_percentage': 0.0,
+                    'recommendations': ['No positions to analyze']
+                }
+            
+            # คำนวณข้อมูลพื้นฐาน
+            total_positions = sum(len(zone['positions']) for zone in zones.values())
+            distribution_score = self.calculate_zone_distribution_score(zones)
+            edge_zones = self.identify_edge_zones(zones)
+            coverage_percentage = self.calculate_zone_coverage_percentage(zones)
+            
+            # สร้างข้อเสนะแนะ
+            recommendations = []
+            
+            if distribution_score < 60:
+                recommendations.append(f"⚠️ Distribution score is low ({distribution_score:.1f}) - improve position spread")
+            
+            if len(edge_zones) < 2:
+                recommendations.append("🎯 Need more edge zones for effective edge closing strategy")
+            
+            if coverage_percentage < 50:
+                recommendations.append(f"📈 Low zone coverage ({coverage_percentage:.1f}%) - expand to more zones")
+            
+            # ตรวจสอบโซนที่แออัด
+            overcrowded_zones = []
+            for zone_idx, zone_data in zones.items():
+                if len(zone_data['positions']) > self.max_positions_per_zone:
+                    overcrowded_zones.append(zone_idx)
+            
+            if overcrowded_zones:
+                recommendations.append(f"🔴 Overcrowded zones detected: {overcrowded_zones}")
+            
+            if not recommendations:
+                recommendations.append("✅ Zone distribution is optimal")
+            
+            return {
+                'total_zones': len(zones),
+                'total_positions': total_positions,
+                'distribution_score': distribution_score,
+                'edge_zones': edge_zones,
+                'coverage_percentage': coverage_percentage,
+                'overcrowded_zones': overcrowded_zones,
+                'recommendations': recommendations,
+                'zone_details': {
+                    zone_idx: {
+                        'position_count': len(zone_data['positions']),
+                        'buy_count': zone_data['buy_count'],
+                        'sell_count': zone_data['sell_count'],
+                        'total_volume': zone_data['total_volume']
+                    }
+                    for zone_idx, zone_data in zones.items()
+                }
+            }
+            
+        except Exception as e:
+            self.log(f"Error generating zone distribution report: {str(e)}", "ERROR")
+            return {
+                'error': str(e),
+                'recommendations': ['Error generating report']
+            }
 
     def get_empty_zones(self, zones: dict, current_price: float) -> List[int]:
         """หา zones ที่ว่างเปล่าใกล้ราคาปัจจุบัน"""
@@ -2840,18 +4720,19 @@ class TradingSystem:
             return []
 
     def check_position_clustering(self, target_price: float) -> bool:
-        """ตรวจสอบว่าจะเกิด clustering หรือไม่ถ้าเปิด position ที่ราคานี้"""
+        """ตรวจสอบว่าจะเกิด clustering หรือไม่ถ้าเปิด position ที่ราคานี้ (ปรับให้ยืดหยุ่นขึ้น)"""
         try:
             if not self.positions:
                 return False
             
-            min_distance = self.min_position_distance_pips * 0.1  # Convert pips to price units for XAUUSD
+            # ปรับให้ยืดหยุ่นขึ้น - ลดระยะห่างขั้นต่ำ
+            min_distance = (self.min_position_distance_pips * 0.1) * 0.8  # ลดลง 20%
             
             # Check distance to all existing positions
             for position in self.positions:
                 distance = abs(target_price - position.open_price)
                 if distance < min_distance:
-                    self.log(f"🚫 Position clustering detected: {distance*10:.1f} pips < {self.min_position_distance_pips} pips minimum")
+                    self.log(f"🚫 Position clustering detected: {distance*10:.1f} pips < {self.min_position_distance_pips*0.8:.1f} pips minimum")
                     return True
             
             return False
@@ -2859,6 +4740,39 @@ class TradingSystem:
         except Exception as e:
             self.log(f"Error checking position clustering: {str(e)}", "ERROR")
             return False
+
+    def find_suitable_price_without_clustering(self, base_price: float, direction: str, max_attempts: int = 10) -> float:
+        """🔍 หาราคาที่เหมาะสมโดยไม่เกิด clustering แบบยืดหยุ่น"""
+        try:
+            if not self.positions:
+                return base_price
+            
+            # เริ่มจากราคาเดิม
+            current_price = base_price
+            step_size = self.min_position_distance_pips * 0.1 * 0.5  # ขั้นละ 2.5 pips
+            
+            for attempt in range(max_attempts):
+                if not self.check_position_clustering(current_price):
+                    self.log(f"✅ Found suitable price: {current_price:.5f} (attempt {attempt + 1})", "SUCCESS")
+                    return current_price
+                
+                # ปรับราคาตามทิศทาง
+                if direction == 'SELL':
+                    current_price -= step_size  # SELL ราคาลง
+                else:
+                    current_price += step_size  # BUY ราคาขึ้น
+                
+                # เพิ่ม step size ทุก 3 ครั้ง
+                if (attempt + 1) % 3 == 0:
+                    step_size *= 1.5
+            
+            # ถ้าหาไม่ได้ ให้ใช้ราคาเดิมและ log warning
+            self.log(f"⚠️ Could not find suitable price after {max_attempts} attempts, using base price: {base_price:.5f}", "WARNING")
+            return base_price
+            
+        except Exception as e:
+            self.log(f"Error finding suitable price: {str(e)}", "ERROR")
+            return base_price
 
     def calculate_advanced_position_score(self, position: Position) -> dict:
         """คำนวณคะแนน position แบบขั้นสูง"""
@@ -3086,6 +5000,7 @@ class TradingSystem:
             
             if router_result['action'] == 'skip':
                 self.log(f"⏭️ Signal SKIPPED: {signal.direction} - {router_result['details']['reason']}")
+                self.release_system("smart_router")
                 return False
             
             elif router_result['action'] == 'redirect':
@@ -3094,6 +5009,8 @@ class TradingSystem:
                 target_position = details['target_position']
                 
                 success = self.execute_redirect_close(target_position, signal, details['reason'])
+                self.release_system("smart_router")
+                
                 if success:
                     self.log(f"🎯 REDIRECT SUCCESS: ${details['profit_captured']:.2f} captured")
                     return True
@@ -3102,7 +5019,9 @@ class TradingSystem:
                     self.log("🔄 Redirect failed, executing normal order")
             
             # Execute ปกติ (หรือ fallback จาก redirect ที่ล้มเหลว)
-            return self.execute_normal_order(signal)
+            result = self.execute_normal_order(signal)
+            self.release_system("smart_router")
+            return result
             
         except ValidationError as e:
             self.log(f"Validation error in execute_order: {str(e)}", "ERROR")
@@ -3264,9 +5183,12 @@ class TradingSystem:
         
         return error_descriptions.get(retcode, f"Unknown error code: {retcode}")
 
+
     def update_positions(self):
         """Update position data and calculate metrics"""
         if not self.mt5_connected or not MT5_AVAILABLE or not mt5:
+            # ไม่มี MT5 - ไม่สามารถอัพเดท positions ได้
+            self.log("⚠️ Cannot update positions - MT5 not connected", "WARNING")
             return
             
         try:
@@ -3475,6 +5397,21 @@ class TradingSystem:
         Returns: {'action': 'execute'/'redirect'/'skip', 'details': {...}}
         """
         try:
+            # 🎯 System Coordinator Check
+            coordinator_result = self.system_coordinator("signal_routing", "smart_router", "TRADING")
+            if not coordinator_result['allowed']:
+                self.log(f"❌ Smart Router Blocked: {coordinator_result['reason']}", "WARNING")
+                return {
+                    'action': 'skip',
+                    'details': {
+                        'original_signal': signal,
+                        'reason': f"Coordinator blocked: {coordinator_result['reason']}",
+                        'redirect_target': None,
+                        'profit_captured': 0.0,
+                        'zone_analysis': None
+                    }
+                }
+            
             result = {
                 'action': 'execute',
                 'details': {
@@ -3487,6 +5424,7 @@ class TradingSystem:
             }
             
             if not self.smart_router_enabled or not self.positions:
+                self.release_system("smart_router")
                 return result
             
             # 🎯 PHASE 1: Zone-Based Analysis
@@ -3608,7 +5546,7 @@ class TradingSystem:
             
             buy_ratio = self.buy_volume / total_volume
             
-            # 🎯 PHASE 2: Zone-Based Redirect Analysis
+            # 🎯 PHASE 2: Enhanced Zone-Based Analysis
             zone_redirect_analysis = self.should_redirect_for_zone_balance(signal, zone_analysis, buy_ratio)
             
             if zone_redirect_analysis['should_redirect']:
@@ -3616,6 +5554,15 @@ class TradingSystem:
                 result['details'].update(zone_redirect_analysis)
                 self.log(f"🔄 Zone-Based REDIRECT: {signal.direction} → {zone_redirect_analysis['reason']}")
                 return result
+            
+            # 🚀 PHASE 2.5: Optimal Zone Selection for New Position
+            zones = zone_analysis.get('zones', {})
+            optimal_zone = self.find_optimal_zone_for_new_position(signal, zones)
+            
+            if optimal_zone['success'] and optimal_zone['priority_level'] == 'high':
+                result['details']['optimal_zone'] = optimal_zone
+                result['details']['reason'] += f" | Zone Strategy: {optimal_zone['reason']}"
+                self.log(f"🎯 Optimal Zone Selected: {optimal_zone['reason']}", "INFO")
             
             # 4. Check traditional volume-based redirect
             redirect_analysis = self.analyze_redirect_opportunity(signal, buy_ratio)
@@ -4211,148 +6158,135 @@ class TradingSystem:
             return {'success': False, 'error': str(e)}
 
     def _execute_clustered_position_closure(self) -> dict:
-        """🔒 ปิด clustered positions เพื่อปรับปรุง distribution"""
+        """🔒 ปิด clustered positions เพื่อปรับปรุง distribution - GROUP CLOSING ONLY"""
         try:
-            # หา positions ที่ clustered กัน
-            zone_analysis = self.analyze_position_zones()
-            if 'error' in zone_analysis:
-                return {'success': False, 'error': zone_analysis['error']}
+            self.log("🔒 Closing Clustered Positions (GROUP CLOSING)", "AI")
             
-            advanced_distribution = zone_analysis.get('advanced_distribution', {})
-            if 'error' in advanced_distribution:
-                return {'success': False, 'error': advanced_distribution['error']}
+            # ใช้ Smart Edge Closing System แทน individual closing
+            edge_result = self.smart_edge_closing_system("Clustered Positions Distribution Improvement")
             
-            poor_gaps = advanced_distribution.get('price_gaps', [])
-            poor_gaps = [g for g in poor_gaps if g.get('gap_quality') == 'POOR']
-            
-            if not poor_gaps:
-                return {'success': False, 'message': 'No clustered positions found'}
-            
-            # เลือก position ที่ควรปิด (profit ที่น้อยที่สุด)
-            positions_to_close = []
-            for gap in poor_gaps[:2]:  # ปิดแค่ 2 positions ก่อน
-                pos1_ticket = gap.get('position1')
-                pos2_ticket = gap.get('position2')
+            if edge_result['success']:
+                self.log(f"🎯 Clustered Positions Edge Closing Success: {edge_result['positions_closed']} positions, Profit: ${edge_result['total_profit']:.2f}")
+                return {
+                    'success': True,
+                    'positions_closed': edge_result['positions_closed'],
+                    'total_profit': edge_result['total_profit'],
+                    'message': f'Closed {edge_result["positions_closed"]} clustered positions via group closing',
+                    'method': 'edge_closing'
+                }
+            else:
+                # ถ้า edge closing ไม่สำเร็จ ให้ใช้ Smart Flexible Closing
+                flexible_result = self.execute_smart_flexible_closing("Clustered Positions Distribution Improvement Fallback")
                 
-                pos1 = next((p for p in self.positions if p.ticket == pos1_ticket), None)
-                pos2 = next((p for p in self.positions if p.ticket == pos2_ticket), None)
-                
-                if pos1 and pos2:
-                    # เลือก position ที่ profit น้อยกว่า
-                    if pos1.profit < pos2.profit:
-                        positions_to_close.append(pos1)
-                    else:
-                        positions_to_close.append(pos2)
-            
-            # ปิด positions
-            closed_count = 0
-            for position in positions_to_close:
-                if hasattr(self, 'close_position_smart'):
-                    close_result = self.close_position_smart(position.ticket)
-                    if close_result.get('success'):
-                        closed_count += 1
-                        self.log(f"🔒 Closed clustered position {position.ticket} for distribution improvement", "INFO")
-            
-            return {
-                'success': True,
-                'message': f'Closed {closed_count} clustered positions',
-                'closed_count': closed_count
-            }
+                if flexible_result['success']:
+                    self.log(f"🎯 Clustered Positions Flexible Closing Success: {flexible_result['positions_closed']} positions, Profit: ${flexible_result['total_profit']:.2f}")
+                    return {
+                        'success': True,
+                        'positions_closed': flexible_result['positions_closed'],
+                        'total_profit': flexible_result['total_profit'],
+                        'message': f'Closed {flexible_result["positions_closed"]} clustered positions via flexible closing',
+                        'method': 'smart_flexible_closing'
+                    }
+                else:
+                    self.log("❌ All clustered positions closing methods failed", "ERROR")
+                    return {
+                        'success': False,
+                        'positions_closed': 0,
+                        'total_profit': 0.0,
+                        'message': 'Failed to close clustered positions',
+                        'method': 'failed',
+                        'error': flexible_result.get('error', 'Unknown error')
+                    }
             
         except Exception as e:
             self.log(f"Error executing clustered position closure: {str(e)}", "ERROR")
             return {'success': False, 'error': str(e)}
 
     def _execute_profit_redistribution(self) -> dict:
-        """💰 ปิดและเปิดใหม่ profitable positions เพื่อปรับปรุง distribution"""
+        """💰 ปิดและเปิดใหม่ profitable positions เพื่อปรับปรุง distribution - GROUP CLOSING ONLY"""
         try:
-            # หา profitable positions ที่ clustered กัน
-            zone_analysis = self.analyze_position_zones()
-            if 'error' in zone_analysis:
-                return {'success': False, 'error': zone_analysis['error']}
+            self.log("💰 Profit Redistribution (GROUP CLOSING)", "AI")
             
-            advanced_distribution = zone_analysis.get('advanced_distribution', {})
-            if 'error' in advanced_distribution:
-                return {'success': False, 'error': advanced_distribution['error']}
+            # ใช้ Smart Edge Closing System แทน individual closing
+            edge_result = self.smart_edge_closing_system("Profit Redistribution")
             
-            profit_distribution = advanced_distribution.get('profit_distribution', {})
-            if profit_distribution.get('price_spread') == 'GOOD':
-                return {'success': False, 'message': 'Profit distribution is already good'}
-            
-            # หา profitable positions ที่ clustered กัน
-            profitable_positions = [p for p in self.positions if hasattr(p, 'profit') and p.profit > 0]
-            if len(profitable_positions) < 2:
-                return {'success': False, 'message': 'Insufficient profitable positions for redistribution'}
-            
-            # เรียงตาม profit และเลือกตัวที่ profit น้อยที่สุด
-            profitable_positions.sort(key=lambda x: x.profit)
-            positions_to_close = profitable_positions[:2]  # ปิด 2 ตัวที่ profit น้อยที่สุด
-            
-            # ปิด positions
-            closed_count = 0
-            total_profit_closed = 0.0
-            for position in positions_to_close:
-                if hasattr(self, 'close_position_smart'):
-                    close_result = self.close_position_smart(position.ticket)
-                    if close_result.get('success'):
-                        closed_count += 1
-                        total_profit_closed += position.profit
-                        self.log(f"💰 Closed profitable position {position.ticket} (profit: {position.profit:.2f}) for redistribution", "INFO")
-            
-            return {
-                'success': True,
-                'message': f'Closed {closed_count} profitable positions (total profit: {total_profit_closed:.2f})',
-                'closed_count': closed_count,
-                'total_profit_closed': total_profit_closed
-            }
+            if edge_result['success']:
+                self.log(f"🎯 Profit Redistribution Edge Closing Success: {edge_result['positions_closed']} positions, Profit: ${edge_result['total_profit']:.2f}")
+                return {
+                    'success': True,
+                    'positions_closed': edge_result['positions_closed'],
+                    'total_profit': edge_result['total_profit'],
+                    'message': f'Closed {edge_result["positions_closed"]} profitable positions via group closing',
+                    'method': 'edge_closing'
+                }
+            else:
+                # ถ้า edge closing ไม่สำเร็จ ให้ใช้ Smart Flexible Closing
+                flexible_result = self.execute_smart_flexible_closing("Profit Redistribution Fallback")
+                
+                if flexible_result['success']:
+                    self.log(f"🎯 Profit Redistribution Flexible Closing Success: {flexible_result['positions_closed']} positions, Profit: ${flexible_result['total_profit']:.2f}")
+                    return {
+                        'success': True,
+                        'positions_closed': flexible_result['positions_closed'],
+                        'total_profit': flexible_result['total_profit'],
+                        'message': f'Closed {flexible_result["positions_closed"]} profitable positions via flexible closing',
+                        'method': 'smart_flexible_closing'
+                    }
+                else:
+                    self.log("❌ All profit redistribution closing methods failed", "ERROR")
+                    return {
+                        'success': False,
+                        'positions_closed': 0,
+                        'total_profit': 0.0,
+                        'message': 'Failed to close profitable positions for redistribution',
+                        'method': 'failed',
+                        'error': flexible_result.get('error', 'Unknown error')
+                    }
             
         except Exception as e:
             self.log(f"Error executing profit redistribution: {str(e)}", "ERROR")
             return {'success': False, 'error': str(e)}
 
     def _execute_risk_redistribution(self) -> dict:
-        """⚠️ ปิดและเปิดใหม่ risky positions เพื่อปรับปรุง distribution"""
-        
+        """⚠️ ปิดและเปิดใหม่ risky positions เพื่อปรับปรุง distribution - GROUP CLOSING ONLY"""
         try:
-            # หา losing positions ที่ clustered กัน
-            zone_analysis = self.analyze_position_zones()
-            if 'error' in zone_analysis:
-                return {'success': False, 'error': zone_analysis['error']}
+            self.log("⚠️ Risk Redistribution (GROUP CLOSING)", "AI")
             
-            advanced_distribution = zone_analysis.get('advanced_distribution', {})
-            if 'error' in advanced_distribution:
-                return {'success': False, 'error': advanced_distribution['error']}
+            # ใช้ Smart Edge Closing System แทน individual closing
+            edge_result = self.smart_edge_closing_system("Risk Redistribution")
             
-            risk_distribution = advanced_distribution.get('risk_distribution', {})
-            if risk_distribution.get('price_spread') == 'GOOD':
-                return {'success': False, 'message': 'Risk distribution is already good'}
-            
-            # หา losing positions ที่ clustered กัน
-            losing_positions = [p for p in self.positions if hasattr(p, 'profit') and p.profit < 0]
-            if len(losing_positions) < 2:
-                return {'success': False, 'message': 'Insufficient losing positions for redistribution'}
-            
-            # เรียงตาม loss และเลือกตัวที่ loss มากที่สุด
-            losing_positions.sort(key=lambda x: x.profit)  # profit ติดลบ = loss
-            positions_to_close = losing_positions[:2]  # ปิด 2 ตัวที่ loss มากที่สุด
-            
-            # ปิด positions
-            closed_count = 0
-            total_loss_closed = 0.0
-            for position in positions_to_close:
-                if hasattr(self, 'close_position_smart'):
-                    close_result = self.close_position_smart(position.ticket)
-                    if close_result.get('success'):
-                        closed_count += 1
-                        total_loss_closed += abs(position.profit)
-                        self.log(f"⚠️ Closed losing position {position.ticket} (loss: {abs(position.profit):.2f}) for redistribution", "INFO")
-            
-            return {
-                'success': True,
-                'message': f'Closed {closed_count} losing positions (total loss: {total_loss_closed:.2f})',
-                'closed_count': closed_count,
-                'total_loss_closed': total_loss_closed
-            }
+            if edge_result['success']:
+                self.log(f"🎯 Risk Redistribution Edge Closing Success: {edge_result['positions_closed']} positions, Profit: ${edge_result['total_profit']:.2f}")
+                return {
+                    'success': True,
+                    'positions_closed': edge_result['positions_closed'],
+                    'total_profit': edge_result['total_profit'],
+                    'message': f'Closed {edge_result["positions_closed"]} losing positions via group closing',
+                    'method': 'edge_closing'
+                }
+            else:
+                # ถ้า edge closing ไม่สำเร็จ ให้ใช้ Smart Flexible Closing
+                flexible_result = self.execute_smart_flexible_closing("Risk Redistribution Fallback")
+                
+                if flexible_result['success']:
+                    self.log(f"🎯 Risk Redistribution Flexible Closing Success: {flexible_result['positions_closed']} positions, Profit: ${flexible_result['total_profit']:.2f}")
+                    return {
+                        'success': True,
+                        'positions_closed': flexible_result['positions_closed'],
+                        'total_profit': flexible_result['total_profit'],
+                        'message': f'Closed {flexible_result["positions_closed"]} losing positions via flexible closing',
+                        'method': 'smart_flexible_closing'
+                    }
+                else:
+                    self.log("❌ All risk redistribution closing methods failed", "ERROR")
+                    return {
+                        'success': False,
+                        'positions_closed': 0,
+                        'total_profit': 0.0,
+                        'message': 'Failed to close losing positions for redistribution',
+                        'method': 'failed',
+                        'error': flexible_result.get('error', 'Unknown error')
+                    }
             
         except Exception as e:
             self.log(f"Error executing risk redistribution: {str(e)}", "ERROR")
@@ -4536,27 +6470,27 @@ class TradingSystem:
                 return {'success': False, 'error': smart_check['reason']}
             
             # ตรวจสอบว่า MT5 พร้อมใช้งาน
-            if not hasattr(self, 'mt5') or not self.mt5:
-                return {'success': False, 'error': 'MT5 not available'}
+            if not MT5_AVAILABLE or not mt5 or not self.mt5_connected:
+                return {'success': False, 'error': 'MT5 not available or not connected'}
             
             # สร้าง order request
             request = {
-                "action": self.mt5.TRADE_ACTION_DEAL,
+                "action": mt5.TRADE_ACTION_DEAL,
                 "symbol": self.symbol,
                 "volume": volume,
-                "type": self.mt5.ORDER_TYPE_BUY if order_type == 'BUY' else self.mt5.ORDER_TYPE_SELL,
+                "type": mt5.ORDER_TYPE_BUY if order_type == 'BUY' else mt5.ORDER_TYPE_SELL,
                 "price": price,
                 "deviation": 20,
                 "magic": 234000,
                 "comment": f"Smart Distribution: {reason}",
-                "type_time": self.mt5.ORDER_TIME_GTC,
-                "type_filling": self.mt5.ORDER_FILLING_IOC,
+                "type_time": mt5.ORDER_TIME_GTC,
+                "type_filling": mt5.ORDER_FILLING_IOC,
             }
             
             # ส่ง order
-            result = self.mt5.order_send(request)
+            result = mt5.order_send(request)
             
-            if result.retcode == self.mt5.TRADE_RETCODE_DONE:
+            if result and result.retcode == mt5.TRADE_RETCODE_DONE:
                 # 🆕 อัปเดตเวลาที่เปิดไม้ล่าสุด
                 self.last_position_opened = datetime.now()
                 
@@ -5082,12 +7016,28 @@ class TradingSystem:
             # เปิด SELL ที่ราคาต่ำกว่า BUY ต่ำสุดเล็กน้อย
             target_price = min_buy_price - (self.min_position_distance_pips * 0.1)
             
-            # 3. ตรวจสอบว่าไม่เกิด clustering
+            # 3. ตรวจสอบว่าไม่เกิด clustering (ปรับให้ยืดหยุ่นขึ้น)
             if self.check_position_clustering(target_price):
-                # ลองราคาอื่น
-                target_price = min_buy_price - (self.min_position_distance_pips * 0.2)
-                if self.check_position_clustering(target_price):
-                    return {'success': False, 'error': 'Cannot find suitable price without clustering'}
+                # ลองราคาอื่นหลายแบบ
+                alternative_prices = [
+                    min_buy_price - (self.min_position_distance_pips * 0.2),
+                    min_buy_price - (self.min_position_distance_pips * 0.3),
+                    min_buy_price - (self.min_position_distance_pips * 0.5),
+                    min_buy_price - (self.min_position_distance_pips * 0.8)
+                ]
+                
+                target_price = None
+                for alt_price in alternative_prices:
+                    if not self.check_position_clustering(alt_price):
+                        target_price = alt_price
+                        break
+                
+                if target_price is None:
+                    # ใช้ฟังก์ชันหา price ที่เหมาะสม
+                    target_price = self.find_suitable_price_without_clustering(
+                        min_buy_price - (self.min_position_distance_pips * 0.1), 
+                        'SELL'
+                    )
             
             # 4. คำนวณ lot size (ครึ่งหนึ่งของ BUY total volume)
             total_buy_volume = sum(p.volume for p in buy_positions)
@@ -5150,12 +7100,28 @@ class TradingSystem:
             # เปิด BUY ที่ราคาสูงกว่า SELL สูงสุดเล็กน้อย
             target_price = max_sell_price + (self.min_position_distance_pips * 0.1)
             
-            # 3. ตรวจสอบว่าไม่เกิด clustering
+            # 3. ตรวจสอบว่าไม่เกิด clustering (ปรับให้ยืดหยุ่นขึ้น)
             if self.check_position_clustering(target_price):
-                # ลองราคาอื่น
-                target_price = max_sell_price + (self.min_position_distance_pips * 0.2)
-                if self.check_position_clustering(target_price):
-                    return {'success': False, 'error': 'Cannot find suitable price without clustering'}
+                # ลองราคาอื่นหลายแบบ
+                alternative_prices = [
+                    max_sell_price + (self.min_position_distance_pips * 0.2),
+                    max_sell_price + (self.min_position_distance_pips * 0.3),
+                    max_sell_price + (self.min_position_distance_pips * 0.5),
+                    max_sell_price + (self.min_position_distance_pips * 0.8)
+                ]
+                
+                target_price = None
+                for alt_price in alternative_prices:
+                    if not self.check_position_clustering(alt_price):
+                        target_price = alt_price
+                        break
+                
+                if target_price is None:
+                    # ใช้ฟังก์ชันหา price ที่เหมาะสม
+                    target_price = self.find_suitable_price_without_clustering(
+                        max_sell_price + (self.min_position_distance_pips * 0.1), 
+                        'BUY'
+                    )
             
             # 4. คำนวณ lot size (ครึ่งหนึ่งของ SELL total volume)
             total_sell_volume = sum(p.volume for p in sell_positions)
@@ -5943,6 +7909,9 @@ class TradingSystem:
                 prediction_result.update(current_price_analysis)
             
             # 2. 📈 วิเคราะห์เทรนด์
+            # 🔍 Debug positions info
+            self.debug_positions_info()
+            
             trend_analysis = self._analyze_trend_analysis()
             if trend_analysis:
                 prediction_result.update(trend_analysis)
@@ -5963,6 +7932,9 @@ class TradingSystem:
             
             # 6. 📝 แสดงผลการทำนาย
             self._display_prediction_results(prediction_result)
+            
+            # 🔍 แสดงข้อมูล trend analysis แบบละเอียด
+            self._display_trend_analysis_details(prediction_result)
             
             return prediction_result
             
@@ -6025,48 +7997,235 @@ class TradingSystem:
             return {}
 
     def _analyze_trend_analysis(self) -> dict:
-        """📈 วิเคราะห์เทรนด์"""
+        """📈 วิเคราะห์เทรนด์แบบปรับปรุง"""
         try:
             if not self.positions:
-                return {}
+                return {'trend_direction': 'NEUTRAL', 'trend_strength': 0.0}
             
             # วิเคราะห์จาก positions ที่มีอยู่
             buy_positions = [p for p in self.positions if p.type == 'BUY']
             sell_positions = [p for p in self.positions if p.type == 'SELL']
             
             # คำนวณ average price ของ BUY และ SELL
+            avg_buy_price = 0
+            avg_sell_price = 0
+            
             if buy_positions:
                 avg_buy_price = sum(p.open_price for p in buy_positions) / len(buy_positions)
-            else:
-                avg_buy_price = 0
             
             if sell_positions:
                 avg_sell_price = sum(p.open_price for p in sell_positions) / len(sell_positions)
-            else:
-                avg_sell_price = 0
             
-            # วิเคราะห์เทรนด์จาก price distribution
+            # 🔧 ปรับปรุงการวิเคราะห์เทรนด์
             if avg_buy_price > 0 and avg_sell_price > 0:
+                # มีทั้ง BUY และ SELL positions
+                price_diff = abs(avg_buy_price - avg_sell_price)
+                avg_price = (avg_buy_price + avg_sell_price) / 2
+                
                 if avg_buy_price > avg_sell_price:
                     trend_direction = 'BULLISH'
-                    trend_strength = min(0.9, (avg_buy_price - avg_sell_price) / avg_sell_price)
+                    # คำนวณ trend strength จาก price difference และ profit
+                    price_ratio = price_diff / avg_price
+                    buy_profit = sum(p.profit for p in buy_positions)
+                    sell_profit = sum(p.profit for p in sell_positions)
+                    
+                    # รวม profit factor เข้าไปในการคำนวณ
+                    profit_factor = max(0.1, abs(buy_profit - sell_profit) / (avg_price * len(buy_positions + sell_positions) * 0.01))
+                    trend_strength = min(0.9, max(0.1, price_ratio * 100 + profit_factor))
                 else:
                     trend_direction = 'BEARISH'
-                    trend_strength = min(0.9, (avg_sell_price - avg_buy_price) / avg_buy_price)
+                    # คำนวณ trend strength จาก price difference และ profit
+                    price_ratio = price_diff / avg_price
+                    buy_profit = sum(p.profit for p in buy_positions)
+                    sell_profit = sum(p.profit for p in sell_positions)
+                    
+                    # รวม profit factor เข้าไปในการคำนวณ
+                    profit_factor = max(0.1, abs(sell_profit - buy_profit) / (avg_price * len(buy_positions + sell_positions) * 0.01))
+                    trend_strength = min(0.9, max(0.1, price_ratio * 100 + profit_factor))
+            elif avg_buy_price > 0 and avg_sell_price == 0:
+                # มีเฉพาะ BUY positions - แสดงแนวโน้ม BULLISH
+                trend_direction = 'BULLISH'
+                # คำนวณ strength จาก profit ของ BUY positions
+                total_profit = sum(p.profit for p in buy_positions)
+                trend_strength = min(0.8, max(0.1, abs(total_profit) / (avg_buy_price * len(buy_positions) * 0.01)))
+            elif avg_sell_price > 0 and avg_buy_price == 0:
+                # มีเฉพาะ SELL positions - แสดงแนวโน้ม BEARISH
+                trend_direction = 'BEARISH'
+                # คำนวณ strength จาก profit ของ SELL positions
+                total_profit = sum(p.profit for p in sell_positions)
+                trend_strength = min(0.8, max(0.1, abs(total_profit) / (avg_sell_price * len(sell_positions) * 0.01)))
             else:
+                # ไม่มี positions หรือข้อมูลไม่เพียงพอ
                 trend_direction = 'NEUTRAL'
                 trend_strength = 0.0
+            
+            # 🔧 เพิ่มการวิเคราะห์จาก market data ถ้ามี
+            if MT5_AVAILABLE and mt5 and self.mt5_connected:
+                try:
+                    # ใช้ market data เพื่อปรับปรุง trend analysis
+                    market_data = self.get_market_data(periods=20)
+                    if market_data is not None and len(market_data) > 5:
+                        # คำนวณ trend จาก market data
+                        market_trend = self.calculate_trend_strength(market_data)
+                        if market_trend > 0.3:
+                            # ปรับ trend strength ตาม market data
+                            trend_strength = max(trend_strength, market_trend * 0.5)
+                except Exception:
+                    pass  # ใช้ค่าเดิมถ้า market data ไม่พร้อม
+            
+            # 🔧 Fallback: ถ้า trend strength ยังเป็น 0 ให้ใช้ enhanced calculation
+            if trend_strength == 0.0 and len(self.positions) > 0:
+                # ใช้ enhanced trend strength calculation
+                enhanced_strength = self.calculate_enhanced_trend_strength()
+                if enhanced_strength > 0:
+                    trend_strength = enhanced_strength
+                    self.log(f"Using enhanced trend strength calculation: {trend_strength:.1%}", "DEBUG", "AI")
+                else:
+                    # ใช้จำนวน positions เป็นตัววัด trend strength
+                    total_positions = len(self.positions)
+                    if total_positions >= 2:
+                        # มี positions มากกว่า 1 แสดงว่ามีการเทรด
+                        trend_strength = min(0.3, max(0.1, total_positions * 0.05))
+                        self.log(f"Fallback calculation: Using position count ({total_positions}) for trend strength: {trend_strength:.1%}", "DEBUG", "AI")
+            
+            # 🔍 Debug information
+            self.log(f"Trend Analysis Debug: BUY={len(buy_positions)} (avg: {avg_buy_price:.5f}), SELL={len(sell_positions)} (avg: {avg_sell_price:.5f})", "DEBUG", "AI")
+            
+            if avg_buy_price > 0 and avg_sell_price > 0:
+                price_diff = abs(avg_buy_price - avg_sell_price)
+                avg_price = (avg_buy_price + avg_sell_price) / 2
+                price_ratio = price_diff / avg_price
+                buy_profit = sum(p.profit for p in buy_positions)
+                sell_profit = sum(p.profit for p in sell_positions)
+                profit_factor = max(0.1, abs(buy_profit - sell_profit) / (avg_price * len(buy_positions + sell_positions) * 0.01))
+                
+                self.log(f"Price Analysis: Diff={price_diff:.5f}, Avg={avg_price:.5f}, Ratio={price_ratio:.6f}", "DEBUG", "AI")
+                self.log(f"Profit Analysis: BUY={buy_profit:.2f}, SELL={sell_profit:.2f}, Factor={profit_factor:.3f}", "DEBUG", "AI")
+                self.log(f"Calculation: {price_ratio:.6f} * 100 + {profit_factor:.3f} = {trend_strength:.3f}", "DEBUG", "AI")
+            
+            self.log(f"Trend Result: {trend_direction} (Strength: {trend_strength:.1%})", "DEBUG", "AI")
             
             return {
                 'trend_direction': trend_direction,
                 'trend_strength': trend_strength,
                 'avg_buy_price': avg_buy_price,
-                'avg_sell_price': avg_sell_price
+                'avg_sell_price': avg_sell_price,
+                'buy_count': len(buy_positions),
+                'sell_count': len(sell_positions)
             }
             
         except Exception as e:
             self.log(f"Error analyzing trend: {str(e)}", "ERROR")
             return {}
+
+    def debug_positions_info(self):
+        """🔍 แสดงข้อมูล positions สำหรับ debug"""
+        try:
+            if not self.positions:
+                self.log("No positions found", "DEBUG", "AI")
+                return
+            
+            buy_positions = [p for p in self.positions if p.type == 'BUY']
+            sell_positions = [p for p in self.positions if p.type == 'SELL']
+            
+            self.log(f"Positions Debug: Total={len(self.positions)}, BUY={len(buy_positions)}, SELL={len(sell_positions)}", "DEBUG", "AI")
+            
+            if buy_positions:
+                avg_buy = sum(p.open_price for p in buy_positions) / len(buy_positions)
+                total_buy_profit = sum(p.profit for p in buy_positions)
+                self.log(f"BUY Positions: Avg Price={avg_buy:.5f}, Total Profit={total_buy_profit:.2f}", "DEBUG", "AI")
+            
+            if sell_positions:
+                avg_sell = sum(p.open_price for p in sell_positions) / len(sell_positions)
+                total_sell_profit = sum(p.profit for p in sell_positions)
+                self.log(f"SELL Positions: Avg Price={avg_sell:.5f}, Total Profit={total_sell_profit:.2f}", "DEBUG", "AI")
+                
+        except Exception as e:
+            self.log(f"Error in debug_positions_info: {str(e)}", "ERROR", "AI")
+
+    def calculate_enhanced_trend_strength(self) -> float:
+        """🔧 คำนวณ trend strength แบบใหม่ที่ใช้ข้อมูลจาก positions"""
+        try:
+            if not self.positions:
+                return 0.0
+            
+            buy_positions = [p for p in self.positions if p.type == 'BUY']
+            sell_positions = [p for p in self.positions if p.type == 'SELL']
+            
+            # 1. คำนวณจาก price difference
+            price_strength = 0.0
+            if buy_positions and sell_positions:
+                avg_buy = sum(p.open_price for p in buy_positions) / len(buy_positions)
+                avg_sell = sum(p.open_price for p in sell_positions) / len(sell_positions)
+                price_diff = abs(avg_buy - avg_sell)
+                avg_price = (avg_buy + avg_sell) / 2
+                price_strength = min(0.5, price_diff / avg_price * 100)
+            
+            # 2. คำนวณจาก profit difference
+            profit_strength = 0.0
+            if buy_positions and sell_positions:
+                buy_profit = sum(p.profit for p in buy_positions)
+                sell_profit = sum(p.profit for p in sell_positions)
+                profit_diff = abs(buy_profit - sell_profit)
+                total_volume = sum(p.volume for p in buy_positions + sell_positions)
+                if total_volume > 0:
+                    profit_strength = min(0.3, profit_diff / (total_volume * 100))
+            
+            # 3. คำนวณจาก position distribution
+            distribution_strength = 0.0
+            total_positions = len(self.positions)
+            if total_positions > 0:
+                buy_ratio = len(buy_positions) / total_positions
+                sell_ratio = len(sell_positions) / total_positions
+                # ยิ่งไม่สมดุลยิ่งมี trend strength
+                distribution_strength = min(0.2, abs(buy_ratio - sell_ratio) * 2)
+            
+            # 4. รวมผลลัพธ์
+            total_strength = price_strength + profit_strength + distribution_strength
+            
+            # 5. ปรับให้อยู่ในช่วง 0.1 - 0.8
+            final_strength = min(0.8, max(0.1, total_strength))
+            
+            self.log(f"Enhanced Trend Strength: Price={price_strength:.3f}, Profit={profit_strength:.3f}, Distribution={distribution_strength:.3f}, Total={final_strength:.3f}", "DEBUG", "AI")
+            
+            return final_strength
+            
+        except Exception as e:
+            self.log(f"Error calculating enhanced trend strength: {str(e)}", "ERROR", "AI")
+            return 0.1  # Return minimum value
+
+    def _display_trend_analysis_details(self, prediction_result: dict):
+        """🔍 แสดงข้อมูล trend analysis แบบละเอียด"""
+        try:
+            trend_direction = prediction_result.get('trend_direction', 'UNKNOWN')
+            trend_strength = prediction_result.get('trend_strength', 0.0)
+            avg_buy_price = prediction_result.get('avg_buy_price', 0)
+            avg_sell_price = prediction_result.get('avg_sell_price', 0)
+            buy_count = prediction_result.get('buy_count', 0)
+            sell_count = prediction_result.get('sell_count', 0)
+            
+            # แสดงข้อมูล trend analysis
+            self.log(f"📈 Trend Analysis Details:", "INFO", "AI")
+            self.log(f"   Direction: {trend_direction}", "INFO", "AI")
+            self.log(f"   Strength: {trend_strength:.1%}", "INFO", "AI")
+            self.log(f"   BUY Positions: {buy_count} (Avg: {avg_buy_price:.5f})", "INFO", "AI")
+            self.log(f"   SELL Positions: {sell_count} (Avg: {avg_sell_price:.5f})", "INFO", "AI")
+            
+            # แสดงสาเหตุที่ trend strength เป็น 0%
+            if trend_strength == 0.0:
+                if buy_count == 0 and sell_count == 0:
+                    self.log("   ⚠️ No positions found - Trend strength = 0%", "WARNING", "AI")
+                elif buy_count == 0:
+                    self.log("   ⚠️ No BUY positions - Using SELL-only analysis", "WARNING", "AI")
+                elif sell_count == 0:
+                    self.log("   ⚠️ No SELL positions - Using BUY-only analysis", "WARNING", "AI")
+                else:
+                    self.log("   ⚠️ Both BUY and SELL positions found but trend strength = 0%", "WARNING", "AI")
+            else:
+                self.log(f"   ✅ Trend strength calculated successfully: {trend_strength:.1%}", "SUCCESS", "AI")
+                
+        except Exception as e:
+            self.log(f"Error displaying trend analysis details: {str(e)}", "ERROR", "AI")
 
     def _analyze_reversal_signals(self) -> dict:
         """🔄 วิเคราะห์สัญญาณการกลับตัว"""
@@ -6599,28 +8758,28 @@ class TradingSystem:
             return []
 
     def _execute_recovery_position_closing(self, positions_to_close: list):
-        """🚀 ปิดไม้ที่เสี่ยงเพื่อการฟื้นฟูพอร์ต"""
+        """🚀 ปิดไม้ที่เสี่ยงเพื่อการฟื้นฟูพอร์ต - GROUP CLOSING ONLY"""
         try:
             if not positions_to_close:
                 return
             
-            self.log(f"🚀 Portfolio Recovery: Closing {len(positions_to_close)} risky positions", "INFO")
+            self.log(f"🚀 Portfolio Recovery: Closing {len(positions_to_close)} risky positions (GROUP CLOSING)", "INFO")
             
-            for risk_item in positions_to_close:
-                position = risk_item['position']
-                risk_score = risk_item['risk_score']
-                
-                self.log(f"🚀 Recovery Closing: Position {position.ticket} (Risk Score: {risk_score:.1f})", "INFO")
-                
-                # ปิด position
-                if hasattr(self, 'close_position_smart'):
-                    close_result = self.close_position_smart(position.ticket)
-                    if close_result.get('success'):
-                        self.log(f"✅ Recovery Closed Position {position.ticket}", "SUCCESS")
-                    else:
-                        self.log(f"❌ Failed to Recovery Close Position {position.ticket}", "ERROR")
+            # ใช้ Smart Edge Closing System แทน individual closing
+            edge_result = self.smart_edge_closing_system("Portfolio Recovery")
             
-            self.log(f"🚀 Portfolio Recovery: Completed closing {len(positions_to_close)} risky positions", "INFO")
+            if edge_result['success']:
+                self.log(f"🎯 Portfolio Recovery Edge Closing Success: {edge_result['positions_closed']} positions, Profit: ${edge_result['total_profit']:.2f}")
+                self.log(f"🚀 Portfolio Recovery: Completed closing {edge_result['positions_closed']} risky positions via group closing", "INFO")
+            else:
+                # ถ้า edge closing ไม่สำเร็จ ให้ใช้ Smart Flexible Closing
+                flexible_result = self.execute_smart_flexible_closing("Portfolio Recovery Fallback")
+                
+                if flexible_result['success']:
+                    self.log(f"🎯 Portfolio Recovery Flexible Closing Success: {flexible_result['positions_closed']} positions, Profit: ${flexible_result['total_profit']:.2f}")
+                    self.log(f"🚀 Portfolio Recovery: Completed closing {flexible_result['positions_closed']} risky positions via flexible closing", "INFO")
+                else:
+                    self.log(f"❌ All portfolio recovery closing methods failed", "ERROR")
             
         except Exception as e:
             self.log(f"Error in recovery position closing: {str(e)}", "ERROR")
@@ -6936,14 +9095,15 @@ class TradingSystem:
                     else:
                         self.log(f"⚪ AI Recovery Strategy: Neutral market - Standard recovery approach", "INFO")
                 
-                recovery_executed = self.execute_smart_recovery_closes()
-                if recovery_executed:
-                    self.log("🧠 AI Smart Recovery completed, traditional closing may be skipped", "INFO")
+                # ใช้ระบบปิดไม้ขอบแบบ Enhanced แทน
+                recovery_executed = self.smart_edge_closing_system("AI Smart Recovery")
+                if recovery_executed.get('success'):
+                    self.log("🧠 AI Smart Recovery completed via edge closing system", "INFO")
                 else:
                     self.log("🧠 AI Smart Recovery: No actions taken", "INFO")
             
-            # 🎯 Step 5: ปิดแบบยืดหยุ่น (AI-Enhanced หรือ Traditional)
-            self.execute_flexible_closes()
+            # 🎯 Step 5: ปิดแบบยืดหยุ่น - ใช้ระบบบูรณาการแทน
+            self.integrated_zone_edge_management_system("AI Smart Position Management")
             
             # 🆕 Step 5.5: Independent Portfolio Distribution System + AI Market Prediction
             if self.ai_margin_intelligence:
@@ -7095,127 +9255,7 @@ class TradingSystem:
             self.log(f"Error getting current balance: {str(e)}", "ERROR")
             return 1000.0
 
-    def execute_smart_recovery_closes(self) -> bool:
-        """🧠 AI Smart Recovery: ระบบปิดไม้อัจฉริยะเพื่อฟื้นฟู portfolio"""
-        try:
-            if not self.ai_margin_intelligence:
-                return False
-            
-            # 📊 ประเมินสถานการณ์
-            margin_risk = self.ai_assess_margin_risk()
-            losing_positions = [p for p in self.positions if p.profit < 0]
-            profitable_positions = [p for p in self.positions if p.profit > 0]
-            
-            if not profitable_positions:
-                self.log("🔍 Smart Recovery: No profitable positions for recovery", "INFO")
-                return False
-            
-            self.log(f"🧠 Smart Recovery Analysis: {margin_risk['risk_level']} risk, "
-                   f"{len(losing_positions)} losing, {len(profitable_positions)} profitable", "INFO")
-            
-            recovery_success = False
-            
-            # 🎯 Strategy 1: Emergency Net Profit Baskets
-            if margin_risk['risk_level'] in ['EMERGENCY', 'DANGER']:
-                optimal_baskets = self.find_optimal_closing_baskets()
-                
-                for basket in optimal_baskets[:3]:  # Top 3 baskets
-                    if basket['total_profit'] > 0 and basket['confidence'] >= 0.6:  # Lower confidence threshold
-                        self.log(f"🚨 Emergency Recovery: Executing basket with ${basket['total_profit']:.2f} profit", "INFO")
-                        
-                        # ปิดทั้ง basket
-                        for position in basket['positions']:
-                            try:
-                                success = self.close_position_smart(position, 
-                                    f"Emergency Recovery: {basket['strategy']}")
-                                if success:
-                                    recovery_success = True
-                                    time.sleep(0.5)  # Quick succession
-                            except Exception as pos_error:
-                                self.log(f"❌ Recovery error on {position.ticket}: {pos_error}", "ERROR")
-                        
-                        if recovery_success:
-                            break
-            
-            # 🎯 Strategy 2: Intelligent Pair Closing
-            if not recovery_success and len(losing_positions) >= 2:
-                # หาไม้ขาดทุนที่น้อยที่สุด + ไม้กำไรที่เหมาะสม
-                sorted_losses = sorted(losing_positions, key=lambda x: abs(x.profit))
-                sorted_profits = sorted(profitable_positions, key=lambda x: x.profit, reverse=True)
-                
-                for loss_pos in sorted_losses[:3]:  # Top 3 smallest losses
-                    for profit_pos in sorted_profits:
-                        net_profit = profit_pos.profit + loss_pos.profit
-                        
-                        if net_profit > 5:  # Net positive > $5
-                            # ตรวจสอบ balance impact
-                            pair = [loss_pos, profit_pos]
-                            target_analysis = self.calculate_dynamic_profit_target(pair)
-                            
-                            if target_analysis['meets_target']:
-                                self.log(f"🎯 Smart Pair Recovery: Net ${net_profit:.2f} "
-                                       f"({loss_pos.ticket} + {profit_pos.ticket})", "INFO")
-                                
-                                # ปิดทั้งคู่
-                                pair_success = 0
-                                for pos in pair:
-                                    success = self.close_position_smart(pos, 
-                                        f"Smart Pair Recovery: Net ${net_profit:.2f}")
-                                    if success:
-                                        pair_success += 1
-                                        time.sleep(1)
-                                
-                                if pair_success >= 1:
-                                    recovery_success = True
-                                    break
-                    
-                    if recovery_success:
-                        break
-            
-            # 🎯 Strategy 3: Margin Relief Priority
-            if not recovery_success and margin_risk['risk_score'] >= 60:
-                # ปิดไม้กำไรที่ให้ margin relief สูงสุด
-                high_volume_profits = [p for p in profitable_positions if p.volume >= 0.02]  # >= 0.02 lots
-                
-                if high_volume_profits:
-                    # เรียงตาม margin relief potential
-                    sorted_by_margin = sorted(high_volume_profits, 
-                                            key=lambda x: x.volume * x.profit, reverse=True)
-                    
-                    for position in sorted_by_margin[:2]:  # Top 2
-                        if position.profit > 10:  # At least $10 profit
-                            self.log(f"💰 Margin Relief Recovery: ${position.profit:.2f} "
-                                   f"({position.volume} lots)", "INFO")
-                            
-                            success = self.close_position_smart(position, 
-                                f"Margin Relief Recovery: {position.volume} lots")
-                            if success:
-                                recovery_success = True
-                                time.sleep(1)
-            
-            # 🆕 Strategy 4: No Cut Loss - Profit Buffer Recovery
-            if not recovery_success and hasattr(self, 'hedge_profit_buffer_tracker'):
-                recovery_success = self._execute_profit_buffer_recovery()
-            
-            # 📊 Recovery Summary
-            if recovery_success:
-                self.log("✅ Smart Recovery executed successfully", "SUCCESS")
-                
-                # Update AI decision history
-                self.ai_decision_history.append({
-                    'timestamp': datetime.now(),
-                    'action': 'smart_recovery',
-                    'risk_level': margin_risk['risk_level'],
-                    'success': True
-                })
-            else:
-                self.log("⚠️ Smart Recovery: No suitable recovery actions found", "WARNING")
-            
-            return recovery_success
-            
-        except Exception as e:
-            self.log(f"❌ Error in smart recovery closes: {str(e)}", "ERROR")
-            return False
+    # REMOVED: execute_smart_recovery_closes() - Individual recovery function removed, use enhanced edge closing system
 
     def _execute_profit_buffer_recovery(self) -> bool:
         """🎯 No Cut Loss Recovery: ใช้ profit buffer แทนการคัท loss"""
@@ -7255,16 +9295,23 @@ class TradingSystem:
                     self.log(f"🎯 Profit Buffer Target Reached: Position {stuck_ticket}", "INFO")
                     self.log(f"   Current Buffer: ${current_profit_buffer:.2f} | Target: ${target_buffer:.2f}", "INFO")
                     
-                    # ปิด stuck position
-                    success = self.close_position_smart(stuck_position, 
-                        f"Profit Buffer Recovery: Buffer ${current_profit_buffer:.2f} >= Target ${target_buffer:.2f}")
-                    
-                    if success:
+                    # ใช้ Smart Edge Closing System แทน individual closing
+                    edge_result = self.smart_edge_closing_system(f"Profit Buffer Recovery: Buffer ${current_profit_buffer:.2f} >= Target ${target_buffer:.2f}")
+                    if edge_result['success']:
                         hedge_info['status'] = 'COMPLETED'
                         recovery_success = True
-                        self.log(f"✅ Successfully closed stuck position {stuck_ticket} using profit buffer", "SUCCESS")
+                        self.log(f"✅ Successfully closed stuck position {stuck_ticket} using profit buffer via group closing", "SUCCESS")
+                        self.log(f"🎯 Profit Buffer Recovery Edge Closing Success: {edge_result['positions_closed']} positions, Profit: ${edge_result['total_profit']:.2f}")
                     else:
-                        self.log(f"❌ Failed to close stuck position {stuck_ticket}", "ERROR")
+                        # ถ้า edge closing ไม่สำเร็จ ให้ใช้ Smart Flexible Closing
+                        flexible_result = self.execute_smart_flexible_closing(f"Profit Buffer Recovery Fallback: Buffer ${current_profit_buffer:.2f} >= Target ${target_buffer:.2f}")
+                        if flexible_result['success']:
+                            hedge_info['status'] = 'COMPLETED'
+                            recovery_success = True
+                            self.log(f"✅ Successfully closed stuck position {stuck_ticket} using profit buffer via flexible closing", "SUCCESS")
+                            self.log(f"🎯 Profit Buffer Recovery Flexible Closing Success: {flexible_result['positions_closed']} positions, Profit: ${flexible_result['total_profit']:.2f}")
+                        else:
+                            self.log(f"❌ Failed to close stuck position {stuck_ticket} via group closing", "ERROR")
                 
                 else:
                     # ยังไม่ถึง target - แสดงสถานการณ์
@@ -9297,66 +11344,7 @@ class TradingSystem:
         else:
             return f"❌ POOR: Not recommended. Profit: ${profit:.2f}, Score: {score:.1f}"
 
-    def execute_flexible_closes(self):
-        """🤖 AI-Enhanced Flexible Closing: ปิดไม้แบบฉลาดตาม AI margin risk assessment และ Market Intelligence"""
-        try:
-            if not self.positions:
-                return
-            
-            # 🤖 AI Step 1: Market Intelligence Analysis
-            market_analysis = self.analyze_market_intelligence()
-            market_condition = market_analysis.get('market_condition', 'NORMAL')
-            reversal_detected = market_analysis.get('reversal_detected', False)
-            momentum_trend = market_analysis.get('momentum_trend', 'NEUTRAL')
-            
-            self.log(f"🤖 Market Intelligence: {market_condition} | Reversal: {reversal_detected} | Trend: {momentum_trend}", "AI")
-            
-            # 🤖 AI Step 2: Margin Risk Assessment
-            margin_risk = self.ai_assess_margin_risk()
-            risk_level = margin_risk.get('risk_level', 'SAFE')
-            confidence = margin_risk.get('confidence', 0.7)
-            
-            self.log(f"🤖 AI Margin Risk Assessment: {risk_level} (Score: {margin_risk.get('risk_score', 0):.1f})", "AI")
-            self.log(f"💡 {margin_risk.get('recommendation', 'No recommendation')}", "AI")
-            
-            # 🤖 AI Step 3: Portfolio Position Analysis
-            portfolio_analysis = self.analyze_portfolio_positions()
-            if 'error' not in portfolio_analysis:
-                total_positions = portfolio_analysis.get('total_positions', 0)
-                trouble_count = len(portfolio_analysis.get('position_categories', {}).get('TROUBLEMAKER', []))
-                recoverable_count = len(portfolio_analysis.get('position_categories', {}).get('RECOVERABLE', []))
-                
-                self.log(f"🤖 Portfolio Analysis: {total_positions} positions | {trouble_count} TROUBLEMAKERS | {recoverable_count} RECOVERABLE", "AI")
-            
-            # 🤖 AI Step 4: Smart Closing Strategy Selection
-            closing_strategy = self._select_closing_strategy(market_condition, risk_level, portfolio_analysis)
-            self.log(f"🤖 Selected Closing Strategy: {closing_strategy['name']} - {closing_strategy['description']}", "AI")
-            
-            # 🤖 AI Step 5: Execute Selected Strategy (ปรับปรุงให้ใช้ระบบใหม่)
-            if closing_strategy['name'] == 'MARKET_AWARE_CLOSING':
-                # ใช้ Smart Flexible Closing แทน (ระบบใหม่)
-                self.log("🚀 Upgrading to Smart Flexible Closing System", "AI")
-                self.execute_smart_flexible_closing()
-                    
-            elif closing_strategy['name'] == 'TRADITIONAL_BASKET_CLOSING':
-                # ใช้ Smart Flexible Closing แทน (ระบบใหม่)
-                self.log("🚀 Upgrading to Smart Flexible Closing System", "AI")
-                self.execute_smart_flexible_closing()
-                    
-            elif closing_strategy['name'] == 'DEFENSIVE_CLOSING':
-                # ใช้ Smart Flexible Closing แทน (ระบบใหม่)
-                self.log("🚀 Upgrading to Smart Flexible Closing System", "AI")
-                self.execute_smart_flexible_closing()
-                    
-            elif closing_strategy['name'] == 'WAIT_AND_MONITOR':
-                # รอและติดตาม
-                self.log("🤖 Strategy: Wait and Monitor - No immediate action needed", "AI")
-            
-            # 🤖 AI Step 6: Update Decision History
-            self._update_ai_decision_history(closing_strategy, market_analysis, margin_risk)
-                
-        except Exception as e:
-            self.log(f"❌ Error in AI-enhanced flexible closing: {str(e)}", "ERROR")
+    # REMOVED: execute_flexible_closes() - Individual flexible closing function removed, use enhanced edge closing system
 
     def _select_closing_strategy(self, market_condition: str, risk_level: str, portfolio_analysis: dict) -> dict:
         """🎯 เลือก closing strategy ที่เหมาะสมตาม market condition และ portfolio health"""
@@ -9520,14 +11508,767 @@ class TradingSystem:
             self.log(f"Error checking portfolio balance impact: {str(e)}", "ERROR")
             return False  # ถ้า error ให้ปิดได้
 
-    def close_position_smart(self, position: Position, reason: str) -> bool:
-        """ปิด position อย่างชาญฉลาด - Enhanced with Order Closing Check"""
+    def find_edge_positions(self, current_price: float = None) -> dict:
+        """🎯 หาไม้ขอบบนและขอบล่างแบบยืดหยุ่น"""
         try:
-            # 🆕 Enhanced Order Closing Conditions Check
-            order_closing_check = self.check_order_closing_conditions(position)
-            if not order_closing_check['can_close']:
-                self.log(f"❌ Order Closing Conditions Not Met: {order_closing_check['reason']}", "WARNING")
-                return False
+            if not self.positions:
+                return {
+                    'upper_edge': [],
+                    'lower_edge': [],
+                    'middle_positions': [],
+                    'current_price': current_price or 0.0
+                }
+            
+            # รับราคาปัจจุบัน
+            if current_price is None:
+                current_price = self.get_current_price()
+            
+            # แบ่งไม้ตามราคา
+            buy_positions = [p for p in self.positions if p.type == "BUY"]
+            sell_positions = [p for p in self.positions if p.type == "SELL"]
+            
+            # เรียงตามราคา
+            buy_positions.sort(key=lambda x: x.open_price)
+            sell_positions.sort(key=lambda x: x.open_price)
+            
+            # คำนวณช่วงราคา
+            all_prices = [p.open_price for p in self.positions]
+            min_price = min(all_prices)
+            max_price = max(all_prices)
+            price_range = max_price - min_price
+            
+            # กำหนดขอบเขต (20% จากขอบ)
+            edge_threshold = price_range * 0.2
+            
+            upper_edge = []
+            lower_edge = []
+            middle_positions = []
+            
+            # หาไม้ขอบบน (ระแวกขอบบน)
+            upper_threshold = max_price - edge_threshold
+            for pos in self.positions:
+                if pos.open_price >= upper_threshold:
+                    upper_edge.append(pos)
+                elif pos.open_price <= min_price + edge_threshold:
+                    lower_edge.append(pos)
+                else:
+                    middle_positions.append(pos)
+            
+            # เรียงตามกำไร/ขาดทุน
+            upper_edge.sort(key=lambda x: x.profit, reverse=True)
+            lower_edge.sort(key=lambda x: x.profit, reverse=True)
+            middle_positions.sort(key=lambda x: x.profit, reverse=True)
+            
+            self.log(f"🎯 Edge Analysis: Upper={len(upper_edge)}, Lower={len(lower_edge)}, Middle={len(middle_positions)}")
+            
+            return {
+                'upper_edge': upper_edge,
+                'lower_edge': lower_edge,
+                'middle_positions': middle_positions,
+                'current_price': current_price,
+                'price_range': price_range,
+                'edge_threshold': edge_threshold
+            }
+            
+        except Exception as e:
+            self.log(f"Error finding edge positions: {str(e)}", "ERROR")
+            return {
+                'upper_edge': [],
+                'lower_edge': [],
+                'middle_positions': [],
+                'current_price': current_price or 0.0
+            }
+
+    def calculate_edge_group_profit(self, positions: list) -> dict:
+        """💰 คำนวณผลรวมของไม้ขอบ"""
+        try:
+            if not positions:
+                return {
+                    'total_profit': 0.0,
+                    'total_volume': 0.0,
+                    'buy_profit': 0.0,
+                    'sell_profit': 0.0,
+                    'position_count': 0,
+                    'is_profitable': True
+                }
+            
+            total_profit = 0.0
+            total_volume = 0.0
+            buy_profit = 0.0
+            sell_profit = 0.0
+            
+            for pos in positions:
+                total_profit += pos.profit
+                total_volume += pos.volume
+                
+                if pos.type == "BUY":
+                    buy_profit += pos.profit
+                else:
+                    sell_profit += pos.profit
+            
+            return {
+                'total_profit': total_profit,
+                'total_volume': total_volume,
+                'buy_profit': buy_profit,
+                'sell_profit': sell_profit,
+                'position_count': len(positions),
+                'is_profitable': total_profit >= 0
+            }
+            
+        except Exception as e:
+            self.log(f"Error calculating edge group profit: {str(e)}", "ERROR")
+            return {
+                'total_profit': 0.0,
+                'total_volume': 0.0,
+                'buy_profit': 0.0,
+                'sell_profit': 0.0,
+                'position_count': 0,
+                'is_profitable': False
+            }
+
+    def close_edge_positions(self, positions: list, reason: str = "Edge Closing") -> dict:
+        """🎯 ปิดไม้ขอบแบบยืดหยุ่น"""
+        try:
+            if not positions:
+                return {
+                    'success': False,
+                    'positions_closed': 0,
+                    'total_profit': 0.0,
+                    'error': 'No positions to close'
+                }
+            
+            # คำนวณผลรวมก่อนปิด
+            profit_before = self.calculate_edge_group_profit(positions)
+            
+            if not profit_before['is_profitable']:
+                self.log(f"❌ Edge group not profitable: ${profit_before['total_profit']:.2f}", "WARNING")
+                return {
+                    'success': False,
+                    'positions_closed': 0,
+                    'total_profit': profit_before['total_profit'],
+                    'error': 'Group not profitable'
+                }
+            
+            # ใช้ Smart Edge Closing System แทน individual closing
+            edge_result = self.smart_edge_closing_system(f"{reason}_Edge_Group")
+            
+            if edge_result['success']:
+                positions_closed = edge_result['positions_closed']
+                total_profit_captured = edge_result['total_profit']
+                failed_positions = []
+                self.log(f"🎯 Edge Group Closing Success: {positions_closed} positions, Profit: ${total_profit_captured:.2f}")
+            else:
+                # ถ้า edge closing ไม่สำเร็จ ให้ใช้ Smart Flexible Closing
+                flexible_result = self.execute_smart_flexible_closing(f"{reason}_Edge_Fallback")
+                
+                if flexible_result['success']:
+                    positions_closed = flexible_result['positions_closed']
+                    total_profit_captured = flexible_result['total_profit']
+                    failed_positions = []
+                    self.log(f"🎯 Edge Flexible Closing Success: {positions_closed} positions, Profit: ${total_profit_captured:.2f}")
+                else:
+                    positions_closed = 0
+                    total_profit_captured = 0.0
+                    failed_positions = [pos.ticket for pos in positions]
+                    self.log(f"❌ All edge closing methods failed", "ERROR")
+            
+            success = positions_closed > 0
+            
+            if success:
+                self.log(f"🎯 Edge Closing Success: {positions_closed}/{len(positions)} positions, Profit: ${total_profit_captured:.2f}")
+            else:
+                self.log(f"❌ Edge Closing Failed: No positions closed", "ERROR")
+            
+            return {
+                'success': success,
+                'positions_closed': positions_closed,
+                'total_profit': total_profit_captured,
+                'failed_positions': failed_positions,
+                'expected_profit': profit_before['total_profit']
+            }
+            
+        except Exception as e:
+            self.log(f"Error in edge closing: {str(e)}", "ERROR")
+            return {
+                'success': False,
+                'positions_closed': 0,
+                'total_profit': 0.0,
+                'error': str(e)
+            }
+
+    def smart_edge_closing_system(self, reason: str = "Smart Edge Closing") -> dict:
+        """🎯 ระบบการปิดไม้ขอบแบบอัตโนมัติและชาญฉลาด - Enhanced Recovery System"""
+        try:
+            # 🎯 System Coordinator Check
+            coordinator_result = self.system_coordinator("edge_closing", "edge_closing", "RISK_MANAGEMENT")
+            if not coordinator_result['allowed']:
+                self.log(f"❌ Edge Closing Blocked: {coordinator_result['reason']}", "WARNING")
+                return {
+                    'success': False,
+                    'positions_closed': 0,
+                    'total_profit': 0.0,
+                    'error': f"Coordinator blocked: {coordinator_result['reason']}"
+                }
+            
+            self.log(f"🎯 Starting Enhanced Smart Edge Closing System: {reason}")
+            
+            # 🆕 Pre-Analysis: Recovery Assessment
+            recovery_assessment = self._assess_portfolio_recovery_needs()
+            self.log(f"💊 Recovery Assessment: {recovery_assessment['priority']} priority", "INFO")
+            
+            # 1. หาไม้ขอบทั้งหมดพร้อมการวิเคราะห์ฟื้นฟู
+            edge_analysis = self.find_enhanced_edge_positions(recovery_assessment)
+            
+            if not edge_analysis['upper_edge'] and not edge_analysis['lower_edge']:
+                self.log("❌ No edge positions found", "WARNING")
+                return {
+                    'success': False,
+                    'positions_closed': 0,
+                    'total_profit': 0.0,
+                    'error': 'No edge positions found'
+                }
+            
+            # 2. วิเคราะห์กลุ่มที่ปิดได้พร้อมการพิจารณาฟื้นฟู
+            closing_options = self._analyze_enhanced_edge_closing_options(edge_analysis, recovery_assessment)
+            
+            if not closing_options:
+                self.log("❌ No profitable closing options found", "WARNING")
+                return {
+                    'success': False,
+                    'positions_closed': 0,
+                    'total_profit': 0.0,
+                    'error': 'No profitable options'
+                }
+            
+            # 3. เลือกกลุ่มที่ดีที่สุดสำหรับการฟื้นฟู
+            best_option = self._select_best_recovery_closing_option(closing_options, recovery_assessment)
+            
+            if not best_option:
+                self.log("❌ No suitable recovery closing option selected", "WARNING")
+                return {
+                    'success': False,
+                    'positions_closed': 0,
+                    'total_profit': 0.0,
+                    'error': 'No suitable recovery option'
+                }
+            
+            # 4. Execute Enhanced Edge Closing with Recovery Focus
+            result = self.execute_enhanced_edge_closing(best_option, recovery_assessment, f"{reason}_{best_option['strategy']}")
+            
+            # 🔓 Release system when done
+            self.release_system("edge_closing")
+            
+            if result['success']:
+                self.log(f"🎯 Enhanced Edge Closing Success: {result['positions_closed']} positions, Profit: ${result['total_profit']:.2f}")
+                self.log(f"💊 Recovery Impact: {result['recovery_impact']}", "SUCCESS")
+            else:
+                self.log(f"❌ Enhanced Edge Closing Failed: {result.get('error', 'Unknown error')}", "ERROR")
+            
+            return result
+            
+        except Exception as e:
+            self.log(f"Error in enhanced smart edge closing system: {str(e)}", "ERROR")
+            return {
+                'success': False,
+                'positions_closed': 0,
+                'total_profit': 0.0,
+                'error': str(e)
+            }
+
+    def _assess_portfolio_recovery_needs(self) -> dict:
+        """💊 ประเมินความต้องการการฟื้นฟูของ Portfolio"""
+        try:
+            recovery_needs = {
+                'margin_recovery': False,
+                'balance_recovery': False,
+                'stuck_positions_recovery': False,
+                'equity_recovery': False,
+                'priority': 'LOW',
+                'recovery_score': 0,
+                'recommendations': []
+            }
+            
+            # 1. Margin Recovery Assessment
+            if MT5_AVAILABLE and mt5 and self.mt5_connected:
+                account_info = mt5.account_info()
+                if account_info and account_info.margin > 0:
+                    margin_level = (account_info.equity / account_info.margin) * 100
+                    if margin_level < 300:  # Margin level ต่ำกว่า 300%
+                        recovery_needs['margin_recovery'] = True
+                        recovery_needs['recovery_score'] += 30
+                        recovery_needs['recommendations'].append(f"Margin Level: {margin_level:.1f}% - Need margin relief")
+            
+            # 2. Balance Recovery Assessment
+            current_balance = self._get_current_balance()
+            if current_balance < 100:  # Balance ต่ำกว่า $100
+                recovery_needs['balance_recovery'] = True
+                recovery_needs['recovery_score'] += 25
+                recovery_needs['recommendations'].append(f"Low Balance: ${current_balance:.2f} - Need balance improvement")
+            
+            # 3. Stuck Positions Recovery Assessment
+            stuck_positions = [p for p in self.positions if p.profit < -50]  # ไม้ที่ติดลบมากกว่า $50
+            if len(stuck_positions) > 0:
+                recovery_needs['stuck_positions_recovery'] = True
+                recovery_needs['recovery_score'] += len(stuck_positions) * 5
+                recovery_needs['recommendations'].append(f"Stuck Positions: {len(stuck_positions)} positions with loss > $50")
+            
+            # 4. Equity Recovery Assessment
+            if MT5_AVAILABLE and mt5 and self.mt5_connected:
+                account_info = mt5.account_info()
+                if account_info:
+                    equity_change = account_info.equity - account_info.balance
+                    if equity_change < -100:  # Equity ต่ำกว่า balance มากกว่า $100
+                        recovery_needs['equity_recovery'] = True
+                        recovery_needs['recovery_score'] += 20
+                        recovery_needs['recommendations'].append(f"Equity Drop: ${equity_change:.2f} - Need equity recovery")
+            
+            # Set Priority based on recovery score
+            if recovery_needs['recovery_score'] >= 50:
+                recovery_needs['priority'] = 'CRITICAL'
+            elif recovery_needs['recovery_score'] >= 30:
+                recovery_needs['priority'] = 'HIGH'
+            elif recovery_needs['recovery_score'] >= 15:
+                recovery_needs['priority'] = 'MEDIUM'
+            
+            self.log(f"💊 Recovery Assessment - Score: {recovery_needs['recovery_score']}, Priority: {recovery_needs['priority']}", "INFO")
+            for rec in recovery_needs['recommendations']:
+                self.log(f"   📋 {rec}", "INFO")
+            
+            return recovery_needs
+            
+        except Exception as e:
+            self.log(f"Error in portfolio recovery assessment: {str(e)}", "ERROR")
+            return {
+                'margin_recovery': False,
+                'balance_recovery': False,
+                'stuck_positions_recovery': False,
+                'equity_recovery': False,
+                'priority': 'LOW',
+                'recovery_score': 0,
+                'recommendations': ['Error in assessment']
+            }
+
+    def find_enhanced_edge_positions(self, recovery_assessment: dict) -> dict:
+        """🎯 หาไม้ขอบบนและขอบล่างแบบยืดหยุ่น - Enhanced for Recovery"""
+        try:
+            if not self.positions:
+                return {
+                    'upper_edge': [],
+                    'lower_edge': [],
+                    'middle_positions': [],
+                    'current_price': 0.0,
+                    'recovery_potential': {}
+                }
+            
+            # รับราคาปัจจุบัน
+            current_price = self.get_current_price()
+            
+            # แบ่งไม้ตามราคา
+            buy_positions = [p for p in self.positions if p.type == "BUY"]
+            sell_positions = [p for p in self.positions if p.type == "SELL"]
+            
+            # เรียงตามราคา
+            buy_positions.sort(key=lambda x: x.open_price)
+            sell_positions.sort(key=lambda x: x.open_price)
+            
+            # คำนวณช่วงราคา
+            all_prices = [p.open_price for p in self.positions]
+            min_price = min(all_prices)
+            max_price = max(all_prices)
+            price_range = max_price - min_price
+            
+            # กำหนดขอบเขตแบบ Dynamic ตาม recovery needs
+            base_threshold = 0.2  # 20% default
+            if recovery_assessment['priority'] == 'CRITICAL':
+                edge_threshold = price_range * 0.15  # ขยายขอบเขตเพื่อหาไม้มากขึ้น
+            elif recovery_assessment['priority'] == 'HIGH':
+                edge_threshold = price_range * 0.18
+            else:
+                edge_threshold = price_range * base_threshold
+            
+            upper_edge = []
+            lower_edge = []
+            middle_positions = []
+            
+            # หาไม้ขอบบน (ระแวกขอบบน)
+            upper_threshold = max_price - edge_threshold
+            for pos in self.positions:
+                if pos.open_price >= upper_threshold:
+                    upper_edge.append(pos)
+                elif pos.open_price <= min_price + edge_threshold:
+                    lower_edge.append(pos)
+                else:
+                    middle_positions.append(pos)
+            
+            # เรียงตามความสำคัญสำหรับการฟื้นฟู
+            upper_edge.sort(key=lambda x: self._calculate_recovery_priority(x, recovery_assessment), reverse=True)
+            lower_edge.sort(key=lambda x: self._calculate_recovery_priority(x, recovery_assessment), reverse=True)
+            middle_positions.sort(key=lambda x: self._calculate_recovery_priority(x, recovery_assessment), reverse=True)
+            
+            # คำนวณ recovery potential
+            recovery_potential = self._calculate_recovery_potential(upper_edge, lower_edge, recovery_assessment)
+            
+            self.log(f"🎯 Enhanced Edge Analysis: Upper={len(upper_edge)}, Lower={len(lower_edge)}, Middle={len(middle_positions)}", "INFO")
+            self.log(f"💊 Recovery Potential: {recovery_potential['total_score']:.1f} points", "INFO")
+            
+            return {
+                'upper_edge': upper_edge,
+                'lower_edge': lower_edge,
+                'middle_positions': middle_positions,
+                'current_price': current_price,
+                'price_range': price_range,
+                'edge_threshold': edge_threshold,
+                'recovery_potential': recovery_potential
+            }
+            
+        except Exception as e:
+            self.log(f"Error finding enhanced edge positions: {str(e)}", "ERROR")
+            return {
+                'upper_edge': [],
+                'lower_edge': [],
+                'middle_positions': [],
+                'current_price': current_price or 0.0,
+                'recovery_potential': {}
+            }
+
+    def _calculate_recovery_priority(self, position, recovery_assessment: dict) -> float:
+        """💊 คำนวณความสำคัญของ position สำหรับการฟื้นฟู"""
+        try:
+            priority_score = 0.0
+            
+            # Base profit score
+            if position.profit > 0:
+                priority_score += position.profit * 2  # กำไรมีความสำคัญมาก
+            else:
+                priority_score += abs(position.profit) * 0.1  # ไม้ขาดทุนมีความสำคัญน้อยกว่า
+            
+            # Volume impact (margin relief)
+            if recovery_assessment['margin_recovery']:
+                priority_score += position.volume * 100  # Volume สำคัญมากสำหรับ margin
+            
+            # Balance impact
+            if recovery_assessment['balance_recovery'] and position.profit > 0:
+                priority_score += position.profit * 3  # กำไรสำคัญมากสำหรับ balance
+            
+            # Stuck position recovery
+            if recovery_assessment['stuck_positions_recovery'] and position.profit < -50:
+                priority_score += abs(position.profit) * 0.5  # ไม้ติดลบต้องพิจารณาปิดคู่
+            
+            return priority_score
+            
+        except Exception as e:
+            self.log(f"Error calculating recovery priority: {str(e)}", "ERROR")
+            return 0.0
+
+    def _calculate_recovery_potential(self, upper_edge: list, lower_edge: list, recovery_assessment: dict) -> dict:
+        """💊 คำนวณศักยภาพการฟื้นฟูจากไม้ขอบ"""
+        try:
+            potential = {
+                'margin_relief_score': 0.0,
+                'balance_improvement_score': 0.0,
+                'stuck_recovery_score': 0.0,
+                'equity_improvement_score': 0.0,
+                'total_score': 0.0
+            }
+            
+            all_edge_positions = upper_edge + lower_edge
+            
+            # Margin Relief Potential
+            if recovery_assessment['margin_recovery']:
+                total_volume = sum(p.volume for p in all_edge_positions)
+                potential['margin_relief_score'] = total_volume * 50  # คะแนนตาม volume
+            
+            # Balance Improvement Potential
+            if recovery_assessment['balance_recovery']:
+                profitable_positions = [p for p in all_edge_positions if p.profit > 0]
+                total_profit = sum(p.profit for p in profitable_positions)
+                potential['balance_improvement_score'] = total_profit * 2
+            
+            # Stuck Recovery Potential
+            if recovery_assessment['stuck_positions_recovery']:
+                stuck_in_edges = [p for p in all_edge_positions if p.profit < -50]
+                potential['stuck_recovery_score'] = len(stuck_in_edges) * 10
+            
+            # Equity Improvement Potential
+            if recovery_assessment['equity_recovery']:
+                net_profit = sum(p.profit for p in all_edge_positions)
+                if net_profit > 0:
+                    potential['equity_improvement_score'] = net_profit * 1.5
+            
+            potential['total_score'] = (
+                potential['margin_relief_score'] + 
+                potential['balance_improvement_score'] + 
+                potential['stuck_recovery_score'] + 
+                potential['equity_improvement_score']
+            )
+            
+            return potential
+            
+        except Exception as e:
+            self.log(f"Error calculating recovery potential: {str(e)}", "ERROR")
+            return {'total_score': 0.0}
+
+    def _analyze_enhanced_edge_closing_options(self, edge_analysis: dict, recovery_assessment: dict) -> list:
+        """🔍 วิเคราะห์ตัวเลือกการปิดไม้ขอบแบบ Enhanced สำหรับการฟื้นฟู"""
+        try:
+            options = []
+            
+            upper_edge = edge_analysis['upper_edge']
+            lower_edge = edge_analysis['lower_edge']
+            middle_positions = edge_analysis['middle_positions']
+            recovery_potential = edge_analysis['recovery_potential']
+            
+            # ตัวเลือก 1: ปิดไม้ขอบบนเท่านั้น (Enhanced for Recovery)
+            if upper_edge:
+                profit_analysis = self.calculate_edge_group_profit(upper_edge)
+                recovery_impact = self._calculate_recovery_impact(upper_edge, recovery_assessment)
+                
+                if profit_analysis['is_profitable'] or recovery_impact['is_beneficial']:
+                    options.append({
+                        'strategy': 'Upper_Edge_Recovery',
+                        'positions': upper_edge,
+                        'profit_analysis': profit_analysis,
+                        'recovery_impact': recovery_impact,
+                        'priority': 1 if recovery_impact['is_beneficial'] else 2,
+                        'recovery_score': recovery_impact['total_score']
+                    })
+            
+            # ตัวเลือก 2: ปิดไม้ขอบล่างเท่านั้น (Enhanced for Recovery)
+            if lower_edge:
+                profit_analysis = self.calculate_edge_group_profit(lower_edge)
+                recovery_impact = self._calculate_recovery_impact(lower_edge, recovery_assessment)
+                
+                if profit_analysis['is_profitable'] or recovery_impact['is_beneficial']:
+                    options.append({
+                        'strategy': 'Lower_Edge_Recovery',
+                        'positions': lower_edge,
+                        'profit_analysis': profit_analysis,
+                        'recovery_impact': recovery_impact,
+                        'priority': 1 if recovery_impact['is_beneficial'] else 2,
+                        'recovery_score': recovery_impact['total_score']
+                    })
+            
+            # ตัวเลือก 3: ปิดไม้ขอบบน + ขอบล่าง (Enhanced for Maximum Recovery)
+            if upper_edge and lower_edge:
+                combined_positions = upper_edge + lower_edge
+                profit_analysis = self.calculate_edge_group_profit(combined_positions)
+                recovery_impact = self._calculate_recovery_impact(combined_positions, recovery_assessment)
+                
+                if profit_analysis['is_profitable'] or recovery_impact['is_beneficial']:
+                    options.append({
+                        'strategy': 'Combined_Edges_Recovery',
+                        'positions': combined_positions,
+                        'profit_analysis': profit_analysis,
+                        'recovery_impact': recovery_impact,
+                        'priority': 1 if recovery_impact['total_score'] > 100 else 2,
+                        'recovery_score': recovery_impact['total_score']
+                    })
+            
+            # ตัวเลือก 4: Smart Recovery Mix (ไม้ขอบ + ไม้ตรงกลางที่เหมาะสม)
+            if recovery_assessment['priority'] in ['CRITICAL', 'HIGH']:
+                # เลือกไม้ตรงกลางที่มีกำไรสำหรับการฟื้นฟู
+                profitable_middle = [p for p in middle_positions if p.profit > 10][:3]  # Top 3
+                
+                for edge_group in [upper_edge, lower_edge]:
+                    if edge_group and profitable_middle:
+                        mixed_positions = edge_group + profitable_middle
+                        profit_analysis = self.calculate_edge_group_profit(mixed_positions)
+                        recovery_impact = self._calculate_recovery_impact(mixed_positions, recovery_assessment)
+                        
+                        if recovery_impact['is_beneficial']:
+                            options.append({
+                                'strategy': 'Smart_Recovery_Mix',
+                                'positions': mixed_positions,
+                                'profit_analysis': profit_analysis,
+                                'recovery_impact': recovery_impact,
+                                'priority': 1,
+                                'recovery_score': recovery_impact['total_score']
+                            })
+            
+            # เรียงตาม recovery score และ priority
+            options.sort(key=lambda x: (x['priority'], -x['recovery_score'], -x['profit_analysis']['total_profit']))
+            
+            self.log(f"🔍 Found {len(options)} enhanced recovery closing options", "INFO")
+            for i, option in enumerate(options):
+                self.log(f"   Option {i+1}: {option['strategy']} - Recovery Score: {option['recovery_score']:.1f}, Profit: ${option['profit_analysis']['total_profit']:.2f}", "INFO")
+            
+            return options
+            
+        except Exception as e:
+            self.log(f"Error analyzing enhanced edge closing options: {str(e)}", "ERROR")
+            return []
+
+    def _calculate_recovery_impact(self, positions: list, recovery_assessment: dict) -> dict:
+        """💊 คำนวณผลกระทบการฟื้นฟูจากการปิดไม้"""
+        try:
+            impact = {
+                'margin_relief': 0.0,
+                'balance_improvement': 0.0,
+                'stuck_recovery_count': 0,
+                'equity_improvement': 0.0,
+                'total_score': 0.0,
+                'is_beneficial': False
+            }
+            
+            # คำนวณผลกระทบต่างๆ
+            total_volume = sum(p.volume for p in positions)
+            total_profit = sum(p.profit for p in positions)
+            profitable_count = len([p for p in positions if p.profit > 0])
+            stuck_count = len([p for p in positions if p.profit < -50])
+            
+            # Margin Relief Impact
+            if recovery_assessment['margin_recovery']:
+                impact['margin_relief'] = total_volume * 50  # Volume relief score
+                impact['total_score'] += impact['margin_relief']
+            
+            # Balance Improvement Impact
+            if recovery_assessment['balance_recovery'] and total_profit > 0:
+                impact['balance_improvement'] = total_profit * 2
+                impact['total_score'] += impact['balance_improvement']
+            
+            # Stuck Recovery Impact
+            if recovery_assessment['stuck_positions_recovery'] and stuck_count > 0:
+                impact['stuck_recovery_count'] = stuck_count
+                impact['total_score'] += stuck_count * 15  # คะแนนต่อไม้ติดลบที่ปิดได้
+            
+            # Equity Improvement Impact
+            if recovery_assessment['equity_recovery'] and total_profit > 0:
+                impact['equity_improvement'] = total_profit * 1.5
+                impact['total_score'] += impact['equity_improvement']
+            
+            # ตัดสินใจว่าเป็นประโยชน์หรือไม่
+            impact['is_beneficial'] = (
+                impact['total_score'] > 50 or  # คะแนนฟื้นฟูสูง
+                (total_profit > 20 and profitable_count >= 2) or  # กำไรดีและมีไม้กำไรหลายตัว
+                (recovery_assessment['priority'] == 'CRITICAL' and total_profit > 0)  # สถานการณ์วิกฤตและมีกำไร
+            )
+            
+            return impact
+            
+        except Exception as e:
+            self.log(f"Error calculating recovery impact: {str(e)}", "ERROR")
+            return {'total_score': 0.0, 'is_beneficial': False}
+
+    def _select_best_recovery_closing_option(self, options: list, recovery_assessment: dict) -> dict:
+        """🎯 เลือกตัวเลือกการปิดไม้ที่ดีที่สุดสำหรับการฟื้นฟู"""
+        try:
+            if not options:
+                return None
+            
+            # กรองตัวเลือกที่เป็นประโยชน์เท่านั้น
+            beneficial_options = [opt for opt in options if opt['recovery_impact']['is_beneficial']]
+            
+            if not beneficial_options:
+                # ถ้าไม่มีตัวเลือกที่เป็นประโยชน์ ให้เลือกตัวที่มีกำไรมากที่สุด
+                profitable_options = [opt for opt in options if opt['profit_analysis']['is_profitable']]
+                if profitable_options:
+                    best_option = max(profitable_options, key=lambda x: x['profit_analysis']['total_profit'])
+                    self.log(f"🎯 Selected fallback profitable option: {best_option['strategy']}", "INFO")
+                    return best_option
+                else:
+                    return None
+            
+            # เลือกตัวเลือกที่ดีที่สุดจาก beneficial options
+            best_option = max(beneficial_options, key=lambda x: (
+                x['recovery_score'],  # Recovery score สำคัญที่สุด
+                x['profit_analysis']['total_profit'],  # กำไรเป็นอันดับสอง
+                -x['priority']  # Priority ต่ำกว่าดีกว่า
+            ))
+            
+            self.log(f"🎯 Selected best recovery option: {best_option['strategy']}", "SUCCESS")
+            self.log(f"   💊 Recovery Score: {best_option['recovery_score']:.1f}", "SUCCESS")
+            self.log(f"   💰 Profit: ${best_option['profit_analysis']['total_profit']:.2f}", "SUCCESS")
+            self.log(f"   📊 Impact: {best_option['recovery_impact']}", "INFO")
+            
+            return best_option
+            
+        except Exception as e:
+            self.log(f"Error selecting best recovery closing option: {str(e)}", "ERROR")
+            return None
+
+    def execute_enhanced_edge_closing(self, best_option: dict, recovery_assessment: dict, reason: str) -> dict:
+        """🎯 ดำเนินการปิดไม้ขอบแบบ Enhanced พร้อมการฟื้นฟู"""
+        try:
+            self.log(f"🎯 Executing Enhanced Edge Closing: {best_option['strategy']}", "INFO")
+            
+            positions_to_close = best_option['positions']
+            expected_recovery = best_option['recovery_impact']
+            expected_profit = best_option['profit_analysis']['total_profit']
+            
+            # บันทึกสถานะก่อนปิด
+            pre_closing_state = self._capture_pre_closing_state()
+            
+            # 🆕 ปิดไม้แบบกลุ่มจริง (Group Closing)
+            self.log(f"🎯 Executing GROUP CLOSING: {len(positions_to_close)} positions", "INFO")
+            
+            # แสดงรายละเอียดกลุ่มที่จะปิด
+            for pos in positions_to_close:
+                self.log(f"   📍 Position {pos.ticket}: {pos.type} {pos.volume} lots @ {pos.open_price:.5f} | Profit: ${pos.profit:.2f}", "INFO")
+            
+            # ปิดแบบกลุ่มผ่าน MT5 batch operation
+            group_close_result = self._close_positions_group(positions_to_close, f"Enhanced_Edge_{reason}")
+            
+            closed_positions = group_close_result['closed_positions']
+            failed_positions = group_close_result['failed_positions']
+            total_profit_realized = group_close_result['total_profit']
+            
+            # แสดงผลลัพธ์การปิดกลุ่ม
+            if closed_positions:
+                self.log(f"✅ GROUP CLOSING SUCCESS: {len(closed_positions)} positions closed, Total Profit: ${total_profit_realized:.2f}", "SUCCESS")
+                for ticket in closed_positions:
+                    self.log(f"   ✅ Closed: {ticket}", "SUCCESS")
+            
+            if failed_positions:
+                self.log(f"❌ GROUP CLOSING PARTIAL: {len(failed_positions)} positions failed", "ERROR")
+                for ticket in failed_positions:
+                    self.log(f"   ❌ Failed: {ticket}", "ERROR")
+            
+            # บันทึกสถานะหลังปิด
+            post_closing_state = self._capture_post_closing_state()
+            
+            # คำนวณผลกระทบการฟื้นฟูจริง
+            actual_recovery_impact = self._calculate_actual_recovery_impact(
+                pre_closing_state, post_closing_state, recovery_assessment
+            )
+            
+            success = len(closed_positions) > 0
+            
+            result = {
+                'success': success,
+                'positions_closed': len(closed_positions),
+                'total_profit': total_profit_realized,
+                'failed_positions': failed_positions,
+                'expected_recovery': expected_recovery,
+                'actual_recovery_impact': actual_recovery_impact,
+                'recovery_impact': self._format_recovery_impact_summary(actual_recovery_impact),
+                'strategy_used': best_option['strategy']
+            }
+            
+            if success:
+                self.log(f"🎯 Enhanced Edge Closing Success!", "SUCCESS")
+                self.log(f"   📊 Positions Closed: {len(closed_positions)}/{len(positions_to_close)}", "SUCCESS")
+                self.log(f"   💰 Total Profit: ${total_profit_realized:.2f}", "SUCCESS")
+                self.log(f"   💊 Recovery Impact: {result['recovery_impact']}", "SUCCESS")
+            else:
+                self.log(f"❌ Enhanced Edge Closing Failed: No positions closed", "ERROR")
+            
+            return result
+            
+        except Exception as e:
+            self.log(f"Error in enhanced edge closing execution: {str(e)}", "ERROR")
+            return {
+                'success': False,
+                'positions_closed': 0,
+                'total_profit': 0.0,
+                'error': str(e),
+                'recovery_impact': 'Error in execution'
+            }
+
+    def _close_position_direct(self, position, reason: str) -> dict:
+        """🎯 ปิด position โดยตรงผ่าน MT5"""
+        try:
+            if not MT5_AVAILABLE or not mt5 or not self.mt5_connected:
+                return {'success': False, 'error': 'MT5 not available'}
             
             close_type = mt5.ORDER_TYPE_SELL if position.type == "BUY" else mt5.ORDER_TYPE_BUY
             
@@ -9543,7 +12284,7 @@ class TradingSystem:
                 "position": position.ticket,
                 "deviation": 20,
                 "magic": 123456,
-                "comment": f"Smart_{reason[:12]}",
+                "comment": f"Edge_{reason[:15]}",
                 "type_time": mt5.ORDER_TIME_GTC,
                 "type_filling": self.filling_type,
             }
@@ -9551,9 +12292,7 @@ class TradingSystem:
             result = mt5.order_send(request)
             
             if result.retcode == mt5.TRADE_RETCODE_DONE:
-                self.log(f"✅ Smart close: {position.ticket} - {reason}")
-                self.log(f"   Profit: ${position.profit:.2f} (${position.profit_per_lot:.2f}/lot)")
-                return True
+                return {'success': True, 'ticket': position.ticket}
             elif result.retcode == mt5.TRADE_RETCODE_INVALID_FILL:
                 # Try with different filling types
                 for filling_type in self.filling_types_priority:
@@ -9561,18 +12300,826 @@ class TradingSystem:
                         request["type_filling"] = filling_type
                         result = mt5.order_send(request)
                         if result.retcode == mt5.TRADE_RETCODE_DONE:
-                            self.log(f"✅ Smart close successful with {filling_type}")
-                            return True
-                            
-                self.log(f"❌ Smart close failed with all filling types", "ERROR")
-                return False
+                            return {'success': True, 'ticket': position.ticket}
+                
+                return {'success': False, 'error': 'All filling types failed'}
             else:
-                self.log(f"❌ Smart close failed: {result.retcode}", "WARNING")
-                return False
+                return {'success': False, 'error': f'MT5 error: {result.retcode}'}
                 
         except Exception as e:
-            self.log(f"Error in smart close: {str(e)}", "ERROR")
+            return {'success': False, 'error': str(e)}
+
+    def _capture_pre_closing_state(self) -> dict:
+        """📊 บันทึกสถานะก่อนปิดไม้"""
+        try:
+            state = {
+                'timestamp': datetime.now(),
+                'balance': 0.0,
+                'equity': 0.0,
+                'margin': 0.0,
+                'margin_level': 0.0,
+                'positions_count': len(self.positions) if self.positions else 0,
+                'total_profit': sum(p.profit for p in self.positions) if self.positions else 0.0,
+                'stuck_positions_count': len([p for p in self.positions if p.profit < -50]) if self.positions else 0
+            }
+            
+            if MT5_AVAILABLE and mt5 and self.mt5_connected:
+                account_info = mt5.account_info()
+                if account_info:
+                    state['balance'] = account_info.balance
+                    state['equity'] = account_info.equity
+                    state['margin'] = account_info.margin
+                    if account_info.margin > 0:
+                        state['margin_level'] = (account_info.equity / account_info.margin) * 100
+            
+            return state
+            
+        except Exception as e:
+            self.log(f"Error capturing pre-closing state: {str(e)}", "ERROR")
+            return {'timestamp': datetime.now(), 'error': str(e)}
+
+    def _capture_post_closing_state(self) -> dict:
+        """📊 บันทึกสถานะหลังปิดไม้"""
+        try:
+            # รอสักครู่เพื่อให้ MT5 อัปเดตข้อมูล
+            import time
+            time.sleep(1)
+            
+            # อัปเดตข้อมูล positions
+            self.update_positions()
+            
+            state = {
+                'timestamp': datetime.now(),
+                'balance': 0.0,
+                'equity': 0.0,
+                'margin': 0.0,
+                'margin_level': 0.0,
+                'positions_count': len(self.positions) if self.positions else 0,
+                'total_profit': sum(p.profit for p in self.positions) if self.positions else 0.0,
+                'stuck_positions_count': len([p for p in self.positions if p.profit < -50]) if self.positions else 0
+            }
+            
+            if MT5_AVAILABLE and mt5 and self.mt5_connected:
+                account_info = mt5.account_info()
+                if account_info:
+                    state['balance'] = account_info.balance
+                    state['equity'] = account_info.equity
+                    state['margin'] = account_info.margin
+                    if account_info.margin > 0:
+                        state['margin_level'] = (account_info.equity / account_info.margin) * 100
+            
+            return state
+            
+        except Exception as e:
+            self.log(f"Error capturing post-closing state: {str(e)}", "ERROR")
+            return {'timestamp': datetime.now(), 'error': str(e)}
+
+    def _calculate_actual_recovery_impact(self, pre_state: dict, post_state: dict, recovery_assessment: dict) -> dict:
+        """💊 คำนวณผลกระทบการฟื้นฟูจริงหลังปิดไม้"""
+        try:
+            impact = {
+                'margin_improvement': 0.0,
+                'balance_improvement': 0.0,
+                'equity_improvement': 0.0,
+                'stuck_positions_reduced': 0,
+                'overall_improvement': False,
+                'details': {}
+            }
+            
+            # คำนวณการปรับปรุงต่างๆ
+            if 'margin_level' in pre_state and 'margin_level' in post_state:
+                impact['margin_improvement'] = post_state['margin_level'] - pre_state['margin_level']
+                impact['details']['margin_level_change'] = f"{pre_state['margin_level']:.1f}% → {post_state['margin_level']:.1f}%"
+            
+            if 'balance' in pre_state and 'balance' in post_state:
+                impact['balance_improvement'] = post_state['balance'] - pre_state['balance']
+                impact['details']['balance_change'] = f"${pre_state['balance']:.2f} → ${post_state['balance']:.2f}"
+            
+            if 'equity' in pre_state and 'equity' in post_state:
+                impact['equity_improvement'] = post_state['equity'] - pre_state['equity']
+                impact['details']['equity_change'] = f"${pre_state['equity']:.2f} → ${post_state['equity']:.2f}"
+            
+            if 'stuck_positions_count' in pre_state and 'stuck_positions_count' in post_state:
+                impact['stuck_positions_reduced'] = pre_state['stuck_positions_count'] - post_state['stuck_positions_count']
+                impact['details']['stuck_positions_change'] = f"{pre_state['stuck_positions_count']} → {post_state['stuck_positions_count']}"
+            
+            # ประเมินการปรับปรุงโดยรวม
+            improvements = 0
+            if impact['margin_improvement'] > 10:  # Margin level ดีขึ้นกว่า 10%
+                improvements += 1
+            if impact['balance_improvement'] > 5:  # Balance ดีขึ้นกว่า $5
+                improvements += 1
+            if impact['equity_improvement'] > 5:  # Equity ดีขึ้นกว่า $5
+                improvements += 1
+            if impact['stuck_positions_reduced'] > 0:  # ไม้ติดลบลดลง
+                improvements += 1
+            
+            impact['overall_improvement'] = improvements >= 2  # อย่างน้อย 2 ด้านดีขึ้น
+            
+            return impact
+            
+        except Exception as e:
+            self.log(f"Error calculating actual recovery impact: {str(e)}", "ERROR")
+            return {'overall_improvement': False, 'error': str(e)}
+
+    def _format_recovery_impact_summary(self, actual_impact: dict) -> str:
+        """💊 จัดรูปแบบสรุปผลกระทบการฟื้นฟู"""
+        try:
+            if 'error' in actual_impact:
+                return f"Error: {actual_impact['error']}"
+            
+            summary_parts = []
+            
+            if actual_impact.get('margin_improvement', 0) > 0:
+                summary_parts.append(f"Margin: +{actual_impact['margin_improvement']:.1f}%")
+            
+            if actual_impact.get('balance_improvement', 0) > 0:
+                summary_parts.append(f"Balance: +${actual_impact['balance_improvement']:.2f}")
+            
+            if actual_impact.get('equity_improvement', 0) > 0:
+                summary_parts.append(f"Equity: +${actual_impact['equity_improvement']:.2f}")
+            
+            if actual_impact.get('stuck_positions_reduced', 0) > 0:
+                summary_parts.append(f"Stuck: -{actual_impact['stuck_positions_reduced']}")
+            
+            if not summary_parts:
+                return "No significant improvements detected"
+            
+            overall_status = "✅ IMPROVED" if actual_impact.get('overall_improvement', False) else "⚠️ PARTIAL"
+            return f"{overall_status}: {', '.join(summary_parts)}"
+            
+        except Exception as e:
+            return f"Error formatting summary: {str(e)}"
+
+    def _analyze_edge_closing_options(self, edge_analysis: dict) -> list:
+        """🔍 วิเคราะห์ตัวเลือกการปิดไม้ขอบ"""
+        try:
+            options = []
+            
+            upper_edge = edge_analysis['upper_edge']
+            lower_edge = edge_analysis['lower_edge']
+            middle_positions = edge_analysis['middle_positions']
+            
+            # ตัวเลือก 1: ปิดไม้ขอบบนเท่านั้น
+            if upper_edge:
+                profit_analysis = self.calculate_edge_group_profit(upper_edge)
+                if profit_analysis['is_profitable']:
+                    options.append({
+                        'strategy': 'Upper_Edge_Only',
+                        'positions': upper_edge,
+                        'profit_analysis': profit_analysis,
+                        'priority': 1
+                    })
+            
+            # ตัวเลือก 2: ปิดไม้ขอบล่างเท่านั้น
+            if lower_edge:
+                profit_analysis = self.calculate_edge_group_profit(lower_edge)
+                if profit_analysis['is_profitable']:
+                    options.append({
+                        'strategy': 'Lower_Edge_Only',
+                        'positions': lower_edge,
+                        'profit_analysis': profit_analysis,
+                        'priority': 1
+                    })
+            
+            # ตัวเลือก 3: ปิดไม้ขอบบน + ขอบล่าง
+            if upper_edge and lower_edge:
+                combined_positions = upper_edge + lower_edge
+                profit_analysis = self.calculate_edge_group_profit(combined_positions)
+                if profit_analysis['is_profitable']:
+                    options.append({
+                        'strategy': 'Upper_Lower_Edges',
+                        'positions': combined_positions,
+                        'profit_analysis': profit_analysis,
+                        'priority': 2
+                    })
+            
+            # ตัวเลือก 4: ปิดไม้ขอบ + ไม้ตรงกลาง (ถ้าจำเป็น)
+            for edge_positions in [upper_edge, lower_edge]:
+                if edge_positions:
+                    for middle_pos in middle_positions:
+                        test_positions = edge_positions + [middle_pos]
+                        profit_analysis = self.calculate_edge_group_profit(test_positions)
+                        if profit_analysis['is_profitable']:
+                            options.append({
+                                'strategy': 'Edge_With_Middle',
+                                'positions': test_positions,
+                                'profit_analysis': profit_analysis,
+                                'priority': 3
+                            })
+            
+            # เรียงตาม priority และ profit
+            options.sort(key=lambda x: (x['priority'], -x['profit_analysis']['total_profit']))
+            
+            self.log(f"🔍 Found {len(options)} closing options")
+            for i, option in enumerate(options):
+                self.log(f"   Option {i+1}: {option['strategy']} - Profit: ${option['profit_analysis']['total_profit']:.2f}")
+            
+            return options
+            
+        except Exception as e:
+            self.log(f"Error analyzing edge closing options: {str(e)}", "ERROR")
+            return []
+
+    def _select_best_closing_option(self, options: list) -> dict:
+        """🎯 เลือกตัวเลือกการปิดไม้ที่ดีที่สุด"""
+        try:
+            if not options:
+                return None
+            
+            # เลือกตัวเลือกที่มี priority ต่ำสุด (ดีที่สุด) และกำไรมากที่สุด
+            best_option = options[0]
+            
+            # ตรวจสอบเงื่อนไขเพิ่มเติม
+            for option in options:
+                if option['priority'] < best_option['priority']:
+                    best_option = option
+                elif (option['priority'] == best_option['priority'] and 
+                      option['profit_analysis']['total_profit'] > best_option['profit_analysis']['total_profit']):
+                    best_option = option
+            
+            self.log(f"🎯 Selected best option: {best_option['strategy']} - Profit: ${best_option['profit_analysis']['total_profit']:.2f}")
+            
+            return best_option
+            
+        except Exception as e:
+            self.log(f"Error selecting best closing option: {str(e)}", "ERROR")
+            return None
+
+    def auto_edge_closing_monitor(self) -> dict:
+        """🤖 ระบบติดตามและปิดไม้ขอบแบบอัตโนมัติ"""
+        try:
+            self.log("🤖 Auto Edge Closing Monitor Started")
+            
+            # ตรวจสอบเงื่อนไขการปิดไม้ขอบ
+            if not self.positions or len(self.positions) < 4:
+                return {
+                    'success': False,
+                    'reason': 'Insufficient positions for edge closing',
+                    'positions_count': len(self.positions) if self.positions else 0
+                }
+            
+            # ตรวจสอบ margin level
+            if MT5_AVAILABLE and mt5 and self.mt5_connected:
+                account_info = mt5.account_info()
+                if account_info and account_info.margin > 0:
+                    margin_level = (account_info.equity / account_info.margin) * 100
+                    if margin_level < 200:  # Margin level ต่ำกว่า 200%
+                        self.log(f"⚠️ Low margin level: {margin_level:.1f}% - Activating edge closing", "WARNING")
+                        return self.smart_edge_closing_system("Auto Monitor: Low Margin")
+            
+            # ตรวจสอบ portfolio health
+            if self.portfolio_health < 60:  # Portfolio health ต่ำกว่า 60%
+                self.log(f"⚠️ Low portfolio health: {self.portfolio_health:.1f}% - Activating edge closing", "WARNING")
+                return self.smart_edge_closing_system("Auto Monitor: Low Portfolio Health")
+            
+            # ตรวจสอบจำนวน positions
+            if len(self.positions) > 30:  # มี positions มากกว่า 30
+                self.log(f"⚠️ High position count: {len(self.positions)} - Activating edge closing", "WARNING")
+                return self.smart_edge_closing_system("Auto Monitor: High Position Count")
+            
+            # ตรวจสอบการกระจุกตัวของ positions
+            edge_analysis = self.find_edge_positions()
+            if edge_analysis['upper_edge'] and edge_analysis['lower_edge']:
+                # มีไม้ขอบทั้งบนและล่าง - ตรวจสอบว่าปิดได้หรือไม่
+                upper_profit = self.calculate_edge_group_profit(edge_analysis['upper_edge'])
+                lower_profit = self.calculate_edge_group_profit(edge_analysis['lower_edge'])
+                
+                if upper_profit['is_profitable'] or lower_profit['is_profitable']:
+                    self.log("🎯 Profitable edge positions found - Activating edge closing", "INFO")
+                    return self.smart_edge_closing_system("Auto Monitor: Profitable Edges")
+            
+            return {
+                'success': False,
+                'reason': 'No conditions met for edge closing',
+                'positions_count': len(self.positions),
+                'portfolio_health': self.portfolio_health
+            }
+            
+        except Exception as e:
+            self.log(f"Error in auto edge closing monitor: {str(e)}", "ERROR")
+            return {
+                'success': False,
+                'error': str(e)
+            }
+
+    def manual_edge_closing(self, strategy: str = "Manual") -> dict:
+        """👤 ระบบการปิดไม้ขอบแบบ Manual"""
+        try:
+            self.log(f"👤 Manual Edge Closing: {strategy}")
+            
+            # เรียกใช้ระบบการปิดไม้ขอบ
+            result = self.smart_edge_closing_system(f"Manual_{strategy}")
+            
+            if result['success']:
+                self.log(f"✅ Manual Edge Closing Success: {result['positions_closed']} positions, Profit: ${result['total_profit']:.2f}")
+            else:
+                self.log(f"❌ Manual Edge Closing Failed: {result.get('error', 'Unknown error')}", "WARNING")
+            
+            return result
+            
+        except Exception as e:
+            self.log(f"Error in manual edge closing: {str(e)}", "ERROR")
+            return {
+                'success': False,
+                'error': str(e)
+            }
+
+    def system_coordinator(self, action: str, system: str, priority: str = "TRADING") -> dict:
+        """🎯 System Coordinator - ประสานงานระหว่างระบบต่างๆ"""
+        try:
+            if not self.system_coordinator_enabled:
+                return {'allowed': True, 'reason': 'Coordinator disabled'}
+            
+            # ตรวจสอบว่าระบบกำลังทำงานอยู่หรือไม่
+            if system in self.active_systems:
+                return {
+                    'allowed': False,
+                    'reason': f'System {system} is already active',
+                    'active_systems': list(self.active_systems)
+                }
+            
+            # ตรวจสอบความขัดแย้งกับระบบอื่น
+            conflict_check = self.detect_system_conflicts(action, system, priority)
+            if conflict_check['has_conflict']:
+                return {
+                    'allowed': False,
+                    'reason': f'Conflict detected: {conflict_check["conflict_reason"]}',
+                    'conflicting_systems': conflict_check['conflicting_systems']
+                }
+            
+            # ตรวจสอบ timeout
+            if system in self.system_locks:
+                lock_time = self.system_locks[system]
+                timeout = self.system_timeouts.get(system, 30)
+                if (datetime.now() - lock_time).seconds < timeout:
+                    return {
+                        'allowed': False,
+                        'reason': f'System {system} is in cooldown period',
+                        'remaining_time': timeout - (datetime.now() - lock_time).seconds
+                    }
+            
+            # อนุญาตให้ทำงาน
+            self.active_systems.add(system)
+            self.system_locks[system] = datetime.now()
+            self.system_states[system] = 'active'
+            
+            self.log(f"🎯 System Coordinator: {system} activated for {action}")
+            
+            return {
+                'allowed': True,
+                'reason': 'No conflicts detected',
+                'active_systems': list(self.active_systems)
+            }
+            
+        except Exception as e:
+            self.log(f"Error in system coordinator: {str(e)}", "ERROR")
+            return {
+                'allowed': False,
+                'error': str(e)
+            }
+
+    def release_system(self, system: str) -> bool:
+        """🔓 ปลดปล่อยระบบเมื่อทำงานเสร็จ"""
+        try:
+            if system in self.active_systems:
+                self.active_systems.remove(system)
+                self.system_states[system] = 'idle'
+                self.log(f"🔓 System {system} released")
+                return True
             return False
+        except Exception as e:
+            self.log(f"Error releasing system {system}: {str(e)}", "ERROR")
+            return False
+
+    def detect_system_conflicts(self, action: str, system: str, priority: str) -> dict:
+        """🔍 ตรวจสอบความขัดแย้งของระบบ"""
+        try:
+            conflicts = []
+            conflicting_systems = []
+            
+            # ตรวจสอบความขัดแย้งตาม priority
+            system_priority_level = self.system_priority.get(priority, 5)
+            
+            for active_system in self.active_systems:
+                # ตรวจสอบว่าระบบที่กำลังทำงานมี priority สูงกว่าหรือไม่
+                if active_system in ['emergency_close', 'risk_management']:
+                    if system_priority_level > 2:  # ถ้า priority ต่ำกว่า SAFETY
+                        conflicts.append(f"High priority system {active_system} is active")
+                        conflicting_systems.append(active_system)
+                
+                # ตรวจสอบความขัดแย้งเฉพาะ
+                if self._check_specific_conflicts(system, active_system):
+                    conflicts.append(f"Specific conflict between {system} and {active_system}")
+                    conflicting_systems.append(active_system)
+            
+            return {
+                'has_conflict': len(conflicts) > 0,
+                'conflicts': conflicts,
+                'conflicting_systems': conflicting_systems,
+                'conflict_reason': '; '.join(conflicts) if conflicts else None
+            }
+            
+        except Exception as e:
+            self.log(f"Error detecting system conflicts: {str(e)}", "ERROR")
+            return {
+                'has_conflict': True,
+                'conflicts': [f"Error: {str(e)}"],
+                'conflicting_systems': [],
+                'conflict_reason': f"Detection error: {str(e)}"
+            }
+
+    def _check_specific_conflicts(self, system1: str, system2: str) -> bool:
+        """🔍 ตรวจสอบความขัดแย้งเฉพาะระหว่างระบบ"""
+        conflict_pairs = [
+            ('edge_closing', 'hedge_system'),      # ปิดไม้ขอบ vs สร้าง hedge
+            ('smart_router', 'portfolio_optimization'),  # router vs optimization
+            ('ai_analysis', 'risk_management'),    # AI analysis vs risk management
+        ]
+        
+        return (system1, system2) in conflict_pairs or (system2, system1) in conflict_pairs
+
+    def system_health_monitor(self) -> dict:
+        """🏥 ตรวจสอบสุขภาพของระบบ"""
+        try:
+            health_report = {
+                'overall_health': 'healthy',
+                'active_systems': list(self.active_systems),
+                'system_states': self.system_states.copy(),
+                'conflicts_detected': 0,
+                'recommendations': []
+            }
+            
+            # ตรวจสอบระบบที่ทำงานนานเกินไป
+            current_time = datetime.now()
+            for system, lock_time in self.system_locks.items():
+                timeout = self.system_timeouts.get(system, 30)
+                if (current_time - lock_time).seconds > timeout * 2:  # เกิน 2 เท่าของ timeout
+                    health_report['recommendations'].append(f"System {system} may be stuck")
+                    health_report['overall_health'] = 'warning'
+            
+            # ตรวจสอบจำนวนระบบที่ทำงานพร้อมกัน
+            if len(self.active_systems) > 3:
+                health_report['recommendations'].append("Too many systems running simultaneously")
+                health_report['overall_health'] = 'warning'
+            
+            # ตรวจสอบความขัดแย้ง
+            for system in self.active_systems:
+                for other_system in self.active_systems:
+                    if system != other_system and self._check_specific_conflicts(system, other_system):
+                        health_report['conflicts_detected'] += 1
+                        health_report['overall_health'] = 'critical'
+                        health_report['recommendations'].append(f"Conflict between {system} and {other_system}")
+            
+            return health_report
+            
+        except Exception as e:
+            self.log(f"Error in system health monitor: {str(e)}", "ERROR")
+            return {
+                'overall_health': 'error',
+                'error': str(e)
+            }
+
+    def force_system_cleanup(self) -> dict:
+        """🧹 บังคับทำความสะอาดระบบ"""
+        try:
+            self.log("🧹 Force System Cleanup Started", "WARNING")
+            
+            # ปลดปล่อยระบบทั้งหมด
+            released_systems = []
+            for system in list(self.active_systems):
+                if self.release_system(system):
+                    released_systems.append(system)
+            
+            # รีเซ็ต system locks
+            self.system_locks.clear()
+            
+            # รีเซ็ต system states
+            for system in self.system_states:
+                self.system_states[system] = 'idle'
+            
+            self.log(f"🧹 System Cleanup Complete: Released {len(released_systems)} systems")
+            
+            return {
+                'success': True,
+                'released_systems': released_systems,
+                'cleanup_time': datetime.now().isoformat()
+            }
+            
+        except Exception as e:
+            self.log(f"Error in force system cleanup: {str(e)}", "ERROR")
+            return {
+                'success': False,
+                'error': str(e)
+            }
+
+    def auto_conflict_resolution(self) -> dict:
+        """🤖 ระบบแก้ไขความขัดแย้งแบบอัตโนมัติ"""
+        try:
+            self.log("🤖 Auto Conflict Resolution Started")
+            
+            resolution_actions = []
+            
+            # 1. ตรวจสอบระบบที่ทำงานนานเกินไป
+            current_time = datetime.now()
+            for system, lock_time in self.system_locks.items():
+                timeout = self.system_timeouts.get(system, 30)
+                if (current_time - lock_time).seconds > timeout * 2:
+                    self.log(f"⚠️ System {system} stuck - Force releasing", "WARNING")
+                    self.release_system(system)
+                    resolution_actions.append(f"Released stuck system: {system}")
+            
+            # 2. ตรวจสอบความขัดแย้งระหว่างระบบ
+            conflicts_found = 0
+            for system1 in list(self.active_systems):
+                for system2 in list(self.active_systems):
+                    if system1 != system2 and self._check_specific_conflicts(system1, system2):
+                        # แก้ไขความขัดแย้งตาม priority
+                        priority1 = self._get_system_priority(system1)
+                        priority2 = self._get_system_priority(system2)
+                        
+                        if priority1 < priority2:  # system1 มี priority สูงกว่า
+                            self.release_system(system2)
+                            resolution_actions.append(f"Released {system2} due to conflict with higher priority {system1}")
+                        else:
+                            self.release_system(system1)
+                            resolution_actions.append(f"Released {system1} due to conflict with higher priority {system2}")
+                        
+                        conflicts_found += 1
+            
+            # 3. ตรวจสอบจำนวนระบบที่ทำงานพร้อมกัน
+            if len(self.active_systems) > 3:
+                # ปลดปล่อยระบบที่มี priority ต่ำสุด
+                systems_by_priority = sorted(self.active_systems, key=lambda s: self._get_system_priority(s), reverse=True)
+                systems_to_release = systems_by_priority[:len(self.active_systems) - 3]
+                
+                for system in systems_to_release:
+                    self.release_system(system)
+                    resolution_actions.append(f"Released {system} due to too many active systems")
+            
+            # 4. ตรวจสอบ threshold conflicts
+            threshold_conflicts = self._fix_threshold_conflicts()
+            if threshold_conflicts:
+                resolution_actions.extend(threshold_conflicts)
+            
+            self.log(f"🤖 Auto Conflict Resolution Complete: {len(resolution_actions)} actions taken")
+            
+            return {
+                'success': True,
+                'actions_taken': resolution_actions,
+                'conflicts_resolved': conflicts_found,
+                'active_systems_after': list(self.active_systems),
+                'resolution_time': datetime.now().isoformat()
+            }
+            
+        except Exception as e:
+            self.log(f"Error in auto conflict resolution: {str(e)}", "ERROR")
+            return {
+                'success': False,
+                'error': str(e)
+            }
+
+    def _get_system_priority(self, system: str) -> int:
+        """🔍 รับ priority level ของระบบ"""
+        priority_mapping = {
+            'emergency_close': 1,
+            'risk_management': 2,
+            'edge_closing': 3,
+            'hedge_system': 3,
+            'smart_router': 4,
+            'ai_analysis': 4,
+            'portfolio_optimization': 5
+        }
+        return priority_mapping.get(system, 5)
+
+    def _fix_threshold_conflicts(self) -> list:
+        """🔧 แก้ไข threshold conflicts"""
+        fixes = []
+        
+        try:
+            # ตรวจสอบและแก้ไข AI margin thresholds
+            if hasattr(self, 'ai_margin_warning_threshold') and hasattr(self, 'ai_margin_danger_threshold'):
+                if self.ai_margin_danger_threshold > self.ai_margin_warning_threshold:
+                    # แก้ไขให้ consistent
+                    self.ai_margin_danger_threshold = 0.50
+                    self.ai_margin_warning_threshold = 0.70
+                    fixes.append("Fixed AI margin threshold inconsistency")
+            
+            # ตรวจสอบและแก้ไข timing conflicts
+            if hasattr(self, 'signal_cooldown') and hasattr(self, 'redirect_cooldown'):
+                if self.signal_cooldown < self.redirect_cooldown:
+                    # แก้ไขให้ consistent
+                    self.redirect_cooldown = self.signal_cooldown - 15
+                    fixes.append("Fixed timing conflict between signal and redirect cooldown")
+            
+            return fixes
+            
+        except Exception as e:
+            self.log(f"Error fixing threshold conflicts: {str(e)}", "ERROR")
+            return [f"Error fixing thresholds: {str(e)}"]
+
+    def system_performance_optimizer(self) -> dict:
+        """⚡ ระบบปรับปรุงประสิทธิภาพของระบบ"""
+        try:
+            self.log("⚡ System Performance Optimizer Started")
+            
+            optimizations = []
+            
+            # 1. ปรับปรุง timing parameters ตาม performance
+            if hasattr(self, 'performance_metrics'):
+                avg_execution_time = self.performance_metrics.get('average_execution_time', 0)
+                
+                if avg_execution_time > 5.0:  # ถ้าใช้เวลานานกว่า 5 วินาที
+                    # เพิ่ม timeout
+                    for system in self.system_timeouts:
+                        self.system_timeouts[system] = min(120, self.system_timeouts[system] + 10)
+                    optimizations.append("Increased system timeouts due to slow execution")
+                
+                elif avg_execution_time < 1.0:  # ถ้าเร็วมาก
+                    # ลด timeout
+                    for system in self.system_timeouts:
+                        self.system_timeouts[system] = max(15, self.system_timeouts[system] - 5)
+                    optimizations.append("Decreased system timeouts due to fast execution")
+            
+            # 2. ปรับปรุง conflict detection rules
+            if hasattr(self, 'conflict_rules'):
+                # เพิ่ม rules ใหม่ตามประสบการณ์
+                new_rules = {
+                    'edge_closing_vs_hedge': 'edge_closing_wins',
+                    'ai_analysis_vs_optimization': 'ai_analysis_wins'
+                }
+                self.conflict_rules.update(new_rules)
+                optimizations.append("Updated conflict resolution rules")
+            
+            # 3. ปรับปรุง system priority
+            if hasattr(self, 'system_priority'):
+                # ปรับ priority ตาม performance
+                if self.portfolio_health < 50:
+                    # เพิ่ม priority ของ risk management
+                    self.system_priority['RISK_MANAGEMENT'] = 2
+                    optimizations.append("Increased risk management priority due to low portfolio health")
+            
+            self.log(f"⚡ System Performance Optimizer Complete: {len(optimizations)} optimizations applied")
+            
+            return {
+                'success': True,
+                'optimizations_applied': optimizations,
+                'optimization_time': datetime.now().isoformat()
+            }
+            
+        except Exception as e:
+            self.log(f"Error in system performance optimizer: {str(e)}", "ERROR")
+            return {
+                'success': False,
+                'error': str(e)
+            }
+
+    def get_system_status_report(self) -> dict:
+        """📊 รายงานสถานะระบบแบบครบถ้วน"""
+        try:
+            # ข้อมูลพื้นฐาน
+            basic_info = {
+                'system_coordinator_enabled': self.system_coordinator_enabled,
+                'active_systems_count': len(self.active_systems),
+                'active_systems': list(self.active_systems),
+                'system_states': self.system_states.copy(),
+                'system_priority': self.system_priority.copy()
+            }
+            
+            # ข้อมูล timing
+            timing_info = {
+                'system_timing': self.system_timing.copy(),
+                'system_timeouts': self.system_timeouts.copy(),
+                'system_locks': {k: v.isoformat() for k, v in self.system_locks.items()}
+            }
+            
+            # ข้อมูล thresholds
+            threshold_info = {
+                'ai_margin_thresholds': self.ai_margin_thresholds.copy(),
+                'ai_confidence_threshold': self.ai_confidence_threshold,
+                'conflict_rules': self.conflict_rules.copy()
+            }
+            
+            # สุขภาพระบบ
+            health_info = self.system_health_monitor()
+            
+            # ประสิทธิภาพ
+            performance_info = {
+                'portfolio_health': self.portfolio_health,
+                'total_positions': len(self.positions),
+                'buy_volume': self.buy_volume,
+                'sell_volume': self.sell_volume
+            }
+            
+            return {
+                'success': True,
+                'timestamp': datetime.now().isoformat(),
+                'basic_info': basic_info,
+                'timing_info': timing_info,
+                'threshold_info': threshold_info,
+                'health_info': health_info,
+                'performance_info': performance_info
+            }
+            
+        except Exception as e:
+            self.log(f"Error generating system status report: {str(e)}", "ERROR")
+            return {
+                'success': False,
+                'error': str(e)
+            }
+
+    def print_system_status(self) -> None:
+        """🖨️ แสดงสถานะระบบในรูปแบบที่อ่านง่าย"""
+        try:
+            report = self.get_system_status_report()
+            if not report['success']:
+                self.log(f"❌ Failed to generate system status report: {report['error']}", "ERROR")
+                return
+            
+            print("\n" + "="*80)
+            print("🎯 HUAKUY TRADING SYSTEM - CONFLICT RESOLUTION STATUS")
+            print("="*80)
+            
+            # Basic Info
+            basic = report['basic_info']
+            print(f"🎮 System Coordinator: {'✅ ENABLED' if basic['system_coordinator_enabled'] else '❌ DISABLED'}")
+            print(f"🔄 Active Systems: {basic['active_systems_count']} systems")
+            if basic['active_systems']:
+                print(f"   📋 Active: {', '.join(basic['active_systems'])}")
+            
+            # System States
+            print(f"\n📊 System States:")
+            for system, state in basic['system_states'].items():
+                status_icon = "🟢" if state == 'idle' else "🔴" if state == 'active' else "🟡"
+                print(f"   {status_icon} {system}: {state}")
+            
+            # Timing Info
+            timing = report['timing_info']
+            print(f"\n⏰ System Timing:")
+            for key, value in timing['system_timing'].items():
+                print(f"   📅 {key}: {value}s")
+            
+            # Thresholds
+            thresholds = report['threshold_info']
+            print(f"\n🎯 AI Thresholds:")
+            for key, value in thresholds['ai_margin_thresholds'].items():
+                print(f"   📊 {key}: {value*100:.0f}%")
+            print(f"   🧠 AI Confidence: {thresholds['ai_confidence_threshold']*100:.0f}%")
+            
+            # Health
+            health = report['health_info']
+            health_icon = "🟢" if health['overall_health'] == 'healthy' else "🟡" if health['overall_health'] == 'warning' else "🔴"
+            print(f"\n🏥 System Health: {health_icon} {health['overall_health'].upper()}")
+            if health['conflicts_detected'] > 0:
+                print(f"   ⚠️ Conflicts Detected: {health['conflicts_detected']}")
+            if health['recommendations']:
+                print(f"   💡 Recommendations:")
+                for rec in health['recommendations']:
+                    print(f"      • {rec}")
+            
+            # Performance
+            perf = report['performance_info']
+            print(f"\n📈 Performance:")
+            print(f"   💰 Portfolio Health: {perf['portfolio_health']:.1f}%")
+            print(f"   📊 Total Positions: {perf['total_positions']}")
+            print(f"   📈 Buy Volume: {perf['buy_volume']:.2f}")
+            print(f"   📉 Sell Volume: {perf['sell_volume']:.2f}")
+            
+            print("="*80)
+            print("✅ System Status Report Complete")
+            print("="*80 + "\n")
+            
+        except Exception as e:
+            self.log(f"Error printing system status: {str(e)}", "ERROR")
+
+    def _is_group_closing_context(self) -> bool:
+        """🔍 ตรวจสอบว่าเป็นการปิดแบบกลุ่มหรือไม่"""
+        import inspect
+        try:
+            # ตรวจสอบ call stack เพื่อดูว่าถูกเรียกจากฟังก์ชัน group closing หรือไม่
+            frame = inspect.currentframe()
+            group_closing_functions = [
+                'execute_group_close',
+                'execute_pair_close', 
+                'close_edge_positions',
+                'smart_edge_closing_system',
+                'execute_smart_flexible_closing',
+                'create_smart_flexible_basket'
+            ]
+            
+            # ตรวจสอบ 5 frames ล่าสุด
+            for i in range(5):
+                if frame is None:
+                    break
+                frame = frame.f_back
+                if frame and frame.f_code.co_name in group_closing_functions:
+                    return True
+            
+            return False
+        except:
+            return False
+
+    # REMOVED: close_position_smart() - Individual closing function removed, use edge closing only
 
     def cleanup_closed_positions(self):
         """ทำความสะอาด tracker with enhanced memory management"""
@@ -9728,13 +13275,31 @@ class TradingSystem:
             cycle_success = True
             
             try:
-                # 🏥 System Health Check (every 5 minutes)
+                # 🏥 System Health Check with Conflict Resolution (every 5 minutes)
                 if (datetime.now() - last_health_check).seconds >= self.health_check_interval:
                     try:
                         if self.system_health_enabled:
                             health_report = self.perform_system_health_check()
                             if health_report['overall_status'] == 'CRITICAL':
                                 self.log("🚨 Critical system health issues detected", "ERROR")
+                            
+                            # 🎯 System Coordinator Health Check
+                            coordinator_health = self.system_health_monitor()
+                            
+                            if coordinator_health['overall_health'] == 'critical':
+                                self.log("🚨 CRITICAL SYSTEM CONFLICTS DETECTED", "ERROR")
+                                # Auto conflict resolution
+                                conflict_result = self.auto_conflict_resolution()
+                                if conflict_result['success']:
+                                    self.log(f"🤖 Auto Conflict Resolution: {len(conflict_result['actions_taken'])} actions taken")
+                            
+                            elif coordinator_health['overall_health'] == 'warning':
+                                self.log("⚠️ System conflicts warning detected", "WARNING")
+                                # Performance optimization
+                                optimization_result = self.system_performance_optimizer()
+                                if optimization_result['success']:
+                                    self.log(f"⚡ Performance Optimization: {len(optimization_result['optimizations_applied'])} optimizations applied")
+                            
                             last_health_check = datetime.now()
                     except Exception as health_error:
                         self.log(f"Health check error: {str(health_error)}", "ERROR")
@@ -9806,7 +13371,15 @@ class TradingSystem:
                         self.log(f"✅ Market data received: {len(market_data)} candles")
                     
                     try:
+                        # ⚡ วิเคราะห์สัญญาณแบบเร็ว
                         signal = self.analyze_mini_trend(market_data)
+                        
+                        # ⚡ เพิ่มการตรวจจับสัญญาณเร็ว
+                        if not signal:
+                            fast_signal = self.detect_fast_momentum_signal(market_data)
+                            if fast_signal:
+                                signal = fast_signal
+                                self.log(f"⚡ FAST SIGNAL DETECTED: {signal.direction} strength {signal.strength:.1f}", "INFO")
                         
                         if signal:
                             self.log(f"🚨 SIGNAL FOUND: {signal.direction} strength {signal.strength:.1f}")
@@ -10356,11 +13929,22 @@ class TradingSystem:
                     self.log("❌ Pair close CANCELLED: All positions are losing")
                     return False
             
-            success_count = 0
-            for position in profitable_positions:
-                if self.close_position_smart(position, f"Pair close: {pair_data['net_profit_percent']:.1f}%"):
-                    success_count += 1
-                    time.sleep(0.5)  # หน่วงเล็กน้อย
+            # ใช้ Smart Edge Closing System แทน individual closing
+            edge_result = self.smart_edge_closing_system(f"Pair close: {pair_data['net_profit_percent']:.1f}%")
+            
+            if edge_result['success']:
+                success_count = edge_result['positions_closed']
+                self.log(f"🎯 Pair Close Edge Closing Success: {success_count} positions, Profit: ${edge_result['total_profit']:.2f}")
+            else:
+                # ถ้า edge closing ไม่สำเร็จ ให้ใช้ Smart Flexible Closing
+                flexible_result = self.execute_smart_flexible_closing(f"Pair close Fallback: {pair_data['net_profit_percent']:.1f}%")
+                
+                if flexible_result['success']:
+                    success_count = flexible_result['positions_closed']
+                    self.log(f"🎯 Pair Close Flexible Closing Success: {success_count} positions, Profit: ${flexible_result['total_profit']:.2f}")
+                else:
+                    success_count = 0
+                    self.log(f"❌ All pair close methods failed", "ERROR")
             
             if success_count == len(profitable_positions):
                 self.total_pair_closes += 1
@@ -10392,11 +13976,22 @@ class TradingSystem:
                     self.log("❌ Group close CANCELLED: All positions are losing")
                     return False
             
-            success_count = 0
-            for position in profitable_positions:
-                if self.close_position_smart(position, f"Group close: {group_data['avg_profit_percent']:.1f}%"):
-                    success_count += 1
-                    time.sleep(0.5)  # หน่วงเล็กน้อย
+            # ใช้ Smart Edge Closing System แทน individual closing
+            edge_result = self.smart_edge_closing_system(f"Group close: {group_data['avg_profit_percent']:.1f}%")
+            
+            if edge_result['success']:
+                success_count = edge_result['positions_closed']
+                self.log(f"🎯 Group Close Edge Closing Success: {success_count} positions, Profit: ${edge_result['total_profit']:.2f}")
+            else:
+                # ถ้า edge closing ไม่สำเร็จ ให้ใช้ Smart Flexible Closing
+                flexible_result = self.execute_smart_flexible_closing(f"Group close Fallback: {group_data['avg_profit_percent']:.1f}%")
+                
+                if flexible_result['success']:
+                    success_count = flexible_result['positions_closed']
+                    self.log(f"🎯 Group Close Flexible Closing Success: {success_count} positions, Profit: ${flexible_result['total_profit']:.2f}")
+                else:
+                    success_count = 0
+                    self.log(f"❌ All group close methods failed", "ERROR")
             
             if success_count >= len(profitable_positions) * 0.8:  # 80% สำเร็จถือว่าโอเค
                 self.total_group_closes += 1
@@ -10831,21 +14426,28 @@ class TradingSystem:
             return False
     
     def close_hedge_pair(self, original_pos: Position, hedge_pos: Position, reason: str) -> bool:
-        """ปิด hedge pair"""
+        """ปิด hedge pair - GROUP CLOSING ONLY"""
         try:
-            success_count = 0
             total_profit = original_pos.profit + hedge_pos.profit
             
-            # ปิด original position ก่อน
-            if self.close_position_smart(original_pos, f"Hedge pair close: {reason}"):
-                success_count += 1
-                time.sleep(0.5)
+            # ใช้ Smart Edge Closing System แทน individual closing
+            edge_result = self.smart_edge_closing_system(f"Hedge pair close: {reason}")
             
-            # ปิด hedge position
-            if self.close_position_smart(hedge_pos, f"Hedge pair close: {reason}"):
-                success_count += 1
+            if edge_result['success']:
+                success_count = edge_result['positions_closed']
+                self.log(f"🎯 Hedge Pair Edge Closing Success: {success_count} positions, Profit: ${edge_result['total_profit']:.2f}")
+            else:
+                # ถ้า edge closing ไม่สำเร็จ ให้ใช้ Smart Flexible Closing
+                flexible_result = self.execute_smart_flexible_closing(f"Hedge pair close Fallback: {reason}")
+                
+                if flexible_result['success']:
+                    success_count = flexible_result['positions_closed']
+                    self.log(f"🎯 Hedge Pair Flexible Closing Success: {success_count} positions, Profit: ${flexible_result['total_profit']:.2f}")
+                else:
+                    success_count = 0
+                    self.log(f"❌ All hedge pair close methods failed", "ERROR")
             
-            if success_count == 2:
+            if success_count >= 1:  # ปิดได้อย่างน้อย 1 ตัวถือว่าสำเร็จ
                 # อัพเดท statistics
                 self.hedge_analytics['successful_recoveries'] += 1
                 self.hedge_analytics['total_recovery_profit'] += total_profit
@@ -10880,10 +14482,23 @@ class TradingSystem:
                         break
                 
                 if hedge_pos:
-                    if self.close_position_smart(hedge_pos, f"Orphaned hedge (original {original_ticket} closed)"):
-                        self.log(f"✅ Closed orphaned hedge {hedge_ticket}")
+                    # ใช้ Smart Edge Closing System แทน individual closing
+                    edge_result = self.smart_edge_closing_system(f"Orphaned hedge (original {original_ticket} closed)")
+                    if edge_result['success']:
+                        self.log(f"✅ Closed orphaned hedge {hedge_ticket} via group closing")
+                        self.log(f"🎯 Orphaned Hedge Edge Closing Success: {edge_result['positions_closed']} positions, Profit: ${edge_result['total_profit']:.2f}")
                         if hedge_ticket in self.hedge_pairs:
                             del self.hedge_pairs[hedge_ticket]
+                    else:
+                        # ถ้า edge closing ไม่สำเร็จ ให้ใช้ Smart Flexible Closing
+                        flexible_result = self.execute_smart_flexible_closing(f"Orphaned hedge Fallback (original {original_ticket} closed)")
+                        if flexible_result['success']:
+                            self.log(f"✅ Closed orphaned hedge {hedge_ticket} via flexible closing")
+                            self.log(f"🎯 Orphaned Hedge Flexible Closing Success: {flexible_result['positions_closed']} positions, Profit: ${flexible_result['total_profit']:.2f}")
+                            if hedge_ticket in self.hedge_pairs:
+                                del self.hedge_pairs[hedge_ticket]
+                        else:
+                            self.log(f"❌ Failed to close orphaned hedge {hedge_ticket} via group closing", "ERROR")
             
             # ลบออกจาก tracking
             if original_ticket in self.active_hedges:
@@ -13221,37 +16836,22 @@ class TradingSystem:
                 position.locked_for_closing = True
                 position.lock_timestamp = time.time()
             
-            # 2. ส่งคำสั่งปิดไม้ทั้งหมดพร้อมกัน
-            close_orders = []
-            for position in positions:
-                try:
-                    # ใช้ฟีเจอร์เดิมที่มีอยู่แล้ว
-                    close_success = self.close_position_smart(
-                        position, 
-                        f"Smart Flexible Closing - Batch Mode"
-                    )
-                    
-                    if close_success:
-                        close_orders.append({
-                            'position': position,
-                            'success': True,
-                            'timestamp': time.time()
-                        })
-                    else:
-                        close_orders.append({
-                            'position': position,
-                            'success': False,
-                            'timestamp': time.time()
-                        })
-                        
-                except Exception as e:
-                    self.log(f"Error closing position {position.ticket}: {str(e)}", "ERROR")
-                    close_orders.append({
-                        'position': position,
-                        'success': False,
-                        'error': str(e),
-                        'timestamp': time.time()
-                    })
+            # 2. ใช้ Smart Edge Closing System แทน individual closing
+            edge_result = self.smart_edge_closing_system("Smart Flexible Closing - Batch Mode")
+            
+            if edge_result['success']:
+                close_orders = [{'position': pos, 'success': True, 'timestamp': time.time()} for pos in positions[:edge_result['positions_closed']]]
+                self.log(f"🎯 Batch Closing Edge Success: {edge_result['positions_closed']} positions, Profit: ${edge_result['total_profit']:.2f}")
+            else:
+                # ถ้า edge closing ไม่สำเร็จ ให้ใช้ Smart Flexible Closing
+                flexible_result = self.execute_smart_flexible_closing("Smart Flexible Closing - Batch Mode Fallback")
+                
+                if flexible_result['success']:
+                    close_orders = [{'position': pos, 'success': True, 'timestamp': time.time()} for pos in positions[:flexible_result['positions_closed']]]
+                    self.log(f"🎯 Batch Closing Flexible Success: {flexible_result['positions_closed']} positions, Profit: ${flexible_result['total_profit']:.2f}")
+                else:
+                    close_orders = []
+                    self.log(f"❌ All batch closing methods failed", "ERROR")
             
             # 3. รอให้ไม้ปิดเสร็จ
             time.sleep(2)  # รอ 2 วินาที
@@ -13279,117 +16879,11 @@ class TradingSystem:
             self.log(f"Error in batch closing: {str(e)}", "ERROR")
             return False
 
-    def _emergency_close_high_risk_positions(self) -> dict:
-        """🚨 ปิดไม้ที่เสี่ยงที่สุดในภาวะฉุกเฉิน"""
-        try:
-            self.log("🚨 Emergency Closing High Risk Positions", "AI")
-            
-            # หาไม้ที่เสี่ยงที่สุด
-            high_risk_positions = []
-            for position in self.positions:
-                risk_score = self._calculate_position_risk_score(position)
-                if risk_score > 80:  # เสี่ยงมากกว่า 80%
-                    high_risk_positions.append((position, risk_score))
-            
-            # เรียงตามความเสี่ยง
-            high_risk_positions.sort(key=lambda x: x[1], reverse=True)
-            
-            # ปิดไม้ที่เสี่ยงที่สุด 3 ตัวแรก
-            positions_closed = 0
-            for position, risk_score in high_risk_positions[:3]:
-                try:
-                    if self.close_position_smart(position, f"Emergency: High Risk (Score: {risk_score:.1f})"):
-                        positions_closed += 1
-                        self.log(f"🚨 Emergency Closed: {position.ticket} (Risk: {risk_score:.1f})", "AI")
-                except Exception as e:
-                    self.log(f"Error emergency closing position {position.ticket}: {str(e)}", "ERROR")
-            
-            return {
-                'success': positions_closed > 0,
-                'positions_closed': positions_closed,
-                'total_high_risk': len(high_risk_positions)
-            }
-            
-        except Exception as e:
-            self.log(f"Error in emergency closing high risk positions: {str(e)}", "ERROR")
-            return {'success': False, 'positions_closed': 0, 'total_high_risk': 0}
+    # REMOVED: _emergency_close_high_risk_positions() - Emergency closing function removed, use enhanced edge closing system
 
-    def _emergency_close_high_loss_positions(self) -> dict:
-        """📉 ปิดไม้ที่ขาดทุนมากที่สุดในภาวะฉุกเฉิน"""
-        try:
-            self.log("📉 Emergency Closing High Loss Positions", "AI")
-            
-            # หาไม้ที่ขาดทุนมากที่สุด
-            high_loss_positions = [p for p in self.positions if p.profit < -100]
-            high_loss_positions.sort(key=lambda x: x.profit)  # เรียงจากขาดทุนมากไปน้อย
-            
-            # ปิดไม้ที่ขาดทุนมากที่สุด 3 ตัวแรก
-            positions_closed = 0
-            total_loss_reduced = 0
-            
-            for position in high_loss_positions[:3]:
-                try:
-                    if self.close_position_smart(position, f"Emergency: High Loss (${position.profit:.2f})"):
-                        positions_closed += 1
-                        total_loss_reduced += abs(position.profit)
-                        self.log(f"📉 Emergency Closed: {position.ticket} (Loss: ${position.profit:.2f})", "AI")
-                except Exception as e:
-                    self.log(f"Error emergency closing position {position.ticket}: {str(e)}", "ERROR")
-            
-            return {
-                'success': positions_closed > 0,
-                'positions_closed': positions_closed,
-                'total_loss_reduced': total_loss_reduced
-            }
-            
-        except Exception as e:
-            self.log(f"Error in emergency closing high loss positions: {str(e)}", "ERROR")
-            return {'success': False, 'positions_closed': 0, 'total_loss_reduced': 0}
+    # REMOVED: _emergency_close_high_loss_positions() - Emergency closing function removed, use enhanced edge closing system
 
-    def _emergency_close_imbalanced_positions(self) -> dict:
-        """⚖️ ปิดไม้ที่ไม่สมดุลในภาวะฉุกเฉิน"""
-        try:
-            self.log("⚖️ Emergency Closing Imbalanced Positions", "AI")
-            
-            # วิเคราะห์ความไม่สมดุล
-            buy_positions = [p for p in self.positions if p.type == "BUY"]
-            sell_positions = [p for p in self.positions if p.type == "SELL"]
-            
-            buy_volume = sum(p.volume for p in buy_positions)
-            sell_volume = sum(p.volume for p in sell_positions)
-            
-            positions_closed = 0
-            
-            if buy_volume > sell_volume * 1.5:  # BUY มากกว่า SELL 50%
-                # ปิด BUY ที่ขาดทุนมากที่สุด
-                buy_loss_positions = [p for p in buy_positions if p.profit < 0]
-                buy_loss_positions.sort(key=lambda x: x.profit)
-                
-                for position in buy_loss_positions[:2]:  # ปิด 2 ตัวแรก
-                    if self.close_position_smart(position, "Emergency: BUY Imbalance"):
-                        positions_closed += 1
-                        self.log(f"⚖️ Emergency Closed BUY: {position.ticket}", "AI")
-                        
-            elif sell_volume > buy_volume * 1.5:  # SELL มากกว่า BUY 50%
-                # ปิด SELL ที่ขาดทุนมากที่สุด
-                sell_loss_positions = [p for p in sell_positions if p.profit < 0]
-                sell_loss_positions.sort(key=lambda x: x.profit)
-                
-                for position in sell_loss_positions[:2]:  # ปิด 2 ตัวแรก
-                    if self.close_position_smart(position, "Emergency: SELL Imbalance"):
-                        positions_closed += 1
-                        self.log(f"📉 Emergency Closed SELL: {position.ticket}", "AI")
-            
-            return {
-                'success': positions_closed > 0,
-                'positions_closed': positions_closed,
-                'buy_volume': buy_volume,
-                'sell_volume': sell_volume
-            }
-            
-        except Exception as e:
-            self.log(f"Error in emergency closing imbalanced positions: {str(e)}", "ERROR")
-            return {'success': False, 'positions_closed': 0}
+    # REMOVED: _emergency_close_imbalanced_positions() - Emergency closing function removed, use enhanced edge closing system
 
     def _ai_create_balancing_positions(self) -> dict:
         """🎯 AI สร้างไม้เพื่อสมดุล Portfolio"""
@@ -13446,181 +16940,131 @@ class TradingSystem:
             self.log(f"Error in AI creating balancing positions: {str(e)}", "ERROR")
             return {'success': False, 'positions_created': 0}
 
-    def _close_high_margin_positions(self) -> dict:
-        """💰 ปิดไม้ที่ใช้ margin มากที่สุด"""
-        try:
-            self.log("💰 Closing High Margin Positions", "AI")
-            
-            # หาไม้ที่ใช้ margin มากที่สุด
-            high_margin_positions = []
-            for position in self.positions:
-                margin_used = position.volume * 1000  # ประมาณการ margin ที่ใช้
-                high_margin_positions.append((position, margin_used))
-            
-            # เรียงตาม margin ที่ใช้
-            high_margin_positions.sort(key=lambda x: x[1], reverse=True)
-            
-            # ปิดไม้ที่ใช้ margin มากที่สุด 2 ตัวแรก
-            positions_closed = 0
-            margin_relieved = 0
-            
-            for position, margin_used in high_margin_positions[:2]:
-                try:
-                    if self.close_position_smart(position, f"Margin Management: High Margin (${margin_used:.0f})"):
-                        positions_closed += 1
-                        margin_relieved += margin_used
-                        self.log(f"💰 Closed High Margin: {position.ticket} (Margin: ${margin_used:.0f})", "AI")
-                except Exception as e:
-                    self.log(f"Error closing high margin position {position.ticket}: {str(e)}", "ERROR")
-            
-            return {
-                'success': positions_closed > 0,
-                'positions_closed': positions_closed,
-                'margin_relieved': margin_relieved
-            }
-            
-        except Exception as e:
-            self.log(f"Error in closing high margin positions: {str(e)}", "ERROR")
-            return {'success': False, 'positions_closed': 0, 'margin_relieved': 0}
+    # REMOVED: _close_high_margin_positions() - Margin closing function removed, use enhanced edge closing system
 
-    def _close_unnecessary_positions(self) -> dict:
-        """🗑️ ปิดไม้ที่ไม่จำเป็น"""
-        try:
-            self.log("🗑️ Closing Unnecessary Positions", "AI")
-            
-            # หาไม้ที่ไม่จำเป็น (ไม้ที่เปิดมานานและไม่กำไร)
-            unnecessary_positions = []
-            current_time = time.time()
-            
-            for position in self.positions:
-                # ไม้ที่เปิดมานาน (มากกว่า 24 ชั่วโมง) และไม่กำไร
-                if hasattr(position, 'open_time'):
-                    try:
-                        open_time = position.open_time if isinstance(position.open_time, datetime) else datetime.fromisoformat(str(position.open_time))
-                        hours_open = (datetime.now() - open_time).total_seconds() / 3600
-                        
-                        if hours_open > 24 and position.profit < 0:
-                            unnecessary_positions.append((position, hours_open))
-                    except:
-                        pass
-            
-            # เรียงตามเวลาที่เปิด
-            unnecessary_positions.sort(key=lambda x: x[1], reverse=True)
-            
-            # ปิดไม้ที่ไม่จำเป็น 2 ตัวแรก
-            positions_closed = 0
-            
-            for position, hours_open in unnecessary_positions[:2]:
-                try:
-                    if self.close_position_smart(position, f"Unnecessary: Open for {hours_open:.1f} hours"):
-                        positions_closed += 1
-                        self.log(f"🗑️ Closed Unnecessary: {position.ticket} (Hours: {hours_open:.1f})", "AI")
-                except Exception as e:
-                    self.log(f"Error closing unnecessary position {position.ticket}: {str(e)}", "ERROR")
-            
-            return {
-                'success': positions_closed > 0,
-                'positions_closed': positions_closed,
-                'total_unnecessary': len(unnecessary_positions)
-            }
-            
-        except Exception as e:
-            self.log(f"Error in closing unnecessary positions: {str(e)}", "ERROR")
-            return {'success': False, 'positions_closed': 0, 'total_unnecessary': 0}
+    # REMOVED: _close_unnecessary_positions() - Unnecessary closing function removed, use enhanced edge closing system
 
     def _rebalance_buy_heavy_portfolio(self) -> dict:
-        """📈 สร้างสมดุล Portfolio ที่ BUY หนัก"""
+        """📈 สร้างสมดุล Portfolio ที่ BUY หนัก - GROUP CLOSING ONLY"""
         try:
-            self.log("📈 Rebalancing BUY Heavy Portfolio", "AI")
+            self.log("📈 Rebalancing BUY Heavy Portfolio (GROUP CLOSING)", "AI")
             
-            # หาไม้ BUY ที่ควรปิด
-            buy_positions = [p for p in self.positions if p.type == "BUY"]
-            buy_positions.sort(key=lambda x: x.profit)  # เรียงจากขาดทุนมากไปน้อย
+            # ใช้ Smart Edge Closing System แทน individual closing
+            edge_result = self.smart_edge_closing_system("BUY Heavy Portfolio Rebalancing")
             
-            # ปิด BUY ที่ขาดทุนมากที่สุด 2 ตัวแรก
-            positions_closed = 0
-            
-            for position in buy_positions[:2]:
-                try:
-                    if self.close_position_smart(position, "Rebalancing: BUY Heavy Portfolio"):
-                        positions_closed += 1
-                        self.log(f"📈 Rebalancing Closed BUY: {position.ticket}", "AI")
-                except Exception as e:
-                    self.log(f"Error rebalancing BUY position {position.ticket}: {str(e)}", "ERROR")
-            
-            return {
-                'success': positions_closed > 0,
-                'positions_closed': positions_closed,
-                'strategy': 'BUY_HEAVY_REBALANCING'
-            }
+            if edge_result['success']:
+                self.log(f"🎯 BUY Heavy Rebalancing Edge Closing Success: {edge_result['positions_closed']} positions, Profit: ${edge_result['total_profit']:.2f}")
+                return {
+                    'success': True,
+                    'positions_closed': edge_result['positions_closed'],
+                    'total_profit': edge_result['total_profit'],
+                    'strategy': 'BUY_HEAVY_REBALANCING_EDGE'
+                }
+            else:
+                # ถ้า edge closing ไม่สำเร็จ ให้ใช้ Smart Flexible Closing
+                flexible_result = self.execute_smart_flexible_closing("BUY Heavy Portfolio Rebalancing Fallback")
+                
+                if flexible_result['success']:
+                    self.log(f"🎯 BUY Heavy Rebalancing Flexible Closing Success: {flexible_result['positions_closed']} positions, Profit: ${flexible_result['total_profit']:.2f}")
+                    return {
+                        'success': True,
+                        'positions_closed': flexible_result['positions_closed'],
+                        'total_profit': flexible_result['total_profit'],
+                        'strategy': 'BUY_HEAVY_REBALANCING_FLEXIBLE'
+                    }
+                else:
+                    self.log("❌ All BUY heavy rebalancing methods failed", "ERROR")
+                    return {
+                        'success': False,
+                        'positions_closed': 0,
+                        'total_profit': 0.0,
+                        'strategy': 'FAILED',
+                        'error': flexible_result.get('error', 'Unknown error')
+                    }
             
         except Exception as e:
             self.log(f"Error in rebalancing BUY heavy portfolio: {str(e)}", "ERROR")
             return {'success': False, 'positions_closed': 0, 'strategy': 'ERROR'}
 
     def _rebalance_sell_heavy_portfolio(self) -> dict:
-        """📉 สร้างสมดุล Portfolio ที่ SELL หนัก"""
+        """📉 สร้างสมดุล Portfolio ที่ SELL หนัก - GROUP CLOSING ONLY"""
         try:
-            self.log("📉 Rebalancing SELL Heavy Portfolio", "AI")
+            self.log("📉 Rebalancing SELL Heavy Portfolio (GROUP CLOSING)", "AI")
             
-            # หาไม้ SELL ที่ควรปิด
-            sell_positions = [p for p in self.positions if p.type == "SELL"]
-            sell_positions.sort(key=lambda x: x.profit)  # เรียงจากขาดทุนมากไปน้อย
+            # ใช้ Smart Edge Closing System แทน individual closing
+            edge_result = self.smart_edge_closing_system("SELL Heavy Portfolio Rebalancing")
             
-            # ปิดไม้ที่ขาดทุนมากที่สุด 2 ตัวแรก
-            positions_closed = 0
-            
-            for position in sell_positions[:2]:
-                try:
-                    if self.close_position_smart(position, "Rebalancing: SELL Heavy Portfolio"):
-                        positions_closed += 1
-                        self.log(f"📉 Rebalancing Closed SELL: {position.ticket}", "AI")
-                except Exception as e:
-                    self.log(f"Error rebalancing SELL position {position.ticket}: {str(e)}", "ERROR")
-            
-            return {
-                'success': positions_closed > 0,
-                'positions_closed': positions_closed,
-                'strategy': 'SELL_HEAVY_REBALANCING'
-            }
+            if edge_result['success']:
+                self.log(f"🎯 SELL Heavy Rebalancing Edge Closing Success: {edge_result['positions_closed']} positions, Profit: ${edge_result['total_profit']:.2f}")
+                return {
+                    'success': True,
+                    'positions_closed': edge_result['positions_closed'],
+                    'total_profit': edge_result['total_profit'],
+                    'strategy': 'SELL_HEAVY_REBALANCING_EDGE'
+                }
+            else:
+                # ถ้า edge closing ไม่สำเร็จ ให้ใช้ Smart Flexible Closing
+                flexible_result = self.execute_smart_flexible_closing("SELL Heavy Portfolio Rebalancing Fallback")
+                
+                if flexible_result['success']:
+                    self.log(f"🎯 SELL Heavy Rebalancing Flexible Closing Success: {flexible_result['positions_closed']} positions, Profit: ${flexible_result['total_profit']:.2f}")
+                    return {
+                        'success': True,
+                        'positions_closed': flexible_result['positions_closed'],
+                        'total_profit': flexible_result['total_profit'],
+                        'strategy': 'SELL_HEAVY_REBALANCING_FLEXIBLE'
+                    }
+                else:
+                    self.log("❌ All SELL heavy rebalancing methods failed", "ERROR")
+                    return {
+                        'success': False,
+                        'positions_closed': 0,
+                        'total_profit': 0.0,
+                        'strategy': 'FAILED',
+                        'error': flexible_result.get('error', 'Unknown error')
+                    }
             
         except Exception as e:
             self.log(f"Error in rebalancing SELL heavy portfolio: {str(e)}", "ERROR")
             return {'success': False, 'positions_closed': 0, 'strategy': 'ERROR'}
 
     def _rebalance_mixed_portfolio(self) -> dict:
-        """🔄 สร้างสมดุล Portfolio แบบผสม"""
+        """🔄 สร้างสมดุล Portfolio แบบผสม - GROUP CLOSING ONLY"""
         try:
-            self.log("🔄 Rebalancing Mixed Portfolio", "AI")
+            self.log("🔄 Rebalancing Mixed Portfolio (GROUP CLOSING)", "AI")
             
-            # วิเคราะห์ Portfolio
-            buy_positions = [p for p in self.positions if p.type == "BUY"]
-            sell_positions = [p for p in self.positions if p.type == "SELL"]
+            # ใช้ Smart Edge Closing System แทน individual closing
+            edge_result = self.smart_edge_closing_system("Mixed Portfolio Rebalancing")
             
-            # ปิดไม้ที่ขาดทุนมากที่สุดจากทั้งสองฝั่ง
-            positions_closed = 0
-            
-            # ปิด BUY ที่ขาดทุนมากที่สุด 1 ตัว
-            if buy_positions:
-                worst_buy = min(buy_positions, key=lambda x: x.profit)
-                if worst_buy.profit < 0:
-                    if self.close_position_smart(worst_buy, "Rebalancing: Mixed Portfolio BUY"):
-                        positions_closed += 1
-                        self.log(f"🔄 Rebalancing Closed BUY: {worst_buy.ticket}", "AI")
-            
-            # ปิด SELL ที่ขาดทุนมากที่สุด 1 ตัว
-            if sell_positions:
-                worst_sell = min(sell_positions, key=lambda x: x.profit)
-                if worst_sell.profit < 0:
-                    if self.close_position_smart(worst_sell, "Rebalancing: Mixed Portfolio SELL"):
-                        positions_closed += 1
-                        self.log(f"📉 Rebalancing Closed SELL: {worst_sell.ticket}", "AI")
-            
-            return {
-                'success': positions_closed > 0,
-                'positions_closed': positions_closed,
-                'strategy': 'MIXED_PORTFOLIO_REBALANCING'
-            }
+            if edge_result['success']:
+                self.log(f"🎯 Mixed Portfolio Rebalancing Edge Closing Success: {edge_result['positions_closed']} positions, Profit: ${edge_result['total_profit']:.2f}")
+                return {
+                    'success': True,
+                    'positions_closed': edge_result['positions_closed'],
+                    'total_profit': edge_result['total_profit'],
+                    'strategy': 'MIXED_PORTFOLIO_REBALANCING_EDGE'
+                }
+            else:
+                # ถ้า edge closing ไม่สำเร็จ ให้ใช้ Smart Flexible Closing
+                flexible_result = self.execute_smart_flexible_closing("Mixed Portfolio Rebalancing Fallback")
+                
+                if flexible_result['success']:
+                    self.log(f"🎯 Mixed Portfolio Rebalancing Flexible Closing Success: {flexible_result['positions_closed']} positions, Profit: ${flexible_result['total_profit']:.2f}")
+                    return {
+                        'success': True,
+                        'positions_closed': flexible_result['positions_closed'],
+                        'total_profit': flexible_result['total_profit'],
+                        'strategy': 'MIXED_PORTFOLIO_REBALANCING_FLEXIBLE'
+                    }
+                else:
+                    self.log("❌ All mixed portfolio rebalancing methods failed", "ERROR")
+                    return {
+                        'success': False,
+                        'positions_closed': 0,
+                        'total_profit': 0.0,
+                        'strategy': 'FAILED',
+                        'error': flexible_result.get('error', 'Unknown error')
+                    }
             
         except Exception as e:
             self.log(f"Error in rebalancing mixed portfolio: {str(e)}", "ERROR")
@@ -15579,16 +19023,17 @@ if __name__ == "__main__":
                 likelihood = "LOW"
                 reason = "Below thresholds"
                 
-                if profit_percent >= 8.0:
+                # ⚡ ปรับ threshold ให้ต่ำลงเพื่อปิดไม้เร็วขึ้น
+                if profit_percent >= 6.0:  # ลดจาก 8.0 เป็น 6.0
                     likelihood = "HIGH"
-                    reason = "Target reached (8%+)"
-                elif profit_percent >= 6.0 and hold_score <= 25 and self.trading_system.portfolio_health < 60:
+                    reason = "Target reached (6%+)"
+                elif profit_percent >= 4.0 and hold_score <= 30:  # ลดจาก 6.0 เป็น 4.0
                     likelihood = "HIGH"
                     reason = "Portfolio concern"
-                elif self.trading_system.portfolio_health < 25 and profit_percent > 4.0 and hold_score <= 30:
+                elif self.trading_system.portfolio_health < 30 and profit_percent > 3.0 and hold_score <= 35:  # ลดจาก 25 เป็น 30, 4.0 เป็น 3.0
                     likelihood = "VERY HIGH"
                     reason = "Emergency mode"
-                elif len(positions) > self.trading_system.max_positions * 0.9 and profit_percent > 5.0 and hold_score <= 20:
+                elif len(positions) > self.trading_system.max_positions * 0.8 and profit_percent > 3.5 and hold_score <= 25:  # ลดจาก 0.9 เป็น 0.8, 5.0 เป็น 3.5
                     likelihood = "MEDIUM"
                     reason = "Position optimization"
                 
