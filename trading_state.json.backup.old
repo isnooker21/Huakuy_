@@ -1,162 +1,195 @@
 {
-  "timestamp": "2025-09-02T15:52:52.830148",
+  "timestamp": "2025-09-03T08:24:40.039113",
   "version": "3.1",
-  "checksum": "c55202601b006a90fa9106888e202a11",
+  "checksum": "760188c6c5bdf54e0161e32c9b689a3c",
   "position_tracker": {
-    "28285104": {
-      "birth_time": "2025-09-02T15:37:43.790192",
-      "initial_price": 3497.53,
-      "max_profit": -32.66,
-      "min_profit": -40.22,
-      "role_history": [
-        "SACRIFICE"
-      ],
-      "efficiency_history": [
-        "poor"
-      ],
-      "peak_profit_per_lot": -1633.0,
-      "contribution_score": 0.0,
-      "hold_score": 80,
-      "adaptive_target": 5.76
-    },
-    "28292893": {
-      "birth_time": "2025-09-02T15:37:43.790192",
-      "initial_price": 3495.91,
-      "max_profit": -58.84,
-      "min_profit": -73.96,
-      "role_history": [
-        "SACRIFICE"
-      ],
-      "efficiency_history": [
-        "poor"
-      ],
-      "peak_profit_per_lot": -1471.0,
-      "contribution_score": 0.0,
-      "hold_score": 70,
-      "adaptive_target": 4.319999999999999
-    },
-    "28306816": {
-      "birth_time": "2025-09-02T15:37:43.790192",
-      "initial_price": 3489.14,
-      "max_profit": -15.88,
-      "min_profit": -23.44,
-      "role_history": [
-        "SACRIFICE"
-      ],
-      "efficiency_history": [
-        "poor"
-      ],
-      "peak_profit_per_lot": -794.0,
-      "contribution_score": 0.0,
-      "hold_score": 80,
-      "adaptive_target": 5.76
-    },
-    "28311377": {
-      "birth_time": "2025-09-02T15:37:43.790192",
-      "initial_price": 3486.2,
-      "max_profit": -5.0,
-      "min_profit": -8.78,
-      "role_history": [
-        "SACRIFICE"
-      ],
-      "efficiency_history": [
-        "poor"
-      ],
-      "peak_profit_per_lot": -500.0,
-      "contribution_score": 0.0,
-      "hold_score": 80,
-      "adaptive_target": 5.76
-    },
-    "28320030": {
-      "birth_time": "2025-09-02T15:37:43.790192",
-      "initial_price": 3484.22,
-      "max_profit": -9.06,
-      "min_profit": -20.4,
-      "role_history": [
-        "SACRIFICE"
-      ],
-      "efficiency_history": [
-        "poor"
-      ],
-      "peak_profit_per_lot": -302.0,
-      "contribution_score": 0.0,
-      "hold_score": 70,
-      "adaptive_target": 4.319999999999999
-    },
     "28332190": {
-      "birth_time": "2025-09-02T15:37:43.790192",
+      "birth_time": "2025-09-03T08:19:38.726690",
       "initial_price": 3475.49,
-      "max_profit": -9.52,
-      "min_profit": -24.64,
+      "max_profit": -233.76,
+      "min_profit": -244.08,
       "role_history": [
         "SACRIFICE"
       ],
       "efficiency_history": [
         "poor"
       ],
-      "peak_profit_per_lot": -238.0,
+      "peak_profit_per_lot": -5844.0,
       "contribution_score": 0.0,
       "hold_score": 80,
-      "adaptive_target": 5.76
+      "adaptive_target": 4.8
     },
-    "28334123": {
-      "birth_time": "2025-09-02T15:37:43.790192",
-      "initial_price": 3479.76,
-      "max_profit": 1.44,
-      "min_profit": -2.34,
+    "28343658": {
+      "birth_time": "2025-09-03T08:19:38.726690",
+      "initial_price": 3478.1,
+      "max_profit": -223.32,
+      "min_profit": -233.64,
       "role_history": [
-        "HG",
-        "SUPPORT",
-        "HG",
-        "SUPPORT",
-        "HG",
         "SACRIFICE"
       ],
       "efficiency_history": [
-        "poor",
-        "fair",
-        "poor",
+        "poor"
+      ],
+      "peak_profit_per_lot": -5583.0,
+      "contribution_score": 0.0,
+      "hold_score": 80,
+      "adaptive_target": 4.8
+    },
+    "28361773": {
+      "birth_time": "2025-09-03T08:19:38.726690",
+      "initial_price": 3479.53,
+      "max_profit": -108.8,
+      "min_profit": -113.96,
+      "role_history": [
+        "SACRIFICE"
+      ],
+      "efficiency_history": [
+        "poor"
+      ],
+      "peak_profit_per_lot": -5440.0,
+      "contribution_score": 0.0,
+      "hold_score": 80,
+      "adaptive_target": 4.8
+    },
+    "28380279": {
+      "birth_time": "2025-09-03T08:19:38.726690",
+      "initial_price": 3482.03,
+      "max_profit": -103.8,
+      "min_profit": -108.96,
+      "role_history": [
+        "SACRIFICE"
+      ],
+      "efficiency_history": [
+        "poor"
+      ],
+      "peak_profit_per_lot": -5190.0,
+      "contribution_score": 0.0,
+      "hold_score": 80,
+      "adaptive_target": 4.8
+    },
+    "28431257": {
+      "birth_time": "2025-09-03T08:19:38.726690",
+      "initial_price": 3509.81,
+      "max_profit": -48.24,
+      "min_profit": -53.4,
+      "role_history": [
+        "SACRIFICE"
+      ],
+      "efficiency_history": [
+        "poor"
+      ],
+      "peak_profit_per_lot": -2412.0,
+      "contribution_score": 0.0,
+      "hold_score": 80,
+      "adaptive_target": 4.8
+    },
+    "28463377": {
+      "birth_time": "2025-09-03T08:19:38.726690",
+      "initial_price": 3530.9,
+      "max_profit": 5.16,
+      "min_profit": 2.58,
+      "role_history": [
+        "SUPPORT",
+        "MAIN"
+      ],
+      "efficiency_history": [
+        "good",
+        "excellent"
+      ],
+      "peak_profit_per_lot": 516.0,
+      "contribution_score": 0.0,
+      "hold_score": 0,
+      "adaptive_target": 4.8
+    },
+    "28466381": {
+      "birth_time": "2025-09-03T08:19:38.726690",
+      "initial_price": 3533.07,
+      "max_profit": 8.97,
+      "min_profit": 1.23,
+      "role_history": [
+        "SUPPORT",
+        "MAIN",
+        "SUPPORT"
+      ],
+      "efficiency_history": [
         "fair",
         "good",
-        "fair",
-        "poor"
+        "excellent",
+        "good"
       ],
-      "peak_profit_per_lot": 144.0,
+      "peak_profit_per_lot": 299.0,
       "contribution_score": 0.0,
-      "hold_score": 80,
-      "adaptive_target": 5.76
+      "hold_score": 0,
+      "adaptive_target": 4.8
     },
-    "28336245": {
-      "birth_time": "2025-09-02T15:50:56.461192",
-      "initial_price": 3478.24,
-      "max_profit": 1.48,
-      "min_profit": -1.48,
+    "28467045": {
+      "birth_time": "2025-09-03T08:19:38.726690",
+      "initial_price": 3535.41,
+      "max_profit": 1.95,
+      "min_profit": -5.79,
       "role_history": [
+        "SACRIFICE",
+        "HG",
         "SUPPORT",
-        "HG"
+        "HG",
+        "SUPPORT"
       ],
       "efficiency_history": [
+        "poor",
         "fair",
+        "poor",
+        "fair"
+      ],
+      "peak_profit_per_lot": 65.0,
+      "contribution_score": 0.0,
+      "hold_score": 45,
+      "adaptive_target": 4.8
+    },
+    "28467559": {
+      "birth_time": "2025-09-03T08:19:38.726690",
+      "initial_price": 3537.56,
+      "max_profit": -4.5,
+      "min_profit": -12.24,
+      "role_history": [
+        "SACRIFICE"
+      ],
+      "efficiency_history": [
         "poor"
       ],
-      "peak_profit_per_lot": 37.0,
+      "peak_profit_per_lot": -150.0,
       "contribution_score": 0.0,
       "hold_score": 80,
-      "adaptive_target": 5.76
+      "adaptive_target": 4.8
+    },
+    "28468492": {
+      "birth_time": "2025-09-03T08:19:38.726690",
+      "initial_price": 3539.58,
+      "max_profit": -10.56,
+      "min_profit": -18.3,
+      "role_history": [
+        "SACRIFICE"
+      ],
+      "efficiency_history": [
+        "poor"
+      ],
+      "peak_profit_per_lot": -352.0,
+      "contribution_score": 0.0,
+      "hold_score": 80,
+      "adaptive_target": 4.8
     }
   },
   "active_hedges": {},
   "hedge_pairs": {},
-  "total_signals": 28,
-  "successful_signals": 29,
-  "last_signal_time": "2025-09-02T15:50:40.956732",
+  "total_signals": 81,
+  "successful_signals": 76,
+  "last_signal_time": "2025-09-03T07:25:24.180716",
   "total_redirects": 1,
   "successful_redirects": 1,
   "redirect_profit_captured": 5.3,
   "last_redirect_time": "2025-09-02T14:50:08.623303",
-  "total_pair_closes": 4,
-  "successful_pair_closes": 4,
-  "pair_profit_captured": 12.159999999999998,
+  "total_pair_closes": 5,
+  "successful_pair_closes": 5,
+  "pair_profit_captured": 19.96,
   "total_group_closes": 0,
   "group_profit_captured": 0.0,
   "hedge_analytics": {
