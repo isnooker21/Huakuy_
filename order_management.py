@@ -197,48 +197,31 @@ class OrderManager:
             total_profit = 0.0
             errors = []
             
-            # ปิด Position ทีละตัว (เช็ค spread ก่อน)
-            for position in positions:
-                try:
-                    # คำนวณกำไรและ spread ก่อนปิด
-                    profit_info = self.mt5.calculate_position_profit_with_spread(position.ticket)
-                    
-                    if profit_info:
-                        logger.info(f"💰 Position {position.ticket}: "
-                                  f"Profit {profit_info['profit_percentage']:.2f}% vs "
-                                  f"Spread {profit_info['spread_percentage']:.3f}%")
-                    
-                    result = self.mt5.close_position(position.ticket)
-                    
-                    if result and result.get('retcode') == 10009:  # TRADE_RETCODE_DONE
-                        closed_tickets.append(position.ticket)
-                        total_profit += position.profit + position.swap + position.commission
-                        
-                        # ลบจากรายการ active positions
-                        self.active_positions = [
-                            pos for pos in self.active_positions 
-                            if pos.ticket != position.ticket
-                        ]
-                        
-                        logger.info(f"✅ ปิด Position {position.ticket} สำเร็จ")
-                        
-                    elif result and result.get('retcode') == 10027:  # ห้ามปิด (กำไรไม่พอ)
-                        logger.info(f"⏳ Position {position.ticket} รอกำไรเพิ่มก่อนปิด")
-                        # ไม่นับเป็น error เพราะเป็นการป้องกันขาดทุน
-                        
-                    else:
-                        error_msg = f"ไม่สามารถปิด Position {position.ticket}"
-                        if result:
-                            error_msg += f" - RetCode: {result.get('retcode')}"
-                            if 'error_description' in result:
-                                error_msg += f" ({result['error_description']})"
-                        errors.append(error_msg)
-                        logger.error(error_msg)
-                        
-                except Exception as e:
-                    error_msg = f"เกิดข้อผิดพลาดในการปิด Position {position.ticket}: {str(e)}"
-                    errors.append(error_msg)
-                    logger.error(error_msg)
+            # ปิด Position แบบกลุ่ม (เช็ค spread ก่อน)
+            tickets = [pos.ticket for pos in positions]
+            group_result = self.mt5.close_positions_group_with_spread_check(tickets)
+            
+            # ประมวลผลลัพธ์
+            closed_tickets = group_result['closed_tickets']
+            rejected_tickets = group_result['rejected_tickets']
+            failed_tickets = group_result['failed_tickets']
+            total_profit = group_result['total_profit']
+            
+            # อัพเดท active positions (ลบที่ปิดสำเร็จ)
+            self.active_positions = [
+                pos for pos in self.active_positions 
+                if pos.ticket not in closed_tickets
+            ]
+            
+            # จัดการ error messages
+            if failed_tickets:
+                errors.extend([f"ไม่สามารถปิด Position {ticket}" for ticket in failed_tickets])
+            
+            # แสดงข้อมูล positions ที่รอกำไรเพิ่ม
+            if rejected_tickets:
+                logger.info(f"⏳ Position ที่รอกำไรเพิ่ม: {len(rejected_tickets)} ตัว")
+                for rejected in rejected_tickets:
+                    logger.info(f"   - Ticket {rejected['ticket']}: {rejected['reason']}")
                     
             # สรุปผลลัพธ์
             if closed_tickets:

@@ -845,4 +845,143 @@ class MT5Connection:
         self.filling_types[symbol] = mt5.ORDER_FILLING_FOK
         logger.warning(f"ไม่สามารถตรวจสอบ filling type สำหรับ {symbol} ใช้ FOK เป็นค่าเริ่มต้น")
         return mt5.ORDER_FILLING_FOK
+    
+    def close_positions_group_with_spread_check(self, tickets: List[int]) -> Dict:
+        """
+        ปิด Position หลายตัวพร้อมกัน โดยเช็ค spread ก่อน
+        
+        Args:
+            tickets: รายการ ticket ที่จะปิด
+            
+        Returns:
+            Dict: ผลลัพธ์การปิดกลุ่ม
+        """
+        if not tickets:
+            return {
+                'success': False,
+                'closed_tickets': [],
+                'rejected_tickets': [],
+                'failed_tickets': [],
+                'total_profit': 0.0,
+                'message': 'ไม่มี Position ให้ปิด'
+            }
+        
+        closed_tickets = []
+        rejected_tickets = []  # กำไรไม่พอ (< spread)
+        failed_tickets = []    # Error อื่นๆ
+        total_profit = 0.0
+        
+        logger.info(f"🎯 เริ่มปิดกลุ่ม Position จำนวน {len(tickets)} ตัว")
+        
+        for ticket in tickets:
+            try:
+                # คำนวณกำไรและ spread ก่อน
+                profit_info = self.calculate_position_profit_with_spread(ticket)
+                
+                if not profit_info:
+                    failed_tickets.append(ticket)
+                    logger.error(f"❌ ไม่สามารถคำนวณกำไร Position {ticket}")
+                    continue
+                
+                logger.info(f"💰 Position {ticket}: "
+                          f"Profit {profit_info['profit_percentage']:.2f}% vs "
+                          f"Spread {profit_info['spread_percentage']:.3f}%")
+                
+                # เช็คว่าควรปิดหรือไม่
+                if not profit_info['should_close']:
+                    rejected_tickets.append({
+                        'ticket': ticket,
+                        'reason': f"กำไร {profit_info['profit_percentage']:.2f}% < Spread {profit_info['spread_percentage']:.3f}%",
+                        'profit_info': profit_info
+                    })
+                    logger.warning(f"⏳ Position {ticket} รอกำไรเพิ่มก่อนปิด")
+                    continue
+                
+                # ปิด Position โดยตรง
+                result = self.close_position_direct(ticket)
+                
+                if result and result.get('retcode') == 10009:
+                    closed_tickets.append(ticket)
+                    total_profit += profit_info['current_profit']
+                    logger.info(f"✅ ปิด Position {ticket} สำเร็จ")
+                else:
+                    failed_tickets.append(ticket)
+                    error_msg = f"ปิด Position {ticket} ไม่สำเร็จ"
+                    if result:
+                        error_msg += f" - RetCode: {result.get('retcode')}"
+                    logger.error(error_msg)
+                    
+            except Exception as e:
+                failed_tickets.append(ticket)
+                logger.error(f"❌ เกิดข้อผิดพลาดในการปิด Position {ticket}: {e}")
+        
+        # สรุปผลลัพธ์
+        success = len(closed_tickets) > 0
+        message = f"ปิดสำเร็จ {len(closed_tickets)}/{len(tickets)} ตัว"
+        
+        if rejected_tickets:
+            message += f", รอกำไรเพิ่ม {len(rejected_tickets)} ตัว"
+        if failed_tickets:
+            message += f", ล้มเหลว {len(failed_tickets)} ตัว"
+        
+        logger.info(f"🎯 สรุปการปิดกลุ่ม: {message}")
+        
+        return {
+            'success': success,
+            'closed_tickets': closed_tickets,
+            'rejected_tickets': rejected_tickets,
+            'failed_tickets': failed_tickets,
+            'total_profit': total_profit,
+            'message': message
+        }
+    
+    def close_position_direct(self, ticket: int) -> Optional[Dict]:
+        """
+        ปิด Position โดยตรงโดยไม่เช็ค spread (ใช้สำหรับกลุ่ม)
+        """
+        try:
+            # ดึงข้อมูล Position
+            position = mt5.positions_get(ticket=ticket)
+            if not position:
+                return None
+                
+            pos = position[0]
+            
+            # กำหนดประเภท Order สำหรับปิด Position
+            if pos.type == mt5.POSITION_TYPE_BUY:
+                order_type = mt5.ORDER_TYPE_SELL
+                price = mt5.symbol_info_tick(pos.symbol).bid
+            else:
+                order_type = mt5.ORDER_TYPE_BUY
+                price = mt5.symbol_info_tick(pos.symbol).ask
+            
+            # เตรียมข้อมูล request
+            request = {
+                "action": mt5.TRADE_ACTION_DEAL,
+                "symbol": pos.symbol,
+                "volume": pos.volume,
+                "type": order_type,
+                "position": ticket,
+                "price": price,
+                "magic": pos.magic,
+                "comment": f"Group close {ticket}",
+            }
+            
+            # ปิด Position
+            result = mt5.order_send(request)
+            if result:
+                return {
+                    'retcode': result.retcode,
+                    'deal': result.deal,
+                    'order': result.order,
+                    'volume': result.volume,
+                    'price': result.price,
+                    'comment': result.comment
+                }
+            else:
+                return None
+                
+        except Exception as e:
+            logger.error(f"เกิดข้อผิดพลาดในการปิด Position {ticket}: {e}")
+            return None
 
