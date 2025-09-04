@@ -158,7 +158,7 @@ class PortfolioManager:
             # ตรวจสอบเงื่อนไขพื้นฐาน
             basic_conditions = self.trading_conditions.check_entry_conditions(
                 candle, self.order_manager.active_positions, 
-                current_state.account_balance, volume_history
+                current_state.account_balance, volume_history, signal.symbol
             )
             
             if not basic_conditions['can_enter']:

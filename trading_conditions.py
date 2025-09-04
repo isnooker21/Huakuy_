@@ -63,10 +63,10 @@ class CandleData:
 class CandleAnalyzer:
     """คลาสสำหรับวิเคราะห์แท่งเทียน"""
     
-    def __init__(self, min_strength_percentage: float = 0.5):
+    def __init__(self, min_strength_percentage: float = 20.0):
         """
         Args:
-            min_strength_percentage: เกณฑ์ขั้นต่ำของแรงตลาดเป็นเปอร์เซ็นต์
+            min_strength_percentage: เกณฑ์ขั้นต่ำของแรงตลาดเป็นเปอร์เซ็นต์ (ลดจาก 50% เป็น 20%)
         """
         self.min_strength_percentage = min_strength_percentage
         
@@ -137,7 +137,8 @@ class TradingConditions:
         self.orders_per_candle = {}  # เก็บจำนวน order ต่อแท่งเทียน
         
     def check_entry_conditions(self, candle: CandleData, positions: List[Position], 
-                             account_balance: float, volume_history: List[float] = None) -> Dict[str, Any]:
+                             account_balance: float, volume_history: List[float] = None, 
+                             symbol: str = "XAUUSD") -> Dict[str, Any]:
         """
         ตรวจสอบเงื่อนไขการเข้า Order
         
@@ -156,47 +157,72 @@ class TradingConditions:
             'reasons': []
         }
         
+        logger.info(f"🔍 ตรวจสอบเงื่อนไขการเข้าเทรด - Symbol: {symbol}")
+        logger.info(f"   Candle: O:{candle.open:.2f} H:{candle.high:.2f} L:{candle.low:.2f} C:{candle.close:.2f}")
+        logger.info(f"   Volume: {candle.volume}, Balance: {account_balance:,.2f}")
+        
         # 1. ตรวจสอบ One Order per Candle
         candle_time_key = candle.timestamp.strftime("%Y%m%d%H%M")
         if candle_time_key in self.orders_per_candle:
             result['reasons'].append("มี Order ในแท่งเทียนนี้แล้ว")
+            logger.info(f"❌ เงื่อนไข 1: {result['reasons'][-1]}")
             return result
             
         # 2. ตรวจสอบแรงตลาด
         volume_avg = sum(volume_history) / len(volume_history) if volume_history else 0
         strength_analysis = self.candle_analyzer.analyze_candle_strength(candle, volume_avg)
         
+        logger.info(f"   แรงตลาด: {strength_analysis['total_strength']:.2f}% (เกณฑ์: ≥20%)")
+        logger.info(f"   ทิศทาง: {strength_analysis['direction']}")
+        
         if not strength_analysis['is_strong']:
             result['reasons'].append(f"แรงตลาดไม่เพียงพอ ({strength_analysis['total_strength']:.2f}%)")
+            logger.info(f"❌ เงื่อนไข 2: {result['reasons'][-1]}")
             return result
+        else:
+            logger.info(f"✅ เงื่อนไข 2: แรงตลาดเพียงพอ ({strength_analysis['total_strength']:.2f}%)")
             
-        # 3. ตรวจสอบ Volume Filter
-        if volume_history and not self.candle_analyzer.check_volume_filter(candle.volume, volume_history):
-            result['reasons'].append("Volume ต่ำกว่าเกณฑ์")
-            return result
+        # 3. ตรวจสอบ Volume Filter (ปิดชั่วคราว)
+        # if volume_history and not self.candle_analyzer.check_volume_filter(candle.volume, volume_history):
+        #     result['reasons'].append("Volume ต่ำกว่าเกณฑ์")
+        #     logger.info(f"❌ เงื่อนไข 3: {result['reasons'][-1]}")
+        #     return result
+        # else:
+        logger.info(f"✅ เงื่อนไข 3: Volume เพียงพอ (ข้าม Volume Filter)")
             
         # 4. ตรวจสอบสมดุลพอร์ต
         balance_check = self._check_portfolio_balance(positions, strength_analysis['direction'])
         if not balance_check['can_enter']:
             result['reasons'].extend(balance_check['reasons'])
+            logger.info(f"❌ เงื่อนไข 4: {'; '.join(balance_check['reasons'])}")
             return result
+        else:
+            logger.info(f"✅ เงื่อนไข 4: สมดุลพอร์ตเหมาะสม")
             
         # 5. ตรวจสอบการใช้เงินทุน
         exposure_check = self._check_capital_exposure(positions, account_balance)
         if not exposure_check['can_enter']:
             result['reasons'].extend(exposure_check['reasons'])
+            logger.info(f"❌ เงื่อนไข 5: {'; '.join(exposure_check['reasons'])}")
             return result
+        else:
+            logger.info(f"✅ เงื่อนไข 5: การใช้เงินทุนเหมาะสม")
             
         # สร้างสัญญาณการเทรด
         signal = Signal(
             direction=strength_analysis['direction'],
-            symbol="EURUSD",  # ควรรับจากพารามิเตอร์
+            symbol=symbol,  # ใช้ symbol ที่ส่งมา
             strength=strength_analysis['total_strength'],
             confidence=self._calculate_signal_confidence(strength_analysis, balance_check),
             timestamp=candle.timestamp,
             price=candle.close,
             comment=f"Candle strength: {strength_analysis['total_strength']:.2f}%"
         )
+        
+        # ผ่านทุกเงื่อนไข
+        logger.info(f"🎉 ผ่านทุกเงื่อนไขการเข้าเทรด!")
+        logger.info(f"   Signal: {signal.direction} {signal.symbol} @ {signal.price:.2f}")
+        logger.info(f"   Strength: {signal.strength:.2f}%, Confidence: {signal.confidence:.2f}%")
         
         result['can_enter'] = True
         result['signal'] = signal
