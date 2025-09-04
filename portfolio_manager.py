@@ -1020,11 +1020,11 @@ class PortfolioManager:
             }
     
     def _should_block_traditional_recovery(self, breakout_analysis: Dict, update_results: Dict) -> bool:
-        """ตัดสินใจว่าควรบล็อค Traditional Recovery หรือไม่ (ยืดหยุ่นขึ้น)"""
+        """ตัดสินใจว่าควรบล็อค Traditional Recovery หรือไม่ (ยืดหยุ่นมาก)"""
         try:
             now = datetime.now()
             
-            # เช็ค Advanced Recovery groups
+            # เช็ค Advanced Recovery groups (ยืดหยุ่นมาก)
             active_groups = len(self.advanced_recovery.active_recoveries)
             
             if active_groups > 0:
@@ -1034,37 +1034,38 @@ class PortfolioManager:
                     age_minutes = (now - group.created_time).total_seconds() / 60
                     oldest_group_age = max(oldest_group_age, age_minutes)
                 
-                # ถ้า recovery groups ค้างเกิน 10 นาที → ไม่บล็อค (fallback)
-                if oldest_group_age > 10:
-                    logger.info(f"🔄 Advanced Recovery Fallback: Groups active for {oldest_group_age:.1f} minutes")
+                # ยืดหยุ่นมาก: ถ้า groups ค้างเกิน 3 นาที → ไม่บล็อค (ลดจาก 10 นาที)
+                if oldest_group_age > 3:
+                    logger.info(f"🔄 Advanced Recovery Timeout: Groups active for {oldest_group_age:.1f} minutes - Allow Smart Recovery")
                     return False
                 
-                # ถ้ามี groups เยอะเกิน 2 → ไม่บล็อค (ให้ Smart Recovery ช่วย)
-                if active_groups > 2:
-                    logger.info(f"🔄 Advanced Recovery Overload: {active_groups} groups active")
+                # ถ้ามี groups เยอะเกิน 1 → ไม่บล็อค (ลดจาก 2 เป็น 1)
+                if active_groups > 1:
+                    logger.info(f"🔄 Advanced Recovery Overload: {active_groups} groups active - Allow Smart Recovery")
                     return False
                 
-                logger.info(f"🔒 Blocking Traditional Recovery: {active_groups} Advanced Recovery groups active")
+                # บล็อคเฉพาะ 1 group แรกๆ เท่านั้น (ภายใน 3 นาที)
+                logger.info(f"🔒 Temporary Block: {active_groups} Advanced Recovery group active ({oldest_group_age:.1f} min)")
                 return True
             
-            # บล็อคถ้าใกล้ breakout (เฉพาะกรณีใหม่)
+            # บล็อคถ้าใกล้ breakout (ยืดหยุ่นมาก - ลดเวลารอ)
             potential = breakout_analysis.get('breakout_analysis', {}).get('potential', 'NONE')
             if potential in ['APPROACHING_BULLISH', 'APPROACHING_BEARISH']:
                 logger.info(f"🔒 Near Breakout Detected: {potential}")
                 # ตรวจสอบว่าใกล้ breakout มานานแล้วหรือยัง
                 if hasattr(self, 'last_approaching_time'):
                     approaching_duration = (now - self.last_approaching_time).total_seconds() / 60
-                    if approaching_duration > 5:  # ถ้าใกล้ breakout เกิน 5 นาที → ไม่บล็อค
-                        logger.info(f"🔄 Approaching Timeout: {approaching_duration:.1f} minutes")
+                    if approaching_duration > 2:  # ลดจาก 5 นาที เป็น 2 นาที
+                        logger.info(f"🔄 Breakout Timeout: {approaching_duration:.1f} minutes - Allow Smart Recovery")
                         return False
                 else:
                     self.last_approaching_time = now
                 
-                logger.info(f"🔒 Blocking for Breakout: Waiting for {potential}")
+                logger.info(f"🔒 Brief Breakout Wait: {potential} (max 2 min)")
                 return True
             
             # ไม่บล็อคถ้าไม่มีเงื่อนไขพิเศษ
-            logger.debug(f"🔓 No blocking conditions - Traditional Recovery allowed")
+            logger.debug(f"🔓 No blocking conditions - Smart Recovery allowed")
             return False
             
         except Exception as e:
