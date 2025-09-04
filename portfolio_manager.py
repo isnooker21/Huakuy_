@@ -14,6 +14,8 @@ from calculations import (
 )
 from trading_conditions import Signal, TradingConditions, CandleData
 from smart_recovery import SmartRecoverySystem
+from price_zone_analysis import PriceZoneAnalyzer
+from zone_rebalancer import ZoneRebalancer
 from order_management import OrderManager, OrderResult, CloseResult
 
 logger = logging.getLogger(__name__)
@@ -63,6 +65,10 @@ class PortfolioManager:
         self.current_balance = initial_balance
         self.trading_conditions = TradingConditions()
         self.smart_recovery = SmartRecoverySystem(order_manager.mt5)
+        
+        # เพิ่ม Zone Analysis System
+        self.zone_analyzer = PriceZoneAnalyzer("XAUUSD", num_zones=10)
+        self.zone_rebalancer = ZoneRebalancer(self.zone_analyzer)
         
         # การตั้งค่าความเสี่ยง
         self.max_risk_per_trade = 2.0  # เปอร์เซ็นต์ความเสี่ยงต่อ Trade
@@ -180,11 +186,14 @@ class PortfolioManager:
                     'signal': None,
                     'lot_size': 0.0
                 }
+            
+            # Zone Analysis & Smart Entry Recommendation
+            zone_recommendation = self._get_zone_smart_entry(signal, candle.close)
                 
-            # คำนวณขนาด Lot
+            # คำนวณขนาด Lot พร้อม Zone Multiplier
             lot_calculator = LotSizeCalculator(current_state.account_balance, self.max_risk_per_trade)
             
-            # คำนวณปัจจัยต่างๆ
+            # คำนวณปัจจัยต่างๆ รวม Zone Analysis
             market_strength = signal.strength
             volatility = self._estimate_market_volatility()
             
@@ -198,17 +207,24 @@ class PortfolioManager:
                 current_state.account_balance, self.initial_balance
             )
             
-            # ใช้ Dynamic Lot Size ตามแรงตลาด Volume และทุน
-            lot_size = lot_calculator.calculate_dynamic_lot_size(
+            # ใช้ Dynamic Lot Size ตามแรงตลาด Volume และทุน รวม Zone Analysis
+            base_lot_size = lot_calculator.calculate_dynamic_lot_size(
                 market_strength, volatility, volume_factor, balance_factor
             )
+            
+            # ปรับ lot size ตาม Zone Recommendation
+            zone_multiplier = zone_recommendation.get('lot_multiplier', 1.0) if zone_recommendation else 1.0
+            lot_size = base_lot_size * zone_multiplier
             
             logger.info(f"📊 Lot Size Calculation:")
             logger.info(f"   Market Strength: {market_strength:.1f}%")
             logger.info(f"   Volatility: {volatility:.1f}%")
             logger.info(f"   Volume Factor: {volume_factor:.2f}x")
             logger.info(f"   Balance Factor: {balance_factor:.2f}x")
-            logger.info(f"   Final Lot Size: {lot_size:.2f}")
+            logger.info(f"   Base Lot Size: {base_lot_size:.3f}")
+            if zone_recommendation:
+                logger.info(f"   Zone Multiplier: {zone_multiplier:.2f}x ({zone_recommendation.get('reason', 'N/A')})")
+            logger.info(f"   Final Lot Size: {lot_size:.3f}")
             
             # ปรับขนาด lot สำหรับสัญลักษณ์ทองคำ
             if 'XAU' in signal.symbol.upper() or 'GOLD' in signal.symbol.upper():
@@ -734,3 +750,101 @@ class PortfolioManager:
         except Exception as e:
             logger.error(f"Error in smart recovery: {e}")
             return {'executed': False, 'error': str(e), 'reason': f'เกิดข้อผิดพลาด: {str(e)}'}
+    
+    def _get_zone_smart_entry(self, signal: Signal, current_price: float) -> Optional[Dict[str, Any]]:
+        """ดึงคำแนะนำการเข้าจาก Zone Analysis"""
+        try:
+            # อัพเดทราคาปัจจุบัน
+            self.zone_analyzer.update_price_history(current_price)
+            
+            # ถ้ายังไม่มีโซน ให้สร้างขึ้นมา
+            if not self.zone_analyzer.zones:
+                self.zone_analyzer.initialize_zones(current_price)
+            
+            # ดึงคำแนะนำ
+            recommendation = self.zone_analyzer.get_smart_entry_recommendation(
+                signal.direction, current_price, self.order_manager.active_positions
+            )
+            
+            if recommendation.recommended_action == "WAIT":
+                logger.info(f"🚫 Zone Analysis: {recommendation.reason}")
+                return None
+            
+            logger.info(f"🎯 Zone Analysis Recommendation:")
+            logger.info(f"   Action: {recommendation.recommended_action}")
+            logger.info(f"   Target Zone: {recommendation.target_zone_id}")
+            logger.info(f"   Price Range: {recommendation.target_price_range[0]:.2f} - {recommendation.target_price_range[1]:.2f}")
+            logger.info(f"   Confidence: {recommendation.confidence_score:.1f}%")
+            logger.info(f"   Lot Multiplier: {recommendation.lot_size_multiplier:.2f}x")
+            logger.info(f"   Reason: {recommendation.reason}")
+            
+            return {
+                'action': recommendation.recommended_action,
+                'zone_id': recommendation.target_zone_id,
+                'price_range': recommendation.target_price_range,
+                'confidence': recommendation.confidence_score,
+                'lot_multiplier': recommendation.lot_size_multiplier,
+                'reason': recommendation.reason,
+                'alternatives': recommendation.alternative_zones
+            }
+            
+        except Exception as e:
+            logger.error(f"Error getting zone smart entry: {e}")
+            return None
+    
+    def check_and_execute_zone_rebalance(self, current_price: float) -> Dict[str, Any]:
+        """ตรวจสอบและดำเนินการปรับสมดุลโซน"""
+        try:
+            # อัพเดทราคา
+            self.zone_analyzer.update_price_history(current_price)
+            
+            # วิเคราะห์การกระจายปัจจุบัน
+            positions = self.order_manager.get_active_positions()
+            analysis = self.zone_analyzer.analyze_position_distribution(positions)
+            
+            # ตรวจสอบว่าควร rebalance หรือไม่
+            should_rebalance = self.zone_rebalancer.should_trigger_rebalance(analysis)
+            
+            if not should_rebalance:
+                return {
+                    'executed': False,
+                    'reason': 'ยังไม่ถึงเงื่อนไข Rebalance',
+                    'zone_score': analysis.overall_health_score,
+                    'zone_quality': analysis.distribution_quality
+                }
+            
+            # วิเคราะห์ความต้องการ rebalance
+            rebalance_result = self.zone_rebalancer.analyze_rebalance_needs(positions, current_price)
+            
+            logger.info(f"📊 Zone Analysis Result:")
+            logger.info(f"   Overall Score: {analysis.overall_health_score:.1f}/100")
+            logger.info(f"   Quality: {analysis.distribution_quality}")
+            logger.info(f"   Active Zones: {analysis.active_zones}/{analysis.total_zones}")
+            logger.info(f"   Balanced Zones: {analysis.balanced_zones}")
+            logger.info(f"   Critical Zones: {analysis.critical_zones}")
+            
+            # แสดงคำแนะนำ
+            summary = self.zone_rebalancer.get_rebalance_summary(rebalance_result)
+            logger.info(summary)
+            
+            # แสดง Zone Map
+            zone_map = self.zone_analyzer.get_zone_map_display(current_price)
+            logger.info(f"\n{zone_map}")
+            
+            return {
+                'executed': True,
+                'analysis': analysis,
+                'rebalance_result': rebalance_result,
+                'recommendations': rebalance_result.recommendations,
+                'zone_score': analysis.overall_health_score,
+                'zone_quality': analysis.distribution_quality,
+                'summary': summary
+            }
+            
+        except Exception as e:
+            logger.error(f"Error in zone rebalance check: {e}")
+            return {
+                'executed': False,
+                'error': str(e),
+                'reason': f'เกิดข้อผิดพลาด: {str(e)}'
+            }
