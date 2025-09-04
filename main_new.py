@@ -376,11 +376,45 @@ class TradingSystem:
                 
                 if result.success:
                     logger.info(f"✅ ส่ง Order สำเร็จ - Ticket: {result.ticket}")
+                    # อัพเดทเวลาเทรดล่าสุด
+                    self.portfolio_manager.update_trade_timing(trade_executed=True)
                 else:
                     logger.error(f"❌ ส่ง Order ไม่สำเร็จ: {result.error_message}")
                     
             else:
                 logger.debug(f"⏸️ ไม่เข้าเทรด - Reasons: {'; '.join(decision['reasons'])}")
+                
+                # ตรวจสอบ Continuous Trading เมื่อไม่มีสัญญาณปกติ
+                continuous_result = self.portfolio_manager.check_continuous_trading_opportunities(
+                    current_price, candle
+                )
+                
+                if continuous_result['gap_filler_active'] or continuous_result['force_trading_active']:
+                    synthetic_signal = continuous_result['recommended_signal']
+                    logger.info(f"🔄 {continuous_result['activation_reason']}")
+                    
+                    # ประมวลผลสัญญาณสังเคราะห์
+                    synthetic_decision = self.portfolio_manager.should_enter_trade(
+                        synthetic_signal, candle, portfolio_state, self.volume_history
+                    )
+                    
+                    if synthetic_decision['should_enter']:
+                        logger.info(f"🤖 Continuous Trade - Direction: {synthetic_signal.direction}, "
+                                   f"Lot: {synthetic_decision['lot_size']:.2f}")
+                        
+                        # ดำเนินการเทรดสังเคราะห์
+                        synthetic_result = self.portfolio_manager.execute_trade_decision(synthetic_decision)
+                        
+                        if synthetic_result.success:
+                            logger.info(f"✅ Continuous Trade สำเร็จ - Ticket: {synthetic_result.ticket}")
+                            self.portfolio_manager.update_trade_timing(trade_executed=True)
+                        else:
+                            logger.error(f"❌ Continuous Trade ไม่สำเร็จ: {synthetic_result.error_message}")
+                    else:
+                        logger.warning(f"🚫 Continuous Signal ถูกปฏิเสธ: {'; '.join(synthetic_decision['reasons'])}")
+                
+                # อัพเดทเวลาสัญญาณ (แม้จะไม่เทรด)
+                self.portfolio_manager.update_trade_timing(signal_generated=True)
                 
             # ล้าง signal หลังจากประมวลผล
             self.last_signal = None
