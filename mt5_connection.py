@@ -417,6 +417,9 @@ class MT5Connection:
             
         try:
             # เตรียมข้อมูล request แบบง่าย (ตามที่ทดสอบสำเร็จ)
+            # MT5 จำกัด comment ไม่เกิน 31 ตัวอักษร
+            short_comment = comment[:31] if comment and len(comment) > 31 else comment or "Trade"
+            
             request = {
                 "action": mt5.TRADE_ACTION_DEAL,
                 "symbol": symbol,
@@ -424,7 +427,7 @@ class MT5Connection:
                 "type": order_type,
                 "price": price,
                 "magic": magic,
-                "comment": comment,
+                "comment": short_comment,
             }
             
             # เพิ่ม SL/TP เฉพาะเมื่อมีค่า
@@ -439,7 +442,7 @@ class MT5Connection:
             logger.info(f"   Price: {price}")
             logger.info(f"   Request: {request}")
             logger.info(f"   Magic: {magic}")
-            logger.info(f"   Comment: {comment}")
+            logger.info(f"   Comment: {short_comment} (original: {comment})")
             logger.info(f"   Order Type: {order_type} (mt5.ORDER_TYPE_BUY={mt5.ORDER_TYPE_BUY}, mt5.ORDER_TYPE_SELL={mt5.ORDER_TYPE_SELL})")
             logger.info(f"   Action: {request['action']} (mt5.TRADE_ACTION_DEAL={mt5.TRADE_ACTION_DEAL})")
             
