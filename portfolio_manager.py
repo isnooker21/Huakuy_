@@ -772,7 +772,12 @@ class PortfolioManager:
                 return {'executed': False, 'reason': f"Portfolio Health: {portfolio_health_check['reason']}"}
             
             logger.info(f"🎯 กำลังดำเนินการ Smart Recovery... (Portfolio Health: ✅)")
-            recovery_result = self.smart_recovery.execute_recovery(best_candidate)
+            
+            # ส่ง Portfolio Health Validator ไปให้ Smart Recovery ใช้ร่วมกัน
+            recovery_result = self.smart_recovery.execute_recovery(
+                best_candidate, 
+                portfolio_validator=lambda candidate, state: self._validate_portfolio_improvement(candidate, current_state)
+            )
             
             if recovery_result['success']:
                 # อัพเดทสถิติ
@@ -950,13 +955,22 @@ class PortfolioManager:
             
             # 5. ดำเนินการ Triple Recovery ถ้าพร้อม
             recovery_results = []
-            for group_id in ready_for_recovery:
-                recovery_result = self.advanced_recovery.execute_triple_recovery(group_id)
-                recovery_results.append(recovery_result)
+            # ดึงข้อมูล current_state สำหรับ validator
+            account_info = self.order_manager.mt5.get_account_info()
+            if account_info:
+                current_state = self.analyze_portfolio_state(account_info)
                 
-                if recovery_result['success']:
-                    logger.info(f"✅ Triple Recovery สำเร็จ: {group_id}")
-                    logger.info(f"   กำไรสุทธิ: ${recovery_result['net_profit']:.2f}")
+                for group_id in ready_for_recovery:
+                    # ส่ง Portfolio Health Validator ไปให้ Advanced Recovery ใช้ร่วมกัน
+                    recovery_result = self.advanced_recovery.execute_triple_recovery(
+                        group_id,
+                        portfolio_validator=lambda candidate, state: self._validate_portfolio_improvement(candidate, current_state)
+                    )
+                    recovery_results.append(recovery_result)
+                    
+                    if recovery_result['success']:
+                        logger.info(f"✅ Triple Recovery สำเร็จ: {group_id}")
+                        logger.info(f"   กำไรสุทธิ: ${recovery_result['net_profit']:.2f}")
             
             # 6. ตัดสินใจการบล็อค Recovery
             should_block_recovery = self._should_block_traditional_recovery(breakout_analysis, update_results)

@@ -285,9 +285,20 @@ class SmartRecoverySystem:
         except Exception:
             return "Portfolio recovery"
     
-    def execute_recovery(self, candidate: RecoveryCandidate) -> Dict[str, Any]:
-        """ดำเนินการ Recovery"""
+    def execute_recovery(self, candidate: RecoveryCandidate, portfolio_validator=None) -> Dict[str, Any]:
+        """ดำเนินการ Recovery (ใช้ Portfolio Health Validator ร่วมกัน)"""
         try:
+            positions_to_close = [candidate.profit_position, candidate.losing_position]
+            
+            # ใช้ Portfolio Health Validator ถ้ามี (จากระบบหลัก)
+            if portfolio_validator:
+                validation = portfolio_validator(candidate, None)  # current_state จะถูกส่งจาก caller
+                if not validation['valid']:
+                    logger.warning(f"❌ Smart Recovery ถูกปฏิเสธโดย Portfolio Health: {validation['reason']}")
+                    return {'success': False, 'reason': f"Portfolio Health: {validation['reason']}"}
+                
+                logger.info(f"✅ Portfolio Health Check ผ่าน: {validation['reason']}")
+            
             logger.info(f"🎯 เริ่ม Smart Recovery:")
             logger.info(f"   Profit Position: {candidate.profit_position.ticket} (+${candidate.profit_position.profit:.2f})")
             logger.info(f"   Losing Position: {candidate.losing_position.ticket} (${candidate.losing_position.profit:.2f})")

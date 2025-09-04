@@ -453,7 +453,7 @@ class AdvancedBreakoutRecovery:
             logger.error(f"Error checking required actions: {e}")
             return None
     
-    def calculate_triple_recovery(self, group_id: str) -> Optional[Dict[str, Any]]:
+    def calculate_triple_recovery(self, group_id: str, portfolio_validator=None) -> Optional[Dict[str, Any]]:
         """คำนวณ Triple Recovery"""
         try:
             group = self.active_recoveries.get(group_id)
@@ -471,8 +471,23 @@ class AdvancedBreakoutRecovery:
             # กำไรสุทธิ
             net_profit = total_profit - spread_cost
             
-            # ตัดสินใจ
+            # ใช้ Portfolio Health Validator ถ้ามี (จากระบบหลัก)
             should_close = net_profit >= group.min_net_profit
+            
+            if should_close and portfolio_validator:
+                # สร้าง candidate สำหรับ validation
+                validation_candidate = {
+                    'positions': positions,
+                    'net_profit': net_profit,
+                    'total_profit': total_profit
+                }
+                
+                validation = portfolio_validator(validation_candidate, None)
+                if not validation['valid']:
+                    logger.info(f"🛡️ Triple Recovery ถูกปฏิเสธโดย Portfolio Health: {validation['reason']}")
+                    should_close = False
+                else:
+                    logger.info(f"✅ Triple Recovery ผ่าน Portfolio Health Check")
             
             result = {
                 'group_id': group_id,
@@ -612,10 +627,10 @@ class AdvancedBreakoutRecovery:
             logger.error(f"Error calculating spread cost: {e}")
             return 0.0
     
-    def execute_triple_recovery(self, group_id: str) -> Dict[str, Any]:
-        """ดำเนินการ Triple Recovery"""
+    def execute_triple_recovery(self, group_id: str, portfolio_validator=None) -> Dict[str, Any]:
+        """ดำเนินการ Triple Recovery (ใช้ Portfolio Health Validator ร่วมกัน)"""
         try:
-            calculation = self.calculate_triple_recovery(group_id)
+            calculation = self.calculate_triple_recovery(group_id, portfolio_validator)
             if not calculation or not calculation['should_close']:
                 return {
                     'success': False,
