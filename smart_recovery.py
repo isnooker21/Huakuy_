@@ -31,7 +31,7 @@ class SmartRecoverySystem:
         self.mt5 = mt5_connection
         self.minimum_position_age = 60   # ลดเหลือ 1 นาที (วินาที) 
         self.minimum_distance_pips = 5   # ลดเหลือ 5 pips
-        self.minimum_net_profit = 0.5    # ลดเหลือ $0.5 กำไรสุทธิขั้นต่ำ
+        self.minimum_net_profit_per_lot = 0.10  # $0.10 ต่อ lot (สำหรับ 0.01 lot = $0.001)
         
     def analyze_recovery_opportunities(self, positions: List[Position], 
                                      account_balance: float,
@@ -67,8 +67,13 @@ class SmartRecoverySystem:
                         profit_pos, losing_pos, account_balance, current_price
                     )
                     
-                    if candidate and candidate.net_profit > self.minimum_net_profit:
-                        candidates.append(candidate)
+                    if candidate:
+                        # ใช้ minimum profit ตาม lot size แทนค่าตายตัว
+                        min_required = self._calculate_minimum_net_profit(profit_pos, losing_pos)
+                        if candidate.net_profit > min_required:
+                            candidates.append(candidate)
+                        else:
+                            logger.debug(f"🚫 Candidate rejected: Net ${candidate.net_profit:.3f} < Required ${min_required:.3f} (lots: {profit_pos.volume + losing_pos.volume})")
             
             # เรียงตาม recovery score
             candidates.sort(key=lambda x: x.recovery_score, reverse=True)
@@ -79,8 +84,12 @@ class SmartRecoverySystem:
             logger.info(f"🎯 พบโอกาส Recovery: {len(smart_candidates)} คู่ (จากทั้งหมด {len(candidates)} คู่)")
             for i, candidate in enumerate(smart_candidates[:3]):  # แสดง top 3
                 profit_loss_ratio = abs(candidate.profit_position.profit / candidate.losing_position.profit) if candidate.losing_position.profit != 0 else 0
-                logger.info(f"   {i+1}. Net: ${candidate.net_profit:.2f}, Score: {candidate.recovery_score:.1f}")
-                logger.info(f"       Profit: ${candidate.profit_position.profit:.2f} vs Loss: ${candidate.losing_position.profit:.2f} (อัตราส่วน: {profit_loss_ratio:.1f})")
+                total_lots = candidate.profit_position.volume + candidate.losing_position.volume
+                min_required = self._calculate_minimum_net_profit(candidate.profit_position, candidate.losing_position)
+                
+                logger.info(f"   {i+1}. Net: ${candidate.net_profit:.3f} (ต้องการ ${min_required:.3f}), Score: {candidate.recovery_score:.1f}")
+                logger.info(f"       Profit: ${candidate.profit_position.profit:.3f} ({candidate.profit_position.volume} lot) vs Loss: ${candidate.losing_position.profit:.3f} ({candidate.losing_position.volume} lot)")
+                logger.info(f"       รวม: {total_lots} lots, อัตราส่วน: {profit_loss_ratio:.1f}:1")
             
             return smart_candidates
             
@@ -142,6 +151,30 @@ class SmartRecoverySystem:
             suitable.append(pos)
         
         return suitable
+    
+    def _calculate_minimum_net_profit(self, profit_pos: Position, losing_pos: Position) -> float:
+        """คำนวณกำไรสุทธิขั้นต่ำตาม lot size"""
+        try:
+            # รวม lot ของทั้งสองไม้
+            total_lot = profit_pos.volume + losing_pos.volume
+            
+            # คำนวณกำไรขั้นต่ำตาม lot (ยิ่งมี lot เยอะยิ่งต้องกำไรมาก)
+            min_profit = total_lot * self.minimum_net_profit_per_lot
+            
+            # สำหรับ lot เล็กมาก (เช่น 0.01) ให้ minimum ต่ำสุด
+            if total_lot <= 0.02:  # รวมกัน <= 0.02 lot
+                min_profit = 0.001  # แค่ $0.001 เท่านั้น!
+            elif total_lot <= 0.05:  # รวมกัน <= 0.05 lot  
+                min_profit = 0.005  # แค่ $0.005
+            elif total_lot <= 0.1:   # รวมกัน <= 0.1 lot
+                min_profit = 0.01   # แค่ $0.01
+            
+            logger.debug(f"💰 Lot-based minimum: {total_lot} lots → ${min_profit:.3f} minimum profit")
+            return min_profit
+            
+        except Exception as e:
+            logger.error(f"Error calculating minimum profit: {e}")
+            return 0.001  # fallback ต่ำสุด
     
     def _filter_smart_recovery_candidates(self, candidates: List[RecoveryCandidate], 
                                          all_positions: List[Position]) -> List[RecoveryCandidate]:
