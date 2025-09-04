@@ -120,6 +120,9 @@ class AdvancedBreakoutRecovery:
             logger.info(f"   Overlapping: {is_overlapping}")
             logger.info(f"   BUY Levels: {len(buy_levels)}, SELL Levels: {len(sell_levels)}")
             
+            # เพิ่ม reason สำหรับกรณี has_levels = True
+            analysis['reason'] = f"Price hierarchy overlapping - analyzing breakout potential"
+            
             return analysis
             
         except Exception as e:
@@ -223,6 +226,11 @@ class AdvancedBreakoutRecovery:
                     'potential': 'CONSOLIDATION',
                     'recommended_action': 'WAIT_AND_MONITOR'
                 })
+            
+            logger.debug(f"🎯 Breakout Potential Analysis: {analysis.get('potential', 'UNKNOWN')}")
+            logger.debug(f"   Distance to Max BUY: {distance_to_max_buy:.2f} pips")
+            logger.debug(f"   Distance to Min SELL: {distance_to_min_sell:.2f} pips")
+            logger.debug(f"   Breakout Threshold: {self.breakout_threshold:.2f} pips")
             
             return analysis
             

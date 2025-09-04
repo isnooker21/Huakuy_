@@ -880,7 +880,16 @@ class PortfolioManager:
             # 1. วิเคราะห์ระดับ breakout
             breakout_analysis = self.advanced_recovery.analyze_breakout_levels(positions, current_price)
             
-            logger.info(f"🔍 Advanced Breakout Analysis: {breakout_analysis.get('reason', 'Unknown')}")
+            # Log ข้อมูลการวิเคราะห์
+            if breakout_analysis.get('has_levels'):
+                analysis_info = breakout_analysis.get('breakout_analysis', {})
+                potential = analysis_info.get('potential', 'NONE')
+                max_buy = breakout_analysis.get('max_buy', 0)
+                min_sell = breakout_analysis.get('min_sell', 0)
+                logger.info(f"🔍 Advanced Breakout Analysis: {potential}")
+                logger.info(f"   Current: {breakout_analysis.get('current_price', 0):.2f}, BUY: {max_buy:.2f}, SELL: {min_sell:.2f}")
+            else:
+                logger.info(f"🔍 Advanced Breakout Analysis: {breakout_analysis.get('reason', 'No analysis available')}")
             
             if not breakout_analysis.get('has_levels'):
                 logger.info(f"📊 No breakout levels detected - Total positions: {len(positions)}")
