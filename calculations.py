@@ -143,17 +143,25 @@ class LotSizeCalculator:
         self.account_balance = account_balance
         self.risk_percentage = risk_percentage
         
-    def calculate_lot_by_risk_percentage(self, stop_loss_pips: float, pip_value: float = 10.0) -> float:
+    def calculate_lot_by_risk_percentage(self, stop_loss_pips: float, pip_value: float = 10.0, symbol: str = "EURUSD") -> float:
         """
         คำนวณขนาด Lot ตามเปอร์เซ็นต์ความเสี่ยง
         
         Args:
             stop_loss_pips: จำนวน pips ของ Stop Loss
-            pip_value: มูลค่าต่อ pip (default 10 สำหรับ standard lot EURUSD)
+            pip_value: มูลค่าต่อ pip (default 10 สำหรับ EURUSD, 1000 สำหรับ XAUUSD)
+            symbol: สัญลักษณ์การเทรด
             
         Returns:
             float: ขนาด Lot ที่แนะนำ
         """
+        # ปรับ pip value สำหรับสัญลักษณ์ต่างๆ
+        if 'XAU' in symbol.upper() or 'GOLD' in symbol.upper():
+            pip_value = 1000.0  # XAUUSD มีมูลค่าต่อ pip สูงกว่า
+        elif 'JPY' in symbol.upper():
+            pip_value = 100.0   # JPY pairs
+        else:
+            pip_value = 10.0    # Major pairs
         if stop_loss_pips <= 0 or pip_value <= 0:
             return 0.01  # ขั้นต่ำ
             
@@ -166,12 +174,13 @@ class LotSizeCalculator:
         # ปรับให้เป็นทศนิยม 2 ตำแหน่ง
         return round(lot_size, 2)
         
-    def calculate_lot_by_balance_percentage(self, balance_percentage: float = 1.0) -> float:
+    def calculate_lot_by_balance_percentage(self, balance_percentage: float = 1.0, symbol: str = "EURUSD") -> float:
         """
         คำนวณขนาด Lot ตามเปอร์เซ็นต์ของยอดเงิน
         
         Args:
             balance_percentage: เปอร์เซ็นต์ของยอดเงินที่จะใช้
+            symbol: สัญลักษณ์การเทรด
             
         Returns:
             float: ขนาด Lot ที่แนะนำ
@@ -179,9 +188,15 @@ class LotSizeCalculator:
         if balance_percentage <= 0:
             return 0.01
             
-        # คำนวณจากการใช้เงินทุน (ประมาณการสำหรับ Forex)
         available_amount = self.account_balance * (balance_percentage / 100)
-        lot_size = available_amount / 100000  # สำหรับ standard lot
+        
+        # คำนวณขนาด lot ตามสัญลักษณ์
+        if 'XAU' in symbol.upper() or 'GOLD' in symbol.upper():
+            # XAUUSD: 1 lot = 100 oz, ราคาประมาณ $2000/oz
+            lot_size = available_amount / 200000  # ประมาณการ margin requirement
+        else:
+            # Forex pairs: 1 lot = 100,000 units
+            lot_size = available_amount / 100000
         
         # ปรับให้อยู่ในช่วงที่เหมาะสม
         lot_size = max(0.01, min(lot_size, 10.0))

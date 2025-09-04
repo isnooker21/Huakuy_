@@ -187,6 +187,11 @@ class PortfolioManager:
             volatility = self._estimate_market_volatility()
             lot_size = lot_calculator.calculate_dynamic_lot_size(market_strength, volatility)
             
+            # ปรับขนาด lot สำหรับสัญลักษณ์ทองคำ
+            if 'XAU' in signal.symbol.upper() or 'GOLD' in signal.symbol.upper():
+                # ทองคำมีความผันผวนสูง ลดขนาด lot
+                lot_size = lot_size * 0.5
+            
             # ปรับขนาด Lot ตามสถานะพอร์ต
             adjusted_lot = self._adjust_lot_size_by_portfolio_state(lot_size, current_state)
             
