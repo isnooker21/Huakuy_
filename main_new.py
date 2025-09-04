@@ -361,6 +361,9 @@ class TradingSystem:
                 timestamp=datetime.now()
             )
             
+            # กำหนด current_price จาก candle
+            current_price = candle.close
+            
             # ตัดสินใจว่าควรเข้าเทรดหรือไม่
             decision = self.portfolio_manager.should_enter_trade(
                 signal, candle, portfolio_state, self.volume_history
