@@ -433,29 +433,21 @@ class MT5Connection:
             if tp > 0:
                 request["tp"] = tp
             
-            # ส่ง Order พร้อม retry mechanism
-            filling_types = [mt5.ORDER_FILLING_IOC, mt5.ORDER_FILLING_FOK, mt5.ORDER_FILLING_RETURN]
+            # ส่ง Order แบบง่าย (ตามที่ทดสอบสำเร็จ)
+            logger.info(f"🚀 ส่ง Order: {symbol}")
+            logger.info(f"   Volume: {volume}")
+            logger.info(f"   Price: {price}")
+            logger.info(f"   Request: {request}")
             
-            for attempt in range(3):  # ลองสูงสุด 3 ครั้ง
-                if attempt > 0:
-                    # ลอง filling type ต่างๆ
-                    request["type_filling"] = filling_types[attempt - 1]
-                    logger.info(f"🔄 ลองส่งใหม่ครั้งที่ {attempt + 1} ด้วย filling_type: {filling_types[attempt - 1]}")
-                else:
-                    logger.info(f"🚀 ส่ง Order Request (ครั้งที่ {attempt + 1}): {request}")
-                
-                result = mt5.order_send(request)
-                
-                # ตรวจสอบผลลัพธ์
-                if result is None:
-                    logger.warning(f"⚠️ mt5.order_send() ส่งคืน None (ครั้งที่ {attempt + 1})")
-                    continue
-                    
-                logger.info(f"📋 Order Result (ครั้งที่ {attempt + 1}): retcode={result.retcode}, deal={result.deal}, order={result.order}")
-                
-                # ตรวจสอบ retcode
-                if result.retcode == 10009:  # TRADE_RETCODE_DONE
-                    logger.info(f"✅ ส่ง Order สำเร็จ - Deal: {result.deal}, Order: {result.order}")
+            result = mt5.order_send(request)
+            
+            if result is None:
+                logger.error("❌ order_send() ส่งคืน None")
+                return None
+            else:
+                logger.info(f"📋 Result: RetCode={result.retcode}")
+                if result.retcode == 10009:
+                    logger.info(f"✅ สำเร็จ! Deal: {result.deal}, Order: {result.order}")
                     return {
                         'retcode': result.retcode,
                         'deal': result.deal,
@@ -469,27 +461,12 @@ class MT5Connection:
                         'retcode_external': result.retcode_external
                     }
                 else:
-                    # แสดง error code และความหมาย
                     error_desc = self._get_retcode_description(result.retcode)
-                    logger.warning(f"⚠️ ส่ง Order ไม่สำเร็จ (ครั้งที่ {attempt + 1}) - RetCode: {result.retcode} ({error_desc})")
-                    
-                    # ถ้าเป็น error ที่ไม่ควร retry ให้หยุดเลย
-                    if result.retcode in [10019, 10018, 10017]:  # NO_MONEY, MARKET_CLOSED, TRADE_DISABLED
-                        logger.error(f"❌ หยุด retry เพราะ error ที่แก้ไม่ได้: {error_desc}")
-                        return {
-                            'retcode': result.retcode,
-                            'error_description': error_desc
-                        }
-            
-            # หมดโอกาส retry แล้ว
-            logger.error("❌ ส่ง Order ไม่สำเร็จหลังจากลอง 3 ครั้ง")
-            if result:
-                return {
-                    'retcode': result.retcode,
-                    'error_description': self._get_retcode_description(result.retcode)
-                }
-            else:
-                return None
+                    logger.error(f"❌ ไม่สำเร็จ: RetCode {result.retcode} - {error_desc}")
+                    return {
+                        'retcode': result.retcode,
+                        'error_description': error_desc
+                    }
                 
         except Exception as e:
             logger.error(f"❌ เกิดข้อผิดพลาดในการส่ง Order: {e}")
@@ -602,10 +579,9 @@ class MT5Connection:
                 order_type = mt5.ORDER_TYPE_BUY
                 price = mt5.symbol_info_tick(pos.symbol).ask
                 
-            # ตรวจสอบ filling type ที่ใช้ได้
-            filling_type = self._detect_filling_type(pos.symbol)
+            # ใช้ราคาจาก symbol_info แทน symbol_info_tick
             
-            # เตรียมข้อมูล request
+            # เตรียมข้อมูล request แบบง่าย (ตามที่ทดสอบสำเร็จ)
             request = {
                 "action": mt5.TRADE_ACTION_DEAL,
                 "symbol": pos.symbol,
@@ -613,8 +589,8 @@ class MT5Connection:
                 "type": order_type,
                 "position": ticket,
                 "price": price,
+                "magic": pos.magic,
                 "comment": f"Close position {ticket}",
-                "type_filling": filling_type,
             }
             
             # ปิด Position
