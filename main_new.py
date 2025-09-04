@@ -391,23 +391,37 @@ class TradingSystem:
     def check_exit_conditions(self, portfolio_state):
         """ตรวจสอบเงื่อนไขการปิด Position"""
         try:
-            # 1. ตรวจสอบ Smart Recovery ก่อน
+            # 1. ตรวจสอบ Breakout Strategy ก่อน
+            breakout_info = None
+            should_block_recovery = False
+            
             if self.current_prices:
                 current_price = self.current_prices.get('close', 0)
-                recovery_result = self.portfolio_manager.check_and_execute_smart_recovery(current_price)
+                
+                # ตรวจสอบ Breakout Strategy
+                breakout_info = self.portfolio_manager.check_breakout_strategy(current_price)
+                should_block_recovery = breakout_info.get('should_block_recovery', False)
+                
+                if breakout_info.get('is_breakout_pending'):
+                    logger.info(f"🎯 Breakout Strategy: {breakout_info['reason']}")
+                
+                # 2. Smart Recovery (ถูกบล็อคถ้ากำลังรอ breakout)
+                recovery_result = self.portfolio_manager.check_and_execute_smart_recovery(
+                    current_price, block_recovery=should_block_recovery
+                )
                 
                 if recovery_result['executed']:
-                    if recovery_result['success']:
+                    if recovery_result.get('success'):
                         logger.info(f"🎯 Smart Recovery: {recovery_result['message']}")
                     else:
                         logger.warning(f"⚠️ Smart Recovery: {recovery_result['message']}")
                 
-                # Zone Analysis & Rebalancing
+                # 3. Zone Analysis & Rebalancing (ไม่ถูกบล็อค)
                 zone_result = self.portfolio_manager.check_and_execute_zone_rebalance(current_price)
                 if zone_result['executed']:
                     logger.info(f"📊 Zone Analysis: Score {zone_result['zone_score']:.1f}/100 ({zone_result['zone_quality']})")
             
-            # 2. ตัดสินใจว่าควรปิด Position หรือไม่
+            # 4. ตัดสินใจว่าควรปิด Position หรือไม่
             decision = self.portfolio_manager.should_exit_positions(
                 portfolio_state, self.current_prices
             )
