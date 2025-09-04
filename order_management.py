@@ -207,10 +207,6 @@ class OrderManager:
                         logger.info(f"💰 Position {position.ticket}: "
                                   f"Profit {profit_info['profit_percentage']:.2f}% vs "
                                   f"Spread {profit_info['spread_percentage']:.3f}%")
-                        
-                        # ปิดแม้กำไรน้อยกว่า spread (แต่แสดงคำเตือน)
-                        if not profit_info['should_close']:
-                            logger.warning(f"⚠️ Position {position.ticket} อาจปิดติดลบเพราะ spread")
                     
                     result = self.mt5.close_position(position.ticket)
                     
@@ -224,10 +220,18 @@ class OrderManager:
                             if pos.ticket != position.ticket
                         ]
                         
-                        logger.info(f"ปิด Position สำเร็จ - Ticket: {position.ticket}")
+                        logger.info(f"✅ ปิด Position {position.ticket} สำเร็จ")
+                        
+                    elif result and result.get('retcode') == 10027:  # ห้ามปิด (กำไรไม่พอ)
+                        logger.info(f"⏳ Position {position.ticket} รอกำไรเพิ่มก่อนปิด")
+                        # ไม่นับเป็น error เพราะเป็นการป้องกันขาดทุน
                         
                     else:
-                        error_msg = f"ปิด Position {position.ticket} ไม่สำเร็จ - RetCode: {result.get('retcode') if result else 'None'}"
+                        error_msg = f"ไม่สามารถปิด Position {position.ticket}"
+                        if result:
+                            error_msg += f" - RetCode: {result.get('retcode')}"
+                            if 'error_description' in result:
+                                error_msg += f" ({result['error_description']})"
                         errors.append(error_msg)
                         logger.error(error_msg)
                         
