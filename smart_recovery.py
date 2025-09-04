@@ -353,7 +353,10 @@ class SmartRecoverySystem:
                                current_equity: float) -> bool:
         """ตรวจสอบว่าควร trigger Recovery หรือไม่"""
         try:
+            logger.debug(f"🔍 Checking Recovery Trigger - positions: {len(positions) if positions else 0}")
+            
             if not positions or len(positions) < 2:
+                logger.debug(f"🔍 Not enough positions for recovery: {len(positions) if positions else 0}")
                 return False
             
             # เช็คเงื่อนไข trigger

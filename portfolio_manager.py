@@ -706,6 +706,9 @@ class PortfolioManager:
                                          block_recovery: bool = False) -> Dict[str, Any]:
         """ตรวจสอบและดำเนินการ Smart Recovery (พร้อม Emergency Override)"""
         try:
+            logger.debug(f"🔍 Smart Recovery Check Started - block_recovery: {block_recovery}")
+            positions = self.order_manager.active_positions
+            logger.debug(f"🔍 Active positions: {len(positions) if positions else 0}")
             # Emergency Override - เฉพาะกรณีที่มั่นใจว่าปิดแล้วพอร์ตดีขึ้น
             positions = self.order_manager.active_positions
             
@@ -733,6 +736,7 @@ class PortfolioManager:
             
             # เช็คว่าถูกบล็อค Recovery หรือไม่ (เช่น ระหว่างรอ Breakout)
             if block_recovery:
+                logger.debug(f"🔒 Smart Recovery blocked by Breakout Strategy")
                 return {'executed': False, 'reason': 'Recovery ถูกบล็อคชั่วคราว - รอ Breakout Strategy'}
             
             # ดึงข้อมูลปัจจุบัน  
@@ -744,6 +748,7 @@ class PortfolioManager:
             positions = self.order_manager.active_positions
             
             if not positions or len(positions) < 2:
+                logger.debug(f"🔍 Not enough positions for recovery: {len(positions) if positions else 0}")
                 return {'executed': False, 'reason': 'ไม่มี positions เพียงพอสำหรับ Recovery'}
             
             # ตรวจสอบว่าควร trigger Recovery หรือไม่
@@ -752,6 +757,7 @@ class PortfolioManager:
             )
             
             if not should_trigger:
+                logger.debug(f"🔍 Recovery conditions not met")
                 return {'executed': False, 'reason': 'ยังไม่ถึงเงื่อนไข Recovery'}
             
             # วิเคราะห์โอกาส Recovery
@@ -760,6 +766,7 @@ class PortfolioManager:
             )
             
             if not recovery_candidates:
+                logger.debug(f"🔍 No suitable recovery opportunities found")
                 return {'executed': False, 'reason': 'ไม่พบโอกาส Recovery ที่เหมาะสม'}
             
             # เลือกและดำเนินการ Recovery ที่ดีที่สุด
@@ -1037,11 +1044,13 @@ class PortfolioManager:
                     logger.info(f"🔄 Advanced Recovery Overload: {active_groups} groups active")
                     return False
                 
+                logger.info(f"🔒 Blocking Traditional Recovery: {active_groups} Advanced Recovery groups active")
                 return True
             
             # บล็อคถ้าใกล้ breakout (เฉพาะกรณีใหม่)
             potential = breakout_analysis.get('breakout_analysis', {}).get('potential', 'NONE')
             if potential in ['APPROACHING_BULLISH', 'APPROACHING_BEARISH']:
+                logger.info(f"🔒 Near Breakout Detected: {potential}")
                 # ตรวจสอบว่าใกล้ breakout มานานแล้วหรือยัง
                 if hasattr(self, 'last_approaching_time'):
                     approaching_duration = (now - self.last_approaching_time).total_seconds() / 60
@@ -1051,9 +1060,11 @@ class PortfolioManager:
                 else:
                     self.last_approaching_time = now
                 
+                logger.info(f"🔒 Blocking for Breakout: Waiting for {potential}")
                 return True
             
             # ไม่บล็อคถ้าไม่มีเงื่อนไขพิเศษ
+            logger.debug(f"🔓 No blocking conditions - Traditional Recovery allowed")
             return False
             
         except Exception as e:

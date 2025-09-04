@@ -20,7 +20,7 @@ from gui import TradingGUI
 
 # Configure logging
 logging.basicConfig(
-    level=logging.INFO,
+    level=logging.DEBUG,  # เปลี่ยนเป็น DEBUG เพื่อดู debug logs
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
     handlers=[
         logging.FileHandler('trading_system.log', encoding='utf-8'),
@@ -428,6 +428,9 @@ class TradingSystem:
     def check_exit_conditions(self, portfolio_state):
         """ตรวจสอบเงื่อนไขการปิด Position"""
         try:
+            positions = self.portfolio_manager.order_manager.active_positions
+            logger.debug(f"🔍 Check Exit Conditions: {len(positions)} positions active")
+            
             # 1. ตรวจสอบ Breakout Strategy ก่อน
             breakout_info = None
             should_block_recovery = False
@@ -450,9 +453,12 @@ class TradingSystem:
                             logger.info(f"✅ Triple Recovery: ${result['net_profit']:.2f} profit")
                 
                 # 2. Smart Recovery (ถูกบล็อคถ้ากำลังรอ breakout)
+                logger.debug(f"🔍 Checking Smart Recovery... (block_recovery: {should_block_recovery})")
                 recovery_result = self.portfolio_manager.check_and_execute_smart_recovery(
                     current_price, block_recovery=should_block_recovery
                 )
+                
+                logger.debug(f"🔍 Smart Recovery Result: executed={recovery_result.get('executed', False)}, reason={recovery_result.get('reason', 'N/A')}")
                 
                 if recovery_result['executed']:
                     if recovery_result.get('success'):
