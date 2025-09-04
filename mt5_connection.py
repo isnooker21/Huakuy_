@@ -561,9 +561,78 @@ class MT5Connection:
             logger.error(f"เกิดข้อผิดพลาดในการตรวจสอบการเทรด: {e}")
             return {'allowed': False, 'reason': f'เกิดข้อผิดพลาด: {str(e)}'}
         
+    def calculate_position_profit_with_spread(self, ticket: int) -> Optional[Dict]:
+        """
+        คำนวณกำไรจริงรวม spread ก่อนปิด position
+        
+        Args:
+            ticket: หมายเลข Position
+            
+        Returns:
+            Dict: ข้อมูลกำไรและ spread หรือ None
+        """
+        try:
+            # ดึงข้อมูล Position
+            position = mt5.positions_get(ticket=ticket)
+            if not position:
+                return None
+                
+            pos = position[0]
+            
+            # ดึงข้อมูล symbol
+            symbol_info = mt5.symbol_info(pos.symbol)
+            if not symbol_info:
+                return None
+            
+            # คำนวณ spread
+            current_tick = mt5.symbol_info_tick(pos.symbol)
+            spread_points = current_tick.ask - current_tick.bid
+            spread_pct = (spread_points / pos.price_open) * 100
+            
+            # คำนวณราคาปิดจริง (รวม spread)
+            if pos.type == mt5.POSITION_TYPE_BUY:
+                close_price = current_tick.bid  # BUY ปิดด้วย Bid
+            else:
+                close_price = current_tick.ask  # SELL ปิดด้วย Ask
+            
+            # คำนวณกำไรจริง (รวม spread)
+            if pos.type == mt5.POSITION_TYPE_BUY:
+                price_diff = close_price - pos.price_open
+            else:
+                price_diff = pos.price_open - close_price
+            
+            # คำนวณกำไรเป็นเงิน
+            if 'XAU' in pos.symbol.upper() or 'GOLD' in pos.symbol.upper():
+                profit_usd = price_diff * pos.volume * 100  # XAUUSD: 100 oz per lot
+            else:
+                profit_usd = price_diff * pos.volume * 100000  # Forex: 100,000 units per lot
+            
+            # คำนวณกำไรเป็นเปอร์เซ็นต์ (ตาม lot size)
+            position_value = pos.volume * pos.price_open * 100  # สำหรับ XAUUSD
+            profit_percentage = (profit_usd / position_value) * 100 if position_value > 0 else 0
+            
+            return {
+                'ticket': ticket,
+                'symbol': pos.symbol,
+                'type': 'BUY' if pos.type == 0 else 'SELL',
+                'volume': pos.volume,
+                'open_price': pos.price_open,
+                'close_price': close_price,
+                'current_profit': pos.profit,  # กำไรจาก MT5
+                'calculated_profit': profit_usd,  # กำไรที่คำนวณ
+                'profit_percentage': profit_percentage,
+                'spread_points': spread_points,
+                'spread_percentage': spread_pct,
+                'should_close': profit_percentage > spread_pct  # ปิดเมื่อกำไร > spread
+            }
+            
+        except Exception as e:
+            logger.error(f"เกิดข้อผิดพลาดในการคำนวณกำไร Position {ticket}: {e}")
+            return None
+
     def close_position(self, ticket: int) -> Optional[Dict]:
         """
-        ปิด Position
+        ปิด Position (ตรวจสอบ spread ก่อน)
         
         Args:
             ticket: หมายเลข Position
@@ -575,6 +644,26 @@ class MT5Connection:
             return None
             
         try:
+            # คำนวณกำไรและ spread ก่อน
+            profit_info = self.calculate_position_profit_with_spread(ticket)
+            if not profit_info:
+                logger.error(f"ไม่สามารถคำนวณกำไร Position {ticket}")
+                return None
+            
+            # แสดงข้อมูลก่อนปิด
+            logger.info(f"📊 ข้อมูลก่อนปิด Position {ticket}:")
+            logger.info(f"   Symbol: {profit_info['symbol']}")
+            logger.info(f"   Type: {profit_info['type']}, Volume: {profit_info['volume']}")
+            logger.info(f"   Open: {profit_info['open_price']:.5f}, Close: {profit_info['close_price']:.5f}")
+            logger.info(f"   Spread: {profit_info['spread_points']:.5f} ({profit_info['spread_percentage']:.3f}%)")
+            logger.info(f"   Profit: ${profit_info['calculated_profit']:.2f} ({profit_info['profit_percentage']:.2f}%)")
+            logger.info(f"   Should Close: {profit_info['should_close']}")
+            
+            # ตรวจสอบว่าควรปิดหรือไม่
+            if not profit_info['should_close']:
+                logger.warning(f"⚠️ Position {ticket} กำไร {profit_info['profit_percentage']:.2f}% < Spread {profit_info['spread_percentage']:.3f}% - ไม่แนะนำให้ปิด")
+                # return None  # ไม่ปิดถ้ากำไรน้อยกว่า spread
+            
             # ดึงข้อมูล Position
             position = mt5.positions_get(ticket=ticket)
             if not position:
