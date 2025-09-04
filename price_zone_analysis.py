@@ -92,7 +92,7 @@ class PriceZoneAnalyzer:
         """คำนวณความกว้างโซนแบบ Dynamic ตาม volatility"""
         try:
             # ดึงข้อมูล ATR (Average True Range) ย้อนหลัง 20 แท่ง
-            rates = mt5.copy_rates(self.symbol, mt5.TIMEFRAME_H1, 0, 20)
+            rates = mt5.copy_rates_from_pos(self.symbol, mt5.TIMEFRAME_H1, 0, 20)
             if rates is None or len(rates) == 0:
                 return 20.0  # Default 20 pips สำหรับ XAUUSD
             
