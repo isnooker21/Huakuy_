@@ -360,13 +360,21 @@ class SmartRecoverySystem:
                                current_equity: float) -> bool:
         """ตรวจสอบว่าควร trigger Recovery หรือไม่"""
         try:
-            logger.debug(f"🔍 Checking Recovery Trigger - positions: {len(positions) if positions else 0}")
+            position_count = len(positions) if positions else 0
+            logger.debug(f"🔍 Checking Recovery Trigger - positions: {position_count}")
             
             if not positions or len(positions) < 2:
-                logger.debug(f"🔍 Not enough positions for recovery: {len(positions) if positions else 0}")
+                logger.debug(f"🔍 Not enough positions for recovery: {position_count}")
                 return False
             
-            # เช็คเงื่อนไข trigger
+            # ถ้ามีไม้เยอะมาก (>40) ลดเงื่อนไขให้ง่ายขึ้น
+            if position_count > 40:
+                logger.info(f"🎯 มีไม้เยอะ ({position_count}) - ใช้เงื่อนไข Recovery แบบง่าย")
+                losing_positions = [pos for pos in positions if pos.profit < 0]
+                profitable_positions = [pos for pos in positions if pos.profit > 0]
+                return len(losing_positions) > 0 and len(profitable_positions) > 0
+            
+            # เช็คเงื่อนไข trigger ปกติ
             conditions_met = 0
             total_conditions = 5
             
@@ -414,13 +422,20 @@ class SmartRecoverySystem:
                 conditions_met += 1
                 logger.debug(f"✅ มี positions กำไร: {len(profitable_positions)} ตัว")
             
-            # ต้องผ่านอย่างน้อย 3 จาก 5 เงื่อนไข
-            should_trigger = conditions_met >= 3
+            # ปรับเงื่อนไขตามจำนวนไม้
+            if position_count > 30:
+                required_conditions = 2  # ไม้เยอะ ใช้เงื่อนไข 2/5
+            elif position_count > 20:
+                required_conditions = 2  # ไม้ปานกลาง ใช้เงื่อนไข 2/5  
+            else:
+                required_conditions = 3  # ไม้น้อย ใช้เงื่อนไข 3/5
+            
+            should_trigger = conditions_met >= required_conditions
             
             if should_trigger:
-                logger.info(f"🎯 ควร trigger Smart Recovery ({conditions_met}/{total_conditions} เงื่อนไข)")
+                logger.info(f"🎯 ควร trigger Smart Recovery ({conditions_met}/{total_conditions} เงื่อนไข, ต้องการ {required_conditions})")
             else:
-                logger.debug(f"💡 ยังไม่ควร Recovery ({conditions_met}/{total_conditions} เงื่อนไข)")
+                logger.debug(f"💡 ยังไม่ควร Recovery ({conditions_met}/{total_conditions} เงื่อนไข, ต้องการ {required_conditions})")
             
             return should_trigger
             

@@ -1202,15 +1202,21 @@ class PortfolioManager:
             if total_profit <= 0:
                 return {'valid': False, 'reason': f'Net profit เป็นลบ: ${total_profit:.2f}'}
             
-            # เงื่อนไข 2: กำไรต้องมากกว่า % ของจำนวนไม้
+            # เงื่อนไข 2: กำไรต้องมากกว่า % ของจำนวนไม้ (ยืดหยุ่นสำหรับ balance ติดลบ)
             position_count = len(positions_to_close)
-            min_profit_percentage = position_count * 0.5  # 0.5% ต่อไม้
-            min_required_profit = current_state.account_balance * (min_profit_percentage / 100)
+            
+            # ถ้า balance ติดลบ หรือมีไม้เยอะ (>20) ใช้เกณฑ์ง่ายๆ
+            if current_state.account_balance <= 0 or len(positions_to_close) > 20:
+                min_required_profit = 1.0  # กำไรขั้นต่ำแค่ $1
+                logger.info(f"🎯 ใช้เกณฑ์ยืดหยุ่น: Balance={current_state.account_balance:.2f}, Positions={position_count}")
+            else:
+                min_profit_percentage = min(position_count * 0.2, 2.0)  # ลดจาก 0.5% เป็น 0.2% และไม่เกิน 2%
+                min_required_profit = abs(current_state.account_balance) * (min_profit_percentage / 100)
             
             if total_profit < min_required_profit:
                 return {
                     'valid': False, 
-                    'reason': f'กำไรไม่ถึงเกณฑ์: ${total_profit:.2f} < ${min_required_profit:.2f} ({min_profit_percentage:.1f}%)'
+                    'reason': f'กำไรไม่ถึงเกณฑ์: ${total_profit:.2f} < ${min_required_profit:.2f}'
                 }
             
             # เงื่อนไข 3: ต้องมีไม้กำไรและขาดทุนปะปนกัน (ไม่ปิดแค่ฝั่งเดียว)
@@ -1220,10 +1226,12 @@ class PortfolioManager:
             if losing_count == 0:
                 return {'valid': False, 'reason': 'ไม่มีไม้ขาดทุนในกลุ่ม - ไม่จำเป็นต้อง Recovery'}
             
-            # เงื่อนไข 4: สมดุลของไม้ (ไม่เอียงไปฝั่งใดมาก)
+            # เงื่อนไข 4: สมดุลของไม้ (ยืดหยุ่นสำหรับไม้เยอะ)
             balance_ratio = abs(profitable_count - losing_count) / position_count
-            if balance_ratio > 0.7:  # เอียงเกิน 70%
-                return {'valid': False, 'reason': f'ไม้ไม่สมดุล: กำไร {profitable_count} vs ขาดทุน {losing_count}'}
+            max_imbalance = 0.9 if position_count > 30 else 0.8  # ยืดหยุ่นมากขึ้นถ้ามีไม้เยอะ
+            
+            if balance_ratio > max_imbalance:
+                return {'valid': False, 'reason': f'ไม้ไม่สมดุลเกินไป: กำไร {profitable_count} vs ขาดทุน {losing_count} ({balance_ratio:.1%})'}
             
             # เงื่อนไข 5: คำนวณผลกระทบต่อ Equity และ Free Margin
             estimated_new_balance = current_state.account_balance + total_profit
