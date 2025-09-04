@@ -391,7 +391,18 @@ class TradingSystem:
     def check_exit_conditions(self, portfolio_state):
         """ตรวจสอบเงื่อนไขการปิด Position"""
         try:
-            # ตัดสินใจว่าควรปิด Position หรือไม่
+            # 1. ตรวจสอบ Smart Recovery ก่อน
+            if self.current_prices:
+                current_price = self.current_prices.get('close', 0)
+                recovery_result = self.portfolio_manager.check_and_execute_smart_recovery(current_price)
+                
+                if recovery_result['executed']:
+                    if recovery_result['success']:
+                        logger.info(f"🎯 Smart Recovery: {recovery_result['message']}")
+                    else:
+                        logger.warning(f"⚠️ Smart Recovery: {recovery_result['message']}")
+            
+            # 2. ตัดสินใจว่าควรปิด Position หรือไม่
             decision = self.portfolio_manager.should_exit_positions(
                 portfolio_state, self.current_prices
             )
