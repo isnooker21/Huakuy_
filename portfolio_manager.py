@@ -688,9 +688,14 @@ class PortfolioManager:
         except Exception as e:
             logger.error(f"เกิดข้อผิดพลาดในการรีเซ็ตเมตริกรายวัน: {str(e)}")
     
-    def check_and_execute_smart_recovery(self, current_price: float) -> Dict[str, Any]:
+    def check_and_execute_smart_recovery(self, current_price: float, 
+                                         block_recovery: bool = False) -> Dict[str, Any]:
         """ตรวจสอบและดำเนินการ Smart Recovery"""
         try:
+            # เช็คว่าถูกบล็อค Recovery หรือไม่ (เช่น ระหว่างรอ Breakout)
+            if block_recovery:
+                return {'executed': False, 'reason': 'Recovery ถูกบล็อคชั่วคราว - รอ Breakout Strategy'}
+            
             # ดึงข้อมูลปัจจุบัน  
             account_info = self.order_manager.mt5.get_account_info()
             if not account_info:
@@ -850,5 +855,128 @@ class PortfolioManager:
             return {
                 'executed': False,
                 'error': str(e),
+                'reason': f'เกิดข้อผิดพลาด: {str(e)}'
+            }
+    
+    def check_breakout_strategy(self, current_price: float) -> Dict[str, Any]:
+        """ตรวจสอบกลยุทธ์ Breakout และการบล็อค Recovery"""
+        try:
+            positions = self.order_manager.active_positions
+            if not positions:
+                return {
+                    'is_breakout_pending': False,
+                    'should_block_recovery': False,
+                    'breakout_direction': None,
+                    'reason': 'ไม่มี positions'
+                }
+            
+            # หาราคา BUY สูงสุด และ SELL ต่ำสุด
+            buy_positions = [pos for pos in positions if pos.type == 0]  # BUY
+            sell_positions = [pos for pos in positions if pos.type == 1]  # SELL
+            
+            if not buy_positions or not sell_positions:
+                return {
+                    'is_breakout_pending': False,
+                    'should_block_recovery': False,
+                    'breakout_direction': None,
+                    'reason': 'ไม่มีทั้ง BUY และ SELL positions'
+                }
+            
+            max_buy_price = max(pos.price_open for pos in buy_positions)
+            min_sell_price = min(pos.price_open for pos in sell_positions)
+            
+            # ตรวจสอบ Price Hierarchy Violation
+            is_overlapping = max_buy_price >= min_sell_price
+            
+            if not is_overlapping:
+                return {
+                    'is_breakout_pending': False,
+                    'should_block_recovery': False,
+                    'breakout_direction': None,
+                    'reason': 'Price hierarchy ปกติ - ไม่ต้องรอ breakout'
+                }
+            
+            # คำนวณระยะห่างจากจุด breakout
+            distance_to_max_buy = abs(current_price - max_buy_price)
+            distance_to_min_sell = abs(current_price - min_sell_price)
+            
+            # กำหนดเกณฑ์การ breakout (5 pips สำหรับ XAUUSD)
+            breakout_threshold = 0.5  # 5 pips for XAUUSD
+            
+            # ตรวจสอบการ breakout
+            breakout_info = {
+                'is_breakout_pending': True,
+                'should_block_recovery': True,
+                'max_buy_price': max_buy_price,
+                'min_sell_price': min_sell_price,
+                'current_price': current_price,
+                'breakout_threshold': breakout_threshold
+            }
+            
+            # กรณีที่ 1: ราคาใกล้จะทะลุขึ้น (ใกล้ max BUY)
+            if distance_to_max_buy <= breakout_threshold:
+                if current_price > max_buy_price:
+                    # ทะลุขึ้นแล้ว - พร้อมเปิด SELL
+                    breakout_info.update({
+                        'breakout_direction': 'BULLISH_BREAKOUT',
+                        'should_block_recovery': False,  # ปลดบล็อค เพื่อให้เปิด SELL ได้
+                        'recommended_action': 'OPEN_SELL',
+                        'target_price': current_price + 1.0,  # เปิด SELL สูงกว่าราคาปัจจุบัน 1 pip
+                        'reason': f'ทะลุ BUY สูงสุด ({max_buy_price}) แล้ว - พร้อมเปิด SELL'
+                    })
+                else:
+                    # ใกล้จะทะลุ - บล็อค Recovery
+                    breakout_info.update({
+                        'breakout_direction': 'APPROACHING_BUY_BREAKOUT',
+                        'should_block_recovery': True,
+                        'recommended_action': 'WAIT',
+                        'reason': f'ใกล้ทะลุ BUY สูงสุด ({max_buy_price}) - รอการทะลุ'
+                    })
+            
+            # กรณีที่ 2: ราคาใกล้จะทะลุลง (ใกล้ min SELL)
+            elif distance_to_min_sell <= breakout_threshold:
+                if current_price < min_sell_price:
+                    # ทะลุลงแล้ว - พร้อมเปิด BUY
+                    breakout_info.update({
+                        'breakout_direction': 'BEARISH_BREAKOUT',
+                        'should_block_recovery': False,  # ปลดบล็อค เพื่อให้เปิด BUY ได้
+                        'recommended_action': 'OPEN_BUY',
+                        'target_price': current_price - 1.0,  # เปิด BUY ต่ำกว่าราคาปัจจุบัน 1 pip
+                        'reason': f'ทะลุ SELL ต่ำสุด ({min_sell_price}) แล้ว - พร้อมเปิด BUY'
+                    })
+                else:
+                    # ใกล้จะทะลุ - บล็อค Recovery
+                    breakout_info.update({
+                        'breakout_direction': 'APPROACHING_SELL_BREAKOUT',
+                        'should_block_recovery': True,
+                        'recommended_action': 'WAIT',
+                        'reason': f'ใกล้ทะลุ SELL ต่ำสุด ({min_sell_price}) - รอการทะลุ'
+                    })
+            
+            # กรณีที่ 3: อยู่ตรงกลาง - บล็อค Recovery
+            else:
+                breakout_info.update({
+                    'breakout_direction': 'CONSOLIDATION',
+                    'should_block_recovery': True,
+                    'recommended_action': 'WAIT',
+                    'reason': f'อยู่ระหว่าง BUY ({max_buy_price}) และ SELL ({min_sell_price}) - รอสัญญาณ'
+                })
+            
+            logger.info(f"🎯 Breakout Strategy Analysis:")
+            logger.info(f"   Current Price: {current_price}")
+            logger.info(f"   Max BUY: {max_buy_price}, Min SELL: {min_sell_price}")
+            logger.info(f"   Direction: {breakout_info['breakout_direction']}")
+            logger.info(f"   Block Recovery: {breakout_info['should_block_recovery']}")
+            logger.info(f"   Action: {breakout_info.get('recommended_action', 'N/A')}")
+            logger.info(f"   Reason: {breakout_info['reason']}")
+            
+            return breakout_info
+            
+        except Exception as e:
+            logger.error(f"Error in breakout strategy check: {e}")
+            return {
+                'is_breakout_pending': False,
+                'should_block_recovery': False,
+                'breakout_direction': None,
                 'reason': f'เกิดข้อผิดพลาด: {str(e)}'
             }
