@@ -54,6 +54,7 @@ class TradingSystem:
         self.is_running = False
         self.trading_thread = None
         self.last_candle_time = None
+        self.is_trading_started_from_gui = False  # ตัวแปรเช็คว่าเริ่มจาก GUI แล้วหรือยัง
         
         # ข้อมูลตลาด
         self.current_prices = {}
@@ -153,12 +154,13 @@ class TradingSystem:
                 return
                 
             self.is_running = True
+            self.is_trading_started_from_gui = True
             
             # เริ่ม trading thread
             self.trading_thread = threading.Thread(target=self.trading_loop, daemon=True)
             self.trading_thread.start()
             
-            logger.info("เริ่มการเทรดแล้ว")
+            logger.info("🚀 เริ่มการเทรดแล้ว (จาก GUI)")
             
         except Exception as e:
             logger.error(f"เกิดข้อผิดพลาดในการเริ่มเทรด: {str(e)}")
@@ -168,11 +170,12 @@ class TradingSystem:
         """หยุดการเทรด"""
         try:
             self.is_running = False
+            self.is_trading_started_from_gui = False
             
             if self.trading_thread and self.trading_thread.is_alive():
                 self.trading_thread.join(timeout=5)
                 
-            logger.info("หยุดการเทรดแล้ว")
+            logger.info("⏹️ หยุดการเทรดแล้ว (จาก GUI)")
             
         except Exception as e:
             logger.error(f"เกิดข้อผิดพลาดในการหยุดเทรด: {str(e)}")
@@ -399,7 +402,7 @@ class TradingSystem:
     def start_gui(self):
         """เริ่ม GUI"""
         try:
-            self.gui = TradingGUI(self.portfolio_manager, self.mt5_connection)
+            self.gui = TradingGUI(self)
             self.gui.run()
         except Exception as e:
             logger.error(f"เกิดข้อผิดพลาดใน GUI: {str(e)}")
@@ -444,11 +447,11 @@ def main():
         logger.info(f"   - สัญลักษณ์: {trading_system.base_symbol} -> {trading_system.actual_symbol}")
         logger.info(f"   - ความเสี่ยงต่อ Trade: {trading_system.portfolio_manager.max_risk_per_trade}%")
         logger.info(f"   - เป้าหมายกำไร: {trading_system.portfolio_manager.profit_target}%")
+        logger.info("")
+        logger.info("⚠️  ระบบพร้อมใช้งาน - กดปุ่ม 'Start Trading' ใน GUI เพื่อเริ่มเทรด")
+        logger.info("=" * 60)
         
-        # เริ่มการเทรดอัตโนมัติ
-        trading_system.start_trading()
-        
-        # เริ่ม GUI
+        # เริ่ม GUI (ไม่เริ่มการเทรดอัตโนมัติ)
         trading_system.start_gui()
         
         # ปิดระบบเมื่อ GUI ปิด
