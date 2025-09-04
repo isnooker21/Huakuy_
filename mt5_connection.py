@@ -443,10 +443,41 @@ class MT5Connection:
             logger.info(f"   Order Type: {order_type} (mt5.ORDER_TYPE_BUY={mt5.ORDER_TYPE_BUY}, mt5.ORDER_TYPE_SELL={mt5.ORDER_TYPE_SELL})")
             logger.info(f"   Action: {request['action']} (mt5.TRADE_ACTION_DEAL={mt5.TRADE_ACTION_DEAL})")
             
+            # เช็ค MT5 state ก่อนส่ง order (ไม่เรียก initialize ซ้ำ)
+            logger.info(f"🔍 MT5 State Check:")
+            logger.info(f"   Connected: {self.is_connected}")
+            terminal_info = mt5.terminal_info()
+            account_info = mt5.account_info()
+            logger.info(f"   Terminal Info: {terminal_info is not None}")
+            logger.info(f"   Account Info: {account_info is not None}")
+            
+            # ถ้า connection หลุด ให้เชื่อมต่อใหม่
+            if not self.is_connected or terminal_info is None or account_info is None:
+                logger.warning("⚠️ MT5 connection หลุด กำลังเชื่อมต่อใหม่...")
+                self.disconnect()
+                if not self.connect():
+                    logger.error("❌ ไม่สามารถเชื่อมต่อ MT5 ใหม่ได้")
+                    return None
+            
+            # เช็ค symbol state
+            current_symbol_info = mt5.symbol_info(symbol)
+            logger.info(f"🔍 Current Symbol State:")
+            logger.info(f"   Symbol: {symbol}")
+            logger.info(f"   Visible: {current_symbol_info.visible if current_symbol_info else 'None'}")
+            logger.info(f"   Select: {mt5.symbol_select(symbol, True)}")
+            
+            # เช็ค last error ก่อนส่ง
+            logger.info(f"🔍 Last Error Before Send: {mt5.last_error()}")
+            
             result = mt5.order_send(request)
+            
+            # เช็ค last error หลังส่ง
+            last_error = mt5.last_error()
+            logger.info(f"🔍 Last Error After Send: {last_error}")
             
             if result is None:
                 logger.error("❌ order_send() ส่งคืน None")
+                logger.error(f"❌ MT5 Last Error: {last_error}")
                 return None
             else:
                 logger.info(f"📋 Result: RetCode={result.retcode}")
