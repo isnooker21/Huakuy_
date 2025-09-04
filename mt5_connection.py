@@ -416,20 +416,22 @@ class MT5Connection:
             return {'retcode': 10017, 'error_description': trade_check['reason']}
             
         try:
-            # เตรียมข้อมูล request (ไม่ระบุ type_filling ให้ MT5 เลือกเอง)
+            # เตรียมข้อมูล request แบบง่าย (ตามที่ทดสอบสำเร็จ)
             request = {
                 "action": mt5.TRADE_ACTION_DEAL,
                 "symbol": symbol,
                 "volume": volume,
                 "type": order_type,
                 "price": price,
-                "sl": sl,
-                "tp": tp,
-                "comment": comment,
                 "magic": magic,
-                "type_time": mt5.ORDER_TIME_GTC,
-                "deviation": 20,
+                "comment": comment,
             }
+            
+            # เพิ่ม SL/TP เฉพาะเมื่อมีค่า
+            if sl > 0:
+                request["sl"] = sl
+            if tp > 0:
+                request["tp"] = tp
             
             # ส่ง Order พร้อม retry mechanism
             filling_types = [mt5.ORDER_FILLING_IOC, mt5.ORDER_FILLING_FOK, mt5.ORDER_FILLING_RETURN]
