@@ -246,14 +246,14 @@ class TradingConditions:
         else:
             logger.info(f"✅ เงื่อนไข 4: สมดุลพอร์ตเหมาะสม")
             
-        # 5. ตรวจสอบการใช้เงินทุน
-        exposure_check = self._check_capital_exposure(positions, account_balance)
-        if not exposure_check['can_enter']:
-            result['reasons'].extend(exposure_check['reasons'])
-            logger.info(f"❌ เงื่อนไข 5: {'; '.join(exposure_check['reasons'])}")
-            return result
-        else:
-            logger.info(f"✅ เงื่อนไข 5: การใช้เงินทุนเหมาะสม")
+        # 5. ตรวจสอบการใช้เงินทุน (ปิดใช้งาน - ขัดกับ Recovery Systems)
+        # exposure_check = self._check_capital_exposure(positions, account_balance)
+        # if not exposure_check['can_enter']:
+        #     result['reasons'].extend(exposure_check['reasons'])
+        #     logger.info(f"❌ เงื่อนไข 5: {'; '.join(exposure_check['reasons'])}")
+        #     return result
+        # else:
+        logger.info(f"✅ เงื่อนไข 5: การใช้เงินทุน (ปิดการตรวจสอบ - เพื่อ Recovery Systems)")
             
         # สร้างสัญญาณการเทรด
         signal = Signal(
