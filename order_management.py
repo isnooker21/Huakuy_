@@ -365,7 +365,17 @@ class OrderManager:
             # อัพเดท active positions
             self.active_positions = synced_positions
             
-            logger.info(f"ซิงค์ข้อมูล Position สำเร็จ - จำนวน: {len(synced_positions)}")
+            logger.info(f"📊 ซิงค์ข้อมูล Position สำเร็จ - จำนวน: {len(synced_positions)}")
+            
+            # แสดงรายละเอียด Position ที่จดจำได้
+            if synced_positions:
+                logger.info("🔍 Position ที่จดจำได้จาก MT5:")
+                for pos in synced_positions:
+                    logger.info(f"   Ticket: {pos.ticket}, Symbol: {pos.symbol}, "
+                              f"Type: {'BUY' if pos.type == 0 else 'SELL'}, "
+                              f"Volume: {pos.volume}, Profit: {pos.profit:.2f}")
+            else:
+                logger.info("ℹ️ ไม่พบ Position เก่าของระบบ (Magic Number: {})".format(self.magic_number))
             return synced_positions
             
         except Exception as e:
