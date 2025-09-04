@@ -314,15 +314,22 @@ class TradingConditions:
         # คำนวณสัดส่วน Buy:Sell
         balance_info = PercentageCalculator.calculate_buy_sell_ratio(positions)
         
-        # ตรวจสอบความไม่สมดุล
-        if direction == "BUY":
-            if balance_info['buy_percentage'] >= 70:
-                result['can_enter'] = False
-                result['reasons'].append(f"Buy positions เกิน 70% ({balance_info['buy_percentage']:.1f}%)")
-        else:  # SELL
-            if balance_info['sell_percentage'] >= 70:
-                result['can_enter'] = False
-                result['reasons'].append(f"Sell positions เกิน 70% ({balance_info['sell_percentage']:.1f}%)")
+        # ตรวจสอบความไม่สมดุล (ยืดหยุ่นกว่าเดิม)
+        total_positions = balance_info['total_positions']
+        
+        # ถ้ามี position น้อยกว่า 3 ตัว ไม่เช็คสมดุล
+        if total_positions < 3:
+            logger.info(f"💡 มี Position {total_positions} ตัว - ข้ามการเช็คสมดุล")
+        else:
+            # เช็คสมดุลเมื่อมี position หลายตัว
+            if direction == "BUY":
+                if balance_info['buy_percentage'] >= 80:  # เพิ่มจาก 70% เป็น 80%
+                    result['can_enter'] = False
+                    result['reasons'].append(f"Buy positions เกิน 80% ({balance_info['buy_percentage']:.1f}%)")
+            else:  # SELL
+                if balance_info['sell_percentage'] >= 80:  # เพิ่มจาก 70% เป็น 80%
+                    result['can_enter'] = False
+                    result['reasons'].append(f"Sell positions เกิน 80% ({balance_info['sell_percentage']:.1f}%)")
                 
         # ตรวจสอบ Price Hierarchy Rule
         hierarchy_check = self._check_price_hierarchy(positions, direction)
