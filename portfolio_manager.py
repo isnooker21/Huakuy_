@@ -762,7 +762,7 @@ class PortfolioManager:
             
             # วิเคราะห์โอกาส Recovery
             recovery_candidates = self.smart_recovery.analyze_recovery_opportunities(
-                positions, self.current_balance, current_price
+                positions, current_state.account_balance, current_price
             )
             
             if not recovery_candidates:

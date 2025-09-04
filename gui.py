@@ -736,7 +736,10 @@ class TradingGUI:
     def update_system_status(self):
         """อัพเดทสถานะของระบบต่างๆ"""
         try:
+            # ซิงค์ positions ก่อน
+            self.portfolio_manager.order_manager.sync_positions_from_mt5()
             positions = self.portfolio_manager.order_manager.active_positions
+            
             if not positions:
                 self.smart_recovery_status.config(text="NO POSITIONS", fg='gray')
                 self.advanced_recovery_status.config(text="IDLE", fg='gray')
@@ -745,9 +748,18 @@ class TradingGUI:
                 self.next_action_label.config(text="Waiting for positions...")
                 return
                 
+            # ดึงข้อมูล account จริง
+            account_info = self.mt5_connection.get_account_info()
+            if account_info:
+                current_balance = account_info['balance']
+                current_equity = account_info['equity']
+            else:
+                current_balance = 2500  # fallback
+                current_equity = 2500
+            
             # Smart Recovery Status
             smart_recovery_result = self.portfolio_manager.smart_recovery.should_trigger_recovery(
-                positions, self.portfolio_manager.current_balance, 2500  # ใช้ค่าประมาณ
+                positions, current_balance, current_equity
             )
             
             if smart_recovery_result:
@@ -788,7 +800,13 @@ class TradingGUI:
             self.next_action_label.config(text=next_action)
             
         except Exception as e:
-            pass
+            logger.debug(f"Error in update_system_status: {e}")
+            # ตั้งค่าเป็น error state
+            self.smart_recovery_status.config(text="ERROR", fg='red')
+            self.advanced_recovery_status.config(text="ERROR", fg='red')
+            self.zone_analysis_status.config(text="ERROR", fg='red')
+            self.portfolio_balance_status.config(text="ERROR", fg='red')
+            self.next_action_label.config(text=f"Error: {str(e)[:50]}...")
             
     def determine_next_action(self, positions):
         """กำหนดการกระทำถัดไป"""
@@ -797,8 +815,16 @@ class TradingGUI:
                 return "Waiting for positions..."
                 
             # ตรวจสอบ Smart Recovery
+            account_info = self.mt5_connection.get_account_info()
+            if account_info:
+                current_balance = account_info['balance']
+                current_equity = account_info['equity']
+            else:
+                current_balance = 2500
+                current_equity = 2500
+                
             smart_ready = self.portfolio_manager.smart_recovery.should_trigger_recovery(
-                positions, self.portfolio_manager.current_balance, 2500
+                positions, current_balance, current_equity
             )
             
             if smart_ready:
@@ -896,9 +922,16 @@ class TradingGUI:
                 current_price = symbol_info.bid if symbol_info else 2540.0
             except:
                 current_price = 2540.0  # fallback price
+            
+            # ดึง account balance จริง
+            account_info = self.mt5_connection.get_account_info()
+            if account_info:
+                current_balance = account_info['balance']
+            else:
+                current_balance = 2500  # fallback
                 
             candidates = self.portfolio_manager.smart_recovery.analyze_recovery_opportunities(
-                positions, self.portfolio_manager.current_balance, current_price
+                positions, current_balance, current_price
             )
             
             # แสดง top 10 candidates
