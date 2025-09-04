@@ -29,9 +29,9 @@ class SmartRecoverySystem:
     
     def __init__(self, mt5_connection):
         self.mt5 = mt5_connection
-        self.minimum_position_age = 300  # 5 นาที (วินาที)
-        self.minimum_distance_pips = 10  # 10 pips
-        self.minimum_net_profit = 1.0    # $1 กำไรสุทธิขั้นต่ำ
+        self.minimum_position_age = 60   # ลดเหลือ 1 นาที (วินาที) 
+        self.minimum_distance_pips = 5   # ลดเหลือ 5 pips
+        self.minimum_net_profit = 0.5    # ลดเหลือ $0.5 กำไรสุทธิขั้นต่ำ
         
     def analyze_recovery_opportunities(self, positions: List[Position], 
                                      account_balance: float,
@@ -93,6 +93,20 @@ class SmartRecoverySystem:
         """กรองไม้ขาดทุนที่เหมาะสมสำหรับ Recovery"""
         suitable = []
         current_time = datetime.now()
+        total_positions = len(losing_positions)
+        
+        # ปรับเงื่อนไขตามจำนวนไม้ - ยิ่งมีไม้เยอะยิ่งยืดหยุ่น
+        if total_positions > 40:
+            dynamic_min_age = 30      # 30 วินาที สำหรับไม้เยอะมาก
+            dynamic_min_distance = 2  # 2 pips
+        elif total_positions > 20:
+            dynamic_min_age = 45      # 45 วินาที สำหรับไม้ปานกลาง
+            dynamic_min_distance = 3  # 3 pips
+        else:
+            dynamic_min_age = self.minimum_position_age  # 60 วินาที สำหรับไม้น้อย
+            dynamic_min_distance = self.minimum_distance_pips  # 5 pips
+        
+        logger.info(f"🎯 Dynamic Filter: {total_positions} ไม้ - ใช้อายุขั้นต่ำ {dynamic_min_age}s, ระยะ {dynamic_min_distance} pips")
         
         for pos in losing_positions:
             # เช็คอายุของ position
@@ -105,19 +119,19 @@ class SmartRecoverySystem:
                     
                     age_seconds = (current_time - pos_time).total_seconds()
                     
-                    if age_seconds < self.minimum_position_age:
-                        logger.debug(f"Position {pos.ticket} อายุน้อยเกินไป ({age_seconds:.0f}s)")
+                    if age_seconds < dynamic_min_age:
+                        logger.debug(f"Position {pos.ticket} อายุน้อยเกินไป ({age_seconds:.0f}s < {dynamic_min_age}s)")
                         continue
                 except Exception as e:
                     logger.warning(f"Cannot determine age of position {pos.ticket}: {e}")
                     continue
             
-            # เช็คระยะห่างจากราคาปัจจุบัน
+            # เช็คระยะห่างจากราคาปัจจุบัน (ใช้ dynamic distance)
             distance = abs(pos.price_open - current_price)
-            min_distance = current_price * (self.minimum_distance_pips / 10000)  # Convert pips to price
+            min_distance = current_price * (dynamic_min_distance / 10000)  # แปลง pips เป็นราคา
             
             if distance < min_distance:
-                logger.debug(f"Position {pos.ticket} ใกล้ราคาปัจจุบันเกินไป")
+                logger.debug(f"Position {pos.ticket} ใกล้ราคาปัจจุบันเกินไป ({distance:.5f} < {min_distance:.5f})")
                 continue
             
             # เช็คว่าขาดทุนไม่มากเกินไป (ไม่เกิน 50% ของ balance)
