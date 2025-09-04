@@ -789,27 +789,65 @@ class TradingGUI:
                 messagebox.showerror("Error", "กรุณาเชื่อมต่อ MT5 ก่อน")
                 return
                 
-            # เริ่มการเทรดผ่าน TradingSystem
-            self.trading_system.start_trading()
-            self.is_trading = True
-            self.trading_status.config(text="Running", fg='green')
-            logger.info("เริ่มการเทรดจาก GUI")
+            # เริ่มการเทรดผ่าน TradingSystem (ใน background thread)
+            def start_trading_async():
+                try:
+                    success = self.trading_system.start_trading()
+                    if success:
+                        # อัพเดท GUI ใน main thread
+                        self.root.after(0, lambda: self.update_trading_status(True))
+                        logger.info("เริ่มการเทรดจาก GUI สำเร็จ")
+                    else:
+                        self.root.after(0, lambda: messagebox.showerror("Error", "ไม่สามารถเริ่มการเทรดได้"))
+                except Exception as e:
+                    logger.error(f"เกิดข้อผิดพลาดในการเริ่มเทรด: {str(e)}")
+                    self.root.after(0, lambda: messagebox.showerror("Error", f"เกิดข้อผิดพลาด: {str(e)}"))
+            
+            # รัน start_trading ใน background thread
+            threading.Thread(target=start_trading_async, daemon=True).start()
+            
+            # อัพเดท GUI ทันที (แสดงสถานะ "Starting...")
+            self.trading_status.config(text="Starting...", fg='orange')
             
         except Exception as e:
             logger.error(f"เกิดข้อผิดพลาดในการเริ่มเทรด: {str(e)}")
             messagebox.showerror("Error", f"เกิดข้อผิดพลาด: {str(e)}")
             
+    def update_trading_status(self, is_running):
+        """อัพเดทสถานะการเทรด"""
+        try:
+            if is_running:
+                self.is_trading = True
+                self.trading_status.config(text="Running", fg='green')
+            else:
+                self.is_trading = False
+                self.trading_status.config(text="Stopped", fg='red')
+        except Exception as e:
+            logger.error(f"เกิดข้อผิดพลาดในการอัพเดทสถานะ: {str(e)}")
+            
     def stop_trading(self):
         """หยุดการเทรด"""
         try:
-            # หยุดการเทรดผ่าน TradingSystem
-            self.trading_system.stop_trading()
-            self.is_trading = False
-            self.trading_status.config(text="Stopped", fg='red')
-            logger.info("หยุดการเทรดจาก GUI")
+            # หยุดการเทรดผ่าน TradingSystem (ใน background thread)
+            def stop_trading_async():
+                try:
+                    self.trading_system.stop_trading()
+                    # อัพเดท GUI ใน main thread
+                    self.root.after(0, lambda: self.update_trading_status(False))
+                    logger.info("หยุดการเทรดจาก GUI สำเร็จ")
+                except Exception as e:
+                    logger.error(f"เกิดข้อผิดพลาดในการหยุดเทรด: {str(e)}")
+                    self.root.after(0, lambda: messagebox.showerror("Error", f"เกิดข้อผิดพลาด: {str(e)}"))
+            
+            # รัน stop_trading ใน background thread
+            threading.Thread(target=stop_trading_async, daemon=True).start()
+            
+            # อัพเดท GUI ทันที (แสดงสถานะ "Stopping...")
+            self.trading_status.config(text="Stopping...", fg='orange')
             
         except Exception as e:
             logger.error(f"เกิดข้อผิดพลาดในการหยุดเทรด: {str(e)}")
+            messagebox.showerror("Error", f"เกิดข้อผิดพลาด: {str(e)}")
             
     def close_all_positions(self):
         """ปิด Position ทั้งหมด"""
