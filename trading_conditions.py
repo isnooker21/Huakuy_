@@ -9,6 +9,7 @@ from typing import Dict, List, Optional, Tuple, Any
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from calculations import Position, PercentageCalculator, MarketAnalysisCalculator
+from market_analysis import MarketSessionAnalyzer, MultiTimeframeAnalyzer
 
 logger = logging.getLogger(__name__)
 
@@ -137,6 +138,10 @@ class TradingConditions:
         self.orders_per_candle = {}  # เก็บจำนวน order ต่อแท่งเทียน
         self.previous_candle_close = None  # เก็บราคาปิดแท่งก่อนหน้า
         
+        # เพิ่ม Market Analysis
+        self.session_analyzer = MarketSessionAnalyzer()
+        self.mtf_analyzer = MultiTimeframeAnalyzer("XAUUSD")
+        
     def check_entry_conditions(self, candle: CandleData, positions: List[Position], 
                              account_balance: float, volume_history: List[float] = None, 
                              symbol: str = "XAUUSD") -> Dict[str, Any]:
@@ -169,30 +174,60 @@ class TradingConditions:
             logger.info(f"❌ เงื่อนไข 1: {result['reasons'][-1]}")
             return result
             
-        # 2. ตรวจสอบแรงตลาดแบบยืดหยุ่น
+        # 2. Market Session Analysis
+        session_params = self.session_analyzer.adjust_trading_parameters({
+            'base_strength_threshold': 20.0,
+            'base_max_positions': 4,
+            'base_lot_multiplier': 1.0
+        })
+        
+        # 3. Multi-Timeframe Confirmation
+        direction = "BUY" if candle.close > candle.open else "SELL"
+        mtf_result = self.mtf_analyzer.get_multi_timeframe_confirmation(direction)
+        mtf_decision = mtf_result['decision']
+        
+        # 4. ตรวจสอบแรงตลาดแบบยืดหยุ่น
         volume_avg = sum(volume_history) / len(volume_history) if volume_history else 0
         strength_analysis = self.candle_analyzer.analyze_candle_strength(candle, volume_avg)
         
-        logger.info(f"   แรงตลาด: {strength_analysis['total_strength']:.2f}% (เกณฑ์: ≥20%)")
+        logger.info(f"   Session: {session_params['current_session']} (Threshold: {session_params['entry_threshold']}%)")
+        logger.info(f"   Multi-TF Score: {mtf_result['confidence_score']}/100 ({mtf_decision['confidence']})")
+        logger.info(f"   แรงตลาด: {strength_analysis['total_strength']:.2f}%")
         logger.info(f"   ทิศทาง: {strength_analysis['direction']}")
-        logger.info(f"   แท่งเทียน: เปิด={candle.open:.2f}, ปิด={candle.close:.2f}")
         
         # เงื่อนไขยืดหยุ่น: ตรวจสอบแท่งเทียนเต็มแท่งหรือปิดสูงกว่าแท่งก่อนหน้า
         flexible_conditions = self._check_flexible_entry_conditions(candle, positions)
         
-        # ถ้าผ่านเงื่อนไขยืดหยุ่น ให้ข้ามการตรวจสอบแรงตลาด
+        # ตัดสินใจเข้าเทรดแบบยืดหยุ่น
+        can_enter_analysis = False
+        entry_reason = ""
+        
         if flexible_conditions['can_enter']:
-            logger.info(f"✅ เงื่อนไข 2: ผ่านเงื่อนไขยืดหยุ่น - {flexible_conditions['reason']}")
-            # ใช้ทิศทางจากเงื่อนไขยืดหยุ่น
+            can_enter_analysis = True
+            entry_reason = f"เงื่อนไขยืดหยุ่น - {flexible_conditions['reason']}"
             strength_analysis['direction'] = flexible_conditions['direction']
             strength_analysis['is_strong'] = True
-            strength_analysis['total_strength'] = 30.0  # กำหนดแรงขั้นต่ำ
-        elif not strength_analysis['is_strong']:
-            result['reasons'].append(f"แรงตลาดไม่เพียงพอ ({strength_analysis['total_strength']:.2f}%) และไม่ผ่านเงื่อนไขยืดหยุ่น")
-            logger.info(f"❌ เงื่อนไข 2: {result['reasons'][-1]}")
-            return result
+            strength_analysis['total_strength'] = 30.0
+        elif mtf_decision['action'] != 'WAIT':
+            can_enter_analysis = True
+            entry_reason = f"Multi-Timeframe ยืนยัน ({mtf_decision['confidence']}, Score: {mtf_result['confidence_score']})"
+            strength_analysis['is_strong'] = True
+            strength_analysis['total_strength'] = max(30.0, mtf_result['confidence_score'] / 2)
+        elif strength_analysis['is_strong'] or strength_analysis['total_strength'] >= session_params['entry_threshold']:
+            can_enter_analysis = True
+            entry_reason = f"แรงตลาดเพียงพอ ({strength_analysis['total_strength']:.2f}% >= {session_params['entry_threshold']}%)"
         else:
-            logger.info(f"✅ เงื่อนไข 2: แรงตลาดเพียงพอ ({strength_analysis['total_strength']:.2f}%)")
+            # ยืดหยุ่นสุดท้าย - ให้เทรดได้แต่ลด lot
+            if session_params['current_session'] in ['OVERLAP_LONDON_NY', 'LONDON'] and strength_analysis['total_strength'] >= 10.0:
+                can_enter_analysis = True
+                entry_reason = f"Session สูง + แรงตลาดพอใช้ ({strength_analysis['total_strength']:.2f}%)"
+                strength_analysis['total_strength'] = 15.0  # ให้คะแนนขั้นต่ำ
+            else:
+                result['reasons'].append(f"แรงตลาดไม่เพียงพอ ({strength_analysis['total_strength']:.2f}%) และไม่ผ่านเงื่อนไขอื่น")
+                logger.info(f"❌ เงื่อนไข 2: {result['reasons'][-1]}")
+                return result
+        
+        logger.info(f"✅ เงื่อนไข 2: {entry_reason}")
             
         # 3. ตรวจสอบ Volume Filter (ปิดชั่วคราว)
         # if volume_history and not self.candle_analyzer.check_volume_filter(candle.volume, volume_history):

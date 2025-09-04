@@ -13,6 +13,7 @@ from calculations import (
     RiskCalculator, MarketAnalysisCalculator, ProfitTargetCalculator
 )
 from trading_conditions import Signal, TradingConditions, CandleData
+from smart_recovery import SmartRecoverySystem
 from order_management import OrderManager, OrderResult, CloseResult
 
 logger = logging.getLogger(__name__)
@@ -61,6 +62,7 @@ class PortfolioManager:
         self.initial_balance = initial_balance
         self.current_balance = initial_balance
         self.trading_conditions = TradingConditions()
+        self.smart_recovery = SmartRecoverySystem(order_manager.mt5)
         
         # การตั้งค่าความเสี่ยง
         self.max_risk_per_trade = 2.0  # เปอร์เซ็นต์ความเสี่ยงต่อ Trade
@@ -669,3 +671,66 @@ class PortfolioManager:
                 
         except Exception as e:
             logger.error(f"เกิดข้อผิดพลาดในการรีเซ็ตเมตริกรายวัน: {str(e)}")
+    
+    def check_and_execute_smart_recovery(self, current_price: float) -> Dict[str, Any]:
+        """ตรวจสอบและดำเนินการ Smart Recovery"""
+        try:
+            # ดึงข้อมูลปัจจุบัน
+            current_state = self.get_current_state()
+            positions = self.order_manager.get_active_positions()
+            
+            if not positions or len(positions) < 2:
+                return {'executed': False, 'reason': 'ไม่มี positions เพียงพอสำหรับ Recovery'}
+            
+            # ตรวจสอบว่าควร trigger Recovery หรือไม่
+            should_trigger = self.smart_recovery.should_trigger_recovery(
+                positions, self.current_balance, current_state.equity
+            )
+            
+            if not should_trigger:
+                return {'executed': False, 'reason': 'ยังไม่ถึงเงื่อนไข Recovery'}
+            
+            # วิเคราะห์โอกาส Recovery
+            recovery_candidates = self.smart_recovery.analyze_recovery_opportunities(
+                positions, self.current_balance, current_price
+            )
+            
+            if not recovery_candidates:
+                return {'executed': False, 'reason': 'ไม่พบโอกาส Recovery ที่เหมาะสม'}
+            
+            # เลือกและดำเนินการ Recovery ที่ดีที่สุด
+            best_candidate = recovery_candidates[0]  # เรียงตาม score แล้ว
+            
+            logger.info(f"🎯 กำลังดำเนินการ Smart Recovery...")
+            recovery_result = self.smart_recovery.execute_recovery(best_candidate)
+            
+            if recovery_result['success']:
+                # อัพเดทสถิติ
+                if hasattr(self.performance_metrics, 'total_recovery_operations'):
+                    self.performance_metrics.total_recovery_operations += 1
+                    self.performance_metrics.recovery_profit += recovery_result.get('net_profit', 0)
+                
+                logger.info(f"✅ Smart Recovery สำเร็จ!")
+                logger.info(f"   กำไรสุทธิ: ${recovery_result.get('net_profit', 0):.2f}")
+                logger.info(f"   Margin คืน: ${recovery_result.get('margin_freed', 0):.2f}")
+                
+                return {
+                    'executed': True,
+                    'success': True,
+                    'net_profit': recovery_result.get('net_profit', 0),
+                    'margin_freed': recovery_result.get('margin_freed', 0),
+                    'closed_tickets': recovery_result.get('closed_tickets', []),
+                    'message': recovery_result.get('message', 'Recovery completed')
+                }
+            else:
+                logger.warning(f"⚠️ Smart Recovery ล้มเหลว: {recovery_result.get('message', 'Unknown error')}")
+                return {
+                    'executed': True,
+                    'success': False,
+                    'error': recovery_result.get('error', 'Unknown error'),
+                    'message': recovery_result.get('message', 'Recovery failed')
+                }
+                
+        except Exception as e:
+            logger.error(f"Error in smart recovery: {e}")
+            return {'executed': False, 'error': str(e), 'reason': f'เกิดข้อผิดพลาด: {str(e)}'}
