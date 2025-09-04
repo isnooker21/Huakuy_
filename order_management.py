@@ -42,7 +42,7 @@ class OrderManager:
         self.mt5 = mt5_connection
         self.active_positions = []
         self.order_history = []
-        self.magic_number = 12345  # Magic Number สำหรับระบุ Orders ของระบบ
+        self.magic_number = 123456  # Magic Number สำหรับระบุ Orders ของระบบ (เหมือน test file)
         
     def place_order_from_signal(self, signal: Signal, lot_size: float, 
                                account_balance: float) -> OrderResult:
