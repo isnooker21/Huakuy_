@@ -401,6 +401,11 @@ class TradingSystem:
                         logger.info(f"🎯 Smart Recovery: {recovery_result['message']}")
                     else:
                         logger.warning(f"⚠️ Smart Recovery: {recovery_result['message']}")
+                
+                # Zone Analysis & Rebalancing
+                zone_result = self.portfolio_manager.check_and_execute_zone_rebalance(current_price)
+                if zone_result['executed']:
+                    logger.info(f"📊 Zone Analysis: Score {zone_result['zone_score']:.1f}/100 ({zone_result['zone_quality']})")
             
             # 2. ตัดสินใจว่าควรปิด Position หรือไม่
             decision = self.portfolio_manager.should_exit_positions(
