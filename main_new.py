@@ -149,22 +149,25 @@ class TradingSystem:
                 logger.warning("ระบบเทรดกำลังทำงานอยู่แล้ว")
                 return
                 
-            if not self.mt5_connection.check_connection_health():
+            # ตรวจสอบการเชื่อมต่อแบบเบา
+            if not self.mt5_connection.is_connected:
                 logger.error("ไม่สามารถเชื่อมต่อ MT5 ได้")
                 return
                 
             self.is_running = True
             self.is_trading_started_from_gui = True
             
-            # เริ่ม trading thread
+            # เริ่ม trading thread ทันที (ไม่ block GUI)
             self.trading_thread = threading.Thread(target=self.trading_loop, daemon=True)
             self.trading_thread.start()
             
             logger.info("🚀 เริ่มการเทรดแล้ว (จาก GUI)")
+            return True  # ส่งกลับทันที
             
         except Exception as e:
             logger.error(f"เกิดข้อผิดพลาดในการเริ่มเทรด: {str(e)}")
             self.is_running = False
+            return False
             
     def stop_trading(self):
         """หยุดการเทรด"""
@@ -184,35 +187,45 @@ class TradingSystem:
         """Loop หลักของการเทรด"""
         logger.info("เริ่ม Trading Loop")
         
+        # ตัวแปรสำหรับลดความถี่
+        loop_count = 0
+        last_daily_reset = None
+        
         while self.is_running:
             try:
-                # อัพเดทข้อมูลตลาด
+                loop_count += 1
+                
+                # อัพเดทข้อมูลตลาด (ทุกรอบ)
                 self.update_market_data()
                 
-                # รีเซ็ตเมตริกรายวัน
-                self.portfolio_manager.reset_daily_metrics()
+                # รีเซ็ตเมตริกรายวัน (ทุก 1 ชั่วโมง)
+                current_hour = datetime.now().hour
+                if last_daily_reset is None or last_daily_reset != current_hour:
+                    self.portfolio_manager.reset_daily_metrics()
+                    last_daily_reset = current_hour
                 
-                # วิเคราะห์สถานะพอร์ต
-                account_info = self.mt5_connection.get_account_info()
-                if not account_info:
-                    logger.warning("ไม่สามารถดึงข้อมูลบัญชีได้")
-                    time.sleep(5)
-                    continue
+                # ดึงข้อมูลบัญชี (ทุก 10 รอบ)
+                if loop_count % 10 == 0:
+                    account_info = self.mt5_connection.get_account_info()
+                    if not account_info:
+                        logger.warning("ไม่สามารถดึงข้อมูลบัญชีได้")
+                        time.sleep(10)
+                        continue
+                        
+                    portfolio_state = self.portfolio_manager.analyze_portfolio_state(account_info)
                     
-                portfolio_state = self.portfolio_manager.analyze_portfolio_state(account_info)
+                    # ตรวจสอบเงื่อนไขการปิด Position
+                    self.check_exit_conditions(portfolio_state)
+                    
+                    # ตรวจสอบเงื่อนไขการเข้าเทรดใหม่
+                    self.check_entry_conditions(portfolio_state)
                 
-                # ตรวจสอบเงื่อนไขการปิด Position
-                self.check_exit_conditions(portfolio_state)
-                
-                # ตรวจสอบเงื่อนไขการเข้าเทรดใหม่
-                self.check_entry_conditions(portfolio_state)
-                
-                # รอ 1 วินาที
-                time.sleep(1)
+                # รอ 3 วินาที (เพิ่มจาก 1 วินาที)
+                time.sleep(3)
                 
             except Exception as e:
                 logger.error(f"เกิดข้อผิดพลาดใน Trading Loop: {str(e)}")
-                time.sleep(5)
+                time.sleep(10)  # รอนานขึ้นเมื่อ error
                 
         logger.info("จบ Trading Loop")
         
