@@ -85,10 +85,25 @@ class OrderManager:
                 magic=self.magic_number
             )
             
-            if result and result.get('retcode') == 10009:  # TRADE_RETCODE_DONE
+            # ตรวจสอบผลลัพธ์อย่างละเอียด
+            if result is None:
+                error_msg = "ส่ง Order ไม่สำเร็จ - mt5.order_send() ส่งคืน None"
+                logger.error(f"❌ {error_msg}")
+                return OrderResult(success=False, error_message=error_msg)
+                
+            retcode = result.get('retcode')
+            logger.info(f"📋 Order Response: RetCode={retcode}")
+            
+            if retcode == 10009:  # TRADE_RETCODE_DONE
                 # บันทึกข้อมูล Order
+                deal_id = result.get('deal', 0)
+                order_id = result.get('order', 0)
+                
+                # ใช้ deal_id เป็น ticket หลัก
+                ticket = deal_id if deal_id > 0 else order_id
+                
                 position = Position(
-                    ticket=result.get('order', 0),
+                    ticket=ticket,
                     symbol=signal.symbol,
                     type=order_type,
                     volume=lot_size,
@@ -102,21 +117,30 @@ class OrderManager:
                 
                 self.active_positions.append(position)
                 
-                logger.info(f"ส่ง Order สำเร็จ - Ticket: {position.ticket}, "
-                           f"Direction: {signal.direction}, Volume: {lot_size}")
+                logger.info(f"✅ ส่ง Order สำเร็จ - Ticket: {ticket}, Deal: {deal_id}, Order: {order_id}")
+                logger.info(f"   Direction: {signal.direction}, Volume: {lot_size}, Price: {result.get('price', price)}")
                 
                 return OrderResult(
                     success=True,
-                    ticket=position.ticket,
+                    ticket=ticket,
                     order_details={
                         'signal': signal,
                         'lot_size': lot_size,
-                        'price': result.get('price', price)
+                        'price': result.get('price', price),
+                        'deal_id': deal_id,
+                        'order_id': order_id
                     }
                 )
             else:
-                error_msg = f"ส่ง Order ไม่สำเร็จ - RetCode: {result.get('retcode') if result else 'None'}"
-                logger.error(error_msg)
+                # แสดง error พร้อมคำอธิบาย
+                error_desc = result.get('error_description', f'RetCode: {retcode}')
+                error_msg = f"ส่ง Order ไม่สำเร็จ - {error_desc}"
+                logger.error(f"❌ {error_msg}")
+                
+                # แสดงข้อมูล request ที่ส่งไป
+                logger.error(f"   Request: Symbol={signal.symbol}, Direction={signal.direction}, Volume={lot_size}")
+                logger.error(f"   Price={price}, Account Balance={account_balance:,.2f}")
+                
                 return OrderResult(success=False, error_message=error_msg)
                 
         except Exception as e:
