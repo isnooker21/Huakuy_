@@ -65,6 +65,24 @@ class OrderManager:
                     error_message="ไม่สามารถเชื่อมต่อ MT5 ได้"
                 )
                 
+            # ตรวจสอบและปรับ lot size ให้ตรงกับ symbol
+            import MetaTrader5 as mt5
+            mt5_symbol_info = mt5.symbol_info(signal.symbol)
+            if mt5_symbol_info:
+                # ปรับ lot size ให้ตรงกับ volume_step
+                volume_step = mt5_symbol_info.volume_step
+                adjusted_lot = round(lot_size / volume_step) * volume_step
+                
+                # ตรวจสอบขั้นต่ำและขั้นสูง
+                if adjusted_lot < mt5_symbol_info.volume_min:
+                    adjusted_lot = mt5_symbol_info.volume_min
+                elif adjusted_lot > mt5_symbol_info.volume_max:
+                    adjusted_lot = mt5_symbol_info.volume_max
+                
+                if adjusted_lot != lot_size:
+                    logger.info(f"🔧 ปรับ Lot Size จาก {lot_size} เป็น {adjusted_lot}")
+                    lot_size = adjusted_lot
+            
             # กำหนดประเภท Order
             if signal.direction == "BUY":
                 order_type = 0  # mt5.ORDER_TYPE_BUY
