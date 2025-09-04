@@ -403,9 +403,9 @@ class TradingConditions:
             # ตรวจสอบว่าเป็น Breakout Scenario หรือไม่
             gap_pips = (max_buy_price - min_sell_price) * 10  # แปลงเป็น pips
             
-            # อนุญาตถ้า gap เล็กมาก (< 100 pips) - เป็น Breakout หรือ Continuous Trading
-            if gap_pips < 100.0:
-                logger.info(f"⚡ Price Hierarchy Override: Gap={gap_pips:.1f} pips (Breakout/Continuous Trading)")
+            # อนุญาตถ้า gap ไม่ใหญ่มาก (< 60 pips = 600 จุด) - เป็น Breakout หรือ Continuous Trading
+            if gap_pips < 60.0:
+                logger.info(f"⚡ Price Hierarchy Override: Gap={gap_pips:.1f} pips ({gap_pips*10:.0f} จุด) - Breakout/Continuous")
                 return {'valid': True, 'reason': f'Breakout scenario - Gap: {gap_pips:.1f} pips'}
             
             # อนุญาตถ้ามี positions น้อย (< 5 ไม้)
