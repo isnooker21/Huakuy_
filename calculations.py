@@ -236,10 +236,54 @@ class LotSizeCalculator:
         dynamic_lot = (base_lot * strength_multiplier * volatility_multiplier * 
                       volume_multiplier * balance_multiplier)
         
+        # Debug logging
+        logger.info(f"📊 Lot Calculation Details:")
+        logger.info(f"   Base Lot: {base_lot:.4f}")
+        logger.info(f"   Strength Multiplier: {strength_multiplier:.2f}")
+        logger.info(f"   Volatility Multiplier: {volatility_multiplier:.2f}")
+        logger.info(f"   Volume Multiplier: {volume_multiplier:.2f}")
+        logger.info(f"   Balance Multiplier: {balance_multiplier:.2f}")
+        logger.info(f"   Raw Dynamic Lot: {dynamic_lot:.4f}")
+        
         # ปรับให้อยู่ในช่วงที่เหมาะสม
         dynamic_lot = max(0.01, min(dynamic_lot, 10.0))
+        logger.info(f"   After Min/Max: {dynamic_lot:.4f}")
         
-        return round(dynamic_lot, 2)
+        # ปัดเศษตาม volume step (0.01)
+        final_lot = LotSizeCalculator.round_to_volume_step(dynamic_lot, 0.01)
+        logger.info(f"   Final Lot: {final_lot:.2f}")
+        
+        return final_lot
+    
+    @staticmethod
+    def round_to_volume_step(lot_size: float, volume_step: float = 0.01) -> float:
+        """
+        ปัดเศษ lot size ตาม volume step ของโบรกเกอร์
+        
+        Args:
+            lot_size: ขนาด lot ที่คำนวณได้
+            volume_step: ขั้นต่ำของ volume (เช่น 0.01)
+            
+        Returns:
+            float: lot size ที่ปัดแล้ว
+        """
+        if volume_step <= 0:
+            return round(lot_size, 2)
+        
+        # คำนวณจำนวนขั้นที่ใกล้เคียงที่สุด
+        steps = lot_size / volume_step
+        
+        # ปัดเศษ: 0.016 -> 0.02, 0.015 -> 0.01
+        if steps - int(steps) >= 0.6:
+            rounded_steps = int(steps) + 1  # ปัดขึ้น
+        elif steps - int(steps) <= 0.4:
+            rounded_steps = int(steps)      # ปัดลง
+        else:
+            # 0.015 (steps = 1.5) -> ปัดลงเป็น 1 (0.01)
+            rounded_steps = int(steps)
+        
+        result = rounded_steps * volume_step
+        return max(volume_step, round(result, 2))  # ขั้นต่ำคือ volume_step
         
     @staticmethod
     def calculate_volume_factor(current_volume: float, volume_history: List[float]) -> float:
