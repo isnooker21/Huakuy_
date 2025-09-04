@@ -392,10 +392,7 @@ class MT5Connection:
             return {'retcode': 10017, 'error_description': trade_check['reason']}
             
         try:
-            # ตรวจสอบ filling type ที่ใช้ได้
-            filling_type = self._detect_filling_type(symbol)
-            
-            # เตรียมข้อมูล request
+            # เตรียมข้อมูล request (ไม่ระบุ type_filling ให้ MT5 เลือกเอง)
             request = {
                 "action": mt5.TRADE_ACTION_DEAL,
                 "symbol": symbol,
@@ -406,43 +403,67 @@ class MT5Connection:
                 "tp": tp,
                 "comment": comment,
                 "magic": magic,
-                "type_filling": filling_type,
+                "type_time": mt5.ORDER_TIME_GTC,
+                "deviation": 20,
             }
             
-            # ส่ง Order
-            logger.info(f"🚀 ส่ง Order Request: {request}")
-            result = mt5.order_send(request)
+            # ส่ง Order พร้อม retry mechanism
+            filling_types = [mt5.ORDER_FILLING_IOC, mt5.ORDER_FILLING_FOK, mt5.ORDER_FILLING_RETURN]
             
-            # ตรวจสอบผลลัพธ์อย่างละเอียด
-            if result is None:
-                logger.error("❌ mt5.order_send() ส่งคืน None - MT5 อาจไม่พร้อมใช้งาน")
-                return None
+            for attempt in range(3):  # ลองสูงสุด 3 ครั้ง
+                if attempt > 0:
+                    # ลอง filling type ต่างๆ
+                    request["type_filling"] = filling_types[attempt - 1]
+                    logger.info(f"🔄 ลองส่งใหม่ครั้งที่ {attempt + 1} ด้วย filling_type: {filling_types[attempt - 1]}")
+                else:
+                    logger.info(f"🚀 ส่ง Order Request (ครั้งที่ {attempt + 1}): {request}")
                 
-            logger.info(f"📋 Order Result: retcode={result.retcode}, deal={result.deal}, order={result.order}")
+                result = mt5.order_send(request)
+                
+                # ตรวจสอบผลลัพธ์
+                if result is None:
+                    logger.warning(f"⚠️ mt5.order_send() ส่งคืน None (ครั้งที่ {attempt + 1})")
+                    continue
+                    
+                logger.info(f"📋 Order Result (ครั้งที่ {attempt + 1}): retcode={result.retcode}, deal={result.deal}, order={result.order}")
+                
+                # ตรวจสอบ retcode
+                if result.retcode == 10009:  # TRADE_RETCODE_DONE
+                    logger.info(f"✅ ส่ง Order สำเร็จ - Deal: {result.deal}, Order: {result.order}")
+                    return {
+                        'retcode': result.retcode,
+                        'deal': result.deal,
+                        'order': result.order,
+                        'volume': result.volume,
+                        'price': result.price,
+                        'bid': result.bid,
+                        'ask': result.ask,
+                        'comment': result.comment,
+                        'request_id': result.request_id,
+                        'retcode_external': result.retcode_external
+                    }
+                else:
+                    # แสดง error code และความหมาย
+                    error_desc = self._get_retcode_description(result.retcode)
+                    logger.warning(f"⚠️ ส่ง Order ไม่สำเร็จ (ครั้งที่ {attempt + 1}) - RetCode: {result.retcode} ({error_desc})")
+                    
+                    # ถ้าเป็น error ที่ไม่ควร retry ให้หยุดเลย
+                    if result.retcode in [10019, 10018, 10017]:  # NO_MONEY, MARKET_CLOSED, TRADE_DISABLED
+                        logger.error(f"❌ หยุด retry เพราะ error ที่แก้ไม่ได้: {error_desc}")
+                        return {
+                            'retcode': result.retcode,
+                            'error_description': error_desc
+                        }
             
-            # ตรวจสอบ retcode
-            if result.retcode == 10009:  # TRADE_RETCODE_DONE
-                logger.info(f"✅ ส่ง Order สำเร็จ - Deal: {result.deal}, Order: {result.order}")
+            # หมดโอกาส retry แล้ว
+            logger.error("❌ ส่ง Order ไม่สำเร็จหลังจากลอง 3 ครั้ง")
+            if result:
                 return {
                     'retcode': result.retcode,
-                    'deal': result.deal,
-                    'order': result.order,
-                    'volume': result.volume,
-                    'price': result.price,
-                    'bid': result.bid,
-                    'ask': result.ask,
-                    'comment': result.comment,
-                    'request_id': result.request_id,
-                    'retcode_external': result.retcode_external
+                    'error_description': self._get_retcode_description(result.retcode)
                 }
             else:
-                # แสดง error code และความหมาย
-                error_desc = self._get_retcode_description(result.retcode)
-                logger.error(f"❌ ส่ง Order ไม่สำเร็จ - RetCode: {result.retcode} ({error_desc})")
-                return {
-                    'retcode': result.retcode,
-                    'error_description': error_desc
-                }
+                return None
                 
         except Exception as e:
             logger.error(f"❌ เกิดข้อผิดพลาดในการส่ง Order: {e}")
