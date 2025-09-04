@@ -218,6 +218,11 @@ class SmartRecoverySystem:
         try:
             score = 0.0
             
+            # ป้องกัน division by zero
+            if account_balance <= 0 or current_price <= 0:
+                logger.warning(f"Invalid values for score calculation: balance={account_balance}, price={current_price}")
+                return 0.0
+            
             # 1. Distance Score (30%) - ไม้ที่ห่างจากราคาปัจจุบันได้คะแนนสูง
             losing_distance = abs(losing_pos.price_open - current_price)
             distance_score = min(losing_distance / current_price * 1000, 30.0)
@@ -243,15 +248,17 @@ class SmartRecoverySystem:
                 score += 5.0  # Default age score
             
             # 4. Margin Impact Score (15%) - การคืน margin
-            margin_score = min(margin_freed / account_balance * 300, 15.0)
-            score += margin_score
+            if account_balance > 0:
+                margin_score = min(margin_freed / account_balance * 300, 15.0)
+                score += margin_score
             
             # 5. Portfolio Health Score (10%) - ผลกระทบต่อพอร์ต
-            portfolio_impact = (loss_amount / account_balance) * 100
-            if portfolio_impact > 10:  # ถ้าขาดทุนเกิน 10% ของ balance
-                score += 10.0
-            elif portfolio_impact > 5:
-                score += 5.0
+            if account_balance > 0:
+                portfolio_impact = (loss_amount / account_balance) * 100
+                if portfolio_impact > 10:  # ถ้าขาดทุนเกิน 10% ของ balance
+                    score += 10.0
+                elif portfolio_impact > 5:
+                    score += 5.0
             
             return score
             
