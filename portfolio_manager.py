@@ -416,12 +416,12 @@ class PortfolioManager:
         """
         result = {'can_enter': True, 'reasons': []}
         
-        # ตรวจสอบการใช้เงินทุน
-        if current_state.exposure_percentage >= self.max_portfolio_exposure:
-            result['can_enter'] = False
-            result['reasons'].append(
-                f"การใช้เงินทุนเกิน {self.max_portfolio_exposure}% ({current_state.exposure_percentage:.1f}%)"
-            )
+        # ตรวจสอบการใช้เงินทุน (ปิดใช้งาน - เพื่อ Recovery Systems)
+        # if current_state.exposure_percentage >= self.max_portfolio_exposure:
+        #     result['can_enter'] = False
+        #     result['reasons'].append(
+        #         f"การใช้เงินทุนเกิน {self.max_portfolio_exposure}% ({current_state.exposure_percentage:.1f}%)"
+        #     )
             
         # ตรวจสอบสมดุล Buy:Sell (ยืดหยุ่นกว่าเดิม)
         total_positions = current_state.buy_sell_ratio.get('total_positions', 0)
