@@ -889,8 +889,16 @@ class TradingGUI:
                 return
                 
             # หา Recovery Candidates จาก Smart Recovery
+            # ดึงราคาปัจจุบันจาก MT5
+            try:
+                import MetaTrader5 as mt5
+                symbol_info = mt5.symbol_info_tick("XAUUSD")
+                current_price = symbol_info.bid if symbol_info else 2540.0
+            except:
+                current_price = 2540.0  # fallback price
+                
             candidates = self.portfolio_manager.smart_recovery.analyze_recovery_opportunities(
-                positions, self.portfolio_manager.current_balance, 2540  # ใช้ราคาประมาณ
+                positions, self.portfolio_manager.current_balance, current_price
             )
             
             # แสดง top 10 candidates
