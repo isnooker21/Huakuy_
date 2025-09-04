@@ -272,6 +272,9 @@ class TradingGUI:
         # แท็บ Positions
         self.create_positions_tab(notebook)
         
+        # แท็บ Recovery Systems
+        self.create_recovery_tab(notebook)
+        
         # แท็บ Trading Log
         self.create_log_tab(notebook)
         
@@ -305,6 +308,128 @@ class TradingGUI:
         
         # เพิ่มเมนูคลิกขวา
         self.create_positions_context_menu()
+        
+    def create_recovery_tab(self, notebook):
+        """สร้างแท็บ Recovery Systems Dashboard"""
+        recovery_frame = tk.Frame(notebook, bg='#2b2b2b')
+        notebook.add(recovery_frame, text="Recovery Systems")
+        
+        # Main container
+        main_container = tk.Frame(recovery_frame, bg='#2b2b2b')
+        main_container.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
+        
+        # Top section - System Status
+        self.create_system_status_section(main_container)
+        
+        # Middle section - Active Recovery Groups
+        self.create_recovery_groups_section(main_container)
+        
+        # Bottom section - Recovery Candidates
+        self.create_recovery_candidates_section(main_container)
+        
+    def create_system_status_section(self, parent):
+        """สร้างส่วนแสดงสถานะระบบ"""
+        status_frame = tk.LabelFrame(parent, text="System Status", bg='#2b2b2b', fg='white', font=('Arial', 10, 'bold'))
+        status_frame.pack(fill=tk.X, pady=(0, 5))
+        
+        # Grid layout for status items
+        status_grid = tk.Frame(status_frame, bg='#2b2b2b')
+        status_grid.pack(fill=tk.X, padx=5, pady=5)
+        
+        # Smart Recovery Status
+        tk.Label(status_grid, text="Smart Recovery:", bg='#2b2b2b', fg='white', font=('Arial', 9)).grid(row=0, column=0, sticky='w', padx=(0, 10))
+        self.smart_recovery_status = tk.Label(status_grid, text="Checking...", bg='#2b2b2b', fg='yellow', font=('Arial', 9, 'bold'))
+        self.smart_recovery_status.grid(row=0, column=1, sticky='w')
+        
+        # Advanced Recovery Status
+        tk.Label(status_grid, text="Advanced Recovery:", bg='#2b2b2b', fg='white', font=('Arial', 9)).grid(row=0, column=2, sticky='w', padx=(20, 10))
+        self.advanced_recovery_status = tk.Label(status_grid, text="Checking...", bg='#2b2b2b', fg='yellow', font=('Arial', 9, 'bold'))
+        self.advanced_recovery_status.grid(row=0, column=3, sticky='w')
+        
+        # Zone Analysis Status
+        tk.Label(status_grid, text="Zone Analysis:", bg='#2b2b2b', fg='white', font=('Arial', 9)).grid(row=1, column=0, sticky='w', padx=(0, 10))
+        self.zone_analysis_status = tk.Label(status_grid, text="Checking...", bg='#2b2b2b', fg='yellow', font=('Arial', 9, 'bold'))
+        self.zone_analysis_status.grid(row=1, column=1, sticky='w')
+        
+        # Portfolio Balance Status
+        tk.Label(status_grid, text="Portfolio Balance:", bg='#2b2b2b', fg='white', font=('Arial', 9)).grid(row=1, column=2, sticky='w', padx=(20, 10))
+        self.portfolio_balance_status = tk.Label(status_grid, text="Checking...", bg='#2b2b2b', fg='yellow', font=('Arial', 9, 'bold'))
+        self.portfolio_balance_status.grid(row=1, column=3, sticky='w')
+        
+        # Next Action
+        tk.Label(status_grid, text="Next Action:", bg='#2b2b2b', fg='white', font=('Arial', 10, 'bold')).grid(row=2, column=0, sticky='w', padx=(0, 10), pady=(10, 0))
+        self.next_action_label = tk.Label(status_grid, text="Analyzing...", bg='#2b2b2b', fg='cyan', font=('Arial', 10, 'bold'), wraplength=600)
+        self.next_action_label.grid(row=2, column=1, columnspan=3, sticky='w', pady=(10, 0))
+        
+    def create_recovery_groups_section(self, parent):
+        """สร้างส่วนแสดง Active Recovery Groups"""
+        groups_frame = tk.LabelFrame(parent, text="Active Recovery Groups", bg='#2b2b2b', fg='white', font=('Arial', 10, 'bold'))
+        groups_frame.pack(fill=tk.BOTH, expand=True, pady=(5, 5))
+        
+        # Treeview for recovery groups
+        columns = ('Group ID', 'Type', 'Phase', 'Age', 'Positions', 'Net P&L', 'Status')
+        self.recovery_groups_tree = ttk.Treeview(groups_frame, columns=columns, show='headings', height=8)
+        
+        # Configure columns
+        self.recovery_groups_tree.heading('Group ID', text='Group ID')
+        self.recovery_groups_tree.heading('Type', text='Type')
+        self.recovery_groups_tree.heading('Phase', text='Phase')
+        self.recovery_groups_tree.heading('Age', text='Age (min)')
+        self.recovery_groups_tree.heading('Positions', text='Positions')
+        self.recovery_groups_tree.heading('Net P&L', text='Net P&L')
+        self.recovery_groups_tree.heading('Status', text='Status')
+        
+        # Configure column widths
+        self.recovery_groups_tree.column('Group ID', width=120)
+        self.recovery_groups_tree.column('Type', width=120)
+        self.recovery_groups_tree.column('Phase', width=120)
+        self.recovery_groups_tree.column('Age', width=80)
+        self.recovery_groups_tree.column('Positions', width=80)
+        self.recovery_groups_tree.column('Net P&L', width=100)
+        self.recovery_groups_tree.column('Status', width=200)
+        
+        # Scrollbar for recovery groups
+        groups_scrollbar = ttk.Scrollbar(groups_frame, orient=tk.VERTICAL, command=self.recovery_groups_tree.yview)
+        self.recovery_groups_tree.configure(yscrollcommand=groups_scrollbar.set)
+        
+        # Pack recovery groups treeview and scrollbar
+        self.recovery_groups_tree.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        groups_scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+        
+    def create_recovery_candidates_section(self, parent):
+        """สร้างส่วนแสดง Recovery Candidates"""
+        candidates_frame = tk.LabelFrame(parent, text="Recovery Candidates (Ready to Close)", bg='#2b2b2b', fg='white', font=('Arial', 10, 'bold'))
+        candidates_frame.pack(fill=tk.BOTH, expand=True, pady=(5, 0))
+        
+        # Treeview for recovery candidates
+        columns = ('Profit Ticket', 'Profit', 'Loss Ticket', 'Loss', 'Net Profit', 'Score', 'Reason')
+        self.recovery_candidates_tree = ttk.Treeview(candidates_frame, columns=columns, show='headings', height=6)
+        
+        # Configure columns
+        self.recovery_candidates_tree.heading('Profit Ticket', text='Profit Ticket')
+        self.recovery_candidates_tree.heading('Profit', text='Profit')
+        self.recovery_candidates_tree.heading('Loss Ticket', text='Loss Ticket')
+        self.recovery_candidates_tree.heading('Loss', text='Loss')
+        self.recovery_candidates_tree.heading('Net Profit', text='Net Profit')
+        self.recovery_candidates_tree.heading('Score', text='Score')
+        self.recovery_candidates_tree.heading('Reason', text='Reason')
+        
+        # Configure column widths
+        self.recovery_candidates_tree.column('Profit Ticket', width=100)
+        self.recovery_candidates_tree.column('Profit', width=80)
+        self.recovery_candidates_tree.column('Loss Ticket', width=100)
+        self.recovery_candidates_tree.column('Loss', width=80)
+        self.recovery_candidates_tree.column('Net Profit', width=80)
+        self.recovery_candidates_tree.column('Score', width=60)
+        self.recovery_candidates_tree.column('Reason', width=200)
+        
+        # Scrollbar for recovery candidates
+        candidates_scrollbar = ttk.Scrollbar(candidates_frame, orient=tk.VERTICAL, command=self.recovery_candidates_tree.yview)
+        self.recovery_candidates_tree.configure(yscrollcommand=candidates_scrollbar.set)
+        
+        # Pack recovery candidates treeview and scrollbar
+        self.recovery_candidates_tree.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        candidates_scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
         
     def create_positions_context_menu(self):
         """สร้างเมนูคลิกขวาสำหรับ Positions"""
@@ -524,6 +649,9 @@ class TradingGUI:
             # อัพเดท Positions (ลดความถี่)
             self.update_positions_display_light()
             
+            # อัพเดท Recovery Systems Dashboard
+            self.update_recovery_systems_display()
+            
         except Exception as e:
             logger.debug(f"GUI update error: {str(e)}")  # ใช้ debug แทน error
             
@@ -590,6 +718,195 @@ class TradingGUI:
                 
         except Exception as e:
             pass  # ไม่ log error
+            
+    def update_recovery_systems_display(self):
+        """อัพเดท Recovery Systems Dashboard"""
+        try:
+            if not hasattr(self, 'smart_recovery_status'):
+                return  # ยังไม่ได้สร้าง recovery tab
+                
+            # อัพเดทสถานะระบบต่างๆ
+            self.update_system_status()
+            self.update_recovery_groups()
+            self.update_recovery_candidates()
+            
+        except Exception as e:
+            pass  # ไม่ log error เพื่อไม่ให้รบกวน
+            
+    def update_system_status(self):
+        """อัพเดทสถานะของระบบต่างๆ"""
+        try:
+            positions = self.portfolio_manager.order_manager.active_positions
+            if not positions:
+                self.smart_recovery_status.config(text="NO POSITIONS", fg='gray')
+                self.advanced_recovery_status.config(text="IDLE", fg='gray')
+                self.zone_analysis_status.config(text="IDLE", fg='gray')
+                self.portfolio_balance_status.config(text="EMPTY", fg='gray')
+                self.next_action_label.config(text="Waiting for positions...")
+                return
+                
+            # Smart Recovery Status
+            smart_recovery_result = self.portfolio_manager.smart_recovery.should_trigger_recovery(
+                positions, self.portfolio_manager.current_balance, 2500  # ใช้ค่าประมาณ
+            )
+            
+            if smart_recovery_result:
+                self.smart_recovery_status.config(text="READY", fg='green')
+            else:
+                self.smart_recovery_status.config(text="WAITING", fg='orange')
+                
+            # Advanced Recovery Status  
+            if hasattr(self.portfolio_manager, 'advanced_recovery'):
+                active_groups = len(self.portfolio_manager.advanced_recovery.active_recoveries)
+                if active_groups > 0:
+                    self.advanced_recovery_status.config(text=f"ACTIVE ({active_groups})", fg='green')
+                else:
+                    self.advanced_recovery_status.config(text="MONITORING", fg='orange')
+            
+            # Zone Analysis Status
+            if len(positions) > 5:
+                self.zone_analysis_status.config(text="ANALYZING", fg='cyan')
+            else:
+                self.zone_analysis_status.config(text="IDLE", fg='gray')
+                
+            # Portfolio Balance Status
+            buy_count = len([p for p in positions if p.type == 0])
+            sell_count = len([p for p in positions if p.type == 1])
+            total = len(positions)
+            
+            if total > 0:
+                buy_pct = (buy_count / total) * 100
+                if 40 <= buy_pct <= 60:
+                    self.portfolio_balance_status.config(text="BALANCED", fg='green')
+                elif buy_pct > 70 or buy_pct < 30:
+                    self.portfolio_balance_status.config(text="IMBALANCED", fg='red')
+                else:
+                    self.portfolio_balance_status.config(text="MODERATE", fg='yellow')
+            
+            # Next Action
+            next_action = self.determine_next_action(positions)
+            self.next_action_label.config(text=next_action)
+            
+        except Exception as e:
+            pass
+            
+    def determine_next_action(self, positions):
+        """กำหนดการกระทำถัดไป"""
+        try:
+            if not positions:
+                return "Waiting for positions..."
+                
+            # ตรวจสอบ Smart Recovery
+            smart_ready = self.portfolio_manager.smart_recovery.should_trigger_recovery(
+                positions, self.portfolio_manager.current_balance, 2500
+            )
+            
+            if smart_ready:
+                profitable = [p for p in positions if p.profit > 0]
+                losing = [p for p in positions if p.profit < 0]
+                if profitable and losing:
+                    return f"🎯 Ready for Smart Recovery: {len(profitable)} profit + {len(losing)} loss positions"
+            
+            # ตรวจสอบ Portfolio Balance
+            buy_count = len([p for p in positions if p.type == 0])
+            sell_count = len([p for p in positions if p.type == 1])
+            total = len(positions)
+            
+            if total > 0:
+                buy_pct = (buy_count / total) * 100
+                if buy_pct > 70:
+                    return f"📊 Portfolio imbalanced: {buy_pct:.1f}% BUY - Need more SELL positions"
+                elif buy_pct < 30:
+                    return f"📊 Portfolio imbalanced: {buy_pct:.1f}% BUY - Need more BUY positions"
+            
+            # ตรวจสอบ Advanced Recovery
+            if hasattr(self.portfolio_manager, 'advanced_recovery'):
+                active_groups = len(self.portfolio_manager.advanced_recovery.active_recoveries)
+                if active_groups > 0:
+                    return f"🚀 Advanced Recovery active: {active_groups} groups in progress"
+            
+            return "💡 Monitoring market conditions..."
+            
+        except Exception as e:
+            return "Analyzing..."
+            
+    def update_recovery_groups(self):
+        """อัพเดท Active Recovery Groups"""
+        try:
+            if not hasattr(self, 'recovery_groups_tree'):
+                return
+                
+            # ล้างข้อมูลเก่า
+            for item in self.recovery_groups_tree.get_children():
+                self.recovery_groups_tree.delete(item)
+            
+            # เพิ่มข้อมูล Advanced Recovery Groups
+            if hasattr(self.portfolio_manager, 'advanced_recovery'):
+                for group_id, group in self.portfolio_manager.advanced_recovery.active_recoveries.items():
+                    age_minutes = (datetime.now() - group.created_time).total_seconds() / 60
+                    
+                    # นับ positions ใน group
+                    positions_count = 0
+                    net_pnl = 0.0
+                    
+                    if hasattr(group, 'old_position') and group.old_position:
+                        positions_count += 1
+                        net_pnl += group.old_position.profit
+                    if hasattr(group, 'new_position') and group.new_position:
+                        positions_count += 1
+                        net_pnl += group.new_position.profit
+                    if hasattr(group, 'target_recovery') and group.target_recovery:
+                        positions_count += 1
+                        net_pnl += group.target_recovery.profit
+                    
+                    status = f"{group.phase.name}" if hasattr(group, 'phase') else "UNKNOWN"
+                    
+                    self.recovery_groups_tree.insert('', 'end', values=(
+                        group_id[:12] + "...",  # ย่อ ID
+                        "Triple Recovery",
+                        status,
+                        f"{age_minutes:.1f}",
+                        str(positions_count),
+                        f"${net_pnl:.2f}",
+                        f"Waiting for phase completion"
+                    ))
+                    
+        except Exception as e:
+            pass
+            
+    def update_recovery_candidates(self):
+        """อัพเดท Recovery Candidates"""
+        try:
+            if not hasattr(self, 'recovery_candidates_tree'):
+                return
+                
+            # ล้างข้อมูลเก่า
+            for item in self.recovery_candidates_tree.get_children():
+                self.recovery_candidates_tree.delete(item)
+            
+            positions = self.portfolio_manager.order_manager.active_positions
+            if not positions:
+                return
+                
+            # หา Recovery Candidates จาก Smart Recovery
+            candidates = self.portfolio_manager.smart_recovery.analyze_recovery_opportunities(
+                positions, self.portfolio_manager.current_balance, 2540  # ใช้ราคาประมาณ
+            )
+            
+            # แสดง top 10 candidates
+            for i, candidate in enumerate(candidates[:10]):
+                self.recovery_candidates_tree.insert('', 'end', values=(
+                    str(candidate.profit_position.ticket),
+                    f"${candidate.profit_position.profit:.2f}",
+                    str(candidate.losing_position.ticket),
+                    f"${candidate.losing_position.profit:.2f}",
+                    f"${candidate.net_profit:.2f}",
+                    f"{candidate.recovery_score:.1f}",
+                    candidate.reason[:30] + "..." if len(candidate.reason) > 30 else candidate.reason
+                ))
+                
+        except Exception as e:
+            pass
             
     def update_connection_status(self):
         """อัพเดทสถานะการเชื่อมต่อ"""
