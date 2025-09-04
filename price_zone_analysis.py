@@ -237,11 +237,11 @@ class PriceZoneAnalyzer:
                 if zone_id is not None:
                     zone = self.zones[zone_id]
                     
-                    if position.type.upper() == 'BUY':
+                    if position.type == 0:  # BUY
                         zone.buy_orders.append(position)
                         zone.buy_count += 1
                         zone.buy_volume += position.volume
-                    else:  # SELL
+                    else:  # SELL (type == 1)
                         zone.sell_orders.append(position)
                         zone.sell_count += 1
                         zone.sell_volume += position.volume
