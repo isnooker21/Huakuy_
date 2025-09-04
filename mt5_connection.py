@@ -195,8 +195,18 @@ class MT5Connection:
         try:
             account_info = mt5.account_info()
             if account_info:
+                # เตือนเมื่อใช้บัญชีจริง
+                if hasattr(account_info, 'trade_mode'):
+                    if account_info.trade_mode == 0:  # Real account
+                        logger.warning("🚨 กำลังใช้บัญชีจริง (REAL ACCOUNT) - เงินจริง!")
+                    elif account_info.trade_mode == 1:  # Demo account  
+                        logger.info("✅ กำลังใช้บัญชีทดลอง (DEMO ACCOUNT)")
+                    elif account_info.trade_mode == 2:  # Contest account
+                        logger.info("🏆 กำลังใช้บัญชีแข่งขัน (CONTEST ACCOUNT)")
+                
                 return {
                     'login': account_info.login,
+                    'trade_mode': getattr(account_info, 'trade_mode', 'Unknown'),
                     'balance': account_info.balance,
                     'equity': account_info.equity,
                     'margin': account_info.margin,
@@ -604,3 +614,4 @@ class MT5Connection:
         self.filling_types[symbol] = mt5.ORDER_FILLING_FOK
         logger.warning(f"ไม่สามารถตรวจสอบ filling type สำหรับ {symbol} ใช้ FOK เป็นค่าเริ่มต้น")
         return mt5.ORDER_FILLING_FOK
+
