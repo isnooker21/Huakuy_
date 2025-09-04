@@ -704,8 +704,19 @@ class PortfolioManager:
     
     def check_and_execute_smart_recovery(self, current_price: float, 
                                          block_recovery: bool = False) -> Dict[str, Any]:
-        """ตรวจสอบและดำเนินการ Smart Recovery"""
+        """ตรวจสอบและดำเนินการ Smart Recovery (พร้อม Emergency Override)"""
         try:
+            # Emergency Override - ถ้ามี positions มาก หรือขาดทุนหนัก ให้ข้าม block
+            positions = self.order_manager.active_positions
+            if len(positions) > 6:  # มากกว่า 6 ไม้
+                logger.info(f"🚨 Emergency Override: {len(positions)} positions - Force Smart Recovery")
+                block_recovery = False
+            
+            total_loss = sum(pos.profit for pos in positions if pos.profit < 0)
+            if total_loss < -50:  # ขาดทุนเกิน 50 USD
+                logger.info(f"🚨 Emergency Override: Heavy loss ${total_loss:.2f} - Force Smart Recovery")
+                block_recovery = False
+            
             # เช็คว่าถูกบล็อค Recovery หรือไม่ (เช่น ระหว่างรอ Breakout)
             if block_recovery:
                 return {'executed': False, 'reason': 'Recovery ถูกบล็อคชั่วคราว - รอ Breakout Strategy'}
@@ -968,15 +979,44 @@ class PortfolioManager:
             }
     
     def _should_block_traditional_recovery(self, breakout_analysis: Dict, update_results: Dict) -> bool:
-        """ตัดสินใจว่าควรบล็อค Traditional Recovery หรือไม่"""
+        """ตัดสินใจว่าควรบล็อค Traditional Recovery หรือไม่ (ยืดหยุ่นขึ้น)"""
         try:
-            # บล็อคถ้ามี recovery groups ที่ active
-            if len(self.advanced_recovery.active_recoveries) > 0:
+            now = datetime.now()
+            
+            # เช็ค Advanced Recovery groups
+            active_groups = len(self.advanced_recovery.active_recoveries)
+            
+            if active_groups > 0:
+                # ตรวจสอบว่า groups ค้างนานเกินไปหรือไม่
+                oldest_group_age = 0
+                for group_id, group in self.advanced_recovery.active_recoveries.items():
+                    age_minutes = (now - group.created_time).total_seconds() / 60
+                    oldest_group_age = max(oldest_group_age, age_minutes)
+                
+                # ถ้า recovery groups ค้างเกิน 10 นาที → ไม่บล็อค (fallback)
+                if oldest_group_age > 10:
+                    logger.info(f"🔄 Advanced Recovery Fallback: Groups active for {oldest_group_age:.1f} minutes")
+                    return False
+                
+                # ถ้ามี groups เยอะเกิน 2 → ไม่บล็อค (ให้ Smart Recovery ช่วย)
+                if active_groups > 2:
+                    logger.info(f"🔄 Advanced Recovery Overload: {active_groups} groups active")
+                    return False
+                
                 return True
             
-            # บล็อคถ้าใกล้ breakout
+            # บล็อคถ้าใกล้ breakout (เฉพาะกรณีใหม่)
             potential = breakout_analysis.get('breakout_analysis', {}).get('potential', 'NONE')
             if potential in ['APPROACHING_BULLISH', 'APPROACHING_BEARISH']:
+                # ตรวจสอบว่าใกล้ breakout มานานแล้วหรือยัง
+                if hasattr(self, 'last_approaching_time'):
+                    approaching_duration = (now - self.last_approaching_time).total_seconds() / 60
+                    if approaching_duration > 5:  # ถ้าใกล้ breakout เกิน 5 นาที → ไม่บล็อค
+                        logger.info(f"🔄 Approaching Timeout: {approaching_duration:.1f} minutes")
+                        return False
+                else:
+                    self.last_approaching_time = now
+                
                 return True
             
             # ไม่บล็อคถ้าไม่มีเงื่อนไขพิเศษ
