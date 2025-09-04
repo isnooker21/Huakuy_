@@ -438,6 +438,10 @@ class MT5Connection:
             logger.info(f"   Volume: {volume}")
             logger.info(f"   Price: {price}")
             logger.info(f"   Request: {request}")
+            logger.info(f"   Magic: {magic}")
+            logger.info(f"   Comment: {comment}")
+            logger.info(f"   Order Type: {order_type} (mt5.ORDER_TYPE_BUY={mt5.ORDER_TYPE_BUY}, mt5.ORDER_TYPE_SELL={mt5.ORDER_TYPE_SELL})")
+            logger.info(f"   Action: {request['action']} (mt5.TRADE_ACTION_DEAL={mt5.TRADE_ACTION_DEAL})")
             
             result = mt5.order_send(request)
             
