@@ -446,7 +446,13 @@ class OrderManager:
         if not self.active_positions:
             return {
                 'total_positions': 0,
-                'buy_sell_ratio': {'buy_percentage': 0, 'sell_percentage': 0},
+                'buy_sell_ratio': {
+                    'buy_percentage': 0, 
+                    'sell_percentage': 0,
+                    'buy_count': 0,
+                    'sell_count': 0,
+                    'total_positions': 0
+                },
                 'total_profit_percentage': 0.0,
                 'exposure_percentage': 0.0,
                 'risk_percentage': 0.0

@@ -17,14 +17,14 @@ logger = logging.getLogger(__name__)
 class TradingGUI:
     """คลาสสำหรับ GUI ของระบบเทรด"""
     
-    def __init__(self, portfolio_manager, mt5_connection):
+    def __init__(self, trading_system):
         """
         Args:
-            portfolio_manager: ตัวจัดการพอร์ต
-            mt5_connection: การเชื่อมต่อ MT5
+            trading_system: ระบบเทรดหลัก
         """
-        self.portfolio_manager = portfolio_manager
-        self.mt5_connection = mt5_connection
+        self.trading_system = trading_system
+        self.portfolio_manager = trading_system.portfolio_manager
+        self.mt5_connection = trading_system.mt5_connection
         
         # สร้าง main window
         self.root = tk.Tk()
@@ -498,6 +498,13 @@ class TradingGUI:
             else:
                 self.connection_status.config(text="Disconnected", fg='red')
                 self.connect_btn.config(text="Connect MT5", command=self.connect_mt5)
+                
+            # อัพเดทสถานะการเทรด
+            if self.trading_system.is_running:
+                self.trading_status.config(text="Running", fg='green')
+            else:
+                self.trading_status.config(text="Stopped", fg='red')
+                
         except Exception as e:
             logger.error(f"เกิดข้อผิดพลาดในการอัพเดทสถานะการเชื่อมต่อ: {str(e)}")
             
@@ -659,9 +666,11 @@ class TradingGUI:
                 messagebox.showerror("Error", "กรุณาเชื่อมต่อ MT5 ก่อน")
                 return
                 
+            # เริ่มการเทรดผ่าน TradingSystem
+            self.trading_system.start_trading()
             self.is_trading = True
             self.trading_status.config(text="Running", fg='green')
-            logger.info("เริ่มการเทรด")
+            logger.info("เริ่มการเทรดจาก GUI")
             
         except Exception as e:
             logger.error(f"เกิดข้อผิดพลาดในการเริ่มเทรด: {str(e)}")
@@ -670,9 +679,11 @@ class TradingGUI:
     def stop_trading(self):
         """หยุดการเทรด"""
         try:
+            # หยุดการเทรดผ่าน TradingSystem
+            self.trading_system.stop_trading()
             self.is_trading = False
             self.trading_status.config(text="Stopped", fg='red')
-            logger.info("หยุดการเทรด")
+            logger.info("หยุดการเทรดจาก GUI")
             
         except Exception as e:
             logger.error(f"เกิดข้อผิดพลาดในการหยุดเทรด: {str(e)}")
