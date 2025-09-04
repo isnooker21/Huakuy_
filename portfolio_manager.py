@@ -1202,21 +1202,33 @@ class PortfolioManager:
             if total_profit <= 0:
                 return {'valid': False, 'reason': f'Net profit เป็นลบ: ${total_profit:.2f}'}
             
-            # เงื่อนไข 2: กำไรต้องมากกว่า % ของจำนวนไม้ (ยืดหยุ่นสำหรับ balance ติดลบ)
+            # เงื่อนไข 2: กำไรต้องมากกว่า % ของจำนวนไม้ (ใช้เกณฑ์ตาม lot size เหมือน Smart Recovery)
             position_count = len(positions_to_close)
             
-            # ถ้า balance ติดลบ หรือมีไม้เยอะ (>20) ใช้เกณฑ์ง่ายๆ
-            if current_state.account_balance <= 0 or len(positions_to_close) > 20:
-                min_required_profit = 1.0  # กำไรขั้นต่ำแค่ $1
-                logger.info(f"🎯 ใช้เกณฑ์ยืดหยุ่น: Balance={current_state.account_balance:.2f}, Positions={position_count}")
+            # คำนวณ total lots ของไม้ที่จะปิด
+            total_lots = sum(pos.volume for pos in positions_to_close)
+            
+            # ใช้เกณฑ์เดียวกับ Smart Recovery - ตาม lot size
+            if total_lots <= 0.02:  # รวมกัน <= 0.02 lot
+                min_required_profit = 0.001  # แค่ $0.001 เท่านั้น!
+            elif total_lots <= 0.05:  # รวมกัน <= 0.05 lot  
+                min_required_profit = 0.005  # แค่ $0.005
+            elif total_lots <= 0.1:   # รวมกัน <= 0.1 lot
+                min_required_profit = 0.01   # แค่ $0.01
+            elif current_state.account_balance <= 0 or position_count > 10:
+                min_required_profit = 0.1    # กำไรขั้นต่ำ $0.1 สำหรับกรณีพิเศษ
             else:
-                min_profit_percentage = min(position_count * 0.2, 2.0)  # ลดจาก 0.5% เป็น 0.2% และไม่เกิน 2%
+                # สำหรับ lot ใหญ่ใช้เกณฑ์ยืดหยุ่น
+                min_profit_percentage = min(position_count * 0.05, 0.5)  # ลดเหลือ 0.05% และไม่เกิน 0.5%
                 min_required_profit = abs(current_state.account_balance) * (min_profit_percentage / 100)
+                min_required_profit = min(min_required_profit, 5.0)  # จำกัดไม่เกิน $5
+            
+            logger.info(f"🎯 Portfolio Health: {total_lots} lots → ต้องการ ${min_required_profit:.3f}, ได้ ${total_profit:.3f}")
             
             if total_profit < min_required_profit:
                 return {
                     'valid': False, 
-                    'reason': f'กำไรไม่ถึงเกณฑ์: ${total_profit:.2f} < ${min_required_profit:.2f}'
+                    'reason': f'กำไรไม่ถึงเกณฑ์: ${total_profit:.3f} < ${min_required_profit:.3f} (lots: {total_lots})'
                 }
             
             # เงื่อนไข 3: ต้องมีไม้กำไรและขาดทุนปะปนกัน (ไม่ปิดแค่ฝั่งเดียว)
