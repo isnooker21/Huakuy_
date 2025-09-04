@@ -197,9 +197,21 @@ class OrderManager:
             total_profit = 0.0
             errors = []
             
-            # ปิด Position ทีละตัว
+            # ปิด Position ทีละตัว (เช็ค spread ก่อน)
             for position in positions:
                 try:
+                    # คำนวณกำไรและ spread ก่อนปิด
+                    profit_info = self.mt5.calculate_position_profit_with_spread(position.ticket)
+                    
+                    if profit_info:
+                        logger.info(f"💰 Position {position.ticket}: "
+                                  f"Profit {profit_info['profit_percentage']:.2f}% vs "
+                                  f"Spread {profit_info['spread_percentage']:.3f}%")
+                        
+                        # ปิดแม้กำไรน้อยกว่า spread (แต่แสดงคำเตือน)
+                        if not profit_info['should_close']:
+                            logger.warning(f"⚠️ Position {position.ticket} อาจปิดติดลบเพราะ spread")
+                    
                     result = self.mt5.close_position(position.ticket)
                     
                     if result and result.get('retcode') == 10009:  # TRADE_RETCODE_DONE
