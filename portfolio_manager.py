@@ -691,9 +691,13 @@ class PortfolioManager:
     def check_and_execute_smart_recovery(self, current_price: float) -> Dict[str, Any]:
         """ตรวจสอบและดำเนินการ Smart Recovery"""
         try:
-            # ดึงข้อมูลปัจจุบัน
-            current_state = self.get_current_state()
-            positions = self.order_manager.get_active_positions()
+            # ดึงข้อมูลปัจจุบัน  
+            account_info = self.order_manager.mt5.get_account_info()
+            if not account_info:
+                return {'executed': False, 'reason': 'ไม่สามารถดึงข้อมูลบัญชีได้'}
+                
+            current_state = self.analyze_portfolio_state(account_info)
+            positions = self.order_manager.active_positions
             
             if not positions or len(positions) < 2:
                 return {'executed': False, 'reason': 'ไม่มี positions เพียงพอสำหรับ Recovery'}
@@ -799,7 +803,7 @@ class PortfolioManager:
             self.zone_analyzer.update_price_history(current_price)
             
             # วิเคราะห์การกระจายปัจจุบัน
-            positions = self.order_manager.get_active_positions()
+            positions = self.order_manager.active_positions
             analysis = self.zone_analyzer.analyze_position_distribution(positions)
             
             # ตรวจสอบว่าควร rebalance หรือไม่
