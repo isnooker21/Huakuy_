@@ -1,0 +1,56 @@
+{
+  "timestamp": "2025-09-02T09:25:47.310795",
+  "version": "3.1",
+  "checksum": "221257409ac7d82253e5f9d181a080b9",
+  "position_tracker": {
+    "28266364": {
+      "birth_time": "2025-09-02T09:22:54.401087",
+      "initial_price": 3492.43,
+      "max_profit": 0.6,
+      "min_profit": -3.42,
+      "role_history": [
+        "HG",
+        "SUPPORT",
+        "SACRIFICE",
+        "HG"
+      ],
+      "efficiency_history": [
+        "poor",
+        "fair",
+        "poor"
+      ],
+      "peak_profit_per_lot": 10.0,
+      "contribution_score": 0.0,
+      "hold_score": 80,
+      "adaptive_target": 36.0
+    }
+  },
+  "active_hedges": {},
+  "hedge_pairs": {},
+  "total_signals": 1,
+  "successful_signals": 1,
+  "last_signal_time": "2025-09-02T09:22:24.117640",
+  "total_redirects": 0,
+  "successful_redirects": 0,
+  "redirect_profit_captured": 0.0,
+  "last_redirect_time": null,
+  "total_pair_closes": 0,
+  "successful_pair_closes": 0,
+  "pair_profit_captured": 0.0,
+  "total_group_closes": 0,
+  "group_profit_captured": 0.0,
+  "hedge_analytics": {
+    "total_hedges_created": 0,
+    "successful_recoveries": 0,
+    "total_recovery_profit": 0.0,
+    "avg_recovery_time_hours": 0.0,
+    "hedge_effectiveness": 0.0,
+    "active_hedge_pairs": 0
+  },
+  "portfolio_health": 0,
+  "base_lot": 0.01,
+  "smart_router_enabled": true,
+  "pair_closing_enabled": true,
+  "hedge_system_enabled": true,
+  "drawdown_management_enabled": true
+}
