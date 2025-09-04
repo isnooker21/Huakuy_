@@ -772,8 +772,15 @@ class PortfolioManager:
             # เลือกและดำเนินการ Recovery ที่ดีที่สุด
             best_candidate = recovery_candidates[0]  # เรียงตาม score แล้ว
             
+            # สร้าง dict สำหรับ Portfolio Health Check
+            candidate_dict = {
+                'positions': [best_candidate.profit_position, best_candidate.losing_position],
+                'net_profit': best_candidate.net_profit,
+                'total_profit': best_candidate.profit_position.profit + best_candidate.losing_position.profit
+            }
+            
             # ตรวจสอบ Portfolio Health ก่อนปิด - ต้องมั่นใจว่าปิดแล้วดีขึ้น
-            portfolio_health_check = self._validate_portfolio_improvement(best_candidate, current_state)
+            portfolio_health_check = self._validate_portfolio_improvement(candidate_dict, current_state)
             if not portfolio_health_check['valid']:
                 logger.warning(f"❌ Portfolio Health Check Failed: {portfolio_health_check['reason']}")
                 return {'executed': False, 'reason': f"Portfolio Health: {portfolio_health_check['reason']}"}
@@ -783,7 +790,14 @@ class PortfolioManager:
             # ส่ง Portfolio Health Validator ไปให้ Smart Recovery ใช้ร่วมกัน
             recovery_result = self.smart_recovery.execute_recovery(
                 best_candidate, 
-                portfolio_validator=lambda candidate, state: self._validate_portfolio_improvement(candidate, current_state)
+                portfolio_validator=lambda candidate, state: self._validate_portfolio_improvement(
+                    {
+                        'positions': [candidate.profit_position, candidate.losing_position],
+                        'net_profit': candidate.net_profit,
+                        'total_profit': candidate.profit_position.profit + candidate.losing_position.profit
+                    }, 
+                    current_state
+                )
             )
             
             if recovery_result['success']:
