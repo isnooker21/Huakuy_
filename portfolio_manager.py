@@ -17,6 +17,8 @@ from smart_recovery import SmartRecoverySystem
 from price_zone_analysis import PriceZoneAnalyzer
 from zone_rebalancer import ZoneRebalancer
 from advanced_breakout_recovery import AdvancedBreakoutRecovery
+from smart_gap_filler import SmartGapFiller
+from force_trading_mode import ForceTradingMode
 from order_management import OrderManager, OrderResult, CloseResult
 
 logger = logging.getLogger(__name__)
@@ -74,6 +76,10 @@ class PortfolioManager:
         # เพิ่ม Advanced Breakout Recovery System
         self.advanced_recovery = AdvancedBreakoutRecovery(order_manager.mt5)
         
+        # เพิ่ม Continuous Trading Systems
+        self.gap_filler = SmartGapFiller(order_manager.mt5)
+        self.force_trading = ForceTradingMode(order_manager.mt5)
+        
         # การตั้งค่าความเสี่ยง
         self.max_risk_per_trade = 2.0  # เปอร์เซ็นต์ความเสี่ยงต่อ Trade
         self.max_portfolio_exposure = 80.0  # เปอร์เซ็นต์การใช้เงินทุนสูงสุด
@@ -93,6 +99,10 @@ class PortfolioManager:
         # ประวัติการทำงาน
         self.portfolio_history = []
         self.trade_history = []
+        
+        # ติดตามเวลาเทรดล่าสุด สำหรับ Continuous Trading
+        self.last_trade_time: Optional[datetime] = None
+        self.last_signal_time: Optional[datetime] = None
         
     def analyze_portfolio_state(self, account_info: Dict) -> PortfolioState:
         """
@@ -966,3 +976,96 @@ class PortfolioManager:
         except Exception as e:
             logger.error(f"Error deciding recovery block: {e}")
             return False
+    
+    def check_continuous_trading_opportunities(self, current_price: float, 
+                                             current_candle: Optional[CandleData] = None) -> Dict[str, Any]:
+        """ตรวจสอบโอกาสการเทรดแบบต่เนื่อง"""
+        try:
+            positions = self.order_manager.active_positions
+            now = datetime.now()
+            
+            result = {
+                'gap_filler_active': False,
+                'force_trading_active': False,
+                'recommended_signal': None,
+                'activation_reason': '',
+                'continuous_stats': {}
+            }
+            
+            # 1. ตรวจสอบ Smart Gap Filler
+            gap_result = self.gap_filler.should_activate_gap_filling(
+                positions, current_price, self.last_trade_time
+            )
+            
+            if gap_result['should_activate']:
+                gap_signal = self.gap_filler.create_synthetic_signal(
+                    gap_result['recommended_action']
+                )
+                
+                if gap_signal:
+                    result.update({
+                        'gap_filler_active': True,
+                        'recommended_signal': gap_signal,
+                        'activation_reason': f"Gap Filling: {gap_result['activation_reason']}",
+                        'gap_analysis': gap_result['gap_analysis']
+                    })
+                    
+                    logger.info(f"🔧 Gap Filler Activated: {result['activation_reason']}")
+                    return result
+            
+            # 2. ตรวจสอบ Force Trading Mode (ถ้า Gap Filler ไม่ทำงาน)
+            force_result = self.force_trading.should_activate_force_mode(
+                self.last_trade_time, positions
+            )
+            
+            if force_result['should_activate']:
+                force_signal = self.force_trading.create_force_signal(
+                    force_result['recommended_action'], current_price
+                )
+                
+                if force_signal:
+                    result.update({
+                        'force_trading_active': True,
+                        'recommended_signal': force_signal,
+                        'activation_reason': f"Force Trading: {force_result['reason']}",
+                        'momentum_analysis': force_result['momentum_analysis']
+                    })
+                    
+                    logger.info(f"🚨 Force Trading Activated: {result['activation_reason']}")
+                    return result
+            
+            # 3. รวบรวมสถิติ
+            result['continuous_stats'] = {
+                'gap_filler_stats': self.gap_filler.get_fill_statistics(),
+                'force_trading_stats': self.force_trading.get_force_statistics(),
+                'last_trade_time': self.last_trade_time,
+                'time_since_last_trade': (now - self.last_trade_time).total_seconds() / 60 if self.last_trade_time else None
+            }
+            
+            return result
+            
+        except Exception as e:
+            logger.error(f"Error checking continuous trading opportunities: {e}")
+            return {
+                'gap_filler_active': False,
+                'force_trading_active': False,
+                'recommended_signal': None,
+                'activation_reason': f'Error: {e}',
+                'continuous_stats': {}
+            }
+    
+    def update_trade_timing(self, trade_executed: bool = False, signal_generated: bool = False):
+        """อัพเดทเวลาการเทรดและสัญญาณ"""
+        try:
+            now = datetime.now()
+            
+            if trade_executed:
+                self.last_trade_time = now
+                logger.debug(f"📊 Trade timing updated: {now}")
+            
+            if signal_generated:
+                self.last_signal_time = now
+                logger.debug(f"📡 Signal timing updated: {now}")
+                
+        except Exception as e:
+            logger.error(f"Error updating trade timing: {e}")
