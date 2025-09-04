@@ -385,6 +385,30 @@ class MT5Connection:
         if not self.check_connection_health():
             return None
             
+        # ตรวจสอบและแสดงข้อมูล Symbol
+        symbol_info = mt5.symbol_info(symbol)
+        if not symbol_info:
+            logger.error(f"❌ ไม่พบสัญลักษณ์ {symbol} ในโบรกเกอร์")
+            return {'retcode': 10013, 'error_description': f'ไม่พบสัญลักษณ์ {symbol}'}
+        
+        # แสดงข้อมูล Symbol ที่สำคัญ
+        logger.info(f"📊 Symbol Info: {symbol}")
+        logger.info(f"   Volume Min: {symbol_info.volume_min}")
+        logger.info(f"   Volume Max: {symbol_info.volume_max}")
+        logger.info(f"   Volume Step: {symbol_info.volume_step}")
+        logger.info(f"   Spread: {symbol_info.spread}")
+        logger.info(f"   Trade Mode: {symbol_info.trade_mode}")
+        logger.info(f"   Filling Mode: {symbol_info.filling_mode}")
+        
+        # ตรวจสอบ Volume
+        if volume < symbol_info.volume_min:
+            logger.error(f"❌ Volume {volume} น้อยกว่าขั้นต่ำ {symbol_info.volume_min}")
+            return {'retcode': 10014, 'error_description': f'Volume ต่ำกว่าขั้นต่ำ ({symbol_info.volume_min})'}
+        
+        if volume > symbol_info.volume_max:
+            logger.error(f"❌ Volume {volume} มากกว่าขั้นสูง {symbol_info.volume_max}")
+            return {'retcode': 10014, 'error_description': f'Volume สูงกว่าขั้นสูง ({symbol_info.volume_max})'}
+        
         # ตรวจสอบการเทรดได้หรือไม่
         trade_check = self._check_trading_allowed(symbol)
         if not trade_check['allowed']:
