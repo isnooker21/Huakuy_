@@ -46,8 +46,8 @@ class TripleRecoveryGroup:
     target_recovery: Optional[Position] = None  # ไม้เก่าฝั่งตรงข้ามที่จะปิดด้วย
     
     # การตั้งค่า
-    min_new_profit: float = 10.0    # กำไรขั้นต่ำของไม้ใหม่ (pips)
-    min_net_profit: float = 5.0     # กำไรสุทธิขั้นต่ำก่อนปิด (pips)
+    min_new_profit: float = 5.0     # กำไรขั้นต่ำของไม้ใหม่ (pips) - ลดลงเพื่อความยืดหยุ่น
+    min_net_profit: float = 3.0     # กำไรสุทธิขั้นต่ำก่อนปิด (pips) - ลดลงเพื่อความยืดหยุ่น
     max_wait_time: int = 1800       # รอสูงสุด 30 นาที
     
     # สถิติ
@@ -64,7 +64,7 @@ class AdvancedBreakoutRecovery:
         self.completed_recoveries: List[TripleRecoveryGroup] = []
         
         # การตั้งค่า
-        self.breakout_threshold = 0.5      # 5 pips สำหรับ XAUUSD
+        self.breakout_threshold = 0.3      # 3 pips สำหรับ XAUUSD (แม่นยำขึ้น)
         self.position_age_threshold = 300   # 5 นาที
         self.max_concurrent_recoveries = 3  # สูงสุด 3 recovery พร้อมกัน
         
