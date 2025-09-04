@@ -103,7 +103,7 @@ class CandleAnalyzer:
             'range_strength': range_strength,
             'total_strength': total_strength,
             'is_strong': total_strength >= self.min_strength_percentage,
-            'direction': 'BUY' if candle.is_green else 'SELL'
+            'direction': 'SELL' if candle.is_green else 'BUY'  # Counter-trend
         }
         
     def check_volume_filter(self, current_volume: float, volume_history: List[float], 
