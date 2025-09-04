@@ -64,7 +64,7 @@ class SmartRecoverySystem:
             for losing_pos in suitable_losing:
                 for profit_pos in profitable_positions:
                     candidate = self._evaluate_recovery_pair(
-                        profit_pos, losing_pos, current_price
+                        profit_pos, losing_pos, account_balance, current_price
                     )
                     
                     if candidate and candidate.net_profit > self.minimum_net_profit:
