@@ -6,7 +6,8 @@ from datetime import datetime, timedelta
 from typing import List, Dict, Optional, Any
 from dataclasses import dataclass
 import MetaTrader5 as mt5
-from data_classes import Position, TradingSignal
+from calculations import Position
+from trading_conditions import Signal
 
 logger = logging.getLogger(__name__)
 
@@ -257,7 +258,7 @@ class ForceTradingMode:
             return {}
     
     def create_force_signal(self, recommendation: Dict[str, Any], current_price: float, 
-                          symbol: str = "XAUUSD") -> Optional[TradingSignal]:
+                          symbol: str = "XAUUSD") -> Optional[Signal]:
         """สร้างสัญญาณบังคับเทรด"""
         try:
             if not recommendation or recommendation.get('action') != 'FORCE_TRADE':
@@ -271,14 +272,14 @@ class ForceTradingMode:
             price_adjustment = 0.1 if direction == 'BUY' else -0.1  # 1 pip
             entry_price = current_price + price_adjustment
             
-            signal = TradingSignal(
-                symbol=symbol,
+            signal = Signal(
                 direction=direction,
-                entry_price=entry_price,
+                symbol=symbol,
                 strength=strength,
                 confidence=confidence,
-                timeframe='M5',
+                entry_price=entry_price,
                 timestamp=datetime.now(),
+                timeframe='M5',
                 indicators={
                     'source': 'FORCE_TRADING',
                     'forced': True,

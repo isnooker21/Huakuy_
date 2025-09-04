@@ -5,7 +5,8 @@ import logging
 from datetime import datetime, timedelta
 from typing import List, Dict, Optional, Any
 from dataclasses import dataclass
-from data_classes import Position, TradingSignal
+from calculations import Position
+from trading_conditions import Signal
 
 logger = logging.getLogger(__name__)
 
@@ -256,7 +257,7 @@ class SmartGapFiller:
             logger.error(f"Error in gap filling activation: {e}")
             return {'should_activate': False, 'gap_analysis': None, 'activation_reason': f'Error: {e}', 'recommended_action': {}}
     
-    def create_synthetic_signal(self, recommendation: Dict[str, Any], symbol: str = "XAUUSD") -> Optional[TradingSignal]:
+    def create_synthetic_signal(self, recommendation: Dict[str, Any], symbol: str = "XAUUSD") -> Optional[Signal]:
         """สร้างสัญญาณเทียมสำหรับการเติม gap"""
         try:
             if not recommendation or recommendation.get('action') != 'FILL_GAP':
@@ -266,14 +267,14 @@ class SmartGapFiller:
             price = recommendation['price']
             strength = recommendation.get('signal_strength', 15.0)
             
-            signal = TradingSignal(
-                symbol=symbol,
+            signal = Signal(
                 direction=direction,
-                entry_price=price,
+                symbol=symbol,
                 strength=strength,
                 confidence=0.6,  # ความเชื่อมั่นปานกลาง
-                timeframe='M5',
+                entry_price=price,
                 timestamp=datetime.now(),
+                timeframe='M5',
                 indicators={
                     'source': 'GAP_FILLER',
                     'gap_fill': True,
