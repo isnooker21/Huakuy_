@@ -51,7 +51,7 @@ class SmartRecoverySystem:
             
             # กรองไม้ขาดทุนที่เหมาะสม
             suitable_losing = self._filter_suitable_losing_positions(
-                losing_positions, current_price
+                losing_positions, current_price, account_balance
             )
             
             if not suitable_losing:
@@ -85,7 +85,7 @@ class SmartRecoverySystem:
             return []
     
     def _filter_suitable_losing_positions(self, losing_positions: List[Position], 
-                                        current_price: float) -> List[Position]:
+                                        current_price: float, account_balance: float) -> List[Position]:
         """กรองไม้ขาดทุนที่เหมาะสมสำหรับ Recovery"""
         suitable = []
         current_time = datetime.now()
