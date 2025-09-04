@@ -73,12 +73,16 @@ class SmartRecoverySystem:
             # เรียงตาม recovery score
             candidates.sort(key=lambda x: x.recovery_score, reverse=True)
             
-            logger.info(f"🎯 พบโอกาส Recovery: {len(candidates)} คู่")
-            for i, candidate in enumerate(candidates[:3]):  # แสดง top 3
-                logger.info(f"   {i+1}. Profit: ${candidate.net_profit:.2f}, "
-                          f"Score: {candidate.recovery_score:.1f} - {candidate.reason}")
+            # กรองเฉพาะ candidates ที่มีประสิทธิภาพในการกำจัดไม้ขาดทุน
+            smart_candidates = self._filter_smart_recovery_candidates(candidates, positions)
             
-            return candidates
+            logger.info(f"🎯 พบโอกาส Recovery: {len(smart_candidates)} คู่ (จากทั้งหมด {len(candidates)} คู่)")
+            for i, candidate in enumerate(smart_candidates[:3]):  # แสดง top 3
+                profit_loss_ratio = abs(candidate.profit_position.profit / candidate.losing_position.profit) if candidate.losing_position.profit != 0 else 0
+                logger.info(f"   {i+1}. Net: ${candidate.net_profit:.2f}, Score: {candidate.recovery_score:.1f}")
+                logger.info(f"       Profit: ${candidate.profit_position.profit:.2f} vs Loss: ${candidate.losing_position.profit:.2f} (อัตราส่วน: {profit_loss_ratio:.1f})")
+            
+            return smart_candidates
             
         except Exception as e:
             logger.error(f"Error analyzing recovery opportunities: {e}")
@@ -124,6 +128,59 @@ class SmartRecoverySystem:
             suitable.append(pos)
         
         return suitable
+    
+    def _filter_smart_recovery_candidates(self, candidates: List[RecoveryCandidate], 
+                                         all_positions: List[Position]) -> List[RecoveryCandidate]:
+        """กรองเฉพาะ candidates ที่ช่วยกำจัดไม้ขาดทุนใหญ่อย่างมีประสิทธิภาพ"""
+        if not candidates:
+            return candidates
+            
+        try:
+            # วิเคราะห์สถานการณ์ portfolio
+            losing_positions = [pos for pos in all_positions if pos.profit < 0]
+            losing_positions.sort(key=lambda x: x.profit)  # เรียงจากขาดทุนมากสุดไปน้อยสุด
+            
+            # หาไม้ขาดทุน worst 20%
+            worst_count = max(1, len(losing_positions) // 5)  # อย่างน้อย 1 ตัว
+            worst_losing = losing_positions[:worst_count]
+            worst_tickets = [pos.ticket for pos in worst_losing]
+            
+            # กรอง candidates ที่ช่วยกำจัดไม้ขาดทุนใหญ่
+            priority_candidates = []
+            regular_candidates = []
+            
+            for candidate in candidates:
+                losing_ticket = candidate.losing_position.ticket
+                profit_loss_ratio = abs(candidate.profit_position.profit / candidate.losing_position.profit) if candidate.losing_position.profit != 0 else 0
+                
+                # เงื่อนไขสำหรับ Priority Candidates
+                is_priority = (
+                    losing_ticket in worst_tickets or  # กำจัดไม้ขาดทุนใหญ่
+                    profit_loss_ratio >= 1.5 or       # กำไรมากกว่าขาดทุน 1.5 เท่า
+                    abs(candidate.losing_position.profit) > 50  # ไม้ขาดทุนเกิน $50
+                )
+                
+                if is_priority:
+                    priority_candidates.append(candidate)
+                else:
+                    regular_candidates.append(candidate)
+            
+            # ให้ความสำคัญกับ priority candidates ก่อน แต่ไม่เกิน 70% ของทั้งหมด
+            max_priority = max(1, len(candidates) * 7 // 10)  # 70%
+            result = priority_candidates[:max_priority]
+            
+            # เติม regular candidates ที่เหลือ
+            remaining_slots = len(candidates) - len(result)
+            if remaining_slots > 0:
+                result.extend(regular_candidates[:remaining_slots])
+            
+            logger.info(f"🎯 Smart Filter: เลือก {len(priority_candidates)} Priority + {min(remaining_slots, len(regular_candidates))} Regular")
+            
+            return result
+            
+        except Exception as e:
+            logger.error(f"Error filtering smart candidates: {e}")
+            return candidates  # fallback ให้ candidates เดิม
     
     def _evaluate_recovery_pair(self, profit_pos: Position, losing_pos: Position,
                                account_balance: float, current_price: float) -> Optional[RecoveryCandidate]:
@@ -228,9 +285,9 @@ class SmartRecoverySystem:
             distance_score = min(losing_distance / current_price * 1000, 30.0)
             score += distance_score
             
-            # 2. Loss Amount Score (25%) - ไม้ที่ขาดทุนมากได้คะแนนสูง
+            # 2. Loss Amount Score (35%) - ไม้ที่ขาดทุนมากได้คะแนนสูงขึ้น (เพิ่มจาก 25% เป็น 35%)
             loss_amount = abs(losing_pos.profit)
-            loss_score = min(loss_amount / account_balance * 500, 25.0)
+            loss_score = min(loss_amount / abs(account_balance) * 700, 35.0)  # เพิ่มน้ำหนักและใช้ abs()
             score += loss_score
             
             # 3. Age Score (20%) - ไม้ที่เก่ากว่าได้คะแนนสูง
@@ -252,12 +309,27 @@ class SmartRecoverySystem:
                 margin_score = min(margin_freed / account_balance * 300, 15.0)
                 score += margin_score
             
-            # 5. Portfolio Health Score (10%) - ผลกระทบต่อพอร์ต
-            if account_balance > 0:
-                portfolio_impact = (loss_amount / account_balance) * 100
-                if portfolio_impact > 10:  # ถ้าขาดทุนเกิน 10% ของ balance
+            # 5. Smart Recovery Priority Score (15%) - ความสำคัญในการกำจัดไม้ขาดทุน
+            if account_balance != 0:
+                portfolio_impact = (loss_amount / abs(account_balance)) * 100
+                
+                # เพิ่มคะแนนสำหรับไม้ขาดทุนใหญ่ที่ควรกำจัดด่วน
+                if portfolio_impact > 15:  # ขาดทุนเกิน 15% ของ balance - ต้องกำจัดด่วน
+                    score += 15.0
+                elif portfolio_impact > 10:  # ขาดทุนเกิน 10% ของ balance
+                    score += 12.0
+                elif portfolio_impact > 5:  # ขาดทุนเกิน 5% ของ balance
+                    score += 8.0
+                elif portfolio_impact > 2:  # ขาดทุนเกิน 2% ของ balance
+                    score += 5.0
+                
+                # เพิ่มคะแนนถ้าไม้กำไรใหญ่พอที่จะกำจัดไม้ขาดทุนได้
+                profit_to_loss_ratio = abs(profit_pos.profit / losing_pos.profit) if losing_pos.profit != 0 else 0
+                if profit_to_loss_ratio >= 2.0:  # กำไรมากกว่าขาดทุน 2 เท่า
                     score += 10.0
-                elif portfolio_impact > 5:
+                elif profit_to_loss_ratio >= 1.5:  # กำไรมากกว่าขาดทุน 1.5 เท่า
+                    score += 7.0
+                elif profit_to_loss_ratio >= 1.2:  # กำไรมากกว่าขาดทุน 1.2 เท่า
                     score += 5.0
             
             return score
