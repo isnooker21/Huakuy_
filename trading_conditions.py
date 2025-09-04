@@ -135,6 +135,7 @@ class TradingConditions:
         self.candle_analyzer = CandleAnalyzer()
         self.last_candle_time = None
         self.orders_per_candle = {}  # เก็บจำนวน order ต่อแท่งเทียน
+        self.previous_candle_close = None  # เก็บราคาปิดแท่งก่อนหน้า
         
     def check_entry_conditions(self, candle: CandleData, positions: List[Position], 
                              account_balance: float, volume_history: List[float] = None, 
@@ -168,15 +169,26 @@ class TradingConditions:
             logger.info(f"❌ เงื่อนไข 1: {result['reasons'][-1]}")
             return result
             
-        # 2. ตรวจสอบแรงตลาด
+        # 2. ตรวจสอบแรงตลาดแบบยืดหยุ่น
         volume_avg = sum(volume_history) / len(volume_history) if volume_history else 0
         strength_analysis = self.candle_analyzer.analyze_candle_strength(candle, volume_avg)
         
         logger.info(f"   แรงตลาด: {strength_analysis['total_strength']:.2f}% (เกณฑ์: ≥20%)")
         logger.info(f"   ทิศทาง: {strength_analysis['direction']}")
+        logger.info(f"   แท่งเทียน: เปิด={candle.open:.2f}, ปิด={candle.close:.2f}")
         
-        if not strength_analysis['is_strong']:
-            result['reasons'].append(f"แรงตลาดไม่เพียงพอ ({strength_analysis['total_strength']:.2f}%)")
+        # เงื่อนไขยืดหยุ่น: ตรวจสอบแท่งเทียนเต็มแท่งหรือปิดสูงกว่าแท่งก่อนหน้า
+        flexible_conditions = self._check_flexible_entry_conditions(candle, positions)
+        
+        # ถ้าผ่านเงื่อนไขยืดหยุ่น ให้ข้ามการตรวจสอบแรงตลาด
+        if flexible_conditions['can_enter']:
+            logger.info(f"✅ เงื่อนไข 2: ผ่านเงื่อนไขยืดหยุ่น - {flexible_conditions['reason']}")
+            # ใช้ทิศทางจากเงื่อนไขยืดหยุ่น
+            strength_analysis['direction'] = flexible_conditions['direction']
+            strength_analysis['is_strong'] = True
+            strength_analysis['total_strength'] = 30.0  # กำหนดแรงขั้นต่ำ
+        elif not strength_analysis['is_strong']:
+            result['reasons'].append(f"แรงตลาดไม่เพียงพอ ({strength_analysis['total_strength']:.2f}%) และไม่ผ่านเงื่อนไขยืดหยุ่น")
             logger.info(f"❌ เงื่อนไข 2: {result['reasons'][-1]}")
             return result
         else:
@@ -228,6 +240,56 @@ class TradingConditions:
         result['signal'] = signal
         result['reasons'].append("ผ่านเงื่อนไขการเข้าทั้งหมด")
         
+        return result
+        
+    def _check_flexible_entry_conditions(self, candle: CandleData, positions: List[Position]) -> Dict[str, Any]:
+        """
+        ตรวจสอบเงื่อนไขการเข้าแบบยืดหยุ่น
+        
+        Args:
+            candle: ข้อมูลแท่งเทียนปัจจุบัน
+            positions: รายการ Position ปัจจุบัน
+            
+        Returns:
+            Dict: ผลการตรวจสอบเงื่อนไขยืดหยุ่น
+        """
+        result = {
+            'can_enter': False,
+            'direction': None,
+            'reason': ''
+        }
+        
+        # เงื่อนไข 1: แท่งเทียนเต็มแท่ง (body ≥ 70% ของ range)
+        candle_range = candle.high - candle.low
+        candle_body = abs(candle.close - candle.open)
+        
+        if candle_range > 0:
+            body_ratio = candle_body / candle_range
+            if body_ratio >= 0.7:  # body ≥ 70% ของ range
+                result['can_enter'] = True
+                result['direction'] = 'BUY' if candle.is_green else 'SELL'
+                result['reason'] = f"แท่งเทียนเต็มแท่ง (body {body_ratio*100:.1f}% ของ range)"
+                logger.info(f"🎯 เงื่อนไขยืดหยุ่น: {result['reason']}")
+                return result
+        
+        # เงื่อนไข 2: ปิดสูงกว่าหรือต่ำกว่าแท่งก่อนหน้า (ต้องมีข้อมูลเปรียบเทียบ)
+        # สำหรับตอนนี้ใช้การเปรียบเทียบแบบง่าย
+        if hasattr(self, 'previous_candle_close') and self.previous_candle_close:
+            price_change_pct = ((candle.close - self.previous_candle_close) / self.previous_candle_close) * 100
+            
+            # ถ้าราคาเปลี่ยนแปลง ≥ 0.02% (สำหรับทองคำ)
+            if abs(price_change_pct) >= 0.02:
+                result['can_enter'] = True
+                result['direction'] = 'BUY' if price_change_pct > 0 else 'SELL'
+                result['reason'] = f"ปิด{'สูงกว่า' if price_change_pct > 0 else 'ต่ำกว่า'}แท่งก่อนหน้า ({price_change_pct:+.3f}%)"
+                logger.info(f"🎯 เงื่อนไขยืดหยุ่น: {result['reason']}")
+                
+        # บันทึกราคาปิดสำหรับแท่งถัดไป
+        self.previous_candle_close = candle.close
+        
+        if not result['can_enter']:
+            logger.info(f"⏸️ ไม่ผ่านเงื่อนไขยืดหยุ่น")
+            
         return result
         
     def _check_portfolio_balance(self, positions: List[Position], direction: str) -> Dict[str, Any]:
