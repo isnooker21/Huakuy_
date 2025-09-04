@@ -385,6 +385,12 @@ class MT5Connection:
         if not self.check_connection_health():
             return None
             
+        # ตรวจสอบการเทรดได้หรือไม่
+        trade_check = self._check_trading_allowed(symbol)
+        if not trade_check['allowed']:
+            logger.error(f"❌ ไม่สามารถเทรดได้: {trade_check['reason']}")
+            return {'retcode': 10017, 'error_description': trade_check['reason']}
+            
         try:
             # ตรวจสอบ filling type ที่ใช้ได้
             filling_type = self._detect_filling_type(symbol)
@@ -404,8 +410,19 @@ class MT5Connection:
             }
             
             # ส่ง Order
+            logger.info(f"🚀 ส่ง Order Request: {request}")
             result = mt5.order_send(request)
-            if result:
+            
+            # ตรวจสอบผลลัพธ์อย่างละเอียด
+            if result is None:
+                logger.error("❌ mt5.order_send() ส่งคืน None - MT5 อาจไม่พร้อมใช้งาน")
+                return None
+                
+            logger.info(f"📋 Order Result: retcode={result.retcode}, deal={result.deal}, order={result.order}")
+            
+            # ตรวจสอบ retcode
+            if result.retcode == 10009:  # TRADE_RETCODE_DONE
+                logger.info(f"✅ ส่ง Order สำเร็จ - Deal: {result.deal}, Order: {result.order}")
                 return {
                     'retcode': result.retcode,
                     'deal': result.deal,
@@ -418,10 +435,95 @@ class MT5Connection:
                     'request_id': result.request_id,
                     'retcode_external': result.retcode_external
                 }
+            else:
+                # แสดง error code และความหมาย
+                error_desc = self._get_retcode_description(result.retcode)
+                logger.error(f"❌ ส่ง Order ไม่สำเร็จ - RetCode: {result.retcode} ({error_desc})")
+                return {
+                    'retcode': result.retcode,
+                    'error_description': error_desc
+                }
+                
         except Exception as e:
-            logger.error(f"เกิดข้อผิดพลาดในการส่ง Order: {e}")
+            logger.error(f"❌ เกิดข้อผิดพลาดในการส่ง Order: {e}")
             
         return None
+        
+    def _get_retcode_description(self, retcode: int) -> str:
+        """แปล retcode เป็นคำอธิบาย"""
+        retcode_dict = {
+            10009: "TRADE_RETCODE_DONE - สำเร็จ",
+            10004: "TRADE_RETCODE_REQUOTE - ราคาเปลี่ยน ต้องส่งใหม่",
+            10006: "TRADE_RETCODE_REJECT - คำสั่งถูกปฏิเสธ",
+            10007: "TRADE_RETCODE_CANCEL - คำสั่งถูกยกเลิก",
+            10008: "TRADE_RETCODE_PLACED - คำสั่งถูกวาง",
+            10010: "TRADE_RETCODE_DONE_PARTIAL - ทำสำเร็จบางส่วน",
+            10011: "TRADE_RETCODE_ERROR - ข้อผิดพลาดทั่วไป",
+            10012: "TRADE_RETCODE_TIMEOUT - หมดเวลา",
+            10013: "TRADE_RETCODE_INVALID - คำสั่งไม่ถูกต้อง",
+            10014: "TRADE_RETCODE_INVALID_VOLUME - Volume ไม่ถูกต้อง",
+            10015: "TRADE_RETCODE_INVALID_PRICE - ราคาไม่ถูกต้อง",
+            10016: "TRADE_RETCODE_INVALID_STOPS - Stop Loss/Take Profit ไม่ถูกต้อง",
+            10017: "TRADE_RETCODE_TRADE_DISABLED - การเทรดถูกปิด",
+            10018: "TRADE_RETCODE_MARKET_CLOSED - ตลาดปิด",
+            10019: "TRADE_RETCODE_NO_MONEY - เงินไม่พอ",
+            10020: "TRADE_RETCODE_PRICE_CHANGED - ราคาเปลี่ยน",
+            10021: "TRADE_RETCODE_PRICE_OFF - ราคาผิด",
+            10022: "TRADE_RETCODE_INVALID_EXPIRATION - วันหมดอายุไม่ถูกต้อง",
+            10023: "TRADE_RETCODE_ORDER_CHANGED - คำสั่งเปลี่ยนแปลง",
+            10024: "TRADE_RETCODE_TOO_MANY_REQUESTS - คำสั่งมากเกินไป",
+            10025: "TRADE_RETCODE_NO_CHANGES - ไม่มีการเปลี่ยนแปลง",
+            10026: "TRADE_RETCODE_SERVER_DISABLES_AT - Server ปิดการทำงาน",
+            10027: "TRADE_RETCODE_CLIENT_DISABLES_AT - Client ปิดการทำงาน",
+            10028: "TRADE_RETCODE_LOCKED - ถูกล็อค",
+            10029: "TRADE_RETCODE_FROZEN - ถูกแช่แข็ง",
+            10030: "TRADE_RETCODE_INVALID_FILL - Fill type ไม่ถูกต้อง"
+        }
+        return retcode_dict.get(retcode, f"Unknown RetCode: {retcode}")
+        
+    def _check_trading_allowed(self, symbol: str) -> Dict[str, Any]:
+        """ตรวจสอบว่าสามารถเทรดได้หรือไม่"""
+        try:
+            # ตรวจสอบข้อมูล Symbol
+            symbol_info = mt5.symbol_info(symbol)
+            if not symbol_info:
+                return {'allowed': False, 'reason': f'ไม่พบข้อมูลสัญลักษณ์ {symbol}'}
+            
+            # ตรวจสอบว่า Symbol สามารถเทรดได้
+            if not symbol_info.trade_mode:
+                return {'allowed': False, 'reason': f'สัญลักษณ์ {symbol} ไม่อนุญาตให้เทรด'}
+            
+            # ตรวจสอบเวลาเทรด
+            import datetime
+            now = datetime.datetime.now()
+            weekday = now.weekday()  # 0=Monday, 6=Sunday
+            
+            # ตรวจสอบว่าเป็นวันหยุดสุดสัปดาห์หรือไม่ (สำหรับ Forex)
+            if weekday == 5 and now.hour >= 22:  # Friday after 22:00
+                return {'allowed': False, 'reason': 'ตลาดปิดในวันศุกร์'}
+            elif weekday == 6:  # Saturday
+                return {'allowed': False, 'reason': 'ตลาดปิดในวันเสาร์'}
+            elif weekday == 0 and now.hour < 1:  # Sunday before 01:00
+                return {'allowed': False, 'reason': 'ตลาดยังไม่เปิดในวันอาทิตย์'}
+            
+            # ตรวจสอบ Account Info
+            account_info = mt5.account_info()
+            if not account_info:
+                return {'allowed': False, 'reason': 'ไม่สามารถดึงข้อมูลบัญชีได้'}
+            
+            # ตรวจสอบว่าบัญชีอนุญาตให้เทรดหรือไม่
+            if not account_info.trade_allowed:
+                return {'allowed': False, 'reason': 'บัญชีไม่อนุญาตให้เทรด'}
+            
+            # ตรวจสอบว่ามีเงินพอหรือไม่ (เช็คเบื้องต้น)
+            if account_info.margin_free <= 0:
+                return {'allowed': False, 'reason': 'เงินไม่เพียงพอสำหรับเทรด'}
+            
+            return {'allowed': True, 'reason': 'สามารถเทรดได้'}
+            
+        except Exception as e:
+            logger.error(f"เกิดข้อผิดพลาดในการตรวจสอบการเทรด: {e}")
+            return {'allowed': False, 'reason': f'เกิดข้อผิดพลาด: {str(e)}'}
         
     def close_position(self, ticket: int) -> Optional[Dict]:
         """
