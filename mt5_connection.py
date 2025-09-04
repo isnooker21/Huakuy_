@@ -659,10 +659,15 @@ class MT5Connection:
             logger.info(f"   Profit: ${profit_info['calculated_profit']:.2f} ({profit_info['profit_percentage']:.2f}%)")
             logger.info(f"   Should Close: {profit_info['should_close']}")
             
-            # ตรวจสอบว่าควรปิดหรือไม่
+            # บังคับไม่ให้ปิดติดลบ
             if not profit_info['should_close']:
-                logger.warning(f"⚠️ Position {ticket} กำไร {profit_info['profit_percentage']:.2f}% < Spread {profit_info['spread_percentage']:.3f}% - ไม่แนะนำให้ปิด")
-                # return None  # ไม่ปิดถ้ากำไรน้อยกว่า spread
+                logger.warning(f"🚫 Position {ticket} กำไร {profit_info['profit_percentage']:.2f}% < Spread {profit_info['spread_percentage']:.3f}% - ห้ามปิด!")
+                logger.info(f"💡 รอให้กำไรมากกว่า {profit_info['spread_percentage']:.3f}% ก่อนปิด")
+                return {
+                    'retcode': 10027,  # TRADE_RETCODE_REJECT (custom)
+                    'error_description': f'กำไรไม่เพียงพอ: {profit_info["profit_percentage"]:.2f}% < Spread {profit_info["spread_percentage"]:.3f}%',
+                    'profit_info': profit_info
+                }
             
             # ดึงข้อมูล Position
             position = mt5.positions_get(ticket=ticket)
