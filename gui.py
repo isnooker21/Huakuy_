@@ -36,13 +36,14 @@ class TradingGUI:
         self.is_trading = False
         self.update_thread = None
         self.stop_update = False
+        self._last_account_update = 0  # เพื่อลดความถี่การอัพเดท
         
         # สร้าง GUI components
         self.create_widgets()
         self.setup_styles()
         
-        # เริ่มต้นการอัพเดทข้อมูล
-        self.start_data_update()
+        # เริ่มต้นการอัพเดทข้อมูลเบาๆ หลังจาก GUI โหลดเสร็จ
+        self.root.after(10000, self.start_light_update)  # รอ 10 วินาทีก่อนเริ่มอัพเดท
         
     def create_widgets(self):
         """สร้าง widgets ทั้งหมด"""
@@ -453,24 +454,42 @@ class TradingGUI:
         gui_handler.setFormatter(logging.Formatter('%(name)s - %(levelname)s - %(message)s'))
         logging.getLogger().addHandler(gui_handler)
         
+    def start_light_update(self):
+        """เริ่มต้นการอัพเดทข้อมูลแบบเบา"""
+        if not self.update_thread or not self.update_thread.is_alive():
+            self.stop_update = False
+            self.update_thread = threading.Thread(target=self.light_update_loop, daemon=True)
+            self.update_thread.start()
+            
     def start_data_update(self):
-        """เริ่มต้นการอัพเดทข้อมูล"""
+        """เริ่มต้นการอัพเดทข้อมูล (ใช้เมื่อจำเป็น)"""
         if not self.update_thread or not self.update_thread.is_alive():
             self.stop_update = False
             self.update_thread = threading.Thread(target=self.update_data_loop, daemon=True)
             self.update_thread.start()
             
+    def light_update_loop(self):
+        """Loop อัพเดทแบบเบา"""
+        while not self.stop_update:
+            try:
+                if not self.stop_update:
+                    self.root.after_idle(self.update_connection_status_light)
+                time.sleep(10)  # อัพเดททุก 10 วินาที
+            except Exception as e:
+                logger.debug(f"Light update error: {str(e)}")
+                time.sleep(20)
+            
     def update_data_loop(self):
         """Loop สำหรับอัพเดทข้อมูล"""
         while not self.stop_update:
             try:
-                # อัพเดทข้อมูลใน main thread (ลดความถี่)
+                # อัพเดทข้อมูลใน main thread (ลดความถี่มากขึ้น)
                 if not self.stop_update:  # ตรวจสอบอีกครั้ง
-                    self.root.after(0, self.safe_update_gui_data)
-                time.sleep(3)  # อัพเดททุก 3 วินาที (ลดจาก 1 วินาที)
+                    self.root.after_idle(self.safe_update_gui_data)  # ใช้ after_idle แทน after(0)
+                time.sleep(5)  # อัพเดททุก 5 วินาที (เพิ่มจาก 3 วินาที)
             except Exception as e:
                 logger.error(f"เกิดข้อผิดพลาดในการอัพเดทข้อมูล: {str(e)}")
-                time.sleep(10)  # รอนานขึ้นเมื่อเกิดข้อผิดพลาด
+                time.sleep(15)  # รอนานขึ้นเมื่อเกิดข้อผิดพลาด
                 
     def safe_update_gui_data(self):
         """อัพเดทข้อมูลใน GUI อย่างปลอดภัย"""
@@ -478,34 +497,99 @@ class TradingGUI:
             if self.stop_update:  # หยุดการอัพเดทถ้าได้รับสัญญาณ
                 return
                 
-            # อัพเดทสถานะการเชื่อมต่อ
-            self.update_connection_status()
+            # อัพเดทสถานะการเชื่อมต่อ (เบาๆ)
+            self.update_connection_status_light()
             
             if self.stop_update:
                 return
                 
-            # อัพเดทข้อมูลบัญชี (ถ้าเชื่อมต่ออยู่)
-            if self.mt5_connection.check_connection_health():
+            # อัพเดทข้อมูลบัญชี (ลดความถี่)
+            if hasattr(self, '_last_account_update'):
+                if time.time() - self._last_account_update < 10:  # อัพเดททุก 10 วินาที
+                    return
+            
+            if self.mt5_connection.is_connected:  # ใช้ตัวแปรแทนการเรียกฟังก์ชัน
                 self.update_account_info()
+                self._last_account_update = time.time()
                 
             if self.stop_update:
                 return
                 
-            # อัพเดทข้อมูลพอร์ต
-            self.update_portfolio_info()
+            # อัพเดทข้อมูลพอร์ต (ลดความถี่)
+            self.update_portfolio_info_light()
             
             if self.stop_update:
                 return
                 
-            # อัพเดท Positions
-            self.update_positions_display()
+            # อัพเดท Positions (ลดความถี่)
+            self.update_positions_display_light()
             
         except Exception as e:
-            logger.error(f"เกิดข้อผิดพลาดในการอัพเดท GUI: {str(e)}")
+            logger.debug(f"GUI update error: {str(e)}")  # ใช้ debug แทน error
             
     def update_gui_data(self):
         """อัพเดทข้อมูลใน GUI (เรียกจาก safe_update_gui_data)"""
         self.safe_update_gui_data()
+        
+    def update_connection_status_light(self):
+        """อัพเดทสถานะการเชื่อมต่อแบบเบา"""
+        try:
+            # ใช้ตัวแปรแทนการเรียกฟังก์ชัน
+            if self.mt5_connection.is_connected:
+                self.connection_status.config(text="Connected", fg='green')
+                self.connect_btn.config(text="Disconnect", command=self.disconnect_mt5)
+            else:
+                self.connection_status.config(text="Disconnected", fg='red')
+                self.connect_btn.config(text="Connect MT5", command=self.connect_mt5)
+                
+            # อัพเดทสถานะการเทรด
+            if hasattr(self.trading_system, 'is_running') and self.trading_system.is_running:
+                self.trading_status.config(text="Running", fg='green')
+            else:
+                self.trading_status.config(text="Stopped", fg='red')
+                
+        except Exception as e:
+            pass  # ไม่ log error เพื่อลด overhead
+            
+    def update_portfolio_info_light(self):
+        """อัพเดทข้อมูลพอร์ตแบบเบา"""
+        try:
+            # อัพเดทเฉพาะข้อมูลสำคัญ
+            if hasattr(self.portfolio_manager.order_manager, 'active_positions'):
+                positions = self.portfolio_manager.order_manager.active_positions or []
+                
+                if positions:
+                    from calculations import PercentageCalculator
+                    balance_ratio = PercentageCalculator.calculate_buy_sell_ratio(positions)
+                    
+                    buy_pct = balance_ratio.get('buy_percentage', 0)
+                    sell_pct = balance_ratio.get('sell_percentage', 0)
+                    
+                    self.buy_ratio_label.config(text=f"Buy: {buy_pct:.1f}%")
+                    self.sell_ratio_label.config(text=f"Sell: {sell_pct:.1f}%")
+                    
+                    self.buy_progress['value'] = buy_pct
+                    self.sell_progress['value'] = sell_pct
+                    
+        except Exception as e:
+            pass  # ไม่ log error
+            
+    def update_positions_display_light(self):
+        """อัพเดทการแสดง Positions แบบเบา"""
+        try:
+            # อัพเดทเฉพาะเมื่อจำเป็น
+            if not hasattr(self, 'positions_tree'):
+                return
+                
+            positions = getattr(self.portfolio_manager.order_manager, 'active_positions', [])
+            current_count = len(self.positions_tree.get_children())
+            
+            # อัพเดทเฉพาะเมื่อจำนวน position เปลี่ยน
+            if len(positions) != current_count:
+                self.update_positions_display()
+                
+        except Exception as e:
+            pass  # ไม่ log error
             
     def update_connection_status(self):
         """อัพเดทสถานะการเชื่อมต่อ"""
@@ -681,6 +765,8 @@ class TradingGUI:
             if success:
                 logger.info("เชื่อมต่อ MT5 สำเร็จ")
                 messagebox.showinfo("Success", "เชื่อมต่อ MT5 สำเร็จ")
+                # อัพเดท GUI ทันทีหลังเชื่อมต่อ
+                self.root.after(100, self.update_connection_status_light)
             else:
                 logger.error("ไม่สามารถเชื่อมต่อ MT5 ได้")
                 messagebox.showerror("Error", "ไม่สามารถเชื่อมต่อ MT5 ได้")
@@ -699,7 +785,7 @@ class TradingGUI:
     def start_trading(self):
         """เริ่มการเทรด"""
         try:
-            if not self.mt5_connection.check_connection_health():
+            if not self.mt5_connection.is_connected:
                 messagebox.showerror("Error", "กรุณาเชื่อมต่อ MT5 ก่อน")
                 return
                 
