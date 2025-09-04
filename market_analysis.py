@@ -186,7 +186,7 @@ class MultiTimeframeAnalyzer:
             tf = self.timeframes.get(timeframe, mt5.TIMEFRAME_M1)
             
             # ดึงข้อมูล
-            rates = mt5.copy_rates(self.symbol, tf, 0, bars_count)
+            rates = mt5.copy_rates_from_pos(self.symbol, tf, 0, bars_count)
             if rates is None or len(rates) == 0:
                 return self._default_analysis(timeframe)
             
