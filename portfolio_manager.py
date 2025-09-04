@@ -16,6 +16,7 @@ from trading_conditions import Signal, TradingConditions, CandleData
 from smart_recovery import SmartRecoverySystem
 from price_zone_analysis import PriceZoneAnalyzer
 from zone_rebalancer import ZoneRebalancer
+from advanced_breakout_recovery import AdvancedBreakoutRecovery
 from order_management import OrderManager, OrderResult, CloseResult
 
 logger = logging.getLogger(__name__)
@@ -69,6 +70,9 @@ class PortfolioManager:
         # เพิ่ม Zone Analysis System
         self.zone_analyzer = PriceZoneAnalyzer("XAUUSD", num_zones=10)
         self.zone_rebalancer = ZoneRebalancer(self.zone_analyzer)
+        
+        # เพิ่ม Advanced Breakout Recovery System
+        self.advanced_recovery = AdvancedBreakoutRecovery(order_manager.mt5)
         
         # การตั้งค่าความเสี่ยง
         self.max_risk_per_trade = 2.0  # เปอร์เซ็นต์ความเสี่ยงต่อ Trade
@@ -858,125 +862,104 @@ class PortfolioManager:
                 'reason': f'เกิดข้อผิดพลาด: {str(e)}'
             }
     
-    def check_breakout_strategy(self, current_price: float) -> Dict[str, Any]:
-        """ตรวจสอบกลยุทธ์ Breakout และการบล็อค Recovery"""
+    def check_advanced_breakout_recovery(self, current_price: float) -> Dict[str, Any]:
+        """ตรวจสอบ Advanced Breakout Recovery Strategy"""
         try:
             positions = self.order_manager.active_positions
-            if not positions:
+            
+            # 1. วิเคราะห์ระดับ breakout
+            breakout_analysis = self.advanced_recovery.analyze_breakout_levels(positions, current_price)
+            
+            if not breakout_analysis.get('has_levels'):
                 return {
                     'is_breakout_pending': False,
                     'should_block_recovery': False,
                     'breakout_direction': None,
-                    'reason': 'ไม่มี positions'
+                    'reason': breakout_analysis.get('reason', 'ไม่มีระดับ breakout'),
+                    'recovery_groups': 0
                 }
             
-            # หาราคา BUY สูงสุด และ SELL ต่ำสุด
-            buy_positions = [pos for pos in positions if pos.type == 0]  # BUY
-            sell_positions = [pos for pos in positions if pos.type == 1]  # SELL
+            # 2. ตรวจสอบการ breakout และสร้าง recovery group
+            potential = breakout_analysis['breakout_analysis']['potential']
             
-            if not buy_positions or not sell_positions:
-                return {
-                    'is_breakout_pending': False,
-                    'should_block_recovery': False,
-                    'breakout_direction': None,
-                    'reason': 'ไม่มีทั้ง BUY และ SELL positions'
+            if potential in ['BULLISH_BREAKOUT', 'BEARISH_BREAKOUT']:
+                # สร้าง recovery group ใหม่
+                group_id = self.advanced_recovery.create_recovery_group(breakout_analysis['breakout_analysis'], current_price)
+                if group_id:
+                    logger.info(f"🎯 สร้าง Recovery Group ใหม่: {group_id}")
+            
+            # 3. อัพเดทสถานะ recovery groups ที่มีอยู่
+            update_results = self.advanced_recovery.update_recovery_groups(current_price, positions)
+            
+            # 4. เช็คการกระทำที่ต้องทำ
+            actions_needed = update_results.get('actions_needed', [])
+            ready_for_recovery = update_results.get('ready_for_recovery', [])
+            
+            # 5. ดำเนินการ Triple Recovery ถ้าพร้อม
+            recovery_results = []
+            for group_id in ready_for_recovery:
+                recovery_result = self.advanced_recovery.execute_triple_recovery(group_id)
+                recovery_results.append(recovery_result)
+                
+                if recovery_result['success']:
+                    logger.info(f"✅ Triple Recovery สำเร็จ: {group_id}")
+                    logger.info(f"   กำไรสุทธิ: ${recovery_result['net_profit']:.2f}")
+            
+            # 6. ตัดสินใจการบล็อค Recovery
+            should_block_recovery = self._should_block_traditional_recovery(breakout_analysis, update_results)
+            
+            # 7. สร้างผลลัพธ์
+            result = {
+                'is_breakout_pending': breakout_analysis.get('is_overlapping', False),
+                'should_block_recovery': should_block_recovery,
+                'breakout_direction': potential,
+                'reason': breakout_analysis['breakout_analysis'].get('recommended_action', 'N/A'),
+                'recovery_groups': len(self.advanced_recovery.active_recoveries),
+                'actions_needed': actions_needed,
+                'recovery_results': recovery_results,
+                'breakout_levels': {
+                    'max_buy': breakout_analysis.get('max_buy'),
+                    'min_sell': breakout_analysis.get('min_sell'),
+                    'current_price': current_price
                 }
-            
-            max_buy_price = max(pos.price_open for pos in buy_positions)
-            min_sell_price = min(pos.price_open for pos in sell_positions)
-            
-            # ตรวจสอบ Price Hierarchy Violation
-            is_overlapping = max_buy_price >= min_sell_price
-            
-            if not is_overlapping:
-                return {
-                    'is_breakout_pending': False,
-                    'should_block_recovery': False,
-                    'breakout_direction': None,
-                    'reason': 'Price hierarchy ปกติ - ไม่ต้องรอ breakout'
-                }
-            
-            # คำนวณระยะห่างจากจุด breakout
-            distance_to_max_buy = abs(current_price - max_buy_price)
-            distance_to_min_sell = abs(current_price - min_sell_price)
-            
-            # กำหนดเกณฑ์การ breakout (5 pips สำหรับ XAUUSD)
-            breakout_threshold = 0.5  # 5 pips for XAUUSD
-            
-            # ตรวจสอบการ breakout
-            breakout_info = {
-                'is_breakout_pending': True,
-                'should_block_recovery': True,
-                'max_buy_price': max_buy_price,
-                'min_sell_price': min_sell_price,
-                'current_price': current_price,
-                'breakout_threshold': breakout_threshold
             }
             
-            # กรณีที่ 1: ราคาใกล้จะทะลุขึ้น (ใกล้ max BUY)
-            if distance_to_max_buy <= breakout_threshold:
-                if current_price > max_buy_price:
-                    # ทะลุขึ้นแล้ว - พร้อมเปิด SELL
-                    breakout_info.update({
-                        'breakout_direction': 'BULLISH_BREAKOUT',
-                        'should_block_recovery': False,  # ปลดบล็อค เพื่อให้เปิด SELL ได้
-                        'recommended_action': 'OPEN_SELL',
-                        'target_price': current_price + 1.0,  # เปิด SELL สูงกว่าราคาปัจจุบัน 1 pip
-                        'reason': f'ทะลุ BUY สูงสุด ({max_buy_price}) แล้ว - พร้อมเปิด SELL'
-                    })
-                else:
-                    # ใกล้จะทะลุ - บล็อค Recovery
-                    breakout_info.update({
-                        'breakout_direction': 'APPROACHING_BUY_BREAKOUT',
-                        'should_block_recovery': True,
-                        'recommended_action': 'WAIT',
-                        'reason': f'ใกล้ทะลุ BUY สูงสุด ({max_buy_price}) - รอการทะลุ'
-                    })
-            
-            # กรณีที่ 2: ราคาใกล้จะทะลุลง (ใกล้ min SELL)
-            elif distance_to_min_sell <= breakout_threshold:
-                if current_price < min_sell_price:
-                    # ทะลุลงแล้ว - พร้อมเปิด BUY
-                    breakout_info.update({
-                        'breakout_direction': 'BEARISH_BREAKOUT',
-                        'should_block_recovery': False,  # ปลดบล็อค เพื่อให้เปิด BUY ได้
-                        'recommended_action': 'OPEN_BUY',
-                        'target_price': current_price - 1.0,  # เปิด BUY ต่ำกว่าราคาปัจจุบัน 1 pip
-                        'reason': f'ทะลุ SELL ต่ำสุด ({min_sell_price}) แล้ว - พร้อมเปิด BUY'
-                    })
-                else:
-                    # ใกล้จะทะลุ - บล็อค Recovery
-                    breakout_info.update({
-                        'breakout_direction': 'APPROACHING_SELL_BREAKOUT',
-                        'should_block_recovery': True,
-                        'recommended_action': 'WAIT',
-                        'reason': f'ใกล้ทะลุ SELL ต่ำสุด ({min_sell_price}) - รอการทะลุ'
-                    })
-            
-            # กรณีที่ 3: อยู่ตรงกลาง - บล็อค Recovery
-            else:
-                breakout_info.update({
-                    'breakout_direction': 'CONSOLIDATION',
-                    'should_block_recovery': True,
-                    'recommended_action': 'WAIT',
-                    'reason': f'อยู่ระหว่าง BUY ({max_buy_price}) และ SELL ({min_sell_price}) - รอสัญญาณ'
-                })
-            
-            logger.info(f"🎯 Breakout Strategy Analysis:")
+            # Log สรุป
+            logger.info(f"🎯 Advanced Breakout Recovery Analysis:")
             logger.info(f"   Current Price: {current_price}")
-            logger.info(f"   Max BUY: {max_buy_price}, Min SELL: {min_sell_price}")
-            logger.info(f"   Direction: {breakout_info['breakout_direction']}")
-            logger.info(f"   Block Recovery: {breakout_info['should_block_recovery']}")
-            logger.info(f"   Action: {breakout_info.get('recommended_action', 'N/A')}")
-            logger.info(f"   Reason: {breakout_info['reason']}")
+            logger.info(f"   Potential: {potential}")
+            logger.info(f"   Active Recovery Groups: {result['recovery_groups']}")
+            logger.info(f"   Block Traditional Recovery: {should_block_recovery}")
+            logger.info(f"   Actions Needed: {len(actions_needed)}")
+            logger.info(f"   Recovery Results: {len(recovery_results)}")
             
-            return breakout_info
+            return result
             
         except Exception as e:
-            logger.error(f"Error in breakout strategy check: {e}")
+            logger.error(f"Error in advanced breakout recovery check: {e}")
             return {
                 'is_breakout_pending': False,
                 'should_block_recovery': False,
                 'breakout_direction': None,
-                'reason': f'เกิดข้อผิดพลาด: {str(e)}'
+                'reason': f'เกิดข้อผิดพลาด: {str(e)}',
+                'recovery_groups': 0
             }
+    
+    def _should_block_traditional_recovery(self, breakout_analysis: Dict, update_results: Dict) -> bool:
+        """ตัดสินใจว่าควรบล็อค Traditional Recovery หรือไม่"""
+        try:
+            # บล็อคถ้ามี recovery groups ที่ active
+            if len(self.advanced_recovery.active_recoveries) > 0:
+                return True
+            
+            # บล็อคถ้าใกล้ breakout
+            potential = breakout_analysis.get('breakout_analysis', {}).get('potential', 'NONE')
+            if potential in ['APPROACHING_BULLISH', 'APPROACHING_BEARISH']:
+                return True
+            
+            # ไม่บล็อคถ้าไม่มีเงื่อนไขพิเศษ
+            return False
+            
+        except Exception as e:
+            logger.error(f"Error deciding recovery block: {e}")
+            return False

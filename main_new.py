@@ -398,12 +398,19 @@ class TradingSystem:
             if self.current_prices:
                 current_price = self.current_prices.get('close', 0)
                 
-                # ตรวจสอบ Breakout Strategy
-                breakout_info = self.portfolio_manager.check_breakout_strategy(current_price)
+                # ตรวจสอบ Advanced Breakout Recovery Strategy
+                breakout_info = self.portfolio_manager.check_advanced_breakout_recovery(current_price)
                 should_block_recovery = breakout_info.get('should_block_recovery', False)
                 
                 if breakout_info.get('is_breakout_pending'):
-                    logger.info(f"🎯 Breakout Strategy: {breakout_info['reason']}")
+                    logger.info(f"🎯 Advanced Breakout Recovery: {breakout_info['reason']}")
+                    logger.info(f"   Recovery Groups: {breakout_info['recovery_groups']}")
+                    logger.info(f"   Actions Needed: {len(breakout_info.get('actions_needed', []))}")
+                    
+                    # แสดงผล Recovery ที่สำเร็จ
+                    for result in breakout_info.get('recovery_results', []):
+                        if result['success']:
+                            logger.info(f"✅ Triple Recovery: ${result['net_profit']:.2f} profit")
                 
                 # 2. Smart Recovery (ถูกบล็อคถ้ากำลังรอ breakout)
                 recovery_result = self.portfolio_manager.check_and_execute_smart_recovery(
