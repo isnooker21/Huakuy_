@@ -365,7 +365,7 @@ class TradingConditions:
         return {'valid': True, 'reason': ''}
         
     def _check_capital_exposure(self, positions: List[Position], account_balance: float, 
-                               max_exposure_percentage: float = 80.0) -> Dict[str, Any]:
+                               max_exposure_percentage: float = 50.0) -> Dict[str, Any]:
         """
         ตรวจสอบการใช้เงินทุน
         

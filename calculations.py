@@ -98,8 +98,21 @@ class PercentageCalculator:
         if not positions or account_balance <= 0:
             return 0.0
             
-        # คำนวณมูลค่าการลงทุนรวม (ประมาณการ)
-        total_exposure = sum(pos.volume * pos.price_open * 100000 for pos in positions)  # สำหรับ Forex
+        # คำนวณมูลค่าการลงทุนรวม (ปรับตามสัญลักษณ์)
+        total_exposure = 0.0
+        
+        for pos in positions:
+            if 'XAU' in pos.symbol.upper() or 'GOLD' in pos.symbol.upper():
+                # XAUUSD: 1 lot = 100 oz, ใช้ margin requirement จริง (ประมาณ 1-5%)
+                position_value = pos.volume * pos.price_open * 100  # 100 oz per lot
+                margin_requirement = position_value * 0.02  # 2% margin requirement
+                total_exposure += margin_requirement
+            else:
+                # Forex pairs: ใช้ margin requirement จริง (ประมาณ 1-3%)
+                position_value = pos.volume * 100000  # 100,000 units per lot
+                margin_requirement = position_value * 0.01  # 1% margin requirement  
+                total_exposure += margin_requirement
+        
         return (total_exposure / account_balance) * 100
         
     @staticmethod
