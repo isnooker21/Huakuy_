@@ -1,0 +1,449 @@
+# -*- coding: utf-8 -*-
+"""
+Main Trading System
+ระบบเทรดหลักที่ใช้การคำนวณเป็นเปอร์เซ็นต์
+"""
+
+import logging
+import time
+import threading
+from datetime import datetime, timedelta
+from typing import Dict, List, Optional, Any
+
+# Import modules
+from mt5_connection import MT5Connection
+from calculations import Position, PercentageCalculator, LotSizeCalculator
+from trading_conditions import TradingConditions, Signal, CandleData
+from order_management import OrderManager
+from portfolio_manager import PortfolioManager
+from gui import TradingGUI
+
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.FileHandler('trading_system.log', encoding='utf-8'),
+        logging.StreamHandler()
+    ]
+)
+logger = logging.getLogger(__name__)
+
+class TradingSystem:
+    """ระบบเทรดหลักที่ใช้การคำนวณเป็นเปอร์เซ็นต์"""
+    
+    def __init__(self, initial_balance: float = 10000.0, symbol: str = "EURUSD"):
+        """
+        เริ่มต้นระบบเทรด
+        
+        Args:
+            initial_balance: เงินทุนเริ่มต้น
+            symbol: สัญลักษณ์การเทรด
+        """
+        self.symbol = symbol
+        self.initial_balance = initial_balance
+        
+        # เริ่มต้น components
+        self.mt5_connection = MT5Connection()
+        self.order_manager = OrderManager(self.mt5_connection)
+        self.portfolio_manager = PortfolioManager(self.order_manager, initial_balance)
+        self.trading_conditions = TradingConditions()
+        
+        # สถานะการทำงาน
+        self.is_running = False
+        self.trading_thread = None
+        self.last_candle_time = None
+        
+        # ข้อมูลตลาด
+        self.current_prices = {}
+        self.volume_history = []
+        self.price_history = []
+        
+        # GUI
+        self.gui = None
+        
+        logger.info(f"เริ่มต้นระบบเทรด - Symbol: {symbol}, Initial Balance: {initial_balance}")
+        
+    def initialize_system(self) -> bool:
+        """
+        เริ่มต้นระบบทั้งหมด
+        
+        Returns:
+            bool: สำเร็จหรือไม่
+        """
+        try:
+            logger.info("กำลังเริ่มต้นระบบเทรด...")
+            
+            # เชื่อมต่อ MT5
+            if not self.mt5_connection.connect_mt5():
+                logger.error("ไม่สามารถเชื่อมต่อ MT5 ได้")
+                return False
+                
+            # ตรวจสอบสัญลักษณ์
+            symbol_info = self.mt5_connection.get_symbol_info(self.symbol)
+            if not symbol_info:
+                logger.error(f"ไม่พบสัญลักษณ์ {self.symbol}")
+                return False
+                
+            logger.info(f"ข้อมูลสัญลักษณ์ {self.symbol}: {symbol_info}")
+            
+            # ซิงค์ข้อมูล Position
+            positions = self.order_manager.sync_positions_from_mt5()
+            logger.info(f"พบ Position ที่เปิดอยู่: {len(positions)} ตัว")
+            
+            # โหลดข้อมูลราคาเริ่มต้น
+            self.load_initial_market_data()
+            
+            logger.info("เริ่มต้นระบบเทรดสำเร็จ")
+            return True
+            
+        except Exception as e:
+            logger.error(f"เกิดข้อผิดพลาดในการเริ่มต้นระบบ: {str(e)}")
+            return False
+            
+    def load_initial_market_data(self):
+        """โหลดข้อมูลตลาดเริ่มต้น"""
+        try:
+            # ดึงข้อมูลราคา 100 แท่งล่าสุด
+            import MetaTrader5 as mt5
+            rates = self.mt5_connection.get_market_data(
+                self.symbol, mt5.TIMEFRAME_M1, 100
+            )
+            
+            if rates:
+                self.price_history = [rate['close'] for rate in rates]
+                self.volume_history = [rate['tick_volume'] for rate in rates]
+                
+                # อัพเดทราคาปัจจุบัน
+                latest_rate = rates[-1]
+                self.current_prices[self.symbol] = latest_rate['close']
+                
+                logger.info(f"โหลดข้อมูลตลาดสำเร็จ - ราคาปัจจุบัน: {latest_rate['close']}")
+            else:
+                logger.warning("ไม่สามารถโหลดข้อมูลตลาดได้")
+                
+        except Exception as e:
+            logger.error(f"เกิดข้อผิดพลาดในการโหลดข้อมูลตลาด: {str(e)}")
+            
+    def start_trading(self):
+        """เริ่มการเทรด"""
+        try:
+            if self.is_running:
+                logger.warning("ระบบเทรดกำลังทำงานอยู่แล้ว")
+                return
+                
+            if not self.mt5_connection.check_connection_health():
+                logger.error("ไม่สามารถเชื่อมต่อ MT5 ได้")
+                return
+                
+            self.is_running = True
+            
+            # เริ่ม trading thread
+            self.trading_thread = threading.Thread(target=self.trading_loop, daemon=True)
+            self.trading_thread.start()
+            
+            logger.info("เริ่มการเทรดแล้ว")
+            
+        except Exception as e:
+            logger.error(f"เกิดข้อผิดพลาดในการเริ่มเทรด: {str(e)}")
+            self.is_running = False
+            
+    def stop_trading(self):
+        """หยุดการเทรด"""
+        try:
+            self.is_running = False
+            
+            if self.trading_thread and self.trading_thread.is_alive():
+                self.trading_thread.join(timeout=5)
+                
+            logger.info("หยุดการเทรดแล้ว")
+            
+        except Exception as e:
+            logger.error(f"เกิดข้อผิดพลาดในการหยุดเทรด: {str(e)}")
+            
+    def trading_loop(self):
+        """Loop หลักของการเทรด"""
+        logger.info("เริ่ม Trading Loop")
+        
+        while self.is_running:
+            try:
+                # อัพเดทข้อมูลตลาด
+                self.update_market_data()
+                
+                # รีเซ็ตเมตริกรายวัน
+                self.portfolio_manager.reset_daily_metrics()
+                
+                # วิเคราะห์สถานะพอร์ต
+                account_info = self.mt5_connection.get_account_info()
+                if not account_info:
+                    logger.warning("ไม่สามารถดึงข้อมูลบัญชีได้")
+                    time.sleep(5)
+                    continue
+                    
+                portfolio_state = self.portfolio_manager.analyze_portfolio_state(account_info)
+                
+                # ตรวจสอบเงื่อนไขการปิด Position
+                self.check_exit_conditions(portfolio_state)
+                
+                # ตรวจสอบเงื่อนไขการเข้าเทรดใหม่
+                self.check_entry_conditions(portfolio_state)
+                
+                # รอ 1 วินาที
+                time.sleep(1)
+                
+            except Exception as e:
+                logger.error(f"เกิดข้อผิดพลาดใน Trading Loop: {str(e)}")
+                time.sleep(5)
+                
+        logger.info("จบ Trading Loop")
+        
+    def update_market_data(self):
+        """อัพเดทข้อมูลตลาด"""
+        try:
+            import MetaTrader5 as mt5
+            
+            # ดึงข้อมูลแท่งเทียนล่าสุด
+            rates = self.mt5_connection.get_market_data(
+                self.symbol, mt5.TIMEFRAME_M1, 1
+            )
+            
+            if rates and len(rates) > 0:
+                latest_rate = rates[0]
+                current_time = datetime.fromtimestamp(latest_rate['time'])
+                
+                # ตรวจสอบว่าเป็นแท่งเทียนใหม่หรือไม่
+                if self.last_candle_time is None or current_time > self.last_candle_time:
+                    self.last_candle_time = current_time
+                    
+                    # สร้าง CandleData
+                    candle = CandleData(
+                        open=latest_rate['open'],
+                        high=latest_rate['high'],
+                        low=latest_rate['low'],
+                        close=latest_rate['close'],
+                        volume=latest_rate['tick_volume'],
+                        timestamp=current_time
+                    )
+                    
+                    # อัพเดทข้อมูลประวัติ
+                    self.price_history.append(candle.close)
+                    self.volume_history.append(candle.volume)
+                    
+                    # จำกัดขนาดประวัติ
+                    if len(self.price_history) > 100:
+                        self.price_history = self.price_history[-100:]
+                        self.volume_history = self.volume_history[-100:]
+                        
+                    # อัพเดทราคาปัจจุบัน
+                    self.current_prices[self.symbol] = candle.close
+                    
+                    # ประมวลผลแท่งเทียนใหม่
+                    self.process_new_candle(candle)
+                    
+        except Exception as e:
+            logger.error(f"เกิดข้อผิดพลาดในการอัพเดทข้อมูลตลาด: {str(e)}")
+            
+    def process_new_candle(self, candle: CandleData):
+        """ประมวลผลแท่งเทียนใหม่"""
+        try:
+            logger.info(f"แท่งเทียนใหม่ - {candle.timestamp}: "
+                       f"O:{candle.open} H:{candle.high} L:{candle.low} C:{candle.close} "
+                       f"V:{candle.volume}")
+                       
+            # วิเคราะห์แท่งเทียน
+            if candle.is_green:
+                direction = "BUY"
+                logger.info("🟢 แท่งเทียนเขียว - สัญญาณ BUY")
+            elif candle.is_red:
+                direction = "SELL"
+                logger.info("🔴 แท่งเทียนแดง - สัญญาณ SELL")
+            else:
+                logger.info("⚪ แท่งเทียน Doji - ไม่มีสัญญาณ")
+                return
+                
+            # คำนวณแรงของสัญญาณ
+            strength = self.calculate_signal_strength(candle)
+            
+            # สร้าง Signal
+            signal = Signal(
+                direction=direction,
+                symbol=self.symbol,
+                strength=strength,
+                confidence=min(100, strength + 20),  # เพิ่ม confidence
+                timestamp=candle.timestamp,
+                price=candle.close,
+                comment=f"Candle signal - Strength: {strength:.1f}%"
+            )
+            
+            # เก็บ signal สำหรับการตรวจสอบ
+            self.last_signal = signal
+            
+        except Exception as e:
+            logger.error(f"เกิดข้อผิดพลาดในการประมวลผลแท่งเทียน: {str(e)}")
+            
+    def calculate_signal_strength(self, candle: CandleData) -> float:
+        """คำนวณแรงของสัญญาณ"""
+        try:
+            # คำนวณแรงจากขนาดตัวเทียน
+            body_strength = candle.body_size_percentage * 10  # แปลงเป็น 0-100
+            
+            # คำนวณแรงจาก Volume
+            volume_strength = 0.0
+            if len(self.volume_history) > 1:
+                avg_volume = sum(self.volume_history[:-1]) / len(self.volume_history[:-1])
+                if avg_volume > 0:
+                    volume_ratio = candle.volume / avg_volume
+                    volume_strength = min(100, volume_ratio * 50)
+                    
+            # คำนวณแรงจากช่วงราคา
+            range_strength = min(100, candle.range_percentage * 20)
+            
+            # รวมแรงทั้งหมด
+            total_strength = (body_strength * 0.4 + volume_strength * 0.4 + range_strength * 0.2)
+            
+            return min(100, total_strength)
+            
+        except Exception as e:
+            logger.error(f"เกิดข้อผิดพลาดในการคำนวณแรงสัญญาณ: {str(e)}")
+            return 0.0
+            
+    def check_entry_conditions(self, portfolio_state):
+        """ตรวจสอบเงื่อนไขการเข้าเทรด"""
+        try:
+            # ตรวจสอบว่ามี signal ใหม่หรือไม่
+            if not hasattr(self, 'last_signal') or not self.last_signal:
+                return
+                
+            signal = self.last_signal
+            
+            # สร้าง CandleData จากข้อมูลล่าสุด
+            if len(self.price_history) < 4:
+                return
+                
+            candle = CandleData(
+                open=self.price_history[-2] if len(self.price_history) > 1 else self.price_history[-1],
+                high=max(self.price_history[-4:]),
+                low=min(self.price_history[-4:]),
+                close=self.price_history[-1],
+                volume=self.volume_history[-1] if self.volume_history else 1000,
+                timestamp=datetime.now()
+            )
+            
+            # ตัดสินใจว่าควรเข้าเทรดหรือไม่
+            decision = self.portfolio_manager.should_enter_trade(
+                signal, candle, portfolio_state, self.volume_history
+            )
+            
+            if decision['should_enter']:
+                logger.info(f"🎯 ตัดสินใจเข้าเทรด - Direction: {signal.direction}, "
+                           f"Lot: {decision['lot_size']:.2f}, "
+                           f"Reasons: {'; '.join(decision['reasons'])}")
+                
+                # ดำเนินการเทรด
+                result = self.portfolio_manager.execute_trade_decision(decision)
+                
+                if result.success:
+                    logger.info(f"✅ ส่ง Order สำเร็จ - Ticket: {result.ticket}")
+                else:
+                    logger.error(f"❌ ส่ง Order ไม่สำเร็จ: {result.error_message}")
+                    
+            else:
+                logger.debug(f"⏸️ ไม่เข้าเทรด - Reasons: {'; '.join(decision['reasons'])}")
+                
+            # ล้าง signal หลังจากประมวลผล
+            self.last_signal = None
+            
+        except Exception as e:
+            logger.error(f"เกิดข้อผิดพลาดในการตรวจสอบเงื่อนไขการเข้าเทรด: {str(e)}")
+            
+    def check_exit_conditions(self, portfolio_state):
+        """ตรวจสอบเงื่อนไขการปิด Position"""
+        try:
+            # ตัดสินใจว่าควรปิด Position หรือไม่
+            decision = self.portfolio_manager.should_exit_positions(
+                portfolio_state, self.current_prices
+            )
+            
+            if decision['should_exit']:
+                logger.info(f"🎯 ตัดสินใจปิด Position - Type: {decision.get('exit_type', 'unknown')}, "
+                           f"Reason: {decision.get('reason', 'No reason')}")
+                
+                # ดำเนินการปิด Position
+                result = self.portfolio_manager.execute_exit_decision(decision)
+                
+                if result.success:
+                    logger.info(f"✅ ปิด Position สำเร็จ - จำนวน: {len(result.closed_tickets)}, "
+                               f"Profit: {result.total_profit:.2f}")
+                else:
+                    logger.error(f"❌ ปิด Position ไม่สำเร็จ: {result.error_message}")
+                    
+        except Exception as e:
+            logger.error(f"เกิดข้อผิดพลาดในการตรวจสอบเงื่อนไขการปิด: {str(e)}")
+            
+    def start_gui(self):
+        """เริ่ม GUI"""
+        try:
+            self.gui = TradingGUI(self.portfolio_manager, self.mt5_connection)
+            self.gui.run()
+        except Exception as e:
+            logger.error(f"เกิดข้อผิดพลาดใน GUI: {str(e)}")
+            
+    def shutdown(self):
+        """ปิดระบบ"""
+        try:
+            logger.info("กำลังปิดระบบเทรด...")
+            
+            # หยุดการเทรด
+            self.stop_trading()
+            
+            # ปิดการเชื่อมต่อ MT5
+            self.mt5_connection.disconnect_mt5()
+            
+            logger.info("ปิดระบบเทรดแล้ว")
+            
+        except Exception as e:
+            logger.error(f"เกิดข้อผิดพลาดในการปิดระบบ: {str(e)}")
+            
+def main():
+    """ฟังก์ชันหลัก"""
+    try:
+        logger.info("=" * 60)
+        logger.info("🚀 เริ่มต้น Trading System - Percentage Based")
+        logger.info("=" * 60)
+        
+        # สร้างระบบเทรด
+        trading_system = TradingSystem(
+            initial_balance=10000.0,  # เงินทุนเริ่มต้น
+            symbol="EURUSD"           # สัญลักษณ์การเทรด
+        )
+        
+        # เริ่มต้นระบบ
+        if not trading_system.initialize_system():
+            logger.error("ไม่สามารถเริ่มต้นระบบได้")
+            return
+            
+        # แสดงข้อมูลเริ่มต้น
+        logger.info("📊 ข้อมูลเริ่มต้น:")
+        logger.info(f"   - เงินทุนเริ่มต้น: {trading_system.initial_balance:,.2f}")
+        logger.info(f"   - สัญลักษณ์: {trading_system.symbol}")
+        logger.info(f"   - ความเสี่ยงต่อ Trade: {trading_system.portfolio_manager.max_risk_per_trade}%")
+        logger.info(f"   - เป้าหมายกำไร: {trading_system.portfolio_manager.profit_target}%")
+        
+        # เริ่มการเทรดอัตโนมัติ
+        trading_system.start_trading()
+        
+        # เริ่ม GUI
+        trading_system.start_gui()
+        
+        # ปิดระบบเมื่อ GUI ปิด
+        trading_system.shutdown()
+        
+    except KeyboardInterrupt:
+        logger.info("ได้รับสัญญาณหยุดจากผู้ใช้")
+    except Exception as e:
+        logger.error(f"เกิดข้อผิดพลาดในฟังก์ชันหลัก: {str(e)}")
+    finally:
+        logger.info("🏁 จบการทำงาน Trading System")
+
+if __name__ == "__main__":
+    main()
