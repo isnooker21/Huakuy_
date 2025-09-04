@@ -403,15 +403,20 @@ class TradingConditions:
             # ตรวจสอบว่าเป็น Breakout Scenario หรือไม่
             gap_pips = (max_buy_price - min_sell_price) * 10  # แปลงเป็น pips
             
-            # อนุญาตถ้า gap ไม่ใหญ่มาก (< 60 pips = 600 จุด) - เป็น Breakout หรือ Continuous Trading
-            if gap_pips < 60.0:
-                logger.info(f"⚡ Price Hierarchy Override: Gap={gap_pips:.1f} pips ({gap_pips*10:.0f} จุด) - Breakout/Continuous")
-                return {'valid': True, 'reason': f'Breakout scenario - Gap: {gap_pips:.1f} pips'}
+            # ยืดหยุ่นมาก: อนุญาตถ้า gap ไม่ใหญ่มาก (< 150 pips = 1500 จุด)
+            if gap_pips < 150.0:  # เพิ่มจาก 60 เป็น 150 pips
+                logger.info(f"⚡ Price Hierarchy Override: Gap={gap_pips:.1f} pips ({gap_pips*10:.0f} จุด) - Normal Trading")
+                return {'valid': True, 'reason': f'Acceptable gap - {gap_pips:.1f} pips < 150 pips'}
             
-            # อนุญาตถ้ามี positions น้อย (< 5 ไม้)
-            if len(positions) < 5:
+            # อนุญาตถ้ามี positions น้อย (< 10 ไม้) - เพิ่มจาก 5 เป็น 10
+            if len(positions) < 10:
                 logger.info(f"⚡ Price Hierarchy Override: Only {len(positions)} positions (Allow flexibility)")
                 return {'valid': True, 'reason': f'Few positions ({len(positions)}) - Allow flexibility'}
+            
+            # อนุญาตถ้ามี positions เยอะมาก (> 15 ไม้) - เพื่อ recovery
+            if len(positions) > 15:
+                logger.info(f"⚡ Price Hierarchy Override: Many positions ({len(positions)}) - Recovery mode")
+                return {'valid': True, 'reason': f'Many positions ({len(positions)}) - Recovery priority'}
             
             return {
                 'valid': False,
