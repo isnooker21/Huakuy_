@@ -870,7 +870,10 @@ class PortfolioManager:
             # 1. วิเคราะห์ระดับ breakout
             breakout_analysis = self.advanced_recovery.analyze_breakout_levels(positions, current_price)
             
+            logger.info(f"🔍 Advanced Breakout Analysis: {breakout_analysis.get('reason', 'Unknown')}")
+            
             if not breakout_analysis.get('has_levels'):
+                logger.info(f"📊 No breakout levels detected - Total positions: {len(positions)}")
                 return {
                     'is_breakout_pending': False,
                     'should_block_recovery': False,

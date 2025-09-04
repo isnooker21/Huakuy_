@@ -505,23 +505,23 @@ class TradingConditions:
             result['reasons'].append("รอ Pullback ก่อนปิด")
             return result
             
-        # 4. ตรวจสอบ Group P&L
-        group_pnl_check = self._check_group_pnl(positions, account_balance)
-        if group_pnl_check['should_exit']:
-            result.update(group_pnl_check)
-            return result
+        # 4. ตรวจสอบ Group P&L (ปิดชั่วคราวเพื่อให้ Advanced Recovery ทำงาน)
+        # group_pnl_check = self._check_group_pnl(positions, account_balance)
+        # if group_pnl_check['should_exit']:
+        #     result.update(group_pnl_check)
+        #     return result
             
         return result
         
     def _check_profit_target(self, positions: List[Position], account_balance: float,
-                           profit_target_percentage: float = 2.0) -> Dict[str, Any]:
+                           profit_target_percentage: float = 5.0) -> Dict[str, Any]:
         """
         ตรวจสอบเป้าหมายกำไร
         
         Args:
             positions: รายการ Position
             account_balance: ยอดเงินในบัญชี
-            profit_target_percentage: เป้าหมายกำไรเป็นเปอร์เซ็นต์
+            profit_target_percentage: เป้าหมายกำไรเป็นเปอร์เซ็นต์ (เพิ่มเป็น 5% เพื่อให้ Advanced Recovery ทำงาน)
             
         Returns:
             Dict: ผลการตรวจสอบ
