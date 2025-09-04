@@ -569,7 +569,31 @@ class PortfolioManager:
             Dict: ข้อมูลสรุปพอร์ต
         """
         try:
-            positions = self.order_manager.active_positions
+            # ตรวจสอบว่ามี order_manager หรือไม่
+            if not hasattr(self.order_manager, 'active_positions'):
+                return {'error': 'No order manager available'}
+                
+            positions = self.order_manager.active_positions or []
+            
+            # ตรวจสอบว่ามี positions หรือไม่
+            if not positions:
+                return {
+                    'account_balance': self.current_balance,
+                    'initial_balance': self.initial_balance,
+                    'total_profit_loss': 0.0,
+                    'total_profit_percentage': 0.0,
+                    'total_positions': 0,
+                    'profitable_positions': 0,
+                    'losing_positions': 0,
+                    'performance_metrics': {
+                        'total_trades': 0,
+                        'win_rate_percentage': 0.0,
+                        'profit_factor': 0.0,
+                        'max_drawdown_percentage': 0.0,
+                        'daily_pnl_percentage': 0.0
+                    }
+                }
+                
             profit_loss = self.order_manager.calculate_total_profit_loss()
             
             return {

@@ -464,30 +464,48 @@ class TradingGUI:
         """Loop สำหรับอัพเดทข้อมูล"""
         while not self.stop_update:
             try:
-                # อัพเดทข้อมูลใน main thread
-                self.root.after(0, self.update_gui_data)
-                time.sleep(1)  # อัพเดททุกวินาที
+                # อัพเดทข้อมูลใน main thread (ลดความถี่)
+                if not self.stop_update:  # ตรวจสอบอีกครั้ง
+                    self.root.after(0, self.safe_update_gui_data)
+                time.sleep(3)  # อัพเดททุก 3 วินาที (ลดจาก 1 วินาที)
             except Exception as e:
                 logger.error(f"เกิดข้อผิดพลาดในการอัพเดทข้อมูล: {str(e)}")
-                time.sleep(5)
+                time.sleep(10)  # รอนานขึ้นเมื่อเกิดข้อผิดพลาด
                 
-    def update_gui_data(self):
-        """อัพเดทข้อมูลใน GUI"""
+    def safe_update_gui_data(self):
+        """อัพเดทข้อมูลใน GUI อย่างปลอดภัย"""
         try:
+            if self.stop_update:  # หยุดการอัพเดทถ้าได้รับสัญญาณ
+                return
+                
             # อัพเดทสถานะการเชื่อมต่อ
             self.update_connection_status()
             
-            # อัพเดทข้อมูลบัญชี
-            self.update_account_info()
-            
+            if self.stop_update:
+                return
+                
+            # อัพเดทข้อมูลบัญชี (ถ้าเชื่อมต่ออยู่)
+            if self.mt5_connection.check_connection_health():
+                self.update_account_info()
+                
+            if self.stop_update:
+                return
+                
             # อัพเดทข้อมูลพอร์ต
             self.update_portfolio_info()
             
+            if self.stop_update:
+                return
+                
             # อัพเดท Positions
             self.update_positions_display()
             
         except Exception as e:
             logger.error(f"เกิดข้อผิดพลาดในการอัพเดท GUI: {str(e)}")
+            
+    def update_gui_data(self):
+        """อัพเดทข้อมูลใน GUI (เรียกจาก safe_update_gui_data)"""
+        self.safe_update_gui_data()
             
     def update_connection_status(self):
         """อัพเดทสถานะการเชื่อมต่อ"""
@@ -534,10 +552,18 @@ class TradingGUI:
     def update_portfolio_info(self):
         """อัพเดทข้อมูลพอร์ต"""
         try:
-            # ดึงข้อมูลสรุปพอร์ต
-            portfolio_summary = self.portfolio_manager.get_portfolio_summary()
+            # ตรวจสอบว่ามี positions หรือไม่ก่อน
+            if not hasattr(self.portfolio_manager.order_manager, 'active_positions'):
+                return
+                
+            # ดึงข้อมูลสรุปพอร์ต (ถ้าไม่มี error)
+            try:
+                portfolio_summary = self.portfolio_manager.get_portfolio_summary()
+            except Exception as e:
+                logger.debug(f"ไม่สามารถดึงข้อมูลพอร์ตได้: {str(e)}")
+                return
             
-            if 'error' not in portfolio_summary:
+            if portfolio_summary and 'error' not in portfolio_summary:
                 # อัพเดทข้อมูล Performance
                 perf_metrics = portfolio_summary.get('performance_metrics', {})
                 
@@ -594,44 +620,55 @@ class TradingGUI:
     def update_positions_display(self):
         """อัพเดทการแสดง Positions"""
         try:
+            # ตรวจสอบว่ามี positions tree หรือไม่
+            if not hasattr(self, 'positions_tree'):
+                return
+                
+            # ดึงข้อมูล positions อย่างปลอดภัย
+            try:
+                positions = self.portfolio_manager.order_manager.active_positions
+            except Exception as e:
+                logger.debug(f"ไม่สามารถดึงข้อมูล positions ได้: {str(e)}")
+                return
+                
             # ลบข้อมูลเก่า
             for item in self.positions_tree.get_children():
                 self.positions_tree.delete(item)
                 
             # เพิ่มข้อมูลใหม่
-            positions = self.portfolio_manager.order_manager.active_positions
-            for pos in positions:
-                # คำนวณ Profit %
-                profit_pct = 0.0
-                if pos.price_open != 0:
-                    if pos.type == 0:  # BUY
-                        profit_pct = ((pos.price_current - pos.price_open) / pos.price_open) * 100
-                    else:  # SELL
-                        profit_pct = ((pos.price_open - pos.price_current) / pos.price_open) * 100
+            if positions:
+                for pos in positions:
+                    # คำนวณ Profit %
+                    profit_pct = 0.0
+                    if pos.price_open != 0:
+                        if pos.type == 0:  # BUY
+                            profit_pct = ((pos.price_current - pos.price_open) / pos.price_open) * 100
+                        else:  # SELL
+                            profit_pct = ((pos.price_open - pos.price_current) / pos.price_open) * 100
                         
-                # เพิ่มข้อมูลใน Treeview
-                values = (
-                    pos.ticket,
-                    pos.symbol,
-                    "BUY" if pos.type == 0 else "SELL",
-                    f"{pos.volume:.2f}",
-                    f"{pos.price_open:.5f}",
-                    f"{pos.price_current:.5f}",
-                    f"{pos.profit:.2f}",
-                    f"{profit_pct:.2f}%",
-                    f"{pos.swap:.2f}",
-                    pos.comment
-                )
-                
-                item = self.positions_tree.insert('', 'end', values=values)
-                
-                # เปลี่ยนสีตามกำไรขาดทุน
-                if pos.profit > 0:
-                    self.positions_tree.set(item, 'Profit', f"+{pos.profit:.2f}")
-                    # สีเขียวสำหรับกำไร (ต้องใช้ tag)
-                elif pos.profit < 0:
-                    # สีแดงสำหรับขาดทุน (ต้องใช้ tag)
-                    pass
+                    # เพิ่มข้อมูลใน Treeview
+                    values = (
+                        pos.ticket,
+                        pos.symbol,
+                        "BUY" if pos.type == 0 else "SELL",
+                        f"{pos.volume:.2f}",
+                        f"{pos.price_open:.5f}",
+                        f"{pos.price_current:.5f}",
+                        f"{pos.profit:.2f}",
+                        f"{profit_pct:.2f}%",
+                        f"{pos.swap:.2f}",
+                        pos.comment
+                    )
+                    
+                    item = self.positions_tree.insert('', 'end', values=values)
+                    
+                    # เปลี่ยนสีตามกำไรขาดทุน
+                    if pos.profit > 0:
+                        self.positions_tree.set(item, 'Profit', f"+{pos.profit:.2f}")
+                        # สีเขียวสำหรับกำไร (ต้องใช้ tag)
+                    elif pos.profit < 0:
+                        # สีแดงสำหรับขาดทุน (ต้องใช้ tag)
+                        pass
                     
         except Exception as e:
             logger.error(f"เกิดข้อผิดพลาดในการอัพเดท Positions: {str(e)}")
@@ -757,13 +794,31 @@ class TradingGUI:
     def on_closing(self):
         """จัดการเมื่อปิด GUI"""
         try:
+            logger.info("กำลังปิด GUI...")
+            
+            # หยุด update thread
             self.stop_update = True
+            
+            # หยุดการเทรดก่อน
+            if hasattr(self, 'trading_system') and self.trading_system.is_running:
+                self.trading_system.stop_trading()
+            
+            # รอ update thread ให้หยุด
             if self.update_thread and self.update_thread.is_alive():
-                self.update_thread.join(timeout=1)
+                self.update_thread.join(timeout=2)  # เพิ่มเวลารอ
                 
-            self.mt5_connection.disconnect_mt5()
-            logger.info("ปิด Trading System")
-            self.root.destroy()
+            # ตัดการเชื่อมต่อ MT5
+            try:
+                self.mt5_connection.disconnect_mt5()
+            except:
+                pass  # ไม่สำคัญถ้า disconnect ไม่ได้
+                
+            logger.info("ปิด Trading System สำเร็จ")
+            self.root.quit()  # ใช้ quit แทน destroy
+            
         except Exception as e:
             logger.error(f"เกิดข้อผิดพลาดในการปิด GUI: {str(e)}")
-            self.root.destroy()
+            try:
+                self.root.quit()
+            except:
+                pass
