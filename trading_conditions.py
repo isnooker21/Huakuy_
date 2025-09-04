@@ -421,7 +421,7 @@ class TradingConditions:
         return {'valid': True, 'reason': ''}
         
     def _check_capital_exposure(self, positions: List[Position], account_balance: float, 
-                               max_exposure_percentage: float = 50.0) -> Dict[str, Any]:
+                               max_exposure_percentage: float = 65.0) -> Dict[str, Any]:
         """
         ตรวจสอบการใช้เงินทุน
         
@@ -445,12 +445,25 @@ class TradingConditions:
             positions, account_balance
         )
         
-        if exposure_percentage >= max_exposure_percentage:
+        # ยืดหยุ่นขึ้น: อนุญาตให้เกิน 5% ถ้ามี positions น้อย
+        total_positions = len(positions)
+        flexible_limit = max_exposure_percentage
+        
+        # ถ้ามี positions น้อย ให้ยืดหยุ่นขึ้น
+        if total_positions <= 3:
+            flexible_limit = max_exposure_percentage + 10  # เพิ่ม 10%
+        elif total_positions <= 5:
+            flexible_limit = max_exposure_percentage + 5   # เพิ่ม 5%
+        
+        if exposure_percentage >= flexible_limit:
             result['can_enter'] = False
             result['reasons'].append(
-                f"การใช้เงินทุนเกิน {max_exposure_percentage}% ({exposure_percentage:.1f}%)"
+                f"การใช้เงินทุนเกิน {flexible_limit}% ({exposure_percentage:.1f}%) - Positions: {total_positions}"
             )
-            
+        elif exposure_percentage >= max_exposure_percentage:
+            # แจ้งเตือนแต่ยังอนุญาต
+            logger.warning(f"⚠️ การใช้เงินทุนใกล้เกิน: {exposure_percentage:.1f}% (ขีดจำกัด {max_exposure_percentage}%)")
+        
         return result
         
     def _calculate_signal_confidence(self, strength_analysis: Dict, balance_check: Dict) -> float:
