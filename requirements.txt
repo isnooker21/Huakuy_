@@ -1,0 +1,24 @@
+# Trading System Requirements
+# ไฟล์สำหรับ dependencies ของระบบเทรด
+
+# MetaTrader 5 API
+MetaTrader5>=5.0.0
+
+# Data manipulation and analysis
+pandas>=1.5.0
+numpy>=1.24.0
+
+# GUI (built-in with Python)
+# tkinter (included in Python standard library)
+
+# Logging and utilities (built-in with Python)
+# logging (included in Python standard library)
+# datetime (included in Python standard library)
+# threading (included in Python standard library)
+# typing (included in Python standard library)
+# dataclasses (included in Python standard library)
+
+# Optional: For enhanced functionality
+# matplotlib>=3.6.0  # For plotting charts
+# plotly>=5.0.0      # For interactive charts
+# openpyxl>=3.0.0    # For Excel export
