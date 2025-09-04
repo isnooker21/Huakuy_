@@ -203,13 +203,16 @@ class LotSizeCalculator:
         
         return round(lot_size, 2)
         
-    def calculate_dynamic_lot_size(self, market_strength: float, volatility: float) -> float:
+    def calculate_dynamic_lot_size(self, market_strength: float, volatility: float, 
+                                  volume_factor: float = 1.0, balance_factor: float = 1.0) -> float:
         """
-        คำนวณขนาด Lot แบบไดนามิกตามแรงตลาดและความผันผวน
+        คำนวณขนาด Lot แบบไดนามิกตามแรงตลาด ความผันผวน Volume และทุน
         
         Args:
             market_strength: แรงตลาดเป็นเปอร์เซ็นต์ (0-100)
             volatility: ความผันผวนเป็นเปอร์เซ็นต์
+            volume_factor: ปัจจัย Volume ตลาด (1.0 = ปกติ, >1.0 = Volume สูง)
+            balance_factor: ปัจจัยทุน (1.0 = ปกติ, >1.0 = ทุนเยอะ)
             
         Returns:
             float: ขนาด Lot ที่แนะนำ
@@ -223,12 +226,92 @@ class LotSizeCalculator:
         volatility_multiplier = 1.0 - (volatility / 200)  # ลดสูงสุด 50%
         volatility_multiplier = max(0.5, volatility_multiplier)
         
-        dynamic_lot = base_lot * strength_multiplier * volatility_multiplier
+        # ปรับตาม Volume ตลาด
+        volume_multiplier = min(2.0, max(0.5, volume_factor))  # จำกัด 0.5-2.0
+        
+        # ปรับตามทุนที่มี  
+        balance_multiplier = min(3.0, max(0.3, balance_factor))  # จำกัด 0.3-3.0
+        
+        # คำนวณ lot size รวมทุกปัจจัย
+        dynamic_lot = (base_lot * strength_multiplier * volatility_multiplier * 
+                      volume_multiplier * balance_multiplier)
         
         # ปรับให้อยู่ในช่วงที่เหมาะสม
-        dynamic_lot = max(0.01, min(dynamic_lot, 5.0))
+        dynamic_lot = max(0.01, min(dynamic_lot, 10.0))
         
         return round(dynamic_lot, 2)
+        
+    @staticmethod
+    def calculate_volume_factor(current_volume: float, volume_history: List[float]) -> float:
+        """
+        คำนวณปัจจัย Volume ตลาด
+        
+        Args:
+            current_volume: Volume ปัจจุบัน
+            volume_history: ประวัติ Volume
+            
+        Returns:
+            float: ปัจจัย Volume (1.0 = ปกติ, >1.0 = สูง, <1.0 = ต่ำ)
+        """
+        if not volume_history or len(volume_history) < 5:
+            return 1.0
+        
+        # คำนวณ Volume เฉลี่ย
+        avg_volume = sum(volume_history[-20:]) / min(20, len(volume_history))
+        
+        if avg_volume <= 0:
+            return 1.0
+        
+        # อัตราส่วน Volume ปัจจุบันต่อเฉลี่ย
+        volume_ratio = current_volume / avg_volume
+        
+        # แปลงเป็นปัจจัย (1.0 = ปกติ)
+        if volume_ratio >= 2.0:
+            return 2.0  # Volume สูงมาก
+        elif volume_ratio >= 1.5:
+            return 1.5  # Volume สูง
+        elif volume_ratio >= 1.2:
+            return 1.2  # Volume ปานกลาง
+        elif volume_ratio <= 0.5:
+            return 0.5  # Volume ต่ำมาก
+        elif volume_ratio <= 0.8:
+            return 0.8  # Volume ต่ำ
+        else:
+            return 1.0  # Volume ปกติ
+    
+    @staticmethod
+    def calculate_balance_factor(current_balance: float, initial_balance: float = 10000.0) -> float:
+        """
+        คำนวณปัจจัยทุน
+        
+        Args:
+            current_balance: ทุนปัจจุบัน
+            initial_balance: ทุนเริ่มต้น
+            
+        Returns:
+            float: ปัจจัยทุน (1.0 = ปกติ, >1.0 = ทุนเพิ่ม, <1.0 = ทุนลด)
+        """
+        if initial_balance <= 0:
+            return 1.0
+        
+        # อัตราส่วนทุนปัจจุบันต่อเริ่มต้น
+        balance_ratio = current_balance / initial_balance
+        
+        # แปลงเป็นปัจจัย
+        if balance_ratio >= 3.0:
+            return 3.0  # ทุนเพิ่มมาก (300%+)
+        elif balance_ratio >= 2.0:
+            return 2.0  # ทุนเพิ่ม (200%+)
+        elif balance_ratio >= 1.5:
+            return 1.5  # ทุนเพิ่มเล็กน้อย (150%+)
+        elif balance_ratio <= 0.3:
+            return 0.3  # ทุนลดมาก (30%-)
+        elif balance_ratio <= 0.5:
+            return 0.5  # ทุนลด (50%-)
+        elif balance_ratio <= 0.8:
+            return 0.8  # ทุนลดเล็กน้อย (80%-)
+        else:
+            return balance_ratio  # ใช้อัตราส่วนจริง
 
 class RiskCalculator:
     """คลาสสำหรับคำนวณความเสี่ยง"""

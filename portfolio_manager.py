@@ -182,10 +182,31 @@ class PortfolioManager:
             # คำนวณขนาด Lot
             lot_calculator = LotSizeCalculator(current_state.account_balance, self.max_risk_per_trade)
             
-            # ใช้ Dynamic Lot Size ตามแรงตลาด
+            # คำนวณปัจจัยต่างๆ
             market_strength = signal.strength
             volatility = self._estimate_market_volatility()
-            lot_size = lot_calculator.calculate_dynamic_lot_size(market_strength, volatility)
+            
+            # คำนวณปัจจัย Volume ตลาด
+            volume_factor = lot_calculator.calculate_volume_factor(
+                candle.volume, volume_history or []
+            )
+            
+            # คำนวณปัจจัยทุน
+            balance_factor = lot_calculator.calculate_balance_factor(
+                current_state.account_balance, self.initial_balance
+            )
+            
+            # ใช้ Dynamic Lot Size ตามแรงตลาด Volume และทุน
+            lot_size = lot_calculator.calculate_dynamic_lot_size(
+                market_strength, volatility, volume_factor, balance_factor
+            )
+            
+            logger.info(f"📊 Lot Size Calculation:")
+            logger.info(f"   Market Strength: {market_strength:.1f}%")
+            logger.info(f"   Volatility: {volatility:.1f}%")
+            logger.info(f"   Volume Factor: {volume_factor:.2f}x")
+            logger.info(f"   Balance Factor: {balance_factor:.2f}x")
+            logger.info(f"   Final Lot Size: {lot_size:.2f}")
             
             # ปรับขนาด lot สำหรับสัญลักษณ์ทองคำ
             if 'XAU' in signal.symbol.upper() or 'GOLD' in signal.symbol.upper():
