@@ -378,6 +378,7 @@ class TradingConditions:
         """
         ตรวจสอบ Price Hierarchy Rule
         Buy Orders ต้องอยู่ต่ำกว่า Sell Orders เสมอ
+        แต่อนุญาตเมื่อเกิด Breakout หรือมี Continuous Trading
         
         Args:
             positions: รายการ Position
@@ -399,9 +400,22 @@ class TradingConditions:
         min_sell_price = min(sell_prices)
         
         if max_buy_price >= min_sell_price:
+            # ตรวจสอบว่าเป็น Breakout Scenario หรือไม่
+            gap_pips = (max_buy_price - min_sell_price) * 10  # แปลงเป็น pips
+            
+            # อนุญาตถ้า gap เล็กมาก (< 100 pips) - เป็น Breakout หรือ Continuous Trading
+            if gap_pips < 100.0:
+                logger.info(f"⚡ Price Hierarchy Override: Gap={gap_pips:.1f} pips (Breakout/Continuous Trading)")
+                return {'valid': True, 'reason': f'Breakout scenario - Gap: {gap_pips:.1f} pips'}
+            
+            # อนุญาตถ้ามี positions น้อย (< 5 ไม้)
+            if len(positions) < 5:
+                logger.info(f"⚡ Price Hierarchy Override: Only {len(positions)} positions (Allow flexibility)")
+                return {'valid': True, 'reason': f'Few positions ({len(positions)}) - Allow flexibility'}
+            
             return {
                 'valid': False,
-                'reason': f'Price hierarchy violated: Max BUY ({max_buy_price}) >= Min SELL ({min_sell_price})'
+                'reason': f'Price hierarchy violated: Max BUY ({max_buy_price}) >= Min SELL ({min_sell_price}) - Gap: {gap_pips:.1f} pips'
             }
             
         return {'valid': True, 'reason': ''}
