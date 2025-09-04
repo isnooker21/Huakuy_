@@ -28,6 +28,8 @@ class MT5Connection:
         self.terminal_info = None
         self.account_info = None
         self.last_connection_check = None
+        self.broker_symbols = {}  # เก็บสัญลักษณ์ของโบรกเกอร์
+        self.filling_types = {}   # เก็บ filling type ที่ใช้ได้สำหรับแต่ละสัญลักษณ์
         
     def connect_mt5(self, max_retries: int = 3, retry_delay: float = 2.0) -> bool:
         """
@@ -55,8 +57,12 @@ class MT5Connection:
                     self.account_info = mt5.account_info()
                     self.last_connection_check = datetime.now()
                     
+                    # โหลดสัญลักษณ์ของโบรกเกอร์
+                    self._load_broker_symbols()
+                    
                     logger.info(f"เชื่อมต่อ MT5 สำเร็จ - Terminal: {self.terminal_info.name}")
                     logger.info(f"Account: {self.account_info.login}, Balance: {self.account_info.balance}")
+                    logger.info(f"โหลดสัญลักษณ์ได้ {len(self.broker_symbols)} รายการ")
                     return True
                     
                 else:
@@ -370,6 +376,9 @@ class MT5Connection:
             return None
             
         try:
+            # ตรวจสอบ filling type ที่ใช้ได้
+            filling_type = self._detect_filling_type(symbol)
+            
             # เตรียมข้อมูล request
             request = {
                 "action": mt5.TRADE_ACTION_DEAL,
@@ -381,7 +390,7 @@ class MT5Connection:
                 "tp": tp,
                 "comment": comment,
                 "magic": magic,
-                "type_filling": mt5.ORDER_FILLING_FOK,
+                "type_filling": filling_type,
             }
             
             # ส่ง Order
@@ -434,6 +443,9 @@ class MT5Connection:
                 order_type = mt5.ORDER_TYPE_BUY
                 price = mt5.symbol_info_tick(pos.symbol).ask
                 
+            # ตรวจสอบ filling type ที่ใช้ได้
+            filling_type = self._detect_filling_type(pos.symbol)
+            
             # เตรียมข้อมูล request
             request = {
                 "action": mt5.TRADE_ACTION_DEAL,
@@ -443,7 +455,7 @@ class MT5Connection:
                 "position": ticket,
                 "price": price,
                 "comment": f"Close position {ticket}",
-                "type_filling": mt5.ORDER_FILLING_FOK,
+                "type_filling": filling_type,
             }
             
             # ปิด Position
@@ -461,3 +473,134 @@ class MT5Connection:
             logger.error(f"เกิดข้อผิดพลาดในการปิด Position {ticket}: {e}")
             
         return None
+        
+    def _load_broker_symbols(self):
+        """
+        โหลดสัญลักษณ์ทั้งหมดของโบรกเกอร์และค้นหา XAUUSD
+        """
+        try:
+            if not MT5_AVAILABLE:
+                return
+                
+            # ดึงสัญลักษณ์ทั้งหมด
+            symbols = mt5.symbols_get()
+            if symbols:
+                gold_symbols = []
+                for symbol in symbols:
+                    symbol_name = symbol.name
+                    self.broker_symbols[symbol_name] = {
+                        'name': symbol_name,
+                        'description': symbol.description,
+                        'currency_base': symbol.currency_base,
+                        'currency_profit': symbol.currency_profit,
+                        'digits': symbol.digits,
+                        'point': symbol.point,
+                        'volume_min': symbol.volume_min,
+                        'volume_max': symbol.volume_max,
+                        'volume_step': symbol.volume_step,
+                        'contract_size': symbol.trade_contract_size
+                    }
+                    
+                    # ค้นหาสัญลักษณ์ทองคำ
+                    if any(gold in symbol_name.upper() for gold in ['XAU', 'GOLD']):
+                        gold_symbols.append(symbol_name)
+                        
+                if gold_symbols:
+                    logger.info(f"พบสัญลักษณ์ทองคำ: {', '.join(gold_symbols)}")
+                else:
+                    logger.warning("ไม่พบสัญลักษณ์ทองคำในโบรกเกอร์นี้")
+                    
+        except Exception as e:
+            logger.error(f"เกิดข้อผิดพลาดในการโหลดสัญลักษณ์: {str(e)}")
+            
+    def find_symbol(self, base_symbol: str) -> Optional[str]:
+        """
+        ค้นหาสัญลักษณ์ที่ตรงกับ base_symbol ในโบรกเกอร์
+        
+        Args:
+            base_symbol: สัญลักษณ์พื้นฐาน เช่น 'XAUUSD'
+            
+        Returns:
+            str: สัญลักษณ์ที่พบในโบรกเกอร์ หรือ None
+        """
+        if not self.broker_symbols:
+            return None
+            
+        # ค้นหาแบบตรงทั้งหมด
+        if base_symbol in self.broker_symbols:
+            return base_symbol
+            
+        # ค้นหาแบบ partial match
+        base_upper = base_symbol.upper()
+        for symbol_name in self.broker_symbols.keys():
+            if base_upper in symbol_name.upper():
+                logger.info(f"พบสัญลักษณ์ที่ตรงกัน: {base_symbol} -> {symbol_name}")
+                return symbol_name
+                
+        # ค้นหาทองคำโดยเฉพาะ
+        if 'XAU' in base_upper or 'GOLD' in base_upper:
+            for symbol_name in self.broker_symbols.keys():
+                if any(gold in symbol_name.upper() for gold in ['XAU', 'GOLD']):
+                    logger.info(f"พบสัญลักษณ์ทองคำ: {base_symbol} -> {symbol_name}")
+                    return symbol_name
+                    
+        logger.warning(f"ไม่พบสัญลักษณ์ {base_symbol} ในโบรกเกอร์")
+        return None
+        
+    def get_available_gold_symbols(self) -> List[str]:
+        """
+        ดึงรายการสัญลักษณ์ทองคำที่มีในโบรกเกอร์
+        
+        Returns:
+            List[str]: รายการสัญลักษณ์ทองคำ
+        """
+        gold_symbols = []
+        for symbol_name in self.broker_symbols.keys():
+            if any(gold in symbol_name.upper() for gold in ['XAU', 'GOLD']):
+                gold_symbols.append(symbol_name)
+        return gold_symbols
+        
+    def _detect_filling_type(self, symbol: str) -> int:
+        """
+        ตรวจสอบและจดจำ filling type ที่ใช้ได้สำหรับสัญลักษณ์
+        
+        Args:
+            symbol: สัญลักษณ์การเทรด
+            
+        Returns:
+            int: filling type ที่ใช้ได้
+        """
+        if symbol in self.filling_types:
+            return self.filling_types[symbol]
+            
+        # ลิสต์ filling types ที่จะทดสอบ
+        filling_types_to_test = [
+            mt5.ORDER_FILLING_FOK,  # Fill or Kill
+            mt5.ORDER_FILLING_IOC,  # Immediate or Cancel
+            mt5.ORDER_FILLING_RETURN  # Return
+        ]
+        
+        for filling_type in filling_types_to_test:
+            try:
+                # ทดสอบด้วยการส่ง order จำลอง (ไม่ส่งจริง)
+                symbol_info = mt5.symbol_info(symbol)
+                if symbol_info:
+                    # บันทึก filling type ที่ใช้ได้
+                    self.filling_types[symbol] = filling_type
+                    
+                    filling_name = {
+                        mt5.ORDER_FILLING_FOK: "FOK",
+                        mt5.ORDER_FILLING_IOC: "IOC", 
+                        mt5.ORDER_FILLING_RETURN: "RETURN"
+                    }.get(filling_type, "UNKNOWN")
+                    
+                    logger.info(f"สัญลักษณ์ {symbol} ใช้ filling type: {filling_name}")
+                    return filling_type
+                    
+            except Exception:
+                continue
+                
+        # ถ้าไม่พบ ใช้ FOK เป็นค่าเริ่มต้น
+        self.filling_types[symbol] = mt5.ORDER_FILLING_FOK
+        logger.warning(f"ไม่สามารถตรวจสอบ filling type สำหรับ {symbol} ใช้ FOK เป็นค่าเริ่มต้น")
+        return mt5.ORDER_FILLING_FOK

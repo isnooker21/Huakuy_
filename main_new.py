@@ -32,15 +32,16 @@ logger = logging.getLogger(__name__)
 class TradingSystem:
     """ระบบเทรดหลักที่ใช้การคำนวณเป็นเปอร์เซ็นต์"""
     
-    def __init__(self, initial_balance: float = 10000.0, symbol: str = "EURUSD"):
+    def __init__(self, initial_balance: float = 10000.0, symbol: str = "XAUUSD"):
         """
         เริ่มต้นระบบเทรด
         
         Args:
             initial_balance: เงินทุนเริ่มต้น
-            symbol: สัญลักษณ์การเทรด
+            symbol: สัญลักษณ์การเทรด (default: XAUUSD สำหรับทองคำ)
         """
-        self.symbol = symbol
+        self.base_symbol = symbol
+        self.actual_symbol = None  # สัญลักษณ์จริงที่ใช้ในโบรกเกอร์
         self.initial_balance = initial_balance
         
         # เริ่มต้น components
@@ -62,7 +63,7 @@ class TradingSystem:
         # GUI
         self.gui = None
         
-        logger.info(f"เริ่มต้นระบบเทรด - Symbol: {symbol}, Initial Balance: {initial_balance}")
+        logger.info(f"เริ่มต้นระบบเทรด - Base Symbol: {symbol}, Initial Balance: {initial_balance}")
         
     def initialize_system(self) -> bool:
         """
@@ -79,13 +80,28 @@ class TradingSystem:
                 logger.error("ไม่สามารถเชื่อมต่อ MT5 ได้")
                 return False
                 
-            # ตรวจสอบสัญลักษณ์
-            symbol_info = self.mt5_connection.get_symbol_info(self.symbol)
+            # ค้นหาสัญลักษณ์ในโบรกเกอร์
+            self.actual_symbol = self.mt5_connection.find_symbol(self.base_symbol)
+            if not self.actual_symbol:
+                logger.error(f"ไม่พบสัญลักษณ์ {self.base_symbol} ในโบรกเกอร์")
+                
+                # แสดงสัญลักษณ์ทองคำที่มี
+                gold_symbols = self.mt5_connection.get_available_gold_symbols()
+                if gold_symbols:
+                    logger.info(f"สัญลักษณ์ทองคำที่มี: {', '.join(gold_symbols)}")
+                    self.actual_symbol = gold_symbols[0]  # ใช้ตัวแรกที่พบ
+                    logger.info(f"ใช้สัญลักษณ์: {self.actual_symbol}")
+                else:
+                    return False
+                    
+            # ตรวจสอบข้อมูลสัญลักษณ์
+            symbol_info = self.mt5_connection.get_symbol_info(self.actual_symbol)
             if not symbol_info:
-                logger.error(f"ไม่พบสัญลักษณ์ {self.symbol}")
+                logger.error(f"ไม่พบข้อมูลสัญลักษณ์ {self.actual_symbol}")
                 return False
                 
-            logger.info(f"ข้อมูลสัญลักษณ์ {self.symbol}: {symbol_info}")
+            logger.info(f"ใช้สัญลักษณ์: {self.base_symbol} -> {self.actual_symbol}")
+            logger.info(f"ข้อมูลสัญลักษณ์: {symbol_info}")
             
             # ซิงค์ข้อมูล Position
             positions = self.order_manager.sync_positions_from_mt5()
@@ -107,7 +123,7 @@ class TradingSystem:
             # ดึงข้อมูลราคา 100 แท่งล่าสุด
             import MetaTrader5 as mt5
             rates = self.mt5_connection.get_market_data(
-                self.symbol, mt5.TIMEFRAME_M1, 100
+                self.actual_symbol, mt5.TIMEFRAME_M1, 100
             )
             
             if rates:
@@ -116,7 +132,7 @@ class TradingSystem:
                 
                 # อัพเดทราคาปัจจุบัน
                 latest_rate = rates[-1]
-                self.current_prices[self.symbol] = latest_rate['close']
+                self.current_prices[self.actual_symbol] = latest_rate['close']
                 
                 logger.info(f"โหลดข้อมูลตลาดสำเร็จ - ราคาปัจจุบัน: {latest_rate['close']}")
             else:
@@ -204,7 +220,7 @@ class TradingSystem:
             
             # ดึงข้อมูลแท่งเทียนล่าสุด
             rates = self.mt5_connection.get_market_data(
-                self.symbol, mt5.TIMEFRAME_M1, 1
+                self.actual_symbol, mt5.TIMEFRAME_M1, 1
             )
             
             if rates and len(rates) > 0:
@@ -235,7 +251,7 @@ class TradingSystem:
                         self.volume_history = self.volume_history[-100:]
                         
                     # อัพเดทราคาปัจจุบัน
-                    self.current_prices[self.symbol] = candle.close
+                    self.current_prices[self.actual_symbol] = candle.close
                     
                     # ประมวลผลแท่งเทียนใหม่
                     self.process_new_candle(candle)
@@ -267,7 +283,7 @@ class TradingSystem:
             # สร้าง Signal
             signal = Signal(
                 direction=direction,
-                symbol=self.symbol,
+                symbol=self.actual_symbol,
                 strength=strength,
                 confidence=min(100, strength + 20),  # เพิ่ม confidence
                 timestamp=candle.timestamp,
@@ -414,7 +430,7 @@ def main():
         # สร้างระบบเทรด
         trading_system = TradingSystem(
             initial_balance=10000.0,  # เงินทุนเริ่มต้น
-            symbol="EURUSD"           # สัญลักษณ์การเทรด
+            symbol="XAUUSD"           # สัญลักษณ์การเทรด (ทองคำ)
         )
         
         # เริ่มต้นระบบ
@@ -425,7 +441,7 @@ def main():
         # แสดงข้อมูลเริ่มต้น
         logger.info("📊 ข้อมูลเริ่มต้น:")
         logger.info(f"   - เงินทุนเริ่มต้น: {trading_system.initial_balance:,.2f}")
-        logger.info(f"   - สัญลักษณ์: {trading_system.symbol}")
+        logger.info(f"   - สัญลักษณ์: {trading_system.base_symbol} -> {trading_system.actual_symbol}")
         logger.info(f"   - ความเสี่ยงต่อ Trade: {trading_system.portfolio_manager.max_risk_per_trade}%")
         logger.info(f"   - เป้าหมายกำไร: {trading_system.portfolio_manager.profit_target}%")
         
