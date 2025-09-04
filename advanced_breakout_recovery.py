@@ -187,22 +187,44 @@ class AdvancedBreakoutRecovery:
                 'breakout_threshold': self.breakout_threshold
             }
             
-            # ตรวจสอบการ breakout
+            # ตรวจสอบการ breakout พร้อมกำหนดกลยุทธ์การออกไม้
             if current_price > max_buy_level.price + self.breakout_threshold:
-                # ทะลุขึ้นแล้ว
+                # ทะลุขึ้นแล้ว - ตรวจสอบประเภทไม้ที่ถูกเบรค
+                breakout_position_type = max_buy_level.position.type  # 0=BUY, 1=SELL
+                
+                if breakout_position_type == 0:  # BUY ถูกเบรค
+                    # BUY ถูกเบรคขึ้น → รอแรงตลาด แล้วออก SELL ตรงข้าม
+                    counter_action = 'WAIT_MARKET_STRENGTH_THEN_SELL'
+                else:  # SELL ถูกเบรค  
+                    # SELL ถูกเบรคขึ้น → ออกตามเงื่อนไขปกติ
+                    counter_action = 'OPEN_SELL_NORMAL'
+                
                 analysis.update({
                     'potential': 'BULLISH_BREAKOUT',
                     'breakout_level': max_buy_level,
+                    'breakout_position_type': 'BUY' if breakout_position_type == 0 else 'SELL',
                     'target_recovery_level': min_sell_level,
-                    'recommended_action': 'OPEN_SELL_AND_PREPARE_RECOVERY'
+                    'recommended_action': counter_action,
+                    'counter_trade_direction': 'SELL'
                 })
             elif current_price < min_sell_level.price - self.breakout_threshold:
-                # ทะลุลงแล้ว
+                # ทะลุลงแล้ว - ตรวจสอบประเภทไม้ที่ถูกเบรค
+                breakout_position_type = min_sell_level.position.type  # 0=BUY, 1=SELL
+                
+                if breakout_position_type == 1:  # SELL ถูกเบรค
+                    # SELL ถูกเบรคลง → รอแรงตลาด แล้วออก BUY ตรงข้าม
+                    counter_action = 'WAIT_MARKET_STRENGTH_THEN_BUY'
+                else:  # BUY ถูกเบรค
+                    # BUY ถูกเบรคลง → ออกตามเงื่อนไขปกติ
+                    counter_action = 'OPEN_BUY_NORMAL'
+                
                 analysis.update({
                     'potential': 'BEARISH_BREAKOUT',
                     'breakout_level': min_sell_level,
+                    'breakout_position_type': 'SELL' if breakout_position_type == 1 else 'BUY',
                     'target_recovery_level': max_buy_level,
-                    'recommended_action': 'OPEN_BUY_AND_PREPARE_RECOVERY'
+                    'recommended_action': counter_action,
+                    'counter_trade_direction': 'BUY'
                 })
             elif distance_to_max_buy <= self.breakout_threshold:
                 # ใกล้จะทะลุขึ้น
@@ -476,6 +498,100 @@ class AdvancedBreakoutRecovery:
         except Exception as e:
             logger.error(f"Error calculating triple recovery: {e}")
             return None
+    
+    def should_execute_counter_trade(self, breakout_analysis: Dict, current_price: float, symbol: str = "XAUUSD") -> Dict[str, Any]:
+        """ตรวจสอบว่าควรออกไม้ตรงข้ามหลัง breakout หรือไม่"""
+        try:
+            recommended_action = breakout_analysis.get('recommended_action', '')
+            
+            # ถ้าไม่ใช่กรณีที่ต้องรอแรงตลาด → ออกได้เลย
+            if 'WAIT_MARKET_STRENGTH' not in recommended_action:
+                return {
+                    'should_trade': True,
+                    'reason': 'Normal breakout - trade immediately',
+                    'direction': breakout_analysis.get('counter_trade_direction', 'UNKNOWN')
+                }
+            
+            # ตรวจสอบแรงตลาดสำหรับกรณีพิเศษ
+            market_strength = self._analyze_market_strength(current_price, symbol)
+            
+            # เงื่อนไขการออกไม้ตรงข้าม
+            trade_conditions = []
+            
+            # 1. ตรวจสอบ Volume
+            if market_strength.get('volume_ratio', 0) > 1.2:
+                trade_conditions.append('Volume สูง')
+            
+            # 2. ตรวจสอบ Momentum  
+            if market_strength.get('momentum_strength', 0) > 30:
+                trade_conditions.append('Momentum แรง')
+            
+            # 3. ตรวจสอบ ATR (ความผันผวน)
+            if market_strength.get('atr_ratio', 0) > 1.5:
+                trade_conditions.append('ATR สูง')
+            
+            # 4. ตรวจสอบเวลาหลัง breakout
+            breakout_time_passed = market_strength.get('time_since_breakout', 0)
+            if breakout_time_passed > 300:  # 5 นาที
+                trade_conditions.append('เวลาผ่านไป 5+ นาที')
+            
+            # ต้องผ่านอย่างน้อย 2 เงื่อนไข
+            should_trade = len(trade_conditions) >= 2
+            
+            return {
+                'should_trade': should_trade,
+                'reason': f"Market conditions: {', '.join(trade_conditions) if trade_conditions else 'ไม่เพียงพอ'}",
+                'direction': breakout_analysis.get('counter_trade_direction', 'UNKNOWN'),
+                'conditions_met': len(trade_conditions),
+                'total_conditions': 4,
+                'market_strength': market_strength
+            }
+            
+        except Exception as e:
+            logger.error(f"Error checking counter trade conditions: {e}")
+            return {'should_trade': False, 'reason': f'Error: {str(e)}', 'direction': 'UNKNOWN'}
+    
+    def _analyze_market_strength(self, current_price: float, symbol: str) -> Dict[str, Any]:
+        """วิเคราะห์แรงตลาดปัจจุบัน"""
+        try:
+            try:
+                import MetaTrader5 as mt5
+            except ImportError:
+                logger.warning("MetaTrader5 not available for market strength analysis")
+                return {'volume_ratio': 0, 'momentum_strength': 0, 'atr_ratio': 0, 'time_since_breakout': 0}
+            
+            # ดึงข้อมูล M5 ล่าสุด 20 แท่ง
+            rates = mt5.copy_rates_from_pos(symbol, mt5.TIMEFRAME_M5, 0, 20)
+            if rates is None or len(rates) < 10:
+                return {'volume_ratio': 0, 'momentum_strength': 0, 'atr_ratio': 0, 'time_since_breakout': 0}
+            
+            # คำนวณ Volume Ratio
+            recent_volumes = [r['tick_volume'] for r in rates[-3:]]
+            older_volumes = [r['tick_volume'] for r in rates[-10:-3]]
+            avg_recent = sum(recent_volumes) / len(recent_volumes)
+            avg_older = sum(older_volumes) / len(older_volumes)
+            volume_ratio = avg_recent / avg_older if avg_older > 0 else 1.0
+            
+            # คำนวณ Momentum
+            price_change = (rates[-1]['close'] - rates[-5]['close']) * 10  # pips
+            momentum_strength = min(100, abs(price_change) * 3)
+            
+            # คำนวณ ATR Ratio
+            atr_recent = sum([(r['high'] - r['low']) * 10 for r in rates[-3:]]) / 3
+            atr_older = sum([(r['high'] - r['low']) * 10 for r in rates[-10:-3]]) / 7
+            atr_ratio = atr_recent / atr_older if atr_older > 0 else 1.0
+            
+            return {
+                'volume_ratio': volume_ratio,
+                'momentum_strength': momentum_strength,
+                'atr_ratio': atr_ratio,
+                'time_since_breakout': 60,  # ประมาณการ - ควรใช้เวลาจริง
+                'price_change_pips': price_change
+            }
+            
+        except Exception as e:
+            logger.error(f"Error analyzing market strength: {e}")
+            return {'volume_ratio': 0, 'momentum_strength': 0, 'atr_ratio': 0, 'time_since_breakout': 0}
     
     def _calculate_spread_cost(self, positions: List[Position]) -> float:
         """คำนวณค่า spread สำหรับ positions"""

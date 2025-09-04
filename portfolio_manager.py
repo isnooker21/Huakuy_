@@ -706,15 +706,29 @@ class PortfolioManager:
                                          block_recovery: bool = False) -> Dict[str, Any]:
         """ตรวจสอบและดำเนินการ Smart Recovery (พร้อม Emergency Override)"""
         try:
-            # Emergency Override - ถ้ามี positions มาก หรือขาดทุนหนัก ให้ข้าม block
+            # Emergency Override - เฉพาะกรณีที่มั่นใจว่าปิดแล้วพอร์ตดีขึ้น
             positions = self.order_manager.active_positions
-            if len(positions) > 6:  # มากกว่า 6 ไม้
-                logger.info(f"🚨 Emergency Override: {len(positions)} positions - Force Smart Recovery")
-                block_recovery = False
             
-            total_loss = sum(pos.profit for pos in positions if pos.profit < 0)
-            if total_loss < -50:  # ขาดทุนเกิน 50 USD
-                logger.info(f"🚨 Emergency Override: Heavy loss ${total_loss:.2f} - Force Smart Recovery")
+            # คำนวณกำไรขาดทุนรวม
+            profitable_positions = [pos for pos in positions if pos.profit > 0]
+            losing_positions = [pos for pos in positions if pos.profit < 0]
+            total_profit = sum(pos.profit for pos in profitable_positions)
+            total_loss = sum(pos.profit for pos in losing_positions)
+            net_profit = total_profit + total_loss
+            
+            # Emergency Override เฉพาะเมื่อ:
+            # 1. มีไม้เยอะมาก (> 8 ไม้) แต่กำไรสุทธิเป็นบวก
+            # 2. หรือมีไม้กำไรมากกว่าไม้ขาดทุน และ net profit > $10
+            emergency_conditions = []
+            
+            if len(positions) > 8 and net_profit > 5:
+                emergency_conditions.append(f"{len(positions)} positions with net profit ${net_profit:.2f}")
+                
+            if len(profitable_positions) > len(losing_positions) and net_profit > 10:
+                emergency_conditions.append(f"More profitable positions ({len(profitable_positions)} vs {len(losing_positions)}) with net ${net_profit:.2f}")
+            
+            if emergency_conditions:
+                logger.info(f"🚨 Smart Emergency Override: {'; '.join(emergency_conditions)}")
                 block_recovery = False
             
             # เช็คว่าถูกบล็อค Recovery หรือไม่ (เช่น ระหว่างรอ Breakout)
@@ -751,7 +765,13 @@ class PortfolioManager:
             # เลือกและดำเนินการ Recovery ที่ดีที่สุด
             best_candidate = recovery_candidates[0]  # เรียงตาม score แล้ว
             
-            logger.info(f"🎯 กำลังดำเนินการ Smart Recovery...")
+            # ตรวจสอบ Portfolio Health ก่อนปิด - ต้องมั่นใจว่าปิดแล้วดีขึ้น
+            portfolio_health_check = self._validate_portfolio_improvement(best_candidate, current_state)
+            if not portfolio_health_check['valid']:
+                logger.warning(f"❌ Portfolio Health Check Failed: {portfolio_health_check['reason']}")
+                return {'executed': False, 'reason': f"Portfolio Health: {portfolio_health_check['reason']}"}
+            
+            logger.info(f"🎯 กำลังดำเนินการ Smart Recovery... (Portfolio Health: ✅)")
             recovery_result = self.smart_recovery.execute_recovery(best_candidate)
             
             if recovery_result['success']:
@@ -1118,3 +1138,75 @@ class PortfolioManager:
                 
         except Exception as e:
             logger.error(f"Error updating trade timing: {e}")
+    
+    def _validate_portfolio_improvement(self, recovery_candidate: Dict, current_state: PortfolioState) -> Dict[str, Any]:
+        """ตรวจสอบว่าการปิดไม้จะทำให้พอร์ตดีขึ้นหรือไม่"""
+        try:
+            positions_to_close = recovery_candidate.get('positions', [])
+            if not positions_to_close:
+                return {'valid': False, 'reason': 'ไม่มีไม้ที่จะปิด'}
+            
+            # คำนวณ Net Profit ของไม้ที่จะปิด
+            total_profit = 0
+            profitable_count = 0
+            losing_count = 0
+            
+            for pos in positions_to_close:
+                total_profit += pos.profit
+                if pos.profit > 0:
+                    profitable_count += 1
+                else:
+                    losing_count += 1
+            
+            # เงื่อนไข 1: Net Profit ต้องเป็นบวก
+            if total_profit <= 0:
+                return {'valid': False, 'reason': f'Net profit เป็นลบ: ${total_profit:.2f}'}
+            
+            # เงื่อนไข 2: กำไรต้องมากกว่า % ของจำนวนไม้
+            position_count = len(positions_to_close)
+            min_profit_percentage = position_count * 0.5  # 0.5% ต่อไม้
+            min_required_profit = current_state.account_balance * (min_profit_percentage / 100)
+            
+            if total_profit < min_required_profit:
+                return {
+                    'valid': False, 
+                    'reason': f'กำไรไม่ถึงเกณฑ์: ${total_profit:.2f} < ${min_required_profit:.2f} ({min_profit_percentage:.1f}%)'
+                }
+            
+            # เงื่อนไข 3: ต้องมีไม้กำไรและขาดทุนปะปนกัน (ไม่ปิดแค่ฝั่งเดียว)
+            if profitable_count == 0:
+                return {'valid': False, 'reason': 'ไม่มีไม้กำไรในกลุ่ม'}
+            
+            if losing_count == 0:
+                return {'valid': False, 'reason': 'ไม่มีไม้ขาดทุนในกลุ่ม - ไม่จำเป็นต้อง Recovery'}
+            
+            # เงื่อนไข 4: สมดุลของไม้ (ไม่เอียงไปฝั่งใดมาก)
+            balance_ratio = abs(profitable_count - losing_count) / position_count
+            if balance_ratio > 0.7:  # เอียงเกิน 70%
+                return {'valid': False, 'reason': f'ไม้ไม่สมดุล: กำไร {profitable_count} vs ขาดทุน {losing_count}'}
+            
+            # เงื่อนไข 5: คำนวณผลกระทบต่อ Equity และ Free Margin
+            estimated_new_balance = current_state.account_balance + total_profit
+            margin_freed = sum(abs(pos.profit) * 0.01 for pos in positions_to_close)  # ประมาณการ
+            estimated_new_free_margin = current_state.margin + margin_freed
+            
+            improvement_metrics = {
+                'balance_improvement': total_profit,
+                'balance_improvement_pct': (total_profit / current_state.account_balance) * 100,
+                'estimated_new_balance': estimated_new_balance,
+                'estimated_margin_freed': margin_freed,
+                'estimated_new_free_margin': estimated_new_free_margin,
+                'positions_closed': position_count,
+                'profitable_positions': profitable_count,
+                'losing_positions': losing_count
+            }
+            
+            return {
+                'valid': True,
+                'reason': f'Portfolio improvement validated: +${total_profit:.2f} ({improvement_metrics["balance_improvement_pct"]:.2f}%)',
+                'metrics': improvement_metrics
+            }
+            
+        except Exception as e:
+            logger.error(f"Error validating portfolio improvement: {e}")
+            return {'valid': False, 'reason': f'Validation error: {str(e)}'}
