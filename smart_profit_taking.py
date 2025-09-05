@@ -59,9 +59,10 @@ class SmartProfitTakingSystem:
         self.order_manager = order_manager
         
         # Core Settings
-        self.min_group_profit_percentage = 0.5  # กำไรกลุ่มขั้นต่ำ 0.5%
+        self.min_profit_per_lot = 0.50           # กำไรขั้นต่ำ $0.50 ต่อ lot
+        self.min_profit_per_position = 0.10      # กำไรขั้นต่ำ $0.10 ต่อไม้
         self.pullback_threshold_percentage = 1.0  # รอ Pullback 1%
-        self.max_positions_per_group = 10  # สูงสุด 10 ไม้ต่อกลุ่ม
+        self.max_positions_per_group = 10         # สูงสุด 10 ไม้ต่อกลุ่ม
         
         # Pullback Detection
         self.price_peaks = {}  # เก็บราคา Peak ของแต่ละ symbol
@@ -435,6 +436,40 @@ class SmartProfitTakingSystem:
             logger.error(f"Error estimating margin freed: {e}")
             return 0.0
     
+    def _calculate_minimum_profit_required(self, profit_group: ProfitGroup) -> float:
+        """คำนวณกำไรขั้นต่ำที่ต้องการตามจำนวนไม้และ lot"""
+        try:
+            total_positions = len(profit_group.profit_positions) + len(profit_group.loss_positions)
+            total_lots = profit_group.total_lots
+            
+            # คำนวณตาม lot (หลัก)
+            lot_based_profit = total_lots * self.min_profit_per_lot
+            
+            # คำนวณตามจำนวนไม้ (รอง)
+            position_based_profit = total_positions * self.min_profit_per_position
+            
+            # ใช้ค่าที่สูงกว่า แต่มี cap สูงสุด
+            min_profit = max(lot_based_profit, position_based_profit)
+            
+            # กำหนดขีดจำกัดสูงสุด (ไม่ให้สูงเกินไป)
+            max_profit_cap = 20.0  # สูงสุด $20
+            min_profit = min(min_profit, max_profit_cap)
+            
+            # ขั้นต่ำสุด $0.50
+            min_profit = max(min_profit, 0.50)
+            
+            logger.debug(f"💰 Min Profit Calculation:")
+            logger.debug(f"   Positions: {total_positions}, Lots: {total_lots:.2f}")
+            logger.debug(f"   Lot-based: ${lot_based_profit:.2f}")
+            logger.debug(f"   Position-based: ${position_based_profit:.2f}")
+            logger.debug(f"   Required: ${min_profit:.2f}")
+            
+            return min_profit
+            
+        except Exception as e:
+            logger.error(f"Error calculating minimum profit required: {e}")
+            return 1.0  # fallback
+    
     def should_execute_profit_taking(self, positions: List[Any], current_price: float, 
                                    account_balance: float) -> Dict[str, Any]:
         """ตรวจสอบว่าควรปิดกำไรหรือไม่"""
@@ -468,12 +503,13 @@ class SmartProfitTakingSystem:
                     'best_group': best_group
                 }
             
-            # 5. ตรวจสอบกำไรขั้นต่ำ
-            min_profit_required = (account_balance * (self.min_group_profit_percentage / 100)) if account_balance > 0 else 1.0
+            # 5. ตรวจสอบกำไรขั้นต่ำ (ตาม lot และจำนวนไม้)
+            min_profit_required = self._calculate_minimum_profit_required(best_group)
             if best_group.total_pnl < min_profit_required:
+                total_positions = len(best_group.profit_positions) + len(best_group.loss_positions)
                 return {
                     'should_execute': False,
-                    'reason': f'กำไรไม่ถึงเกณฑ์: ${best_group.total_pnl:.2f} < ${min_profit_required:.2f}',
+                    'reason': f'กำไรไม่ถึงเกณฑ์: ${best_group.total_pnl:.2f} < ${min_profit_required:.2f} ({total_positions} ไม้, {best_group.total_lots:.2f} lots)',
                     'pullback_status': pullback_info.status.value,
                     'market_condition': market_condition.value,
                     'best_group': best_group
