@@ -84,11 +84,11 @@ class SimplePositionManager:
                     logger.info(f"🎯 CLOSE READY: {len(best_combination['positions'])} positions, ${expected_pnl:.2f}")
                     return {
                         'should_close': True,
-                        'reason': best_combination['reason'],
+                        'reason': best_combination.get('balance_improvement', 'Profitable combination found'),
                         'positions_to_close': best_combination['positions'],
                         'expected_pnl': expected_pnl,
                         'positions_count': len(best_combination['positions']),
-                        'combination_type': best_combination['type']
+                        'combination_type': best_combination.get('strategy', 'Enhanced Strategy')
                     }
                 else:
                     logger.info(f"🚫 Not profitable enough: ${expected_pnl:.2f} < $0.50 minimum")
