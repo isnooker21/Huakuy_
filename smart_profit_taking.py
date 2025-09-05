@@ -159,27 +159,42 @@ class SmartProfitTakingSystem:
                     status=PullbackStatus.NO_PULLBACK_NEEDED
                 )
             
-            # หา extreme prices
+            # หา extreme prices จาก positions
             highest_buy = max([pos.price_open for pos in buy_positions]) if buy_positions else 0
             lowest_sell = min([pos.price_open for pos in sell_positions]) if sell_positions else float('inf')
             
-            # กำหนด peak price
-            peak_price = max(highest_buy, current_price)
-            if sell_positions and lowest_sell < float('inf'):
-                peak_price = max(peak_price, lowest_sell)
-            
-            # อัพเดท peak tracking
-            if symbol not in self.price_peaks or current_price > self.price_peaks[symbol]:
-                self.price_peaks[symbol] = current_price
+            # อัพเดท peak tracking (เก็บราคาสูงสุดที่เคยเจอ)
+            if symbol not in self.price_peaks:
+                # ครั้งแรก - ใช้ราคาสูงสุดระหว่าง current_price, highest_buy, lowest_sell
+                initial_peak = current_price
+                if buy_positions:
+                    initial_peak = max(initial_peak, highest_buy)
+                if sell_positions and lowest_sell < float('inf'):
+                    initial_peak = max(initial_peak, lowest_sell)
+                
+                self.price_peaks[symbol] = initial_peak
                 self.peak_timestamps[symbol] = datetime.now()
-                peak_price = current_price
+                peak_price = initial_peak
             else:
+                # อัพเดท peak ถ้าราคาปัจจุบันสูงกว่า
+                if current_price > self.price_peaks[symbol]:
+                    self.price_peaks[symbol] = current_price
+                    self.peak_timestamps[symbol] = datetime.now()
+                
+                # ใช้ peak ที่เก็บไว้
                 peak_price = self.price_peaks[symbol]
             
             # คำนวณ pullback
             pullback_amount = peak_price - current_price
             pullback_percentage = (pullback_amount / peak_price * 100) if peak_price > 0 else 0
             pullback_pips = pullback_amount * 10  # สำหรับ XAUUSD
+            
+            # Debug logging
+            logger.debug(f"🔍 Pullback Calculation:")
+            logger.debug(f"   Peak Price: {peak_price:.2f}")
+            logger.debug(f"   Current Price: {current_price:.2f}")
+            logger.debug(f"   Pullback Amount: {pullback_amount:.2f}")
+            logger.debug(f"   Pullback %: {pullback_percentage:.2f}%")
             
             # คำนวณเวลาที่ผ่านไปจาก peak
             time_since_peak = 0.0
@@ -196,12 +211,15 @@ class SmartProfitTakingSystem:
                 threshold = self.volatile_pullback_threshold
             
             # กำหนดสถานะ pullback
-            if pullback_percentage < 0.1:  # ราคายังวิ่งขึ้น
-                status = PullbackStatus.WAITING_FOR_PULLBACK
+            if pullback_percentage < 0.1:  # ราคายังวิ่งขึ้นหรือเท่าเดิม
+                if current_price >= peak_price:
+                    status = PullbackStatus.WAITING_FOR_PULLBACK  # ราคายังแรง
+                else:
+                    status = PullbackStatus.PULLBACK_DETECTED     # เริ่ม pullback แล้ว
             elif pullback_percentage >= threshold:
-                status = PullbackStatus.PULLBACK_SUFFICIENT
+                status = PullbackStatus.PULLBACK_SUFFICIENT       # pullback เพียงพอแล้ว
             else:
-                status = PullbackStatus.PULLBACK_DETECTED
+                status = PullbackStatus.PULLBACK_DETECTED         # pullback แต่ยังไม่พอ
             
             return PullbackInfo(
                 peak_price=peak_price,
