@@ -153,27 +153,37 @@ class ZonePositionManager:
             for zone_id, analysis in zone_analyses.items():
                 zone = self.zone_manager.zones[zone_id]
                 
-                # เงื่อนไข 1: Zone มีกำไรดี และ Health Score สูง
-                if (analysis.total_pnl >= self.min_profit_threshold and 
-                    analysis.health_score >= 70 and 
-                    analysis.risk_level == 'LOW'):
+                # เงื่อนไข 1: Zone มีกำไรดี และ Health Score สูง (ปรับเงื่อนไขให้เข้มงวดขึ้น)
+                if (analysis.total_pnl >= self.min_profit_threshold * 1.5 and  # เพิ่มเป็น 1.5x
+                    analysis.health_score >= 75 and  # เพิ่มจาก 70 เป็น 75
+                    analysis.risk_level == 'LOW' and
+                    analysis.total_pnl > 0):  # ต้องมีกำไรจริง
+                    
+                    # เพิ่มการตรวจสอบ Portfolio Impact
+                    portfolio_impact = self._evaluate_portfolio_impact_before_closing(zone.positions)
                     
                     zone_range = f"{zone.price_min:.2f}-{zone.price_max:.2f}"
                     logger.info(f"💰 Single Zone Closing: Zone {zone_id} [{zone_range}]")
                     logger.info(f"   Positions: B{zone.buy_count}:S{zone.sell_count} | "
                                f"P&L: ${analysis.total_pnl:.2f} | Health: {analysis.health_score:.0f}")
+                    logger.info(f"   Portfolio Impact: {portfolio_impact['impact_description']}")
                     
-                    return {
-                        'should_close': True,
-                        'reason': f'Profitable Zone {zone_id} [{zone_range}]: ${analysis.total_pnl:.2f} profit',
-                        'positions_to_close': zone.positions,
-                        'positions_count': zone.total_positions,
-                        'expected_pnl': analysis.total_pnl,
-                        'method': 'single_zone_profit',
-                        'zone_id': zone_id,
-                        'zone_range': zone_range,
-                        'zone_health': analysis.health_score
-                    }
+                    # ปิดเฉพาะเมื่อไม่ส่งผลเสียต่อ Portfolio
+                    if portfolio_impact['safe_to_close']:
+                        return {
+                            'should_close': True,
+                            'reason': f'Profitable Zone {zone_id} [{zone_range}]: ${analysis.total_pnl:.2f} profit (Safe for portfolio)',
+                            'positions_to_close': zone.positions,
+                            'positions_count': zone.total_positions,
+                            'expected_pnl': analysis.total_pnl,
+                            'method': 'single_zone_profit',
+                            'zone_id': zone_id,
+                            'zone_range': zone_range,
+                            'zone_health': analysis.health_score,
+                            'portfolio_impact': portfolio_impact
+                        }
+                    else:
+                        logger.warning(f"⚠️ Skip closing Zone {zone_id}: {portfolio_impact['reason']}")
                 
                 # เงื่อนไข 2: Zone เสี่ยงสูง - ปิดเพื่อลดความเสี่ยง
                 elif (analysis.risk_level == 'CRITICAL' and 
@@ -618,6 +628,80 @@ class ZonePositionManager:
         except Exception as e:
             logger.error(f"❌ Error debugging zone calculation: {e}")
             return None
+    
+    def _evaluate_portfolio_impact_before_closing(self, positions_to_close: List[Any]) -> Dict[str, Any]:
+        """
+        🎯 ประเมินผลกระทบต่อ Portfolio ก่อนปิด Position
+        
+        Args:
+            positions_to_close: รายการ Position ที่จะปิด
+            
+        Returns:
+            Dict: ข้อมูลผลกระทบ
+        """
+        try:
+            if not positions_to_close:
+                return {
+                    'safe_to_close': True,
+                    'reason': 'No positions to close',
+                    'impact_description': 'No impact'
+                }
+            
+            # คำนวณ P&L ที่จะได้จากการปิด
+            closing_pnl = sum(getattr(pos, 'profit', 0.0) for pos in positions_to_close)
+            closing_count = len(positions_to_close)
+            
+            # ดึงข้อมูล Portfolio ปัจจุบัน
+            all_positions = self.order_manager.active_positions or []
+            current_portfolio_pnl = sum(getattr(pos, 'profit', 0.0) for pos in all_positions)
+            remaining_positions_count = len(all_positions) - closing_count
+            
+            # คำนวณ Portfolio P&L หลังปิด
+            portfolio_pnl_after = current_portfolio_pnl - closing_pnl
+            
+            # เงื่อนไขการตัดสินใจ
+            safe_to_close = True
+            reason = "Safe to close"
+            impact_description = f"Close {closing_count} positions, P&L: ${closing_pnl:.2f}"
+            
+            # 1. ตรวจสอบการปิดทำให้ Portfolio P&L แย่ลง
+            if closing_pnl > 0 and portfolio_pnl_after < current_portfolio_pnl * 0.8:
+                safe_to_close = False
+                reason = "Closing would significantly worsen portfolio P&L"
+                impact_description += f" → Portfolio P&L: ${current_portfolio_pnl:.2f} → ${portfolio_pnl_after:.2f}"
+            
+            # 2. ตรวจสอบว่าเหลือ Position น้อยเกินไป
+            elif remaining_positions_count < 3:
+                safe_to_close = False
+                reason = f"Would leave only {remaining_positions_count} positions in portfolio"
+                impact_description += f" → {remaining_positions_count} positions remaining"
+            
+            # 3. ตรวจสอบว่ากำไรน้อยเกินไป
+            elif closing_pnl < 10.0:  # กำไรต่ำกว่า $10
+                safe_to_close = False
+                reason = f"Profit too small (${closing_pnl:.2f} < $10.00)"
+                impact_description += " → Profit too small"
+            
+            else:
+                impact_description += f" → Portfolio P&L: ${current_portfolio_pnl:.2f} → ${portfolio_pnl_after:.2f}"
+            
+            return {
+                'safe_to_close': safe_to_close,
+                'reason': reason,
+                'impact_description': impact_description,
+                'closing_pnl': closing_pnl,
+                'current_portfolio_pnl': current_portfolio_pnl,
+                'portfolio_pnl_after': portfolio_pnl_after,
+                'remaining_positions': remaining_positions_count
+            }
+            
+        except Exception as e:
+            logger.error(f"❌ Error evaluating portfolio impact: {e}")
+            return {
+                'safe_to_close': False,
+                'reason': f'Error in evaluation: {str(e)}',
+                'impact_description': 'Unknown impact'
+            }
     
     def get_zone_price_ranges(self) -> List[Dict[str, Any]]:
         """

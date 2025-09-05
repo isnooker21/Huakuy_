@@ -197,6 +197,7 @@ class PortfolioManager:
             # ตรวจสอบเงื่อนไขพื้นฐาน
             basic_conditions = self.trading_conditions.check_entry_conditions(
                 candle, self.order_manager.active_positions, 
+
                 current_state.account_balance, volume_history, signal.symbol
             )
             
@@ -257,7 +258,7 @@ class PortfolioManager:
             )
             
             # เลือกใช้ Portfolio Lot เป็นหลัก แต่ไม่ต่ำกว่า Traditional Lot
-            base_lot_size = max(portfolio_lot, traditional_lot * 0.8)  # เพิ่มจาก 0.5 เป็น 0.8
+            base_lot_size = max(portfolio_lot, traditional_lot * 0.6)  # ลดจาก 0.8 เป็น 0.6 เพื่อความยืดหยุ่น
             
             # 🎯 ปรับตามแรงแท่งเทียน (Candle Strength Adjustment)
             candle_strength_adj = self._calculate_candle_strength_multiplier(signal.strength, candle)
@@ -278,8 +279,11 @@ class PortfolioManager:
             else:
                 zone_multiplier = 1.0
             
-            # รวมทุกปัจจัย
-            lot_size = base_lot_size * zone_multiplier * candle_strength_adj
+            # รวมทุกปัจจัย (เพิ่มการจำกัดขนาด)
+            multiplier_total = zone_multiplier * candle_strength_adj
+            # จำกัด Total Multiplier ไม่ให้เกิน 1.5x
+            multiplier_total = min(multiplier_total, 1.5)
+            lot_size = base_lot_size * multiplier_total
             
             logger.info(f"📊 Enhanced Lot Size Calculation:")
             logger.info(f"   Positions Count: {positions_count}")
@@ -290,6 +294,7 @@ class PortfolioManager:
             logger.info(f"   Candle Strength Adj: {candle_strength_adj:.2f}x (Strength: {signal.strength:.1f}%)")
             if zone_recommendation:
                 logger.info(f"   Zone Multiplier: {zone_multiplier:.2f}x ({zone_recommendation.get('reason', 'N/A')})")
+            logger.info(f"   Total Multiplier: {multiplier_total:.2f}x (capped at 1.5x)")
             logger.info(f"   Final Lot Size: {lot_size:.3f}")
             
             # ปรับขนาด lot สำหรับสัญลักษณ์ทองคำ (ลดการลดขนาดอีก)
