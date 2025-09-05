@@ -275,40 +275,23 @@ class TradingSystem:
         except Exception as e:
             logger.error(f"เกิดข้อผิดพลาดในการอัพเดทข้อมูลตลาด: {str(e)}")
             
+    # 🗑️ DEPRECATED - Signal generation moved to SignalManager
     def process_new_candle(self, candle: CandleData):
-        """ประมวลผลแท่งเทียนใหม่"""
+        """ประมวลผลแท่งเทียนใหม่ (เหลือไว้เฉพาะ logging)"""
         try:
-            logger.info(f"แท่งเทียนใหม่ - {candle.timestamp}: "
+            logger.info(f"📊 แท่งเทียนใหม่ - {candle.timestamp}: "
                        f"O:{candle.open} H:{candle.high} L:{candle.low} C:{candle.close} "
                        f"V:{candle.volume}")
                        
-            # วิเคราะห์แท่งเทียน (Counter-Trend Logic)
+            # แสดงทิศทางแท่งเทียน (สำหรับ reference)
             if candle.is_green:
-                direction = "SELL"  # ราคาขึ้น → ขาย (เมื่อแพง)
-                logger.info("🟢 แท่งเทียนเขียว (ราคาขึ้น) - สัญญาณ SELL")
+                logger.info("🟢 แท่งเทียนเขียว (ราคาขึ้น)")
             elif candle.is_red:
-                direction = "BUY"   # ราคาลง → ซื้อ (เมื่อถูก)
-                logger.info("🔴 แท่งเทียนแดง (ราคาลง) - สัญญาณ BUY")
+                logger.info("🔴 แท่งเทียนแดง (ราคาลง)")
             else:
-                logger.info("⚪ แท่งเทียน Doji - ไม่มีสัญญาณ")
-                return
+                logger.info("⚪ แท่งเทียน Doji")
                 
-            # คำนวณแรงของสัญญาณ
-            strength = self.calculate_signal_strength(candle)
-            
-            # สร้าง Signal
-            signal = Signal(
-                direction=direction,
-                symbol=self.actual_symbol,
-                strength=strength,
-                confidence=min(100, strength + 20),  # เพิ่ม confidence
-                timestamp=candle.timestamp,
-                price=candle.close,
-                comment=f"Candle signal - Strength: {strength:.1f}%"
-            )
-            
-            # เก็บ signal สำหรับการตรวจสอบ
-            self.last_signal = signal
+            # Signal generation ย้ายไป SignalManager แล้ว
             
         except Exception as e:
             logger.error(f"เกิดข้อผิดพลาดในการประมวลผลแท่งเทียน: {str(e)}")
@@ -340,14 +323,8 @@ class TradingSystem:
             return 0.0
             
     def check_entry_conditions(self, portfolio_state):
-        """ตรวจสอบเงื่อนไขการเข้าเทรด"""
+        """🎯 ตรวจสอบเงื่อนไขการเข้าเทรด (Single Entry Point)"""
         try:
-            # ตรวจสอบว่ามี signal ใหม่หรือไม่
-            if not hasattr(self, 'last_signal') or not self.last_signal:
-                return
-                
-            signal = self.last_signal
-            
             # สร้าง CandleData จากข้อมูลล่าสุด
             if len(self.price_history) < 4:
                 return
@@ -361,60 +338,45 @@ class TradingSystem:
                 timestamp=datetime.now()
             )
             
-            # กำหนด current_price จาก candle
             current_price = candle.close
+            
+            # 🎯 Single Entry Point - ดึงสัญญาณที่ดีที่สุดจาก SignalManager
+            unified_signal = self.portfolio_manager.get_unified_signal(
+                candle=candle,
+                current_price=current_price,
+                account_balance=portfolio_state.account_balance,
+                volume_history=self.volume_history
+            )
+            
+            if not unified_signal:
+                logger.debug("⏸️ ไม่พบสัญญาณที่เหมาะสม")
+                # อัพเดทเวลาสัญญาณ (แม้จะไม่มีสัญญาณ)
+                self.portfolio_manager.update_trade_timing(signal_generated=False)
+                return
             
             # ตัดสินใจว่าควรเข้าเทรดหรือไม่
             decision = self.portfolio_manager.should_enter_trade(
-                signal, candle, portfolio_state, self.volume_history
+                unified_signal.signal, candle, portfolio_state, self.volume_history
             )
             
             if decision['should_enter']:
-                logger.info(f"🎯 ตัดสินใจเข้าเทรด - Direction: {signal.direction}, "
-                           f"Lot: {decision['lot_size']:.2f}, "
-                           f"Reasons: {'; '.join(decision['reasons'])}")
+                logger.info(f"🎯 {unified_signal.source} Signal Accepted!")
+                logger.info(f"   Direction: {unified_signal.signal.direction}, Lot: {decision['lot_size']:.2f}")
+                logger.info(f"   Priority: {unified_signal.priority.name}, Score: {unified_signal.confidence_score:.1f}")
+                logger.info(f"   Reasons: {'; '.join(decision['reasons'])}")
                 
                 # ดำเนินการเทรด
                 result = self.portfolio_manager.execute_trade_decision(decision)
                 
                 if result.success:
-                    logger.info(f"✅ ส่ง Order สำเร็จ - Ticket: {result.ticket}")
-                    # อัพเดทเวลาเทรดล่าสุด
+                    logger.info(f"✅ Order สำเร็จ - Ticket: {result.ticket} ({unified_signal.source})")
                     self.portfolio_manager.update_trade_timing(trade_executed=True)
                 else:
-                    logger.error(f"❌ ส่ง Order ไม่สำเร็จ: {result.error_message}")
+                    logger.error(f"❌ Order ไม่สำเร็จ: {result.error_message}")
                     
             else:
-                logger.debug(f"⏸️ ไม่เข้าเทรด - Reasons: {'; '.join(decision['reasons'])}")
-                
-                # ตรวจสอบ Continuous Trading เมื่อไม่มีสัญญาณปกติ
-                continuous_result = self.portfolio_manager.check_continuous_trading_opportunities(
-                    current_price, candle
-                )
-                
-                if continuous_result['gap_filler_active'] or continuous_result['force_trading_active']:
-                    synthetic_signal = continuous_result['recommended_signal']
-                    logger.info(f"🔄 {continuous_result['activation_reason']}")
-                    
-                    # ประมวลผลสัญญาณสังเคราะห์
-                    synthetic_decision = self.portfolio_manager.should_enter_trade(
-                        synthetic_signal, candle, portfolio_state, self.volume_history
-                    )
-                    
-                    if synthetic_decision['should_enter']:
-                        logger.info(f"🤖 Continuous Trade - Direction: {synthetic_signal.direction}, "
-                                   f"Lot: {synthetic_decision['lot_size']:.2f}")
-                        
-                        # ดำเนินการเทรดสังเคราะห์
-                        synthetic_result = self.portfolio_manager.execute_trade_decision(synthetic_decision)
-                        
-                        if synthetic_result.success:
-                            logger.info(f"✅ Continuous Trade สำเร็จ - Ticket: {synthetic_result.ticket}")
-                            self.portfolio_manager.update_trade_timing(trade_executed=True)
-                        else:
-                            logger.error(f"❌ Continuous Trade ไม่สำเร็จ: {synthetic_result.error_message}")
-                    else:
-                        logger.warning(f"🚫 Continuous Signal ถูกปฏิเสธ: {'; '.join(synthetic_decision['reasons'])}")
+                logger.debug(f"⏸️ {unified_signal.source} Signal ถูกปฏิเสธ")
+                logger.debug(f"   Reasons: {'; '.join(decision['reasons'])}")
                 
                 # อัพเดทเวลาสัญญาณ (แม้จะไม่เทรด)
                 self.portfolio_manager.update_trade_timing(signal_generated=True)

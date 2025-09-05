@@ -20,6 +20,7 @@ from advanced_breakout_recovery import AdvancedBreakoutRecovery
 from smart_gap_filler import SmartGapFiller
 from force_trading_mode import ForceTradingMode
 from smart_profit_taking import SmartProfitTakingSystem
+from signal_manager import SignalManager, RankedSignal
 from order_management import OrderManager, OrderResult, CloseResult
 
 logger = logging.getLogger(__name__)
@@ -83,6 +84,9 @@ class PortfolioManager:
         
         # เพิ่ม Smart Profit Taking System (ระบบปิดกำไรอัจฉริยะ)
         self.smart_profit_taking = SmartProfitTakingSystem(order_manager.mt5, order_manager)
+        
+        # 🎯 Signal Manager - จัดการสัญญาณจากทุกระบบในจุดเดียว
+        self.signal_manager = SignalManager(order_manager.mt5)
         
         # การตั้งค่าความเสี่ยง
         self.max_risk_per_trade = 2.0  # เปอร์เซ็นต์ความเสี่ยงต่อ Trade
@@ -931,6 +935,34 @@ class PortfolioManager:
             logger.error(f"Error deciding recovery block: {e}")
             return False
     
+    def get_unified_signal(self, candle: CandleData, current_price: float,
+                          account_balance: float, volume_history: List[float] = None) -> Optional[RankedSignal]:
+        """ดึงสัญญาณแบบรวมจาก Signal Manager (Single Entry Point)"""
+        try:
+            positions = self.order_manager.active_positions
+            
+            # ใช้ SignalManager เพื่อหาสัญญาณที่ดีที่สุด
+            best_signal = self.signal_manager.get_best_signal(
+                candle=candle,
+                positions=positions,
+                account_balance=account_balance,
+                volume_history=volume_history,
+                current_price=current_price,
+                last_trade_time=self.last_trade_time
+            )
+            
+            if best_signal:
+                logger.info(f"🎯 Unified Signal: {best_signal.source} - {best_signal.signal.direction}")
+                logger.info(f"   Priority: {best_signal.priority.name}, Score: {best_signal.confidence_score:.1f}")
+                logger.info(f"   Reason: {best_signal.reason}")
+            
+            return best_signal
+            
+        except Exception as e:
+            logger.error(f"Error getting unified signal: {e}")
+            return None
+    
+    # 🗑️ DEPRECATED - ใช้ get_unified_signal() แทน
     def check_continuous_trading_opportunities(self, current_price: float, 
                                              current_candle: Optional[CandleData] = None) -> Dict[str, Any]:
         """ตรวจสอบโอกาสการเทรดแบบต่เนื่อง"""
