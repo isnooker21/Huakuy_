@@ -302,30 +302,37 @@ class LotSizeCalculator:
             balance = account_balance or self.account_balance
             risk_amount = balance * (final_risk_pct / 100)
             
-            # ปรับ stop loss ให้เหมาะสมกับ portfolio size เพื่อให้ได้ lot หลากหลาย
-            if positions_count <= 5:
-                stop_loss_pips = 30.0  # Portfolio เล็ก ใช้ SL น้อย = lot ใหญ่
-            elif positions_count <= 15:
-                stop_loss_pips = 40.0  # Portfolio ปานกลาง
-            else:
-                stop_loss_pips = 50.0  # Portfolio ใหญ่
-                
-            pip_value = 1000.0  # XAUUSD pip value
+            # ✅ ไม่มี SL - ใช้วิธีคำนวณแบบ Direct Risk Allocation
+            # คำนวณ lot โดยตรงจาก risk percentage และ portfolio size
             
-            calculated_lot = risk_amount / (stop_loss_pips * pip_value)
+            # Base lot calculation จาก risk amount
+            if positions_count <= 5:
+                # Portfolio เล็ก - เสี่ยงได้มาก
+                base_multiplier = 0.0008  # ~0.03-0.04 lot สำหรับ balance $3000-5000
+            elif positions_count <= 15:
+                # Portfolio ปานกลาง - เสี่ยงปานกลาง
+                base_multiplier = 0.0006  # ~0.02-0.03 lot
+            else:
+                # Portfolio ใหญ่ - เสี่ยงน้อย
+                base_multiplier = 0.0004  # ~0.01-0.02 lot
+                
+            # คำนวณ lot จาก risk amount โดยตรง
+            calculated_lot = risk_amount * base_multiplier
             
             # ปรับให้เป็น 0.01 step และจำกัดขอบเขต
             portfolio_lot = max(0.01, min(0.10, calculated_lot))
             portfolio_lot = round(portfolio_lot, 2)
             
-            logger.info(f"📊 Portfolio Risk Lot Calculation:")
+            logger.info(f"📊 Portfolio Risk Lot Calculation (No SL):")
             logger.info(f"   Positions Count: {positions_count}")
             logger.info(f"   Market Volatility: {market_volatility:.1f}%")
             logger.info(f"   Base Risk: {base_risk_pct:.1f}%")
             logger.info(f"   Volatility Multiplier: {volatility_multiplier:.1f}x")
             logger.info(f"   Final Risk: {final_risk_pct:.1f}%")
             logger.info(f"   Risk Amount: ${risk_amount:.2f}")
-            logger.info(f"   Portfolio Lot: {portfolio_lot:.2f}")
+            logger.info(f"   Base Multiplier: {base_multiplier:.6f}")
+            logger.info(f"   Calculated Lot: {calculated_lot:.4f}")
+            logger.info(f"   Final Portfolio Lot: {portfolio_lot:.2f}")
             
             return portfolio_lot
             
