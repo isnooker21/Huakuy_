@@ -44,6 +44,7 @@ logging.getLogger('market_analysis').setLevel(logging.WARNING)
 
 # เปิดเฉพาะ Lightning Portfolio Cleanup และ Main Trading
 logging.getLogger('lightning_portfolio_cleanup').setLevel(logging.INFO)
+logging.getLogger('portfolio_manager').setLevel(logging.DEBUG)  # เปิด debug เพื่อดูค่า balance
 logging.getLogger('__main__').setLevel(logging.INFO)
 
 logger = logging.getLogger(__name__)

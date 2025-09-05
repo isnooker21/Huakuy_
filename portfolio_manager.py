@@ -1177,6 +1177,10 @@ class PortfolioManager:
             Dict: ผลการตรวจสอบ
         """
         try:
+            # Debug info
+            balance_ratio = (current_state.account_balance / self.initial_balance) * 100 if self.initial_balance > 0 else 100
+            logger.debug(f"Portfolio Health Check: Positions={len(positions)}, Balance={current_state.account_balance:.2f}, Initial={self.initial_balance:.2f}, Ratio={balance_ratio:.1f}%")
+            
             # 1. ตรวจสอบจำนวนไม้ค้างมากเกินไป
             if len(positions) >= 50:  # เกิน 50 ไม้
                 return {
@@ -1198,12 +1202,18 @@ class PortfolioManager:
             except:
                 current_drawdown = 0.0
             
-            # 3. ตรวจสอบ Balance ติดลบมากเกินไป
-            if current_state.account_balance < self.initial_balance * 0.7:  # เหลือ < 70% ของเงินทุน
+            # 3. ตรวจสอบ Balance ติดลบมากเกินไป (เฉพาะเมื่อมีไม้อยู่แล้ว)
+            if len(positions) > 0 and current_state.account_balance < self.initial_balance * 0.5:  # เหลือ < 50% และมีไม้อยู่
                 balance_ratio = (current_state.account_balance / self.initial_balance) * 100
                 return {
                     'allow_entry': False,
-                    'reason': f'Low balance: {balance_ratio:.1f}% < 70% of initial capital'
+                    'reason': f'Low balance with open positions: {balance_ratio:.1f}% < 50% of initial capital'
+                }
+            elif len(positions) == 0 and current_state.account_balance < self.initial_balance * 0.3:  # ไม่มีไม้แต่เงินเหลือ < 30%
+                balance_ratio = (current_state.account_balance / self.initial_balance) * 100
+                return {
+                    'allow_entry': False,
+                    'reason': f'Critical low balance: {balance_ratio:.1f}% < 30% of initial capital'
                 }
             
             # 4. ตรวจสอบไม้เสียเกิน 80% ของพอร์ต
