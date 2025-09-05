@@ -519,22 +519,13 @@ class TradingConditions:
         if not positions:
             return result
             
-        # 🗑️ OLD PROFIT TARGET & STOP LOSS REMOVED
-        # Now handled by Smart Profit Taking System
-            
-        # 3. ตรวจสอบ Pullback Wait Strategy
-        pullback_check = self._check_pullback_conditions(positions, current_prices)
-        if pullback_check['should_wait']:
-            result['reasons'].append("รอ Pullback ก่อนปิด")
-            return result
-            
-        # 4. ตรวจสอบ Group P&L (ปิดชั่วคราวเพื่อให้ Advanced Recovery ทำงาน)
-        # group_pnl_check = self._check_group_pnl(positions, account_balance)
-        # if group_pnl_check['should_exit']:
-        #     result.update(group_pnl_check)
-        #     return result
-            
-        return result
+        # 🗑️ ALL EXIT LOGIC REMOVED - Now handled by Smart Profit Taking System
+        logger.debug("🗑️ Exit conditions removed - all exits handled by Smart Profit Taking System")
+        return {
+            'should_exit': False,
+            'reason': 'Exit conditions removed - using Smart Profit Taking System only',
+            'exit_type': None
+        }
         
     # 🗑️ OLD PROFIT/STOP LOSS METHODS REMOVED
     # Replaced by Smart Profit Taking System in smart_profit_taking.py
