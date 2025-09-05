@@ -20,25 +20,103 @@ from itertools import combinations
 logger = logging.getLogger(__name__)
 
 class SimplePositionManager:
-    """ระบบจัดการไม้แบบเรียบง่าย"""
+    """🚀 Hybrid Adaptive Position Manager - ระบบจัดการไม้แบบปรับตัวได้"""
     
     def __init__(self, mt5_connection, order_manager):
         self.mt5 = mt5_connection
         self.order_manager = order_manager
         
-        # 🎯 การตั้งค่าเรียบง่าย
+        # 🎯 Adaptive Settings
         self.max_acceptable_loss = 5.0  # ยอมรับขาดทุนสูงสุด $5 เพื่อลดไม้ (รวมสเปรด)
         self.min_positions_to_close = 2  # ปิดอย่างน้อย 2 ไม้ขึ้นไป
         self.max_positions_per_round = 10  # ปิดสูงสุด 10 ไม้ต่อรอบ
+        
+        # 🎯 Adaptive Mode Thresholds
+        self.normal_mode_threshold = 40.0  # Wrong positions < 40% = Normal Mode
+        self.balance_mode_threshold = 70.0  # Wrong positions 40-70% = Balance Mode
+        # Wrong positions > 70% = Survival Mode
         
         # 📊 สถิติ
         self.total_closures = 0
         self.total_positions_closed = 0
         self.total_profit_realized = 0.0
+        self.current_mode = "Normal"  # Normal, Balance, Survival
         
+    def analyze_portfolio_health(self, positions: List[Any], current_price: float) -> Dict[str, Any]:
+        """
+        🏥 วิเคราะห์สุขภาพ Portfolio และกำหนด Management Mode
+        
+        Args:
+            positions: รายการ positions ทั้งหมด
+            current_price: ราคาปัจจุบัน
+            
+        Returns:
+            Dict: สุขภาพ Portfolio และ Mode ที่แนะนำ
+        """
+        if not positions:
+            return {
+                'mode': 'Normal',
+                'wrong_percentage': 0.0,
+                'wrong_buys': 0,
+                'wrong_sells': 0,
+                'total_positions': 0,
+                'health_status': 'Excellent'
+            }
+            
+        # นับ Wrong Positions
+        wrong_buys = 0  # BUY เหนือราคาปัจจุบัน (ซื้อแพง)
+        wrong_sells = 0  # SELL ใต้ราคาปัจจุบัน (ขายถูก)
+        total_positions = len(positions)
+        
+        for pos in positions:
+            if hasattr(pos, 'type'):
+                pos_type = pos.type
+            else:
+                pos_type = pos.order_type if hasattr(pos, 'order_type') else 'unknown'
+                
+            if pos_type == 0:  # BUY
+                if pos.price_open > current_price:
+                    wrong_buys += 1
+            elif pos_type == 1:  # SELL
+                if pos.price_open < current_price:
+                    wrong_sells += 1
+        
+        wrong_total = wrong_buys + wrong_sells
+        wrong_percentage = (wrong_total / total_positions) * 100 if total_positions > 0 else 0
+        
+        # กำหนด Mode ตาม Wrong Percentage
+        if wrong_percentage < self.normal_mode_threshold:
+            mode = 'Normal'
+            health_status = 'Good'
+        elif wrong_percentage < self.balance_mode_threshold:
+            mode = 'Balance'
+            health_status = 'Fair'
+        else:
+            mode = 'Survival'
+            health_status = 'Critical'
+            
+        self.current_mode = mode
+        
+        logger.info(f"🏥 Portfolio Health Analysis:")
+        logger.info(f"   Total Positions: {total_positions}")
+        logger.info(f"   Wrong BUYs: {wrong_buys} (above price)")
+        logger.info(f"   Wrong SELLs: {wrong_sells} (below price)")
+        logger.info(f"   Wrong Percentage: {wrong_percentage:.1f}%")
+        logger.info(f"   Management Mode: {mode}")
+        logger.info(f"   Health Status: {health_status}")
+        
+        return {
+            'mode': mode,
+            'wrong_percentage': wrong_percentage,
+            'wrong_buys': wrong_buys,
+            'wrong_sells': wrong_sells,
+            'total_positions': total_positions,
+            'health_status': health_status
+        }
+
     def should_close_positions(self, positions: List[Any], current_price: float) -> Dict[str, Any]:
         """
-        🔍 ตรวจสอบว่าควรปิดไม้หรือไม่
+        🔍 ตรวจสอบว่าควรปิดไม้หรือไม่ (Adaptive Decision Making)
         
         Args:
             positions: รายการ positions ทั้งหมด
@@ -48,6 +126,9 @@ class SimplePositionManager:
             Dict: ผลการตรวจสอบพร้อมรายการไม้ที่ควรปิด
         """
         try:
+            # 🏥 วิเคราะห์สุขภาพ Portfolio ก่อน
+            health_analysis = self.analyze_portfolio_health(positions, current_price)
+            
             # เช็คเบื้องต้น
             if len(positions) < 2:
                 return {
@@ -67,7 +148,10 @@ class SimplePositionManager:
                 }
             
             # 🎯 หาการจับคู่ที่ดีที่สุด (แบบสมดุล Portfolio)
-            best_combination = self._find_best_closing_combination_balanced(analyzed_positions, current_price)
+            # 🎯 หาการจับคู่ที่ดีที่สุดแบบ Adaptive
+            best_combination = self._find_adaptive_closing_combination(
+                analyzed_positions, current_price, health_analysis
+            )
             
             if best_combination:
                 # 🛡️ ตรวจสอบอีกครั้งก่อนปิด - ต้องมีกำไรจริงๆ

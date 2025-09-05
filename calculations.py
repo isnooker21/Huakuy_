@@ -305,16 +305,16 @@ class LotSizeCalculator:
             # ✅ ไม่มี SL - ใช้วิธีคำนวณแบบ Direct Risk Allocation
             # คำนวณ lot โดยตรงจาก risk percentage และ portfolio size
             
-            # Base lot calculation จาก risk amount
+            # Base lot calculation จาก risk amount (เพิ่มขึ้นเพื่อ lot หลากหลาย)
             if positions_count <= 5:
                 # Portfolio เล็ก - เสี่ยงได้มาก
-                base_multiplier = 0.0008  # ~0.03-0.04 lot สำหรับ balance $3000-5000
+                base_multiplier = 0.0012  # เพิ่มจาก 0.0008 → ~0.04-0.06 lot
             elif positions_count <= 15:
                 # Portfolio ปานกลาง - เสี่ยงปานกลาง
-                base_multiplier = 0.0006  # ~0.02-0.03 lot
+                base_multiplier = 0.0010  # เพิ่มจาก 0.0006 → ~0.03-0.05 lot
             else:
                 # Portfolio ใหญ่ - เสี่ยงน้อย
-                base_multiplier = 0.0004  # ~0.01-0.02 lot
+                base_multiplier = 0.0008  # เพิ่มจาก 0.0004 → ~0.02-0.04 lot
                 
             # คำนวณ lot จาก risk amount โดยตรง
             base_lot = risk_amount * base_multiplier
