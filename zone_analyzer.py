@@ -62,6 +62,29 @@ class ZoneComparison:
     combined_health: float
     recommended_action: str
 
+@dataclass
+class BalanceRecoveryAnalysis:
+    """การวิเคราะห์ Balance Recovery ระหว่าง Zones"""
+    zone_id: int
+    imbalance_type: str  # BUY_HEAVY, SELL_HEAVY, BALANCED
+    excess_positions: int
+    excess_type: str  # BUY, SELL, NONE
+    recovery_candidates: List[Any]  # Positions ที่เหมาะสมสำหรับ Recovery
+    health_improvement_score: float  # คะแนนการปรับปรุง Zone หลังปิดไม้
+    cooperation_readiness: float  # ความพร้อมในการร่วมมือ
+
+@dataclass
+class CrossZoneBalancePlan:
+    """แผนการ Balance Recovery ระหว่าง Zones"""
+    primary_zone: int
+    partner_zone: int
+    recovery_type: str  # BALANCE_RECOVERY, MUTUAL_SUPPORT
+    positions_to_close: List[Tuple[int, Any]]  # (zone_id, position)
+    expected_profit: float
+    health_improvement: Dict[int, float]  # zone_id -> improvement_score
+    execution_priority: str  # LOW, MEDIUM, HIGH, URGENT
+    confidence_score: float
+
 class ZoneAnalyzer:
     """🔍 Zone Analyzer - วิเคราะห์ Zone Health และ Performance"""
     
@@ -482,6 +505,364 @@ class ZoneAnalyzer:
         report.append("=" * 60)
         
         return "\n".join(report)
+    
+    def detect_balance_recovery_opportunities(self, current_price: float) -> List[BalanceRecoveryAnalysis]:
+        """
+        🎯 หาโอกาส Balance Recovery ในแต่ละ Zone
+        
+        Args:
+            current_price: ราคาปัจจุบัน
+            
+        Returns:
+            List[BalanceRecoveryAnalysis]: รายการโอกาส Balance Recovery
+        """
+        opportunities = []
+        
+        try:
+            for zone_id, zone in self.zone_manager.zones.items():
+                if zone.total_positions >= 3:  # ต้องมีไม้อย่างน้อย 3 ตัว
+                    analysis = self._analyze_zone_balance_recovery(zone, current_price)
+                    if analysis.excess_positions > 0:
+                        opportunities.append(analysis)
+            
+            # เรียงตาม Health Improvement Score
+            opportunities.sort(key=lambda x: x.health_improvement_score, reverse=True)
+            
+            logger.debug(f"🎯 Found {len(opportunities)} balance recovery opportunities")
+            return opportunities
+            
+        except Exception as e:
+            logger.error(f"❌ Error detecting balance recovery opportunities: {e}")
+            return []
+    
+    def _analyze_zone_balance_recovery(self, zone: Zone, current_price: float) -> BalanceRecoveryAnalysis:
+        """
+        วิเคราะห์ Balance Recovery สำหรับ Zone เดียว
+        
+        Args:
+            zone: Zone ที่ต้องการวิเคราะห์
+            current_price: ราคาปัจจุบัน
+            
+        Returns:
+            BalanceRecoveryAnalysis: ผลการวิเคราะห์
+        """
+        try:
+            total_positions = zone.total_positions
+            buy_count = zone.buy_count
+            sell_count = zone.sell_count
+            
+            if total_positions == 0:
+                return BalanceRecoveryAnalysis(
+                    zone_id=zone.zone_id,
+                    imbalance_type='BALANCED',
+                    excess_positions=0,
+                    excess_type='NONE',
+                    recovery_candidates=[],
+                    health_improvement_score=0.0,
+                    cooperation_readiness=0.0
+                )
+            
+            # คำนวณ Imbalance
+            buy_ratio = buy_count / total_positions
+            sell_ratio = sell_count / total_positions
+            
+            # กำหนด Imbalance Type และ Excess
+            if buy_ratio >= 0.7:  # BUY เกิน 70%
+                imbalance_type = 'BUY_HEAVY'
+                excess_type = 'BUY'
+                excess_positions = buy_count - (total_positions // 2)
+                candidates = [pos for pos in zone.positions if pos.type == 0]  # BUY positions
+            elif sell_ratio >= 0.7:  # SELL เกิน 70%
+                imbalance_type = 'SELL_HEAVY'
+                excess_type = 'SELL'
+                excess_positions = sell_count - (total_positions // 2)
+                candidates = [pos for pos in zone.positions if pos.type == 1]  # SELL positions
+            else:
+                imbalance_type = 'BALANCED'
+                excess_type = 'NONE'
+                excess_positions = 0
+                candidates = []
+            
+            # เลือก Recovery Candidates (เรียงตามกำไร → อายุน้อย → ระยะใกล้)
+            recovery_candidates = []
+            if excess_positions > 0 and candidates:
+                sorted_candidates = sorted(candidates, key=lambda pos: (
+                    -pos.profit,        # กำไรมากก่อน
+                    pos.age_minutes,    # อายุน้อยก่อน
+                    pos.distance_pips   # ระยะใกล้ก่อน
+                ))
+                recovery_candidates = sorted_candidates[:excess_positions]
+            
+            # คำนวณ Health Improvement Score
+            health_improvement_score = self._calculate_zone_health_improvement(
+                zone, recovery_candidates, current_price
+            )
+            
+            # คำนวณ Cooperation Readiness
+            cooperation_readiness = self._calculate_cooperation_readiness(
+                zone, recovery_candidates, current_price
+            )
+            
+            return BalanceRecoveryAnalysis(
+                zone_id=zone.zone_id,
+                imbalance_type=imbalance_type,
+                excess_positions=excess_positions,
+                excess_type=excess_type,
+                recovery_candidates=recovery_candidates,
+                health_improvement_score=health_improvement_score,
+                cooperation_readiness=cooperation_readiness
+            )
+            
+        except Exception as e:
+            logger.error(f"❌ Error analyzing zone {zone.zone_id} balance recovery: {e}")
+            return BalanceRecoveryAnalysis(
+                zone_id=zone.zone_id,
+                imbalance_type='UNKNOWN',
+                excess_positions=0,
+                excess_type='NONE',
+                recovery_candidates=[],
+                health_improvement_score=0.0,
+                cooperation_readiness=0.0
+            )
+    
+    def _calculate_zone_health_improvement(self, zone: Zone, candidates: List[Any], current_price: float) -> float:
+        """
+        🎯 คำนวณคะแนนการปรับปรุง Zone Health หลังจากปิดไม้
+        
+        Args:
+            zone: Zone ปัจจุบัน
+            candidates: Positions ที่จะปิด
+            current_price: ราคาปัจจุบัน
+            
+        Returns:
+            float: คะแนนการปรับปรุง (0-100)
+        """
+        try:
+            if not candidates:
+                return 0.0
+            
+            # คำนวณ Balance Improvement
+            remaining_positions = zone.total_positions - len(candidates)
+            if remaining_positions <= 0:
+                return 0.0  # ไม่ปิดหมด
+            
+            # จำลอง Balance หลังปิดไม้
+            remaining_buy = zone.buy_count
+            remaining_sell = zone.sell_count
+            
+            for pos in candidates:
+                if pos.type == 0:  # BUY
+                    remaining_buy -= 1
+                else:  # SELL
+                    remaining_sell -= 1
+            
+            # คำนวณ Balance Score หลังปิด
+            if remaining_positions > 0:
+                new_buy_ratio = remaining_buy / remaining_positions
+                new_balance_score = 100.0 - abs(new_buy_ratio - 0.5) * 200
+            else:
+                new_balance_score = 0.0
+            
+            # คำนวณ P&L Improvement
+            candidates_profit = sum(pos.profit for pos in candidates)
+            pnl_improvement = max(0, candidates_profit)  # เฉพาะกำไร
+            
+            # คำนวณ Risk Reduction
+            candidates_loss = abs(min(0, candidates_profit))
+            risk_reduction = candidates_loss * 0.5  # ลดความเสี่ยง
+            
+            # รวมคะแนน
+            balance_factor = max(0, new_balance_score - zone.balance_score) * 0.4
+            profit_factor = min(50, pnl_improvement) * 0.4
+            risk_factor = min(30, risk_reduction) * 0.2
+            
+            total_score = balance_factor + profit_factor + risk_factor
+            
+            return min(100.0, max(0.0, total_score))
+            
+        except Exception as e:
+            logger.error(f"❌ Error calculating health improvement: {e}")
+            return 0.0
+    
+    def _calculate_cooperation_readiness(self, zone: Zone, candidates: List[Any], current_price: float) -> float:
+        """
+        คำนวณความพร้อมในการร่วมมือกับ Zone อื่น
+        
+        Args:
+            zone: Zone ปัจจุบัน
+            candidates: Positions ที่จะปิด
+            current_price: ราคาปัจจุบัน
+            
+        Returns:
+            float: ความพร้อมในการร่วมมือ (0-1.0)
+        """
+        try:
+            if not candidates:
+                return 0.0
+            
+            # ปัจจัยความพร้อม
+            readiness = 0.0
+            
+            # 1. Profit Potential (40%)
+            total_profit = sum(pos.profit for pos in candidates)
+            if total_profit > 0:
+                readiness += 0.4 * min(1.0, total_profit / 50.0)  # ปรับตามกำไร
+            
+            # 2. Balance Necessity (30%)
+            imbalance_severity = abs(zone.balance_ratio - 0.5) * 2  # 0-1
+            readiness += 0.3 * imbalance_severity
+            
+            # 3. Zone Health (20%)
+            zone_health = zone.health_score / 100.0
+            readiness += 0.2 * (1.0 - zone_health)  # Zone แย่ = พร้อมร่วมมือมากขึ้น
+            
+            # 4. Position Quality (10%)
+            avg_profit = total_profit / len(candidates) if candidates else 0
+            if avg_profit > 0:
+                readiness += 0.1
+            
+            return min(1.0, max(0.0, readiness))
+            
+        except Exception as e:
+            logger.error(f"❌ Error calculating cooperation readiness: {e}")
+            return 0.0
+    
+    def find_cross_zone_balance_pairs(self, recovery_analyses: List[BalanceRecoveryAnalysis]) -> List[CrossZoneBalancePlan]:
+        """
+        🤝 หาคู่ Zone ที่สามารถทำ Balance Recovery ร่วมกันได้
+        
+        Args:
+            recovery_analyses: รายการ Balance Recovery Analysis
+            
+        Returns:
+            List[CrossZoneBalancePlan]: แผน Balance Recovery ระหว่าง Zones
+        """
+        balance_plans = []
+        
+        try:
+            # แยก Zones ตาม Imbalance Type
+            buy_heavy_zones = [a for a in recovery_analyses if a.imbalance_type == 'BUY_HEAVY']
+            sell_heavy_zones = [a for a in recovery_analyses if a.imbalance_type == 'SELL_HEAVY']
+            
+            # จับคู่ BUY_HEAVY กับ SELL_HEAVY
+            for buy_analysis in buy_heavy_zones:
+                for sell_analysis in sell_heavy_zones:
+                    plan = self._create_balance_recovery_plan(buy_analysis, sell_analysis)
+                    if plan.confidence_score > 0.5:  # มีความเป็นไปได้
+                        balance_plans.append(plan)
+            
+            # เรียงตาม Expected Profit และ Health Improvement
+            balance_plans.sort(key=lambda x: (
+                x.expected_profit,
+                sum(x.health_improvement.values()),
+                x.confidence_score
+            ), reverse=True)
+            
+            logger.debug(f"🤝 Found {len(balance_plans)} cross-zone balance recovery plans")
+            return balance_plans[:10]  # Top 10 plans
+            
+        except Exception as e:
+            logger.error(f"❌ Error finding cross-zone balance pairs: {e}")
+            return []
+    
+    def _create_balance_recovery_plan(self, buy_analysis: BalanceRecoveryAnalysis, sell_analysis: BalanceRecoveryAnalysis) -> CrossZoneBalancePlan:
+        """
+        สร้างแผน Balance Recovery ระหว่าง 2 Zones
+        
+        Args:
+            buy_analysis: Zone ที่ BUY เกิน
+            sell_analysis: Zone ที่ SELL เกิน
+            
+        Returns:
+            CrossZoneBalancePlan: แผน Balance Recovery
+        """
+        try:
+            # คำนวณจำนวนไม้ที่จะปิด
+            positions_to_close_count = min(
+                buy_analysis.excess_positions,
+                sell_analysis.excess_positions,
+                3  # จำกัดไม่เกิน 3 คู่ต่อครั้ง
+            )
+            
+            if positions_to_close_count <= 0:
+                return CrossZoneBalancePlan(
+                    primary_zone=buy_analysis.zone_id,
+                    partner_zone=sell_analysis.zone_id,
+                    recovery_type='BALANCE_RECOVERY',
+                    positions_to_close=[],
+                    expected_profit=0.0,
+                    health_improvement={},
+                    execution_priority='LOW',
+                    confidence_score=0.0
+                )
+            
+            # เลือกไม้ที่จะปิด
+            positions_to_close = []
+            
+            # เลือก BUY positions จาก BUY_HEAVY zone
+            buy_candidates = buy_analysis.recovery_candidates[:positions_to_close_count]
+            for pos in buy_candidates:
+                positions_to_close.append((buy_analysis.zone_id, pos))
+            
+            # เลือก SELL positions จาก SELL_HEAVY zone  
+            sell_candidates = sell_analysis.recovery_candidates[:positions_to_close_count]
+            for pos in sell_candidates:
+                positions_to_close.append((sell_analysis.zone_id, pos))
+            
+            # คำนวณ Expected Profit
+            expected_profit = 0.0
+            for zone_id, pos in positions_to_close:
+                expected_profit += max(0, pos.profit)  # เฉพาะกำไร
+            
+            # คำนวณ Health Improvement
+            health_improvement = {
+                buy_analysis.zone_id: buy_analysis.health_improvement_score,
+                sell_analysis.zone_id: sell_analysis.health_improvement_score
+            }
+            
+            # กำหนด Execution Priority
+            avg_health_improvement = sum(health_improvement.values()) / len(health_improvement)
+            total_readiness = buy_analysis.cooperation_readiness + sell_analysis.cooperation_readiness
+            
+            if expected_profit > 100 and avg_health_improvement > 60:
+                execution_priority = 'URGENT'
+            elif expected_profit > 50 and avg_health_improvement > 40:
+                execution_priority = 'HIGH'
+            elif expected_profit > 20 or avg_health_improvement > 30:
+                execution_priority = 'MEDIUM'
+            else:
+                execution_priority = 'LOW'
+            
+            # คำนวณ Confidence Score
+            profit_factor = min(1.0, expected_profit / 100.0) * 0.3
+            health_factor = (avg_health_improvement / 100.0) * 0.4
+            readiness_factor = (total_readiness / 2.0) * 0.3
+            
+            confidence_score = profit_factor + health_factor + readiness_factor
+            
+            return CrossZoneBalancePlan(
+                primary_zone=buy_analysis.zone_id,
+                partner_zone=sell_analysis.zone_id,
+                recovery_type='BALANCE_RECOVERY',
+                positions_to_close=positions_to_close,
+                expected_profit=expected_profit,
+                health_improvement=health_improvement,
+                execution_priority=execution_priority,
+                confidence_score=min(1.0, confidence_score)
+            )
+            
+        except Exception as e:
+            logger.error(f"❌ Error creating balance recovery plan: {e}")
+            return CrossZoneBalancePlan(
+                primary_zone=buy_analysis.zone_id,
+                partner_zone=sell_analysis.zone_id,
+                recovery_type='BALANCE_RECOVERY',
+                positions_to_close=[],
+                expected_profit=0.0,
+                health_improvement={},
+                execution_priority='LOW',
+                confidence_score=0.0
+            )
     
     def log_zone_analysis(self, current_price: float, detailed: bool = False):
         """

@@ -106,20 +106,28 @@ class ZonePositionManager:
             if single_zone_result['should_close']:
                 return single_zone_result
             
-            # 3. 🤝 Cross-Zone Support (Priority 2)
+            # 3. ⚖️ Cross-Zone Balance Recovery (Priority 2)
+            balance_recovery_result = self._check_balance_recovery(zone_analyses, current_price)
+            if balance_recovery_result['should_close']:
+                return balance_recovery_result
+            
+            # 4. 🤝 Cross-Zone Support (Priority 3)
             if self.enable_cross_zone_support:
                 cross_zone_result = self._check_cross_zone_support(zone_analyses, current_price)
                 if cross_zone_result['should_close']:
                     return cross_zone_result
             
-            # 4. 🚀 Emergency Zone Recovery (Priority 3)
+            # 5. 🚀 Emergency Zone Recovery (Priority 4)
             if self.enable_auto_recovery:
                 recovery_result = self._check_emergency_recovery(zone_analyses, current_price)
                 if recovery_result['should_close']:
                     return recovery_result
             
-            # 5. ไม่มีการปิด - แสดงสถานะ Zones
+            # 6. ไม่มีการปิด - แสดงสถานะ Zones
             self._log_zone_status_summary(zone_analyses)
+            
+            # 7. แสดง Balance Recovery Opportunities (ถ้ามี)
+            self._log_balance_opportunities(current_price)
             
             return {
                 'should_close': False,
@@ -193,6 +201,81 @@ class ZonePositionManager:
             
         except Exception as e:
             logger.error(f"❌ Error in single zone checking: {e}")
+            return {'should_close': False}
+    
+    def _check_balance_recovery(self, zone_analyses: Dict[int, ZoneAnalysis], 
+                               current_price: float) -> Dict[str, Any]:
+        """
+        ⚖️ ตรวจสอบ Cross-Zone Balance Recovery
+        
+        Args:
+            zone_analyses: ผลการวิเคราะห์ Zones
+            current_price: ราคาปัจจุบัน
+            
+        Returns:
+            Dict: ผลการตัดสินใจ
+        """
+        try:
+            # หา Balance Recovery Opportunities
+            balance_plans = self.zone_coordinator.analyze_balance_recovery_opportunities(current_price)
+            
+            if not balance_plans:
+                return {'should_close': False}
+            
+            # เลือกแผนที่ดีที่สุด
+            best_plan = balance_plans[0]  # เรียงตาม expected_profit แล้ว
+            
+            # เงื่อนไขการดำเนินการ
+            if (best_plan.confidence_score >= 0.6 and 
+                best_plan.expected_profit >= 10.0 and
+                best_plan.execution_priority in ['HIGH', 'URGENT']):
+                
+                # เก็บ positions ที่จะปิด
+                positions_to_close = []
+                zone_info = {}
+                
+                for zone_id, position in best_plan.positions_to_close:
+                    positions_to_close.append(position)
+                    
+                    if zone_id not in zone_info:
+                        zone_info[zone_id] = {'count': 0, 'profit': 0.0}
+                    zone_info[zone_id]['count'] += 1
+                    zone_info[zone_id]['profit'] += position.profit
+                
+                if positions_to_close:
+                    logger.info(f"⚖️ Cross-Zone Balance Recovery: Zone {best_plan.primary_zone} ↔ Zone {best_plan.partner_zone}")
+                    logger.info(f"   Expected Profit: ${best_plan.expected_profit:.2f}")
+                    logger.info(f"   Positions: {len(positions_to_close)} from {len(zone_info)} zones")
+                    logger.info(f"   Priority: {best_plan.execution_priority} | Confidence: {best_plan.confidence_score:.2f}")
+                    
+                    # แสดงรายละเอียด Zone Health Improvement
+                    for zone_id, improvement in best_plan.health_improvement.items():
+                        zone_name = f"Zone {zone_id}"
+                        if zone_id == best_plan.primary_zone:
+                            zone_name += " (Primary)"
+                        elif zone_id == best_plan.partner_zone:
+                            zone_name += " (Partner)"
+                        logger.info(f"   {zone_name}: Health +{improvement:.1f}")
+                    
+                    return {
+                        'should_close': True,
+                        'reason': f'Balance recovery: Zone {best_plan.primary_zone} ↔ Zone {best_plan.partner_zone} (${best_plan.expected_profit:.2f})',
+                        'positions_to_close': positions_to_close,
+                        'positions_count': len(positions_to_close),
+                        'expected_pnl': best_plan.expected_profit,
+                        'method': 'balance_recovery',
+                        'primary_zone': best_plan.primary_zone,
+                        'partner_zone': best_plan.partner_zone,
+                        'recovery_type': best_plan.recovery_type,
+                        'health_improvement': best_plan.health_improvement,
+                        'confidence': best_plan.confidence_score,
+                        'zone_info': zone_info
+                    }
+            
+            return {'should_close': False}
+            
+        except Exception as e:
+            logger.error(f"❌ Error in balance recovery checking: {e}")
             return {'should_close': False}
     
     def _check_cross_zone_support(self, zone_analyses: Dict[int, ZoneAnalysis], 
@@ -365,6 +448,154 @@ class ZonePositionManager:
                                
         except Exception as e:
             logger.error(f"❌ Error logging zone summary: {e}")
+    
+    def _log_balance_opportunities(self, current_price: float):
+        """
+        📊 แสดงโอกาส Balance Recovery แบบสรุป
+        
+        Args:
+            current_price: ราคาปัจจุบัน
+        """
+        try:
+            # หา Balance Recovery Opportunities
+            balance_analyses = self.zone_analyzer.detect_balance_recovery_opportunities(current_price)
+            
+            if not balance_analyses:
+                return
+            
+            # สรุปโอกาส Balance Recovery
+            buy_heavy_count = len([a for a in balance_analyses if a.imbalance_type == 'BUY_HEAVY'])
+            sell_heavy_count = len([a for a in balance_analyses if a.imbalance_type == 'SELL_HEAVY'])
+            total_excess = sum(a.excess_positions for a in balance_analyses)
+            
+            if buy_heavy_count > 0 or sell_heavy_count > 0:
+                logger.info(f"⚖️ Balance Recovery Opportunities: {buy_heavy_count} BUY-heavy, {sell_heavy_count} SELL-heavy zones")
+                logger.info(f"   Total excess positions: {total_excess}")
+                
+                # หาคู่ที่สามารถ Balance กันได้
+                balance_plans = self.zone_analyzer.find_cross_zone_balance_pairs(balance_analyses)
+                
+                if balance_plans:
+                    best_plan = balance_plans[0]
+                    total_potential_profit = sum(plan.expected_profit for plan in balance_plans)
+                    
+                    logger.info(f"   💰 Best opportunity: Zone {best_plan.primary_zone} ↔ Zone {best_plan.partner_zone} (${best_plan.expected_profit:.2f})")
+                    logger.info(f"   📈 Total potential: ${total_potential_profit:.2f} from {len(balance_plans)} pairs")
+                    
+                    # แสดงเงื่อนไขที่ขาดไป (ถ้ามี)
+                    if best_plan.confidence_score < 0.6:
+                        logger.info(f"   ⚠️ Confidence too low: {best_plan.confidence_score:.2f} (need ≥0.6)")
+                    elif best_plan.expected_profit < 10.0:
+                        logger.info(f"   ⚠️ Profit too low: ${best_plan.expected_profit:.2f} (need ≥$10)")
+                    elif best_plan.execution_priority not in ['HIGH', 'URGENT']:
+                        logger.info(f"   ⚠️ Priority too low: {best_plan.execution_priority} (need HIGH/URGENT)")
+                
+        except Exception as e:
+            logger.error(f"❌ Error logging balance opportunities: {e}")
+    
+    def log_detailed_zone_analysis(self, current_price: float):
+        """
+        📋 แสดงการวิเคราะห์ Zone แบบละเอียด
+        
+        Args:
+            current_price: ราคาปัจจุบัน
+        """
+        try:
+            # อัพเดท Zones
+            positions = []  # จะต้องได้รับจากภายนอก
+            logger.info("📋 Detailed Zone Analysis (requires position data)")
+            
+            # แสดงสถานะ Zone System
+            zone_status = self.get_zone_status()
+            logger.info(f"🎯 Zone System Status: {zone_status['system_status']}")
+            logger.info(f"📊 Active Zones: {zone_status['zone_system'].get('total_zones', 0)}")
+            logger.info(f"🤝 Support Plans: {zone_status['active_support_plans']}")
+            
+            # ใช้ Zone Analyzer แสดงรายงานเต็ม
+            self.zone_analyzer.log_zone_analysis(current_price, detailed=True)
+            
+            # แสดง Balance Recovery Opportunities แบบละเอียด
+            self.zone_coordinator.log_balance_recovery_opportunities(current_price, detailed=True)
+            
+        except Exception as e:
+            logger.error(f"❌ Error in detailed zone analysis: {e}")
+    
+    def get_zone_price_ranges(self) -> List[Dict[str, Any]]:
+        """
+        📊 ดึงข้อมูลช่วงราคาของแต่ละ Zone
+        
+        Returns:
+            List[Dict]: รายการ Zone และช่วงราคา
+        """
+        try:
+            zone_ranges = []
+            
+            for zone_id, zone in self.zone_manager.zones.items():
+                if zone.total_positions > 0:
+                    zone_ranges.append({
+                        'zone_id': zone_id,
+                        'price_min': zone.price_min,
+                        'price_max': zone.price_max,
+                        'price_center': (zone.price_min + zone.price_max) / 2,
+                        'size_pips': (zone.price_max - zone.price_min) * 100,  # แปลงเป็น pips
+                        'total_positions': zone.total_positions,
+                        'buy_count': zone.buy_count,
+                        'sell_count': zone.sell_count,
+                        'total_pnl': zone.total_pnl,
+                        'balance_ratio': zone.balance_ratio
+                    })
+            
+            # เรียงตามราคา
+            zone_ranges.sort(key=lambda x: x['price_center'])
+            
+            return zone_ranges
+            
+        except Exception as e:
+            logger.error(f"❌ Error getting zone price ranges: {e}")
+            return []
+    
+    def log_zone_price_ranges(self):
+        """
+        📊 แสดงช่วงราคาของแต่ละ Zone
+        """
+        try:
+            zone_ranges = self.get_zone_price_ranges()
+            
+            if not zone_ranges:
+                logger.info("📊 No active zones to display")
+                return
+            
+            logger.info("=" * 80)
+            logger.info("📊 ZONE PRICE RANGES & STATUS")
+            logger.info("=" * 80)
+            
+            for zone_range in zone_ranges:
+                zone_id = zone_range['zone_id']
+                balance_status = "⚖️ BALANCED"
+                
+                if zone_range['balance_ratio'] > 0.7:
+                    balance_status = "📈 BUY-HEAVY"
+                elif zone_range['balance_ratio'] < 0.3:
+                    balance_status = "📉 SELL-HEAVY"
+                
+                pnl_status = "💚" if zone_range['total_pnl'] > 0 else "🔴"
+                
+                logger.info(f"Zone {zone_id:2d} [{zone_range['price_min']:8.2f} - {zone_range['price_max']:8.2f}] "
+                           f"({zone_range['size_pips']:3.0f} pips)")
+                logger.info(f"        Positions: B{zone_range['buy_count']:2d}:S{zone_range['sell_count']:2d} | "
+                           f"P&L: ${zone_range['total_pnl']:+7.2f} {pnl_status} | {balance_status}")
+                logger.info("")
+            
+            # สรุปรวม
+            total_zones = len(zone_ranges)
+            total_positions = sum(z['total_positions'] for z in zone_ranges)
+            total_pnl = sum(z['total_pnl'] for z in zone_ranges)
+            
+            logger.info(f"📊 Summary: {total_zones} zones, {total_positions} positions, ${total_pnl:+.2f} total P&L")
+            logger.info("=" * 80)
+            
+        except Exception as e:
+            logger.error(f"❌ Error logging zone price ranges: {e}")
     
     def close_positions(self, positions_to_close: List[Any]) -> Dict[str, Any]:
         """

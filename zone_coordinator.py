@@ -19,7 +19,10 @@ from typing import Dict, List, Any, Optional, Tuple
 from dataclasses import dataclass, field
 
 from zone_manager import Zone, ZoneManager, ZonePosition
-from zone_analyzer import ZoneAnalyzer, ZoneAnalysis, ZoneComparison
+from zone_analyzer import (
+    ZoneAnalyzer, ZoneAnalysis, ZoneComparison,
+    BalanceRecoveryAnalysis, CrossZoneBalancePlan
+)
 
 logger = logging.getLogger(__name__)
 
@@ -537,6 +540,225 @@ class ZoneCoordinator:
         logger.info(f"📈 Success Rate: {summary['success_rate']:.1%}")
         logger.info(f"⚡ Actions: {summary['pending_actions']} pending, "
                    f"{summary['completed_actions']} completed")
+    
+    def analyze_balance_recovery_opportunities(self, current_price: float) -> List[CrossZoneBalancePlan]:
+        """
+        🎯 วิเคราะห์โอกาส Cross-Zone Balance Recovery
+        
+        Args:
+            current_price: ราคาปัจจุบัน
+            
+        Returns:
+            List[CrossZoneBalancePlan]: รายการแผน Balance Recovery
+        """
+        try:
+            # ใช้ Zone Analyzer หา Balance Recovery Opportunities
+            balance_analyses = self.zone_analyzer.detect_balance_recovery_opportunities(current_price)
+            
+            if not balance_analyses:
+                logger.debug("No balance recovery opportunities found")
+                return []
+            
+            # สร้างแผน Cross-Zone Balance Recovery
+            balance_plans = self.zone_analyzer.find_cross_zone_balance_pairs(balance_analyses)
+            
+            # เพิ่มข้อมูลการประสานงาน
+            for plan in balance_plans:
+                plan = self._enhance_balance_plan_with_coordination(plan, current_price)
+            
+            logger.info(f"🎯 Found {len(balance_plans)} cross-zone balance recovery opportunities")
+            return balance_plans
+            
+        except Exception as e:
+            logger.error(f"❌ Error analyzing balance recovery opportunities: {e}")
+            return []
+    
+    def _enhance_balance_plan_with_coordination(self, plan: CrossZoneBalancePlan, current_price: float) -> CrossZoneBalancePlan:
+        """
+        เพิ่มข้อมูลการประสานงานให้กับ Balance Plan
+        
+        Args:
+            plan: แผน Balance Recovery
+            current_price: ราคาปัจจุบัน
+            
+        Returns:
+            CrossZoneBalancePlan: แผนที่ปรับปรุงแล้ว
+        """
+        try:
+            # คำนวณระยะห่างระหว่าง Zones
+            distance = abs(plan.primary_zone - plan.partner_zone)
+            efficiency = self.distance_penalties.get(distance, 0.5)
+            
+            # ปรับ Expected Profit ตามประสิทธิภาพ
+            plan.expected_profit *= efficiency
+            
+            # ปรับ Confidence Score
+            plan.confidence_score *= efficiency
+            
+            # ปรับ Priority ตามระยะห่าง
+            if distance <= 1 and plan.execution_priority == 'HIGH':
+                plan.execution_priority = 'URGENT'
+            elif distance >= 3 and plan.execution_priority == 'URGENT':
+                plan.execution_priority = 'HIGH'
+            
+            return plan
+            
+        except Exception as e:
+            logger.error(f"❌ Error enhancing balance plan: {e}")
+            return plan
+    
+    def execute_balance_recovery_plan(self, plan: CrossZoneBalancePlan, current_price: float) -> Dict[str, Any]:
+        """
+        🚀 ดำเนินการ Cross-Zone Balance Recovery
+        
+        Args:
+            plan: แผน Balance Recovery
+            current_price: ราคาปัจจุบัน
+            
+        Returns:
+            Dict: ผลการดำเนินงาน
+        """
+        try:
+            logger.info(f"🚀 Executing Balance Recovery: Zone {plan.primary_zone} ↔ Zone {plan.partner_zone}")
+            
+            results = {
+                'success': False,
+                'primary_zone': plan.primary_zone,
+                'partner_zone': plan.partner_zone,
+                'positions_closed': 0,
+                'total_profit': 0.0,
+                'balance_improvement': {},
+                'errors': []
+            }
+            
+            # ดำเนินการปิดไม้ตามแผน
+            for zone_id, position in plan.positions_to_close:
+                try:
+                    # สำหรับ Demo - จำลองการปิดไม้
+                    close_result = self._execute_balance_position_close(zone_id, position, current_price)
+                    
+                    if close_result['success']:
+                        results['positions_closed'] += 1
+                        results['total_profit'] += close_result.get('profit', 0.0)
+                        logger.info(f"✅ Closed position {position.ticket} in Zone {zone_id}: ${close_result.get('profit', 0):.2f}")
+                    else:
+                        error_msg = f"Failed to close position {position.ticket} in Zone {zone_id}"
+                        results['errors'].append(error_msg)
+                        logger.warning(f"❌ {error_msg}")
+                        
+                except Exception as e:
+                    error_msg = f"Error closing position {position.ticket}: {str(e)}"
+                    results['errors'].append(error_msg)
+                    logger.error(error_msg)
+            
+            # ประเมินผลลัพธ์
+            expected_closes = len(plan.positions_to_close)
+            success_rate = results['positions_closed'] / max(1, expected_closes)
+            
+            if success_rate >= 0.7:  # 70% success rate
+                results['success'] = True
+                results['balance_improvement'] = plan.health_improvement
+                
+                logger.info(f"✅ Balance Recovery completed successfully!")
+                logger.info(f"💰 Total Profit: ${results['total_profit']:.2f}")
+                logger.info(f"⚖️ Zones improved: {list(plan.health_improvement.keys())}")
+            else:
+                logger.warning(f"❌ Balance Recovery partially failed: {len(results['errors'])} errors")
+            
+            return results
+            
+        except Exception as e:
+            logger.error(f"❌ Error executing balance recovery plan: {e}")
+            return {
+                'success': False,
+                'primary_zone': plan.primary_zone,
+                'partner_zone': plan.partner_zone,
+                'positions_closed': 0,
+                'total_profit': 0.0,
+                'balance_improvement': {},
+                'errors': [str(e)]
+            }
+    
+    def _execute_balance_position_close(self, zone_id: int, position: Any, current_price: float) -> Dict[str, Any]:
+        """
+        ปิดไม้สำหรับ Balance Recovery
+        
+        Args:
+            zone_id: Zone ID
+            position: Position ที่จะปิด
+            current_price: ราคาปัจจุบัน
+            
+        Returns:
+            Dict: ผลการปิดไม้
+        """
+        try:
+            # ในระบบจริงจะเรียก Order Manager
+            # close_result = self.order_manager.close_position(position)
+            
+            # สำหรับ Demo - จำลองการปิด
+            profit = getattr(position, 'profit', 0.0)
+            
+            logger.debug(f"🎯 Closing balance position: Zone {zone_id}, Ticket {position.ticket}, Profit: ${profit:.2f}")
+            
+            return {
+                'success': True,
+                'ticket': position.ticket,
+                'profit': profit,
+                'zone_id': zone_id
+            }
+            
+        except Exception as e:
+            return {
+                'success': False,
+                'error': str(e),
+                'ticket': getattr(position, 'ticket', 'unknown'),
+                'zone_id': zone_id
+            }
+    
+    def log_balance_recovery_opportunities(self, current_price: float, detailed: bool = False):
+        """
+        📊 แสดงโอกาส Balance Recovery ใน Log
+        
+        Args:
+            current_price: ราคาปัจจุบัน
+            detailed: แสดงรายละเอียดหรือไม่
+        """
+        try:
+            balance_plans = self.analyze_balance_recovery_opportunities(current_price)
+            
+            if not balance_plans:
+                logger.info("🎯 No balance recovery opportunities found")
+                return
+            
+            logger.info("=" * 60)
+            logger.info("🎯 CROSS-ZONE BALANCE RECOVERY OPPORTUNITIES")
+            logger.info("=" * 60)
+            
+            for i, plan in enumerate(balance_plans[:5], 1):  # Top 5
+                logger.info(f"{i}. Zone {plan.primary_zone} ↔ Zone {plan.partner_zone}")
+                logger.info(f"   💰 Expected Profit: ${plan.expected_profit:.2f}")
+                logger.info(f"   ⚖️ Positions to Close: {len(plan.positions_to_close)}")
+                logger.info(f"   📈 Priority: {plan.execution_priority}")
+                logger.info(f"   🎯 Confidence: {plan.confidence_score:.2f}")
+                
+                if detailed:
+                    logger.info(f"   🔄 Health Improvement:")
+                    for zone_id, improvement in plan.health_improvement.items():
+                        logger.info(f"      Zone {zone_id}: +{improvement:.1f}")
+                
+                logger.info("")
+            
+            # สรุปโอกาส
+            total_profit = sum(plan.expected_profit for plan in balance_plans)
+            urgent_plans = len([p for p in balance_plans if p.execution_priority == 'URGENT'])
+            high_plans = len([p for p in balance_plans if p.execution_priority == 'HIGH'])
+            
+            logger.info(f"📊 Summary: {len(balance_plans)} opportunities, ${total_profit:.2f} total potential")
+            logger.info(f"🚨 Urgent: {urgent_plans}, High Priority: {high_plans}")
+            logger.info("=" * 60)
+            
+        except Exception as e:
+            logger.error(f"❌ Error logging balance recovery opportunities: {e}")
 
 
 # ==========================================
