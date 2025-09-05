@@ -389,6 +389,24 @@ class MT5Connection:
         symbol_info = mt5.symbol_info(symbol)
         if not symbol_info:
             logger.error(f"❌ ไม่พบสัญลักษณ์ {symbol} ในโบรกเกอร์")
+            
+            # ค้นหาสัญลักษณ์ทองคำที่มีจริง
+            gold_symbols = []
+            try:
+                symbols = mt5.symbols_get()
+                if symbols:
+                    for sym in symbols:
+                        if any(gold in sym.name.upper() for gold in ['XAU', 'GOLD']):
+                            gold_symbols.append(sym.name)
+                    
+                    if gold_symbols:
+                        logger.info(f"💡 สัญลักษณ์ทองคำที่มีในโบรกเกอร์: {', '.join(gold_symbols[:5])}")
+                        logger.info(f"💡 ลองใช้สัญลักษณ์เหล่านี้แทน: {gold_symbols[0]}")
+                    else:
+                        logger.warning("⚠️ ไม่พบสัญลักษณ์ทองคำใดๆ ในโบรกเกอร์นี้")
+            except Exception as e:
+                logger.error(f"Error searching for gold symbols: {e}")
+            
             return {'retcode': 10013, 'error_description': f'ไม่พบสัญลักษณ์ {symbol}'}
         
         # แสดงข้อมูล Symbol ที่สำคัญ
@@ -787,19 +805,42 @@ class MT5Connection:
                     
         logger.warning(f"ไม่พบสัญลักษณ์ {base_symbol} ในโบรกเกอร์")
         return None
-        
+    
     def get_available_gold_symbols(self) -> List[str]:
-        """
-        ดึงรายการสัญลักษณ์ทองคำที่มีในโบรกเกอร์
+        """ดึงรายการสัญลักษณ์ทองคำทั้งหมดที่มีในโบรกเกอร์"""
+        if not self.broker_symbols:
+            self._load_broker_symbols()
         
-        Returns:
-            List[str]: รายการสัญลักษณ์ทองคำ
-        """
         gold_symbols = []
         for symbol_name in self.broker_symbols.keys():
             if any(gold in symbol_name.upper() for gold in ['XAU', 'GOLD']):
                 gold_symbols.append(symbol_name)
+        
         return gold_symbols
+    
+    def auto_detect_gold_symbol(self) -> Optional[str]:
+        """ตรวจหาสัญลักษณ์ทองคำที่เหมาะสมที่สุดในโบรกเกอร์"""
+        gold_symbols = self.get_available_gold_symbols()
+        
+        if not gold_symbols:
+            logger.error("❌ ไม่พบสัญลักษณ์ทองคำในโบรกเกอร์นี้")
+            return None
+        
+        # เรียงลำดับความเหมาะสม
+        preferred_order = ['XAUUSD', 'GOLD', 'XAU/USD', 'XAUUSD.', 'GOLDm']
+        
+        for preferred in preferred_order:
+            for symbol in gold_symbols:
+                if preferred.upper() in symbol.upper():
+                    logger.info(f"✅ ตรวจพบสัญลักษณ์ทองคำที่เหมาะสม: {symbol}")
+                    return symbol
+        
+        # ถ้าไม่มีที่ตรงกับ preferred ให้ใช้ตัวแรก
+        selected = gold_symbols[0]
+        logger.info(f"✅ ใช้สัญลักษณ์ทองคำ: {selected}")
+        logger.info(f"💡 สัญลักษณ์ทองคำทั้งหมด: {', '.join(gold_symbols)}")
+        
+        return selected
         
     def _detect_filling_type(self, symbol: str) -> int:
         """
