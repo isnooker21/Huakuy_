@@ -278,14 +278,26 @@ class TradingConditions:
         # 🗑️ Portfolio Quality Check REMOVED - ให้ระบบเข้าไม้ได้เสมอ
         # เพื่อไม่ให้พอร์ตแย่ยิ่งแย่หนัก จากการไม่ออกไม้
 
-        # 🛡️ Dynamic Zone Protection - ป้องกัน Price Inversion
+        # 🚀 Adaptive Entry Control - Smart Portfolio Management
+        adaptive_control = self._check_adaptive_entry_control(positions, candle.close, strength_analysis['direction'])
+        if adaptive_control['force_trade']:
+            # บังคับ Counter-Trade เพื่อแก้สมดุล Portfolio
+            strength_analysis['direction'] = adaptive_control['forced_direction']
+            logger.info(f"🚀 Adaptive Force Trade: {adaptive_control['reason']}")
+        elif adaptive_control['should_block']:
+            result['can_enter'] = False
+            result['reasons'].append(f"Adaptive Block: {adaptive_control['reason']}")
+            result['signal'] = None
+            return result
+
+        # 🛡️ Dynamic Zone Protection - ป้องกัน Price Inversion (รองรับ Adaptive)
         dynamic_zone_check = self._check_dynamic_zone_protection(positions, candle.close, strength_analysis['direction'])
-        if dynamic_zone_check['force_counter_trade']:
-            # บังคับ counter trade เพื่อป้องกัน price inversion
+        if dynamic_zone_check['force_counter_trade'] and not adaptive_control['force_trade']:
+            # บังคับ counter trade เพื่อป้องกัน price inversion (ถ้า Adaptive ไม่ได้ Force แล้ว)
             original_direction = strength_analysis['direction']
             strength_analysis['direction'] = dynamic_zone_check['forced_direction']
             logger.info(f"🛡️ Dynamic Zone Protection: Forced {strength_analysis['direction']} at {candle.close:.2f} - {dynamic_zone_check['reason']}")
-        elif not dynamic_zone_check['can_enter']:
+        elif not dynamic_zone_check['can_enter'] and not adaptive_control['force_trade']:
             result['can_enter'] = False
             result['reasons'].append(f"Dynamic Zone Block: {dynamic_zone_check['reason']}")
             result['signal'] = None
@@ -956,20 +968,35 @@ class TradingConditions:
         total_positions = len(positions)
         wrong_percentage = ((wrong_buys + wrong_sells) / total_positions) * 100 if total_positions > 0 else 0
         
-        # 🎯 Adaptive Control Logic
-        if wrong_percentage > 80.0:
-            # 🔴 Critical Mode: บล็อคการเข้าใหม่ชั่วคราว (ยกเว้น Counter-Trade)
-            if direction == "BUY" and current_price <= min([pos.price_open for pos in positions if pos.type == 0], default=current_price):
-                # อนุญาต BUY ที่ราคาต่ำกว่า BUY ที่มีอยู่ (Buy Lower)
-                result['reason'] = f'Critical Mode: Allow BUY lower (Wrong: {wrong_percentage:.1f}%)'
+        # 🎯 Smart Imbalance Detection & Counter-Trade Logic
+        buy_count = sum(1 for pos in positions if pos.type == 0)
+        sell_count = sum(1 for pos in positions if pos.type == 1)
+        buy_percentage = (buy_count / total_positions) * 100 if total_positions > 0 else 0
+        sell_percentage = (sell_count / total_positions) * 100 if total_positions > 0 else 0
+        
+        # 🚀 SMART LOGIC: เมื่อเสียสมดุล → Force Counter-Trade
+        if sell_percentage > 80.0:
+            # Portfolio เอียงไป SELL มาก → ต้อง BUY เพื่อแก้สมดุล
+            if direction == "BUY":
+                result['force_trade'] = True
+                result['reason'] = f'🚀 SMART: Force BUY to balance (SELL: {sell_percentage:.1f}%)'
+                logger.info(f"🚀 FORCE BUY: Portfolio เอียง SELL {sell_percentage:.1f}% → ซื้อถูกแก้สมดุล")
                 return result
-            elif direction == "SELL" and current_price >= max([pos.price_open for pos in positions if pos.type == 1], default=current_price):
-                # อนุญาต SELL ที่ราคาสูงกว่า SELL ที่มีอยู่ (Sell Higher)
-                result['reason'] = f'Critical Mode: Allow SELL higher (Wrong: {wrong_percentage:.1f}%)'
-                return result
-            else:
+            else:  # direction == "SELL"
                 result['should_block'] = True
-                result['reason'] = f'Critical Mode: Block wrong direction (Wrong: {wrong_percentage:.1f}%)'
+                result['reason'] = f'❌ BLOCK: Too many SELL already ({sell_percentage:.1f}%)'
+                return result
+                
+        elif buy_percentage > 80.0:
+            # Portfolio เอียงไป BUY มาก → ต้อง SELL เพื่อแก้สมดุล
+            if direction == "SELL":
+                result['force_trade'] = True
+                result['reason'] = f'🚀 SMART: Force SELL to balance (BUY: {buy_percentage:.1f}%)'
+                logger.info(f"🚀 FORCE SELL: Portfolio เอียง BUY {buy_percentage:.1f}% → ขายแพงแก้สมดุล")
+                return result
+            else:  # direction == "BUY"
+                result['should_block'] = True
+                result['reason'] = f'❌ BLOCK: Too many BUY already ({buy_percentage:.1f}%)'
                 return result
         
         elif total_positions > 50:
