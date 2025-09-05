@@ -20,6 +20,8 @@ from zone_rebalancer import ZoneRebalancer
 from smart_gap_filler import SmartGapFiller
 from force_trading_mode import ForceTradingMode
 from simple_position_manager import SimplePositionManager
+from universal_recovery_manager import UniversalRecoveryManager, integrate_with_position_manager
+from recovery_order_manager import RecoveryOrderManager, integrate_recovery_orders_with_portfolio_manager
 from signal_manager import SignalManager, RankedSignal
 from order_management import OrderManager, OrderResult, CloseResult
 
@@ -86,6 +88,15 @@ class PortfolioManager:
         
         # 🎯 Simple Position Manager - ระบบจัดการไม้แบบเรียบง่าย
         self.position_manager = SimplePositionManager(order_manager.mt5, order_manager)
+        
+        # 🚀 Universal Recovery Manager - ระบบกู้คืนและสร้างสมดุลแบบครบวงจร
+        self.recovery_manager = UniversalRecoveryManager(order_manager.mt5)
+        
+        # 🔗 Integration: เชื่อมต่อ Recovery Manager กับ Position Manager
+        integrate_with_position_manager(self.position_manager, self.recovery_manager)
+        
+        # 🚀 Recovery Order Manager - จัดการ Order สำหรับ Recovery System
+        self.recovery_order_manager = integrate_recovery_orders_with_portfolio_manager(self)
         
         # 🎯 Signal Manager - จัดการสัญญาณจากทุกระบบในจุดเดียว
         self.signal_manager = SignalManager(order_manager.mt5)
@@ -1270,6 +1281,177 @@ class PortfolioManager:
         except Exception as e:
             logger.error(f"Error validating portfolio improvement: {e}")
             return {'valid': False, 'reason': f'Validation error: {str(e)}'}
+    
+    def _check_and_create_recovery_orders(self, positions: List[Any], current_price: float) -> Dict[str, Any]:
+        """
+        🚀 ตรวจสอบและสร้าง Recovery Orders อัตโนมัติ
+        
+        Args:
+            positions: รายการ positions ทั้งหมด
+            current_price: ราคาปัจจุบัน
+            
+        Returns:
+            Dict: ผลการสร้าง Recovery Orders
+        """
+        
+        try:
+            # วิเคราะห์ไม้โดนลาก
+            drag_analysis = self.recovery_manager.analyze_dragged_positions(positions, current_price)
+            
+            recovery_results = {
+                'recovery_created': False,
+                'recovery_orders': [],
+                'balance_orders': [],
+                'dragged_positions': drag_analysis['dragged_count'],
+                'total_drag_loss': drag_analysis['total_drag_loss']
+            }
+            
+            # สร้าง Recovery Orders สำหรับไม้โดนลาก
+            for opportunity in drag_analysis.get('recovery_opportunities', []):
+                try:
+                    recovery_result = self.recovery_order_manager.create_drag_recovery_order(
+                        opportunity['dragged_position'], 
+                        opportunity
+                    )
+                    
+                    if recovery_result['success']:
+                        recovery_results['recovery_orders'].append({
+                            'ticket': recovery_result['ticket'],
+                            'type': opportunity['recovery_type'],
+                            'lot': opportunity['recovery_lot'],
+                            'dragged_ticket': opportunity['dragged_ticket']
+                        })
+                        recovery_results['recovery_created'] = True
+                        
+                        logger.info(f"🚀 Recovery Order Created: {recovery_result['ticket']} for dragged position {opportunity['dragged_ticket']}")
+                    else:
+                        logger.warning(f"⚠️ Recovery Order Failed: {recovery_result.get('error', 'Unknown error')}")
+                        
+                except Exception as e:
+                    logger.error(f"🚨 Error creating recovery order: {e}")
+            
+            # เช็คความสมดุลและสร้าง Balance Orders ถ้าจำเป็น
+            balance_analysis = self._analyze_portfolio_balance(positions, current_price)
+            
+            if balance_analysis.get('imbalance_percentage', 0) > 80.0:
+                # สร้าง Balance Position เพื่อแก้สมดุล
+                imbalance_side = balance_analysis.get('imbalance_side', '')
+                
+                if imbalance_side == 'BUY':
+                    # เอียง BUY มากเกินไป → สร้าง SELL
+                    balance_direction = 'SELL'
+                    balance_price = current_price + (10 / 10000)  # SELL สูงกว่าราคาปัจจุบัน 1 pip
+                elif imbalance_side == 'SELL':
+                    # เอียง SELL มากเกินไป → สร้าง BUY
+                    balance_direction = 'BUY'
+                    balance_price = current_price - (10 / 10000)  # BUY ต่ำกว่าราคาปัจจุบัน 1 pip
+                else:
+                    balance_direction = None
+                    balance_price = None
+                
+                if balance_direction and balance_price:
+                    try:
+                        # คำนวณ Lot Size สำหรับ Balance
+                        balance_lot = self._calculate_balance_lot_size(positions, balance_direction)
+                        
+                        balance_result = self.recovery_order_manager.create_balance_position_order(
+                            balance_direction, balance_lot, balance_price
+                        )
+                        
+                        if balance_result['success']:
+                            recovery_results['balance_orders'].append({
+                                'ticket': balance_result['ticket'],
+                                'type': balance_direction,
+                                'lot': balance_lot,
+                                'purpose': 'balance_correction'
+                            })
+                            recovery_results['recovery_created'] = True
+                            
+                            logger.info(f"⚖️ Balance Order Created: {balance_result['ticket']} ({balance_direction})")
+                        else:
+                            logger.warning(f"⚠️ Balance Order Failed: {balance_result.get('error', 'Unknown error')}")
+                            
+                    except Exception as e:
+                        logger.error(f"🚨 Error creating balance order: {e}")
+            
+            return recovery_results
+            
+        except Exception as e:
+            logger.error(f"🚨 Error in recovery order creation: {e}")
+            return {
+                'recovery_created': False,
+                'recovery_orders': [],
+                'balance_orders': [],
+                'error': str(e)
+            }
+    
+    def _calculate_balance_lot_size(self, positions: List[Any], direction: str) -> float:
+        """คำนวณ Lot Size สำหรับ Balance Position"""
+        
+        try:
+            # คำนวณ Lot เฉลี่ยของไม้ที่มีอยู่
+            total_lot = sum(pos.volume for pos in positions)
+            avg_lot = total_lot / len(positions) if positions else 0.01
+            
+            # ปรับ Lot ตามทิศทาง
+            if direction == 'BUY':
+                # BUY ใช้ Lot น้อยกว่าเฉลี่ยเล็กน้อย
+                balance_lot = avg_lot * 0.8
+            else:  # SELL
+                # SELL ใช้ Lot น้อยกว่าเฉลี่ยเล็กน้อย
+                balance_lot = avg_lot * 0.8
+            
+            # จำกัด Lot Size
+            balance_lot = max(0.01, min(balance_lot, 0.1))
+            
+            # ปรับให้เป็น Step ที่ถูกต้อง (0.01)
+            balance_lot = round(balance_lot, 2)
+            
+            return balance_lot
+            
+        except Exception as e:
+            logger.error(f"Error calculating balance lot size: {e}")
+            return 0.01  # Default lot size
+    
+    def _analyze_portfolio_balance(self, positions: List[Any], current_price: float) -> Dict[str, Any]:
+        """วิเคราะห์สมดุลของ Portfolio"""
+        
+        try:
+            if not positions:
+                return {'imbalance_percentage': 0, 'imbalance_side': 'BALANCED'}
+            
+            buy_positions = [pos for pos in positions if pos.type == 0]
+            sell_positions = [pos for pos in positions if pos.type == 1]
+            
+            total_positions = len(positions)
+            buy_count = len(buy_positions)
+            sell_count = len(sell_positions)
+            
+            buy_percentage = (buy_count / total_positions) * 100
+            sell_percentage = (sell_count / total_positions) * 100
+            
+            imbalance_percentage = max(buy_percentage, sell_percentage)
+            
+            if buy_percentage > sell_percentage:
+                imbalance_side = 'BUY'
+            elif sell_percentage > buy_percentage:
+                imbalance_side = 'SELL'
+            else:
+                imbalance_side = 'BALANCED'
+            
+            return {
+                'total_positions': total_positions,
+                'buy_count': buy_count,
+                'sell_count': sell_count,
+                'buy_percentage': buy_percentage,
+                'sell_percentage': sell_percentage,
+                'imbalance_percentage': imbalance_percentage,
+                'imbalance_side': imbalance_side
+            }
+            
+        except Exception as e:
+            logger.error(f"Error analyzing portfolio balance: {e}")
+            return {'imbalance_percentage': 0, 'imbalance_side': 'ERROR'}
     
     # 🗑️ Portfolio Health Check and Entry Quality Validation REMOVED
     # 

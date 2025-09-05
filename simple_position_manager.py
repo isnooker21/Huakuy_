@@ -20,7 +20,7 @@ from itertools import combinations
 logger = logging.getLogger(__name__)
 
 class SimplePositionManager:
-    """🚀 Hybrid Adaptive Position Manager - ระบบจัดการไม้แบบปรับตัวได้"""
+    """🚀 Hybrid Adaptive Position Manager + Universal Recovery - ระบบจัดการไม้แบบปรับตัวได้พร้อม Recovery"""
     
     def __init__(self, mt5_connection, order_manager):
         self.mt5 = mt5_connection
@@ -35,6 +35,10 @@ class SimplePositionManager:
         self.normal_mode_threshold = 40.0  # Wrong positions < 40% = Normal Mode
         self.balance_mode_threshold = 70.0  # Wrong positions 40-70% = Balance Mode
         # Wrong positions > 70% = Survival Mode
+        
+        # 🎯 Universal Recovery Integration
+        self.recovery_manager = None  # จะถูกตั้งค่าใน integration
+        self.enable_universal_recovery = True  # เปิดใช้ Universal Recovery
         
         # 📊 สถิติ
         self.total_closures = 0
@@ -116,7 +120,7 @@ class SimplePositionManager:
 
     def should_close_positions(self, positions: List[Any], current_price: float) -> Dict[str, Any]:
         """
-        🔍 ตรวจสอบว่าควรปิดไม้หรือไม่ (Adaptive Decision Making)
+        🔍 ตรวจสอบว่าควรปิดไม้หรือไม่ (Enhanced with Universal Recovery)
         
         Args:
             positions: รายการ positions ทั้งหมด
@@ -126,44 +130,82 @@ class SimplePositionManager:
             Dict: ผลการตรวจสอบพร้อมรายการไม้ที่ควรปิด
         """
         try:
-            # 🏥 วิเคราะห์สุขภาพ Portfolio ก่อน
-            health_analysis = self.analyze_portfolio_health(positions, current_price)
-            
             # เช็คเบื้องต้น
             if len(positions) < 2:
                 return {
                     'should_close': False,
                     'reason': 'Need at least 2 positions to close',
-                    'positions_to_close': []
+                    'positions_to_close': [],
+                    'method': 'none'
                 }
             
-            # 🔍 วิเคราะห์ทุกไม้ (ไม่ log เพื่อความเร็ว)
+            # 🚀 1. Universal Recovery Check (ถ้าเปิดใช้)
+            if self.enable_universal_recovery and self.recovery_manager:
+                try:
+                    # วิเคราะห์ Balance
+                    balance_analysis = self._analyze_portfolio_balance(positions, current_price)
+                    
+                    # วิเคราะห์ Drag Recovery
+                    drag_analysis = self.recovery_manager.analyze_dragged_positions(positions, current_price)
+                    
+                    # หา Smart Combinations
+                    smart_combinations = self.recovery_manager.find_smart_combinations(
+                        positions, current_price, balance_analysis
+                    )
+                    
+                    if smart_combinations:
+                        best_combination = smart_combinations[0]  # Top scored
+                        
+                        logger.info(f"🎯 Universal Recovery: {best_combination['type']} (Score: {best_combination['score']:.2f})")
+                        logger.info(f"💰 Profit: ${best_combination['total_profit']:.2f}")
+                        logger.info(f"📊 Positions: {len(best_combination['positions'])}")
+                        
+                        return {
+                            'should_close': True,
+                            'reason': f"Universal Recovery: {best_combination['type']} (Score: {best_combination['score']:.2f})",
+                            'positions_to_close': best_combination['positions'],
+                            'expected_pnl': best_combination['total_profit'],
+                            'positions_count': len(best_combination['positions']),
+                            'combination_type': best_combination['type'],
+                            'method': 'universal_recovery',
+                            'drag_analysis': drag_analysis
+                        }
+                        
+                except Exception as recovery_error:
+                    logger.warning(f"⚠️ Universal Recovery error: {recovery_error}")
+                    # Continue to adaptive method
+            
+            # 🎯 2. Fallback to Adaptive Method
+            # วิเคราะห์สุขภาพ Portfolio
+            health_analysis = self.analyze_portfolio_health(positions, current_price)
+            
+            # วิเคราะห์ทุกไม้ (ไม่ log เพื่อความเร็ว)
             analyzed_positions = self._analyze_all_positions(positions, current_price)
             
             if len(analyzed_positions) < 2:
                 return {
                     'should_close': False,
                     'reason': 'Not enough valid positions after analysis',
-                    'positions_to_close': []
+                    'positions_to_close': [],
+                    'method': 'none'
                 }
             
-            # 🎯 หาการจับคู่ที่ดีที่สุด (แบบสมดุล Portfolio)
-            # 🎯 หาการจับคู่ที่ดีที่สุดแบบ Adaptive
+            # หาการจับคู่ที่ดีที่สุดแบบ Adaptive
             best_combination = self._find_adaptive_closing_combination(
                 analyzed_positions, current_price, health_analysis
             )
             
             if best_combination:
-                # 🛡️ ตรวจสอบอีกครั้งก่อนปิด - ต้องมีกำไรจริงๆ
+                # ตรวจสอบอีกครั้งก่อนปิด - ต้องมีกำไรจริงๆ
                 expected_pnl = best_combination['total_pnl']
                 
-                # 🔍 Double-check P&L โดยใช้ profit จาก position จริง
+                # Double-check P&L โดยใช้ profit จาก position จริง
                 actual_pnl = sum(pos.profit for pos in best_combination['positions'] if hasattr(pos, 'profit'))
                 if actual_pnl != 0.0:
                     expected_pnl = actual_pnl  # ใช้ค่าจริงจาก MT5
                     logger.info(f"🔍 Using actual P&L from positions: ${actual_pnl:.2f}")
                 
-                # 🎯 ADAPTIVE PROFIT THRESHOLD ตาม Mode
+                # ADAPTIVE PROFIT THRESHOLD ตาม Mode
                 mode = health_analysis['mode']
                 if mode == 'Survival':
                     min_profit = 0.10  # Survival: ยอมรับกำไรน้อย
@@ -174,28 +216,31 @@ class SimplePositionManager:
                 
                 # ป้องกันการปิดติดลบอย่างเข้มงวด
                 if expected_pnl > min_profit:
-                    logger.info(f"🎯 CLOSE READY ({mode} Mode): {len(best_combination['positions'])} positions, ${expected_pnl:.2f}")
+                    logger.info(f"🎯 ADAPTIVE CLOSE ({mode} Mode): {len(best_combination['positions'])} positions, ${expected_pnl:.2f}")
                     return {
                         'should_close': True,
                         'reason': best_combination.get('reason', f'{mode} mode: Profitable combination'),
                         'positions_to_close': best_combination['positions'],
                         'expected_pnl': expected_pnl,
                         'positions_count': len(best_combination['positions']),
-                        'combination_type': best_combination.get('type', mode)
+                        'combination_type': best_combination.get('type', mode),
+                        'method': 'adaptive'
                     }
                 else:
                     logger.info(f"🚫 Not profitable enough ({mode} Mode): ${expected_pnl:.2f} < ${min_profit:.2f}")
                     return {
                         'should_close': False,
                         'reason': f'{mode} Mode: ${expected_pnl:.2f} < ${min_profit:.2f}',
-                        'positions_to_close': []
+                        'positions_to_close': [],
+                        'method': 'adaptive_insufficient'
                     }
             else:
                 # ไม่ log เพื่อลด noise
                 return {
                     'should_close': False,
                     'reason': 'No suitable closing combination found',
-                    'positions_to_close': []
+                    'positions_to_close': [],
+                    'method': 'adaptive_no_combination'
                 }
                 
         except Exception as e:

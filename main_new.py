@@ -18,6 +18,10 @@ from order_management import OrderManager
 from portfolio_manager import PortfolioManager
 from gui import TradingGUI
 
+# 🚀 Universal Recovery System
+from universal_recovery_manager import UniversalRecoveryManager
+from recovery_order_manager import RecoveryOrderManager
+
 # Configure logging - เฉพาะระบบเทรดและปิดกำไร
 logging.basicConfig(
     level=logging.INFO,  # ลดเป็น INFO เพื่อลด noise
@@ -42,8 +46,10 @@ logging.getLogger('price_zone_analysis').setLevel(logging.WARNING)
 logging.getLogger('zone_rebalancer').setLevel(logging.WARNING)
 logging.getLogger('market_analysis').setLevel(logging.WARNING)
 
-# เปิดเฉพาะ Simple Position Manager และ Main Trading
+# เปิดเฉพาะ Simple Position Manager, Universal Recovery และ Main Trading
 logging.getLogger('simple_position_manager').setLevel(logging.INFO)
+logging.getLogger('universal_recovery_manager').setLevel(logging.INFO)
+logging.getLogger('recovery_order_manager').setLevel(logging.INFO)
 logging.getLogger('__main__').setLevel(logging.INFO)
 
 logger = logging.getLogger(__name__)
@@ -68,6 +74,10 @@ class TradingSystem:
         self.order_manager = OrderManager(self.mt5_connection)
         self.portfolio_manager = PortfolioManager(self.order_manager, initial_balance)
         self.trading_conditions = TradingConditions()
+        
+        # 🚀 Universal Recovery System (จะถูก initialize หลังจาก MT5 connect)
+        self.recovery_manager = None
+        self.recovery_order_manager = None
         
         # สถานะการทำงาน
         self.is_running = False
@@ -126,6 +136,23 @@ class TradingSystem:
             
             # โหลดข้อมูลราคาเริ่มต้น
             self.load_initial_market_data()
+            
+            # 🚀 Initialize Universal Recovery System
+            logger.info("🚀 Initializing Universal Recovery System...")
+            self.recovery_manager = UniversalRecoveryManager(self.mt5_connection)
+            self.recovery_order_manager = RecoveryOrderManager(
+                self.mt5_connection, 
+                self.order_manager, 
+                self.recovery_manager
+            )
+            
+            # เชื่อมต่อกับ Portfolio Manager
+            if hasattr(self.portfolio_manager, 'recovery_manager'):
+                self.portfolio_manager.recovery_manager = self.recovery_manager
+                self.portfolio_manager.recovery_order_manager = self.recovery_order_manager
+                logger.info("✅ Universal Recovery System integrated with Portfolio Manager")
+            else:
+                logger.warning("⚠️ Portfolio Manager doesn't support Universal Recovery integration")
             
             logger.info("✅ SYSTEM READY")
             return True
@@ -449,7 +476,18 @@ class TradingSystem:
                 
                 # 2. 🗑️ Smart Recovery REMOVED - functionality moved to Smart Profit Taking System
                 
-                # 2. 🎯 Simple Position Manager - ระบบจัดการไม้แบบเรียบง่าย
+                # 🚀 1. Auto Recovery Creation (ตรวจหาไม้โดนลากและสร้าง Recovery)
+                if hasattr(self.portfolio_manager, '_check_and_create_recovery_orders'):
+                    recovery_actions = self.portfolio_manager._check_and_create_recovery_orders(positions, current_price)
+                    if recovery_actions.get('recovery_created', False):
+                        recovery_count = len(recovery_actions.get('recovery_orders', []))
+                        balance_count = len(recovery_actions.get('balance_orders', []))
+                        if recovery_count > 0:
+                            logger.info(f"🚀 Recovery Orders Created: {recovery_count}")
+                        if balance_count > 0:
+                            logger.info(f"⚖️ Balance Orders Created: {balance_count}")
+
+                # 2. 🎯 Simple Position Manager - ระบบจัดการไม้แบบเรียบง่าย (Enhanced with Universal Recovery)
                 if hasattr(self.portfolio_manager, 'position_manager'):
                     close_decision = self.portfolio_manager.position_manager.should_close_positions(
                         positions, current_price
@@ -458,11 +496,15 @@ class TradingSystem:
                     if close_decision.get('should_close', False):
                         positions_to_close = close_decision.get('positions_to_close', [])
                         if positions_to_close:
-                            # 🎯 POSITION CLOSING
+                            # 🎯 POSITION CLOSING (Enhanced with Universal Recovery)
                             count = close_decision.get('positions_count', 0)
                             expected_pnl = close_decision.get('expected_pnl', 0.0)
                             reason = close_decision.get('reason', '')
-                            logger.info(f"🎯 CLOSING: {count} positions, ${expected_pnl:.2f} expected - {reason}")
+                            method = close_decision.get('method', 'adaptive')
+                            combination_type = close_decision.get('combination_type', 'unknown')
+                            
+                            logger.info(f"🎯 CLOSING ({method.upper()}): {count} positions, ${expected_pnl:.2f} expected")
+                            logger.info(f"📊 Type: {combination_type} - {reason}")
                             
                             close_result = self.portfolio_manager.position_manager.close_positions(positions_to_close)
                             if close_result.get('success', False):
