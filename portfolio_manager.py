@@ -19,6 +19,7 @@ from zone_rebalancer import ZoneRebalancer
 from advanced_breakout_recovery import AdvancedBreakoutRecovery
 from smart_gap_filler import SmartGapFiller
 from force_trading_mode import ForceTradingMode
+from smart_profit_taking import SmartProfitTakingSystem
 from order_management import OrderManager, OrderResult, CloseResult
 
 logger = logging.getLogger(__name__)
@@ -79,6 +80,9 @@ class PortfolioManager:
         # เพิ่ม Continuous Trading Systems
         self.gap_filler = SmartGapFiller(order_manager.mt5)
         self.force_trading = ForceTradingMode(order_manager.mt5)
+        
+        # เพิ่ม Smart Profit Taking System (ระบบปิดกำไรอัจฉริยะ)
+        self.smart_profit_taking = SmartProfitTakingSystem(order_manager.mt5, order_manager)
         
         # การตั้งค่าความเสี่ยง
         self.max_risk_per_trade = 2.0  # เปอร์เซ็นต์ความเสี่ยงต่อ Trade
