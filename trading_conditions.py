@@ -182,8 +182,12 @@ class TradingConditions:
             'base_lot_multiplier': 1.0
         })
         
-        # 3. Multi-Timeframe Confirmation
-        direction = "BUY" if candle.close > candle.open else "SELL"
+        # 3. Multi-Timeframe Confirmation  
+        # 🎯 FIXED: Counter-trend logic - ซื้อถูก ขายแพง
+        if candle.close > candle.open:  # แท่งเขียว = ราคาขึ้น
+            direction = "SELL"  # ขายตอนราคาสูง (ขายแพง)
+        else:  # แท่งแดง = ราคาลง
+            direction = "BUY"   # ซื้อตอนราคาต่ำ (ซื้อถูก)
         
         # Initialize mtf_analyzer with actual symbol if not done
         if self.mtf_analyzer is None and symbol:
@@ -262,6 +266,23 @@ class TradingConditions:
         # else:
         logger.info(f"✅ เงื่อนไข 5: การใช้เงินทุน (ปิดการตรวจสอบ - เพื่อ Recovery Systems)")
             
+        # 🛡️ Entry Price Validation - ป้องกันการเข้าไม้ในราคาผิด
+        entry_price = candle.close
+        price_validation = self._validate_entry_price(strength_analysis['direction'], entry_price, candle.close)
+        if not price_validation['valid']:
+            result['can_enter'] = False
+            result['reasons'].append(f"Entry price invalid: {price_validation['reason']}")
+            result['signal'] = None
+            return result
+        
+        # 🔍 Portfolio Quality Check - ประเมินคุณภาพไม้ในพอร์ต
+        portfolio_quality = self._assess_portfolio_quality(positions, candle.close)
+        if portfolio_quality['bad_position_ratio'] > 0.7:  # ไม้เสียเกิน 70%
+            result['can_enter'] = False
+            result['reasons'].append(f"Too many bad positions: {portfolio_quality['bad_position_ratio']:.1%}")
+            result['signal'] = None
+            return result
+
         # สร้างสัญญาณการเทรด
         signal = Signal(
             direction=strength_analysis['direction'],
@@ -269,8 +290,8 @@ class TradingConditions:
             strength=strength_analysis['total_strength'],
             confidence=self._calculate_signal_confidence(strength_analysis, balance_check),
             timestamp=candle.timestamp,
-            price=candle.close,
-            comment=f"Candle strength: {strength_analysis['total_strength']:.2f}%"
+            price=entry_price,
+            comment=f"Validated signal: {strength_analysis['direction']} at {entry_price}"
         )
         
         # ผ่านทุกเงื่อนไข
@@ -309,7 +330,11 @@ class TradingConditions:
             body_ratio = candle_body / candle_range
             if body_ratio >= 0.7:  # body ≥ 70% ของ range
                 result['can_enter'] = True
-                result['direction'] = 'BUY' if candle.is_green else 'SELL'
+                # 🎯 FIXED: Counter-trend logic - ซื้อถูก ขายแพง
+                if candle.is_green:  # แท่งเขียว = ราคาขึ้น
+                    result['direction'] = 'SELL'  # ขายตอนราคาสูง
+                else:  # แท่งแดง = ราคาลง
+                    result['direction'] = 'BUY'   # ซื้อตอนราคาต่ำ
                 result['reason'] = f"แท่งเทียนเต็มแท่ง (body {body_ratio*100:.1f}% ของ range)"
                 logger.info(f"🎯 เงื่อนไขยืดหยุ่น: {result['reason']}")
                 return result
@@ -322,7 +347,11 @@ class TradingConditions:
             # ถ้าราคาเปลี่ยนแปลง ≥ 0.02% (สำหรับทองคำ)
             if abs(price_change_pct) >= 0.02:
                 result['can_enter'] = True
-                result['direction'] = 'BUY' if price_change_pct > 0 else 'SELL'
+                # 🎯 FIXED: Counter-trend logic - ซื้อถูก ขายแพง
+                if price_change_pct > 0:  # ราคาขึ้น
+                    result['direction'] = 'SELL'  # ขายตอนราคาสูง
+                else:  # ราคาลง
+                    result['direction'] = 'BUY'   # ซื้อตอนราคาต่ำ
                 result['reason'] = f"ปิด{'สูงกว่า' if price_change_pct > 0 else 'ต่ำกว่า'}แท่งก่อนหน้า ({price_change_pct:+.3f}%)"
                 logger.info(f"🎯 เงื่อนไขยืดหยุ่น: {result['reason']}")
                 
@@ -534,8 +563,95 @@ class TradingConditions:
             'exit_type': None
         }
         
+    def _validate_entry_price(self, direction: str, entry_price: float, current_price: float) -> Dict[str, Any]:
+        """
+        🛡️ ตรวจสอบราคาเข้าไม้ให้ถูกต้อง - ป้องกันการซื้อแพงขายถูก
+        
+        Args:
+            direction: ทิศทางการเทรด BUY/SELL
+            entry_price: ราคาที่จะเข้าไม้
+            current_price: ราคาปัจจุบัน
+            
+        Returns:
+            Dict: ผลการตรวจสอบ
+        """
+        result = {'valid': True, 'reason': 'Price validation passed'}
+        
+        try:
+            if direction == "BUY":
+                # BUY ต้องซื้อถูกกว่าราคาปัจจุบัน (หรือเท่ากัน)
+                if entry_price > current_price:
+                    result['valid'] = False
+                    result['reason'] = f"BUY price {entry_price:.2f} > current {current_price:.2f} (would buy expensive)"
+                    
+            elif direction == "SELL":
+                # SELL ต้องขายแพงกว่าราคาปัจจุบัน (หรือเท่ากัน)
+                if entry_price < current_price:
+                    result['valid'] = False
+                    result['reason'] = f"SELL price {entry_price:.2f} < current {current_price:.2f} (would sell cheap)"
+                    
+        except Exception as e:
+            result['valid'] = False
+            result['reason'] = f"Price validation error: {e}"
+            
+        return result
+    
+    def _assess_portfolio_quality(self, positions: List[Position], current_price: float) -> Dict[str, Any]:
+        """
+        🔍 ประเมินคุณภาพไม้ในพอร์ต - ดูว่าไม้อยู่ในตำแหน่งที่ดีหรือไม่
+        
+        Args:
+            positions: รายการ positions
+            current_price: ราคาปัจจุบัน
+            
+        Returns:
+            Dict: ผลการประเมิน
+        """
+        result = {
+            'total_positions': 0,
+            'good_positions': 0,
+            'bad_positions': 0,
+            'good_position_ratio': 0.0,
+            'bad_position_ratio': 0.0,
+            'quality_score': 0.0
+        }
+        
+        try:
+            if not positions:
+                result['quality_score'] = 100.0  # พอร์ตว่าง = คุณภาพดี
+                return result
+                
+            total_positions = len(positions)
+            good_positions = 0
+            bad_positions = 0
+            
+            for pos in positions:
+                if hasattr(pos, 'type') and hasattr(pos, 'price_open'):
+                    pos_type = pos.type.upper() if isinstance(pos.type, str) else ("BUY" if pos.type == 0 else "SELL")
+                    
+                    # ประเมินคุณภาพตำแหน่ง
+                    if pos_type == "BUY" and pos.price_open < current_price:
+                        good_positions += 1  # ซื้อถูก - อยู่ในกำไร
+                    elif pos_type == "SELL" and pos.price_open > current_price:
+                        good_positions += 1  # ขายแพง - อยู่ในกำไร
+                    else:
+                        bad_positions += 1   # อยู่ผิดตำแหน่ง - ติดลบ
+            
+            result['total_positions'] = total_positions
+            result['good_positions'] = good_positions
+            result['bad_positions'] = bad_positions
+            result['good_position_ratio'] = good_positions / total_positions
+            result['bad_position_ratio'] = bad_positions / total_positions
+            result['quality_score'] = (good_positions / total_positions) * 100
+            
+        except Exception as e:
+            logger.error(f"Error assessing portfolio quality: {e}")
+            result['quality_score'] = 0.0
+            
+        return result
+    
     # 🗑️ OLD PROFIT/STOP LOSS METHODS REMOVED
-    # Replaced by Smart Profit Taking System in smart_profit_taking.py
+    # Replaced by Lightning Portfolio Cleanup System
         
     def _check_pullback_conditions(self, positions: List[Position], current_prices: Dict[str, float],
                                   min_pullback_percentage: float = 0.3) -> Dict[str, Any]:

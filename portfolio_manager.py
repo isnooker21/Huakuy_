@@ -19,7 +19,7 @@ from zone_rebalancer import ZoneRebalancer
 from advanced_breakout_recovery import AdvancedBreakoutRecovery
 from smart_gap_filler import SmartGapFiller
 from force_trading_mode import ForceTradingMode
-from smart_profit_taking import SmartProfitTakingSystem
+from lightning_portfolio_cleanup import LightningPortfolioCleanup
 from signal_manager import SignalManager, RankedSignal
 from order_management import OrderManager, OrderResult, CloseResult
 
@@ -83,8 +83,8 @@ class PortfolioManager:
         self.gap_filler = SmartGapFiller(order_manager.mt5)
         self.force_trading = ForceTradingMode(order_manager.mt5)
         
-        # เพิ่ม Smart Profit Taking System (ระบบปิดกำไรอัจฉริยะ)
-        self.smart_profit_taking = SmartProfitTakingSystem(order_manager.mt5, order_manager)
+        # ⚡ Lightning Portfolio Cleanup System - ระบบปิดไม้แบบฟ้าผ่า
+        self.lightning_cleanup = LightningPortfolioCleanup(order_manager.mt5, order_manager)
         
         # 🎯 Signal Manager - จัดการสัญญาณจากทุกระบบในจุดเดียว
         self.signal_manager = SignalManager(order_manager.mt5)
@@ -1164,3 +1164,131 @@ class PortfolioManager:
         except Exception as e:
             logger.error(f"Error validating portfolio improvement: {e}")
             return {'valid': False, 'reason': f'Validation error: {str(e)}'}
+    
+    def _check_portfolio_health_before_entry(self, positions: List[Any], current_state: PortfolioState) -> Dict[str, Any]:
+        """
+        🛡️ ตรวจสอบสุขภาพพอร์ตก่อนการเข้าไม้ใหม่
+        
+        Args:
+            positions: รายการ positions ปัจจุบัน
+            current_state: สถานะพอร์ตปัจจุบัน
+            
+        Returns:
+            Dict: ผลการตรวจสอบ
+        """
+        try:
+            # 1. ตรวจสอบจำนวนไม้ค้างมากเกินไป
+            if len(positions) >= 50:  # เกิน 50 ไม้
+                return {
+                    'allow_entry': False,
+                    'reason': f'Too many open positions: {len(positions)}/50 (need cleanup first)'
+                }
+            
+            # 2. ตรวจสอบ Drawdown สูงเกินไป
+            if current_state.drawdown_percentage > 20.0:  # Drawdown > 20%
+                return {
+                    'allow_entry': False,
+                    'reason': f'High drawdown: {current_state.drawdown_percentage:.1f}% > 20%'
+                }
+            
+            # 3. ตรวจสอบ Balance ติดลบมากเกินไป
+            if current_state.account_balance < self.initial_balance * 0.7:  # เหลือ < 70% ของเงินทุน
+                balance_ratio = (current_state.account_balance / self.initial_balance) * 100
+                return {
+                    'allow_entry': False,
+                    'reason': f'Low balance: {balance_ratio:.1f}% < 70% of initial capital'
+                }
+            
+            # 4. ตรวจสอบไม้เสียเกิน 80% ของพอร์ต
+            losing_positions = sum(1 for pos in positions if hasattr(pos, 'profit') and pos.profit < 0)
+            if len(positions) > 0:
+                losing_ratio = losing_positions / len(positions)
+                if losing_ratio > 0.8:  # ไม้เสียเกิน 80%
+                    return {
+                        'allow_entry': False,
+                        'reason': f'Too many losing positions: {losing_ratio:.1%} > 80%'
+                    }
+            
+            # ✅ Portfolio health is acceptable
+            return {
+                'allow_entry': True,
+                'reason': 'Portfolio health check passed',
+                'positions_count': len(positions),
+                'losing_ratio': losing_positions / len(positions) if positions else 0,
+                'drawdown': current_state.drawdown_percentage,
+                'balance_ratio': (current_state.account_balance / self.initial_balance) * 100
+            }
+            
+        except Exception as e:
+            logger.error(f"Error checking portfolio health: {e}")
+            return {
+                'allow_entry': False,
+                'reason': f'Portfolio health check error: {e}'
+            }
+    
+    def _validate_entry_quality(self, signal: Signal, positions: List[Any], current_state: PortfolioState) -> Dict[str, Any]:
+        """
+        🔍 ตรวจสอบคุณภาพการเข้าไม้
+        
+        Args:
+            signal: สัญญาณการเทรด
+            positions: รายการ positions ปัจจุบัน
+            current_state: สถานะพอร์ตปัจจุบัน
+            
+        Returns:
+            Dict: ผลการตรวจสอบคุณภาพ
+        """
+        try:
+            # 1. ตรวจสอบ Signal Strength
+            if signal.strength < 25.0:  # Strength < 25%
+                return {
+                    'valid': False,
+                    'reason': f'Weak signal strength: {signal.strength:.1f}% < 25%'
+                }
+            
+            # 2. ตรวจสอบ Confidence Score
+            if signal.confidence < 60.0:  # Confidence < 60%
+                return {
+                    'valid': False,
+                    'reason': f'Low confidence: {signal.confidence:.1f}% < 60%'
+                }
+            
+            # 3. ตรวจสอบการเข้าไม้ซ้ำทิศทางเดิม (ป้องกันการ Martingale)
+            same_direction_positions = [pos for pos in positions 
+                                     if hasattr(pos, 'type') and 
+                                     ((signal.direction == "BUY" and pos.type == 0) or 
+                                      (signal.direction == "SELL" and pos.type == 1))]
+            
+            if len(same_direction_positions) >= 5:  # เกิน 5 ไม้ทิศทางเดียวกัน
+                return {
+                    'valid': False,
+                    'reason': f'Too many {signal.direction} positions: {len(same_direction_positions)}/5'
+                }
+            
+            # 4. ตรวจสอบระยะห่างจากไม้ล่าสุด (ป้องกันการเข้าใกล้กันเกินไป)
+            recent_positions = [pos for pos in positions 
+                              if hasattr(pos, 'price_open') and 
+                              abs(pos.price_open - signal.price) < 5.0]  # ห่างกันไม่เกิน 5 pips
+            
+            if len(recent_positions) >= 2:  # มีไม้ใกล้กัน >= 2 ไม้
+                return {
+                    'valid': False,
+                    'reason': f'Too close to existing positions: {len(recent_positions)} positions within 5 pips'
+                }
+            
+            # ✅ Entry quality is acceptable
+            return {
+                'valid': True,
+                'reason': 'Entry quality validation passed',
+                'signal_strength': signal.strength,
+                'signal_confidence': signal.confidence,
+                'same_direction_count': len(same_direction_positions),
+                'nearby_positions': len(recent_positions)
+            }
+            
+        except Exception as e:
+            logger.error(f"Error validating entry quality: {e}")
+            return {
+                'valid': False,
+                'reason': f'Entry quality validation error: {e}'
+            }
