@@ -13,7 +13,7 @@ from calculations import (
     RiskCalculator, MarketAnalysisCalculator, ProfitTargetCalculator
 )
 from trading_conditions import Signal, TradingConditions, CandleData
-from smart_recovery import SmartRecoverySystem
+# Smart Recovery System removed - replaced by Smart Profit Taking System
 from price_zone_analysis import PriceZoneAnalyzer
 from zone_rebalancer import ZoneRebalancer
 from advanced_breakout_recovery import AdvancedBreakoutRecovery
@@ -68,7 +68,7 @@ class PortfolioManager:
         self.initial_balance = initial_balance
         self.current_balance = initial_balance
         self.trading_conditions = TradingConditions()
-        self.smart_recovery = SmartRecoverySystem(order_manager.mt5)
+        # Smart Recovery System removed - functionality moved to Smart Profit Taking System
         
         # เพิ่ม Zone Analysis System
         self.zone_analyzer = PriceZoneAnalyzer("XAUUSD", num_zones=10)
@@ -699,134 +699,12 @@ class PortfolioManager:
         except Exception as e:
             logger.error(f"เกิดข้อผิดพลาดในการรีเซ็ตเมตริกรายวัน: {str(e)}")
     
+    # 🗑️ SMART RECOVERY SYSTEM REMOVED - Replaced by Smart Profit Taking System
     def check_and_execute_smart_recovery(self, current_price: float, 
                                          block_recovery: bool = False) -> Dict[str, Any]:
-        """ตรวจสอบและดำเนินการ Smart Recovery (พร้อม Emergency Override)"""
-        try:
-            logger.debug(f"🔍 Smart Recovery Check Started - block_recovery: {block_recovery}")
-            positions = self.order_manager.active_positions
-            logger.debug(f"🔍 Active positions: {len(positions) if positions else 0}")
-            # Emergency Override - เฉพาะกรณีที่มั่นใจว่าปิดแล้วพอร์ตดีขึ้น
-            positions = self.order_manager.active_positions
-            
-            # คำนวณกำไรขาดทุนรวม
-            profitable_positions = [pos for pos in positions if pos.profit > 0]
-            losing_positions = [pos for pos in positions if pos.profit < 0]
-            total_profit = sum(pos.profit for pos in profitable_positions)
-            total_loss = sum(pos.profit for pos in losing_positions)
-            net_profit = total_profit + total_loss
-            
-            # Emergency Override เฉพาะเมื่อ:
-            # 1. มีไม้เยอะมาก (> 8 ไม้) แต่กำไรสุทธิเป็นบวก
-            # 2. หรือมีไม้กำไรมากกว่าไม้ขาดทุน และ net profit > $10
-            emergency_conditions = []
-            
-            if len(positions) > 8 and net_profit > 5:
-                emergency_conditions.append(f"{len(positions)} positions with net profit ${net_profit:.2f}")
-                
-            if len(profitable_positions) > len(losing_positions) and net_profit > 10:
-                emergency_conditions.append(f"More profitable positions ({len(profitable_positions)} vs {len(losing_positions)}) with net ${net_profit:.2f}")
-            
-            if emergency_conditions:
-                logger.info(f"🚨 Smart Emergency Override: {'; '.join(emergency_conditions)}")
-                block_recovery = False
-            
-            # เช็คว่าถูกบล็อค Recovery หรือไม่ (เช่น ระหว่างรอ Breakout)
-            if block_recovery:
-                logger.debug(f"🔒 Smart Recovery blocked by Breakout Strategy")
-                return {'executed': False, 'reason': 'Recovery ถูกบล็อคชั่วคราว - รอ Breakout Strategy'}
-            
-            # ดึงข้อมูลปัจจุบัน  
-            account_info = self.order_manager.mt5.get_account_info()
-            if not account_info:
-                return {'executed': False, 'reason': 'ไม่สามารถดึงข้อมูลบัญชีได้'}
-                
-            current_state = self.analyze_portfolio_state(account_info)
-            positions = self.order_manager.active_positions
-            
-            if not positions or len(positions) < 2:
-                logger.debug(f"🔍 Not enough positions for recovery: {len(positions) if positions else 0}")
-                return {'executed': False, 'reason': 'ไม่มี positions เพียงพอสำหรับ Recovery'}
-            
-            # ตรวจสอบว่าควร trigger Recovery หรือไม่
-            should_trigger = self.smart_recovery.should_trigger_recovery(
-                positions, self.current_balance, current_state.equity
-            )
-            
-            if not should_trigger:
-                logger.debug(f"🔍 Recovery conditions not met")
-                return {'executed': False, 'reason': 'ยังไม่ถึงเงื่อนไข Recovery'}
-            
-            # วิเคราะห์โอกาส Recovery
-            recovery_candidates = self.smart_recovery.analyze_recovery_opportunities(
-                positions, current_state.account_balance, current_price
-            )
-            
-            if not recovery_candidates:
-                logger.debug(f"🔍 No suitable recovery opportunities found")
-                return {'executed': False, 'reason': 'ไม่พบโอกาส Recovery ที่เหมาะสม'}
-            
-            # เลือกและดำเนินการ Recovery ที่ดีที่สุด
-            best_candidate = recovery_candidates[0]  # เรียงตาม score แล้ว
-            
-            # สร้าง dict สำหรับ Portfolio Health Check
-            candidate_dict = {
-                'positions': [best_candidate.profit_position, best_candidate.losing_position],
-                'net_profit': best_candidate.net_profit,
-                'total_profit': best_candidate.profit_position.profit + best_candidate.losing_position.profit
-            }
-            
-            # ตรวจสอบ Portfolio Health ก่อนปิด - ต้องมั่นใจว่าปิดแล้วดีขึ้น
-            portfolio_health_check = self._validate_portfolio_improvement(candidate_dict, current_state)
-            if not portfolio_health_check['valid']:
-                logger.warning(f"❌ Portfolio Health Check Failed: {portfolio_health_check['reason']}")
-                return {'executed': False, 'reason': f"Portfolio Health: {portfolio_health_check['reason']}"}
-            
-            logger.info(f"🎯 กำลังดำเนินการ Smart Recovery... (Portfolio Health: ✅)")
-            
-            # ส่ง Portfolio Health Validator ไปให้ Smart Recovery ใช้ร่วมกัน
-            recovery_result = self.smart_recovery.execute_recovery(
-                best_candidate, 
-                portfolio_validator=lambda candidate, state: self._validate_portfolio_improvement(
-                    {
-                        'positions': [candidate.profit_position, candidate.losing_position],
-                        'net_profit': candidate.net_profit,
-                        'total_profit': candidate.profit_position.profit + candidate.losing_position.profit
-                    }, 
-                    current_state
-                )
-            )
-            
-            if recovery_result['success']:
-                # อัพเดทสถิติ
-                if hasattr(self.performance_metrics, 'total_recovery_operations'):
-                    self.performance_metrics.total_recovery_operations += 1
-                    self.performance_metrics.recovery_profit += recovery_result.get('net_profit', 0)
-                
-                logger.info(f"✅ Smart Recovery สำเร็จ!")
-                logger.info(f"   กำไรสุทธิ: ${recovery_result.get('net_profit', 0):.2f}")
-                logger.info(f"   Margin คืน: ${recovery_result.get('margin_freed', 0):.2f}")
-                
-                return {
-                    'executed': True,
-                    'success': True,
-                    'net_profit': recovery_result.get('net_profit', 0),
-                    'margin_freed': recovery_result.get('margin_freed', 0),
-                    'closed_tickets': recovery_result.get('closed_tickets', []),
-                    'message': recovery_result.get('message', 'Recovery completed')
-                }
-            else:
-                logger.warning(f"⚠️ Smart Recovery ล้มเหลว: {recovery_result.get('message', 'Unknown error')}")
-                return {
-                    'executed': True,
-                    'success': False,
-                    'error': recovery_result.get('error', 'Unknown error'),
-                    'message': recovery_result.get('message', 'Recovery failed')
-                }
-                
-        except Exception as e:
-            logger.error(f"Error in smart recovery: {e}")
-            return {'executed': False, 'error': str(e), 'reason': f'เกิดข้อผิดพลาด: {str(e)}'}
+        """🗑️ REMOVED - Smart Recovery replaced by Smart Profit Taking System"""
+        logger.debug("🗑️ Smart Recovery removed - functionality moved to Smart Profit Taking System")
+        return {'executed': False, 'reason': 'Smart Recovery removed - using Smart Profit Taking System instead'}
     
     def _get_zone_smart_entry(self, signal: Signal, current_price: float) -> Optional[Dict[str, Any]]:
         """ดึงคำแนะนำการเข้าจาก Zone Analysis"""

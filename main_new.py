@@ -452,21 +452,9 @@ class TradingSystem:
                         if result['success']:
                             logger.info(f"✅ Triple Recovery: ${result['net_profit']:.2f} profit")
                 
-                # 2. Smart Recovery (ถูกบล็อคถ้ากำลังรอ breakout)
-                logger.debug(f"🔍 Checking Smart Recovery... (block_recovery: {should_block_recovery})")
-                recovery_result = self.portfolio_manager.check_and_execute_smart_recovery(
-                    current_price, block_recovery=should_block_recovery
-                )
+                # 2. 🗑️ Smart Recovery REMOVED - functionality moved to Smart Profit Taking System
                 
-                logger.debug(f"🔍 Smart Recovery Result: executed={recovery_result.get('executed', False)}, reason={recovery_result.get('reason', 'N/A')}")
-                
-                if recovery_result['executed']:
-                    if recovery_result.get('success'):
-                        logger.info(f"🎯 Smart Recovery: {recovery_result['message']}")
-                    else:
-                        logger.warning(f"⚠️ Smart Recovery: {recovery_result['message']}")
-                
-                # 3. 🆕 Smart Profit Taking System - ระบบปิดกำไรอัจฉริยะ
+                # 2. 🆕 Smart Profit Taking System - ระบบปิดกำไรอัจฉริยะ
                 if hasattr(self.portfolio_manager, 'smart_profit_taking'):
                     profit_decision = self.portfolio_manager.smart_profit_taking.should_execute_profit_taking(
                         positions, current_price, portfolio_state.account_balance
@@ -486,13 +474,13 @@ class TradingSystem:
                     else:
                         logger.debug(f"⏸️ Smart Profit Taking: {profit_decision.get('reason', 'N/A')}")
                 
-                # 4. Zone Analysis & Rebalancing (ไม่ถูกบล็อค)
+                # 3. Zone Analysis & Rebalancing (ไม่ถูกบล็อค)
                 zone_result = self.portfolio_manager.check_and_execute_zone_rebalance(current_price)
                 if zone_result['executed']:
                     logger.info(f"📊 Zone Analysis: Score {zone_result['zone_score']:.1f}/100 ({zone_result['zone_quality']})")
             
-            # 5. ตัดสินใจว่าควรปิด Position หรือไม่ (เฉพาะกรณีฉุกเฉิน)
-            # หมายเหตุ: Smart Profit Taking, Smart Recovery และ Zone Analysis จัดการการปิดไม้แล้ว
+            # 4. ตัดสินใจว่าควรปิด Position หรือไม่ (เฉพาะกรณีฉุกเฉิน)
+            # หมายเหตุ: Smart Profit Taking และ Zone Analysis จัดการการปิดไม้แล้ว
             # ระบบนี้เหลือไว้เฉพาะกรณีฉุกเฉิน (Stop Loss, Emergency)
             if not should_block_recovery:  # ไม่ปิดถ้า Advanced Recovery กำลังทำงาน
                 decision = self.portfolio_manager.should_exit_positions(
