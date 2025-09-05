@@ -19,7 +19,7 @@ from zone_rebalancer import ZoneRebalancer
 from advanced_breakout_recovery import AdvancedBreakoutRecovery
 from smart_gap_filler import SmartGapFiller
 from force_trading_mode import ForceTradingMode
-from lightning_portfolio_cleanup import LightningPortfolioCleanup
+from simple_position_manager import SimplePositionManager
 from signal_manager import SignalManager, RankedSignal
 from order_management import OrderManager, OrderResult, CloseResult
 
@@ -83,8 +83,8 @@ class PortfolioManager:
         self.gap_filler = SmartGapFiller(order_manager.mt5)
         self.force_trading = ForceTradingMode(order_manager.mt5)
         
-        # ⚡ Lightning Portfolio Cleanup System - ระบบปิดไม้แบบฟ้าผ่า
-        self.lightning_cleanup = LightningPortfolioCleanup(order_manager.mt5, order_manager)
+        # 🎯 Simple Position Manager - ระบบจัดการไม้แบบเรียบง่าย
+        self.position_manager = SimplePositionManager(order_manager.mt5, order_manager)
         
         # 🎯 Signal Manager - จัดการสัญญาณจากทุกระบบในจุดเดียว
         self.signal_manager = SignalManager(order_manager.mt5)

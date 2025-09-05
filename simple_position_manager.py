@@ -1,0 +1,352 @@
+# -*- coding: utf-8 -*-
+"""
+Simple Position Manager
+ระบบจัดการไม้แบบเรียบง่าย - วิเคราะห์ทุกไม้แล้วตัดสินใจปิด
+
+🎯 หลักการ:
+1. วิเคราะห์ทุกไม้ในพอร์ต
+2. จำลองการปิดทุกแบบ (2 ไม้, 3 ไม้, หลายไม้)
+3. ตัดสินใจ: ปิดแล้วพอร์ตดีขึ้นไหม? ลดไม้ได้ไหม?
+4. ปิดได้ทุกแบบ ยกเว้น ปิดไม้เดี่ยวที่เก็บแต่กำไร
+
+✅ เรียบง่าย ✅ เร็ว ✅ ยืดหยุ่น ✅ มีเหตุผล
+"""
+
+import logging
+from datetime import datetime
+from typing import List, Dict, Any, Optional, Tuple
+from itertools import combinations
+
+logger = logging.getLogger(__name__)
+
+class SimplePositionManager:
+    """ระบบจัดการไม้แบบเรียบง่าย"""
+    
+    def __init__(self, mt5_connection, order_manager):
+        self.mt5 = mt5_connection
+        self.order_manager = order_manager
+        
+        # 🎯 การตั้งค่าเรียบง่าย
+        self.max_acceptable_loss = 2.0  # ยอมรับขาดทุนสูงสุด $2 เพื่อลดไม้
+        self.min_positions_to_close = 2  # ปิดอย่างน้อย 2 ไม้ขึ้นไป
+        self.max_positions_per_round = 10  # ปิดสูงสุด 10 ไม้ต่อรอบ
+        
+        # 📊 สถิติ
+        self.total_closures = 0
+        self.total_positions_closed = 0
+        self.total_profit_realized = 0.0
+        
+    def should_close_positions(self, positions: List[Any], current_price: float) -> Dict[str, Any]:
+        """
+        🔍 ตรวจสอบว่าควรปิดไม้หรือไม่
+        
+        Args:
+            positions: รายการ positions ทั้งหมด
+            current_price: ราคาปัจจุบัน
+            
+        Returns:
+            Dict: ผลการตรวจสอบพร้อมรายการไม้ที่ควรปิด
+        """
+        try:
+            if len(positions) < 2:
+                return {
+                    'should_close': False,
+                    'reason': 'Need at least 2 positions to close',
+                    'positions_to_close': []
+                }
+            
+            # 🔍 วิเคราะห์ทุกไม้
+            analyzed_positions = self._analyze_all_positions(positions, current_price)
+            
+            # 🎯 หาการจับคู่ที่ดีที่สุด
+            best_combination = self._find_best_closing_combination(analyzed_positions)
+            
+            if best_combination:
+                return {
+                    'should_close': True,
+                    'reason': best_combination['reason'],
+                    'positions_to_close': best_combination['positions'],
+                    'expected_pnl': best_combination['total_pnl'],
+                    'positions_count': len(best_combination['positions']),
+                    'combination_type': best_combination['type']
+                }
+            else:
+                return {
+                    'should_close': False,
+                    'reason': 'No suitable closing combination found',
+                    'positions_to_close': []
+                }
+                
+        except Exception as e:
+            logger.error(f"Error checking position closure: {e}")
+            return {
+                'should_close': False,
+                'reason': f'Analysis error: {e}',
+                'positions_to_close': []
+            }
+    
+    def close_positions(self, positions_to_close: List[Any]) -> Dict[str, Any]:
+        """
+        🔥 ปิดไม้ตามรายการที่กำหนด
+        
+        Args:
+            positions_to_close: รายการไม้ที่จะปิด
+            
+        Returns:
+            Dict: ผลการปิดไม้
+        """
+        try:
+            if not positions_to_close:
+                return {
+                    'success': False,
+                    'message': 'No positions to close',
+                    'closed_count': 0,
+                    'total_profit': 0.0
+                }
+            
+            start_time = datetime.now()
+            successful_closes = 0
+            total_profit = 0.0
+            close_details = []
+            
+            # 🔥 ปิดไม้ทีละตัว
+            for position in positions_to_close:
+                try:
+                    close_result = self.order_manager.close_position(position.ticket)
+                    
+                    if close_result.success:
+                        successful_closes += 1
+                        profit = getattr(close_result, 'profit', 0.0)
+                        total_profit += profit
+                        close_details.append({
+                            'ticket': position.ticket,
+                            'profit': profit,
+                            'success': True
+                        })
+                        logger.info(f"✅ Closed #{position.ticket}: ${profit:.2f}")
+                    else:
+                        close_details.append({
+                            'ticket': position.ticket,
+                            'profit': 0.0,
+                            'success': False,
+                            'error': close_result.error_message
+                        })
+                        logger.warning(f"❌ Failed to close #{position.ticket}: {close_result.error_message}")
+                        
+                except Exception as e:
+                    logger.error(f"Error closing position #{position.ticket}: {e}")
+                    close_details.append({
+                        'ticket': position.ticket,
+                        'profit': 0.0,
+                        'success': False,
+                        'error': str(e)
+                    })
+            
+            # 📊 สรุปผลลัพธ์
+            execution_time = (datetime.now() - start_time).total_seconds()
+            
+            if successful_closes > 0:
+                self.total_closures += 1
+                self.total_positions_closed += successful_closes
+                self.total_profit_realized += total_profit
+                
+                return {
+                    'success': True,
+                    'message': f'Closed {successful_closes}/{len(positions_to_close)} positions successfully',
+                    'closed_count': successful_closes,
+                    'total_profit': total_profit,
+                    'execution_time': execution_time,
+                    'details': close_details
+                }
+            else:
+                return {
+                    'success': False,
+                    'message': 'No positions were successfully closed',
+                    'closed_count': 0,
+                    'total_profit': 0.0,
+                    'execution_time': execution_time,
+                    'details': close_details
+                }
+                
+        except Exception as e:
+            logger.error(f"Error executing position closure: {e}")
+            return {
+                'success': False,
+                'message': f'Execution error: {e}',
+                'closed_count': 0,
+                'total_profit': 0.0
+            }
+    
+    def _analyze_all_positions(self, positions: List[Any], current_price: float) -> List[Dict[str, Any]]:
+        """🔍 วิเคราะห์ทุกไม้ในพอร์ต"""
+        analyzed = []
+        
+        for pos in positions:
+            try:
+                # คำนวณ P&L ปัจจุบัน
+                if hasattr(pos, 'type') and hasattr(pos, 'price_open') and hasattr(pos, 'volume'):
+                    pos_type = pos.type.upper() if isinstance(pos.type, str) else ("BUY" if pos.type == 0 else "SELL")
+                    
+                    if pos_type == "BUY":
+                        pnl = (current_price - pos.price_open) * pos.volume * 100
+                    else:  # SELL
+                        pnl = (pos.price_open - current_price) * pos.volume * 100
+                    
+                    # คำนวณระยะห่างจากราคาปัจจุบัน
+                    distance_pips = abs(current_price - pos.price_open) * 100
+                    
+                    # คำนวณอายุของไม้ (ถ้ามีข้อมูล)
+                    age_minutes = 0
+                    if hasattr(pos, 'time'):
+                        try:
+                            pos_time = datetime.fromtimestamp(pos.time)
+                            age_minutes = (datetime.now() - pos_time).total_seconds() / 60
+                        except:
+                            age_minutes = 0
+                    
+                    analyzed.append({
+                        'position': pos,
+                        'ticket': pos.ticket,
+                        'type': pos_type,
+                        'volume': pos.volume,
+                        'price_open': pos.price_open,
+                        'current_pnl': pnl,
+                        'distance_pips': distance_pips,
+                        'age_minutes': age_minutes,
+                        'is_profit': pnl > 0,
+                        'is_loss': pnl < 0
+                    })
+                    
+            except Exception as e:
+                logger.warning(f"Error analyzing position {pos.ticket}: {e}")
+                continue
+        
+        return analyzed
+    
+    def _find_best_closing_combination(self, analyzed_positions: List[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
+        """🎯 หาการจับคู่ที่ดีที่สุดสำหรับการปิด"""
+        try:
+            best_combination = None
+            best_score = -999999
+            
+            # แยกไม้กำไรและไม้เสีย
+            profit_positions = [p for p in analyzed_positions if p['is_profit']]
+            loss_positions = [p for p in analyzed_positions if p['is_loss']]
+            
+            # 🎯 ลองทุกแบบการจับคู่ (2 ไม้ ถึง max_positions_per_round ไม้)
+            for size in range(self.min_positions_to_close, min(len(analyzed_positions) + 1, self.max_positions_per_round + 1)):
+                
+                # ลองทุกการจับคู่ที่เป็นไปได้
+                for combination in combinations(analyzed_positions, size):
+                    
+                    # คำนวณผลรวม
+                    total_pnl = sum(p['current_pnl'] for p in combination)
+                    profit_count = sum(1 for p in combination if p['is_profit'])
+                    loss_count = sum(1 for p in combination if p['is_loss'])
+                    
+                    # 🚫 กฎที่ห้าม: ไม่ปิดไม้เดี่ยวที่เก็บแต่กำไร
+                    if len(combination) == 1 and profit_count == 1:
+                        continue
+                    
+                    # 🚫 ไม่ปิดแต่ไม้กำไรอย่างเดียว (ต้องมีไม้เสียด้วย)
+                    if loss_count == 0 and profit_count > 1:
+                        continue
+                    
+                    # 🚫 ไม่ปิดถ้าขาดทุนเกินที่ยอมรับได้
+                    if total_pnl < -self.max_acceptable_loss:
+                        continue
+                    
+                    # 📊 คำนวณคะแนน
+                    score = self._calculate_combination_score(combination, total_pnl, profit_count, loss_count)
+                    
+                    if score > best_score:
+                        best_score = score
+                        best_combination = {
+                            'positions': [p['position'] for p in combination],
+                            'total_pnl': total_pnl,
+                            'profit_count': profit_count,
+                            'loss_count': loss_count,
+                            'score': score,
+                            'type': self._get_combination_type(profit_count, loss_count),
+                            'reason': self._get_combination_reason(total_pnl, profit_count, loss_count, len(combination))
+                        }
+            
+            return best_combination
+            
+        except Exception as e:
+            logger.error(f"Error finding best combination: {e}")
+            return None
+    
+    def _calculate_combination_score(self, combination: Tuple, total_pnl: float, profit_count: int, loss_count: int) -> float:
+        """📊 คำนวณคะแนนของการจับคู่"""
+        try:
+            score = 0.0
+            
+            # 1. คะแนนจากกำไร (สำคัญที่สุด)
+            if total_pnl > 0:
+                score += total_pnl * 100  # กำไร $1 = 100 คะแนน
+            else:
+                score += total_pnl * 50   # ขาดทุน $1 = -50 คะแนน
+            
+            # 2. คะแนนจากการลดจำนวนไม้
+            position_reduction_score = len(combination) * 10  # ลดไม้ 1 ตัว = 10 คะแนน
+            score += position_reduction_score
+            
+            # 3. คะแนนพิเศษสำหรับการผสมไม้กำไรกับไม้เสีย
+            if profit_count > 0 and loss_count > 0:
+                score += 50  # โบนัสสำหรับการจับคู่ที่สมดุล
+            
+            # 4. คะแนนจากอายุของไม้เสีย (ยิ่งเก่ายิ่งดี)
+            for p in combination:
+                if p['is_loss'] and p['age_minutes'] > 60:  # ไม้เสียเก่ากว่า 1 ชม
+                    score += min(p['age_minutes'] / 10, 20)  # สูงสุด 20 คะแนน
+            
+            # 5. คะแนนจากระยะห่างของไม้เสีย (ยิ่งไกลยิ่งควรปิด)
+            for p in combination:
+                if p['is_loss'] and p['distance_pips'] > 50:  # ไม้เสียห่าง > 50 pips
+                    score += min(p['distance_pips'] / 10, 30)  # สูงสุด 30 คะแนน
+            
+            return score
+            
+        except Exception as e:
+            logger.error(f"Error calculating combination score: {e}")
+            return 0.0
+    
+    def _get_combination_type(self, profit_count: int, loss_count: int) -> str:
+        """🏷️ ระบุประเภทของการจับคู่"""
+        if profit_count > 0 and loss_count > 0:
+            return "MIXED"  # ผสมกำไรกับขาดทุน
+        elif profit_count > 0:
+            return "PROFIT_ONLY"  # กำไรอย่างเดียว
+        else:
+            return "LOSS_ONLY"  # ขาดทุนอย่างเดียว
+    
+    def _get_combination_reason(self, total_pnl: float, profit_count: int, loss_count: int, total_count: int) -> str:
+        """📝 อธิบายเหตุผลการปิด"""
+        if total_pnl > 1.0:
+            return f"Good profit: ${total_pnl:.2f} from {total_count} positions"
+        elif total_pnl >= 0:
+            return f"Break-even closure: ${total_pnl:.2f}, reduce {total_count} positions"
+        else:
+            return f"Small loss acceptable: ${total_pnl:.2f} to reduce {total_count} positions ({loss_count} losing)"
+    
+    def get_statistics(self) -> Dict[str, Any]:
+        """📊 ดึงสถิติการทำงาน"""
+        return {
+            'total_closures': self.total_closures,
+            'total_positions_closed': self.total_positions_closed,
+            'total_profit_realized': self.total_profit_realized,
+            'avg_positions_per_closure': self.total_positions_closed / max(self.total_closures, 1),
+            'avg_profit_per_closure': self.total_profit_realized / max(self.total_closures, 1)
+        }
+    
+    def configure_settings(self, **settings):
+        """⚙️ ปรับแต่งการตั้งค่า"""
+        if 'max_acceptable_loss' in settings:
+            self.max_acceptable_loss = settings['max_acceptable_loss']
+        if 'min_positions_to_close' in settings:
+            self.min_positions_to_close = settings['min_positions_to_close']
+        if 'max_positions_per_round' in settings:
+            self.max_positions_per_round = settings['max_positions_per_round']
+        
+        logger.info("⚙️ Simple Position Manager settings updated")
