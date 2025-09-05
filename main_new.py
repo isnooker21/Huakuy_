@@ -42,8 +42,8 @@ logging.getLogger('price_zone_analysis').setLevel(logging.WARNING)
 logging.getLogger('zone_rebalancer').setLevel(logging.WARNING)
 logging.getLogger('market_analysis').setLevel(logging.WARNING)
 
-# เปิดเฉพาะ Lightning Portfolio Cleanup และ Main Trading
-logging.getLogger('lightning_portfolio_cleanup').setLevel(logging.INFO)
+# เปิดเฉพาะ Simple Position Manager และ Main Trading
+logging.getLogger('simple_position_manager').setLevel(logging.INFO)
 logging.getLogger('__main__').setLevel(logging.INFO)
 
 logger = logging.getLogger(__name__)
@@ -411,24 +411,29 @@ class TradingSystem:
                 
                 # 2. 🗑️ Smart Recovery REMOVED - functionality moved to Smart Profit Taking System
                 
-                # 2. ⚡ Lightning Portfolio Cleanup System - ระบบปิดไม้แบบฟ้าผ่า
-                if hasattr(self.portfolio_manager, 'lightning_cleanup'):
-                    cleanup_decision = self.portfolio_manager.lightning_cleanup.should_execute_cleanup(
-                        positions, current_price, portfolio_state.account_balance
+                # 2. 🎯 Simple Position Manager - ระบบจัดการไม้แบบเรียบง่าย
+                if hasattr(self.portfolio_manager, 'position_manager'):
+                    close_decision = self.portfolio_manager.position_manager.should_close_positions(
+                        positions, current_price
                     )
                     
-                    if cleanup_decision.get('should_execute', False):
-                        best_group = cleanup_decision.get('best_group')
-                        if best_group:
-                            # ⚡ LIGHTNING CLEANUP
-                            logger.info(f"⚡ CLEANUP: {best_group.total_positions} positions, ${best_group.total_pnl:.2f} profit ({best_group.priority.value})")
+                    if close_decision.get('should_close', False):
+                        positions_to_close = close_decision.get('positions_to_close', [])
+                        if positions_to_close:
+                            # 🎯 POSITION CLOSING
+                            count = close_decision.get('positions_count', 0)
+                            expected_pnl = close_decision.get('expected_pnl', 0.0)
+                            reason = close_decision.get('reason', '')
+                            logger.info(f"🎯 CLOSING: {count} positions, ${expected_pnl:.2f} expected - {reason}")
                             
-                            cleanup_result = self.portfolio_manager.lightning_cleanup.execute_lightning_cleanup(best_group)
-                            if cleanup_result.get('success', False):
-                                logger.info(f"✅ CLEANUP SUCCESS: {cleanup_result.get('message', 'Closed successfully')}")
+                            close_result = self.portfolio_manager.position_manager.close_positions(positions_to_close)
+                            if close_result.get('success', False):
+                                closed_count = close_result.get('closed_count', 0)
+                                total_profit = close_result.get('total_profit', 0.0)
+                                logger.info(f"✅ CLOSE SUCCESS: {closed_count} positions closed, ${total_profit:.2f} profit")
                             else:
-                                logger.warning(f"❌ CLEANUP FAILED: {cleanup_result.get('message', 'Unknown error')}")
-                    # Cleanup not ready - no logging to reduce noise
+                                logger.warning(f"❌ CLOSE FAILED: {close_result.get('message', 'Unknown error')}")
+                    # No suitable positions to close - no logging to reduce noise
                 
                 # 3. Zone Analysis & Rebalancing (silent)
                 zone_result = self.portfolio_manager.check_and_execute_zone_rebalance(current_price)
