@@ -302,8 +302,14 @@ class LotSizeCalculator:
             balance = account_balance or self.account_balance
             risk_amount = balance * (final_risk_pct / 100)
             
-            # สมมติ stop loss 50 pips สำหรับ XAUUSD
-            stop_loss_pips = 50.0
+            # ปรับ stop loss ให้เหมาะสมกับ portfolio size เพื่อให้ได้ lot หลากหลาย
+            if positions_count <= 5:
+                stop_loss_pips = 30.0  # Portfolio เล็ก ใช้ SL น้อย = lot ใหญ่
+            elif positions_count <= 15:
+                stop_loss_pips = 40.0  # Portfolio ปานกลาง
+            else:
+                stop_loss_pips = 50.0  # Portfolio ใหญ่
+                
             pip_value = 1000.0  # XAUUSD pip value
             
             calculated_lot = risk_amount / (stop_loss_pips * pip_value)

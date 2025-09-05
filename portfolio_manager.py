@@ -265,10 +265,10 @@ class PortfolioManager:
                 logger.info(f"   Zone Multiplier: {zone_multiplier:.2f}x ({zone_recommendation.get('reason', 'N/A')})")
             logger.info(f"   Final Lot Size: {lot_size:.3f}")
             
-            # ปรับขนาด lot สำหรับสัญลักษณ์ทองคำ
+            # ปรับขนาด lot สำหรับสัญลักษณ์ทองคำ (ลดการลดขนาด)
             if 'XAU' in signal.symbol.upper() or 'GOLD' in signal.symbol.upper():
-                # ทองคำมีความผันผวนสูง ลดขนาด lot
-                lot_size = lot_size * 0.5
+                # ทองคำมีความผันผวนสูง แต่ลดน้อยลงเพื่อให้ได้ lot หลากหลาย
+                lot_size = lot_size * 0.8  # เปลี่ยนจาก 0.5 เป็น 0.8
             
             # ปรับขนาด Lot ตามสถานะพอร์ต
             adjusted_lot = self._adjust_lot_size_by_portfolio_state(lot_size, current_state)
@@ -533,17 +533,17 @@ class PortfolioManager:
         """
         adjusted_lot = base_lot
         
-        # ลดขนาดเมื่อมี Position มากเกินไป
-        if current_state.total_positions >= 10:
-            adjusted_lot *= 0.8
+        # ลดขนาดเมื่อมี Position มากเกินไป (ลดน้อยลง)
+        if current_state.total_positions >= 15:  # เพิ่มเกณฑ์จาก 10 เป็น 15
+            adjusted_lot *= 0.9  # ลดน้อยลง จาก 0.8 เป็น 0.9
             
-        # ลดขนาดเมื่อความเสี่ยงสูง
-        if current_state.risk_percentage >= 15.0:
-            adjusted_lot *= 0.7
+        # ลดขนาดเมื่อความเสี่ยงสูงมาก (ปรับเกณฑ์)
+        if current_state.risk_percentage >= 25.0:  # เพิ่มเกณฑ์จาก 15 เป็น 25
+            adjusted_lot *= 0.8  # ลดน้อยลง จาก 0.7 เป็น 0.8
             
-        # ลดขนาดเมื่อใช้เงินทุนมาก
-        if current_state.exposure_percentage >= 60.0:
-            adjusted_lot *= 0.9
+        # ลดขนาดเมื่อใช้เงินทุนมากมาย (ปรับเกณฑ์)
+        if current_state.exposure_percentage >= 80.0:  # เพิ่มเกณฑ์จาก 60 เป็น 80
+            adjusted_lot *= 0.95  # ลดน้อยลง จาก 0.9 เป็น 0.95
             
         # ปรับให้อยู่ในช่วงที่เหมาะสม
         adjusted_lot = max(0.01, min(adjusted_lot, 2.0))
