@@ -493,7 +493,9 @@ class TradingSystem:
                     balance_analysis = None
                     if hasattr(self.portfolio_manager.position_manager, '_analyze_portfolio_balance'):
                         try:
-                            balance_analysis = self.portfolio_manager.position_manager._analyze_portfolio_balance(positions, current_price)
+                            # แปลง positions เป็น analyzed_positions ก่อน
+                            analyzed_positions = self.portfolio_manager.position_manager._analyze_all_positions(positions, current_price)
+                            balance_analysis = self.portfolio_manager.position_manager._analyze_portfolio_balance(analyzed_positions, current_price)
                         except:
                             balance_analysis = None
                     
