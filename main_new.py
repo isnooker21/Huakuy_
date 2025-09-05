@@ -81,19 +81,13 @@ class TradingSystem:
                 logger.error("ไม่สามารถเชื่อมต่อ MT5 ได้")
                 return False
                 
-            # ค้นหาสัญลักษณ์ในโบรกเกอร์
-            self.actual_symbol = self.mt5_connection.find_symbol(self.base_symbol)
+            # ตรวจหาสัญลักษณ์ทองคำโดยอัตโนมัติ
+            logger.info("🔍 กำลังตรวจหาสัญลักษณ์ทองคำที่เหมาะสม...")
+            self.actual_symbol = self.mt5_connection.auto_detect_gold_symbol()
+            
             if not self.actual_symbol:
-                logger.error(f"ไม่พบสัญลักษณ์ {self.base_symbol} ในโบรกเกอร์")
-                
-                # แสดงสัญลักษณ์ทองคำที่มี
-                gold_symbols = self.mt5_connection.get_available_gold_symbols()
-                if gold_symbols:
-                    logger.info(f"สัญลักษณ์ทองคำที่มี: {', '.join(gold_symbols)}")
-                    self.actual_symbol = gold_symbols[0]  # ใช้ตัวแรกที่พบ
-                    logger.info(f"ใช้สัญลักษณ์: {self.actual_symbol}")
-                else:
-                    return False
+                logger.error("❌ ไม่พบสัญลักษณ์ทองคำในโบรกเกอร์นี้")
+                return False
                     
             # ตรวจสอบข้อมูลสัญลักษณ์
             symbol_info = self.mt5_connection.get_symbol_info(self.actual_symbol)
