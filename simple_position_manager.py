@@ -136,14 +136,22 @@ class SimplePositionManager:
                         total_profit = 0.0
                         logger.warning("⚠️ No profit information in close_result")
                     
-                    for position in positions_to_close:
+                    # 📊 แสดงรายละเอียดแต่ละไม้ที่ปิด
+                    logger.info(f"✅ GROUP CLOSE SUCCESS:")
+                    avg_profit_per_position = total_profit / len(positions_to_close) if len(positions_to_close) > 0 else 0
+                    
+                    for i, position in enumerate(positions_to_close):
+                        pos_type = position.type.upper() if isinstance(position.type, str) else ("BUY" if position.type == 0 else "SELL")
+                        symbol = "├─" if i < len(positions_to_close) - 1 else "└─"
+                        logger.info(f"  {symbol} #{position.ticket} {pos_type} {position.volume:.2f}lot @ {position.price_open:.2f} → ${avg_profit_per_position:.2f}")
+                        
                         close_details.append({
                             'ticket': position.ticket,
-                            'profit': total_profit / len(positions_to_close),  # แบ่งกำไรเฉลี่ย
+                            'profit': avg_profit_per_position,
                             'success': True
                         })
                     
-                    logger.info(f"✅ Group close success: {successful_closes} positions, ${total_profit:.2f} actual profit")
+                    logger.info(f"📊 TOTAL RESULT: {successful_closes} positions closed, ${total_profit:.2f} total profit")
                 else:
                     # ถ้า group close ไม่สำเร็จ ลองปิดทีละตัว
                     logger.warning("Group close failed, trying individual closes...")
@@ -167,7 +175,10 @@ class SimplePositionManager:
                                     'profit': profit,
                                     'success': True
                                 })
-                                logger.info(f"✅ Individual close #{position.ticket}: ${profit:.2f} actual")
+                                
+                                # แสดงรายละเอียดแต่ละไม้ที่ปิดสำเร็จ
+                                pos_type = position.type.upper() if isinstance(position.type, str) else ("BUY" if position.type == 0 else "SELL")
+                                logger.info(f"✅ #{position.ticket} {pos_type} {position.volume:.2f}lot @ {position.price_open:.2f} → ${profit:.2f} profit")
                             else:
                                 close_details.append({
                                     'ticket': position.ticket,
@@ -183,6 +194,10 @@ class SimplePositionManager:
                                 'success': False,
                                 'error': str(e)
                             })
+                    
+                    # สรุปผลรวมสำหรับ individual closes
+                    if successful_closes > 0:
+                        logger.info(f"📊 INDIVIDUAL CLOSE SUMMARY: {successful_closes} positions closed, ${total_profit:.2f} total profit")
                             
             except Exception as e:
                 logger.error(f"Error in group close: {e}")

@@ -887,6 +887,54 @@ class MT5Connection:
         logger.warning(f"ไม่สามารถตรวจสอบ filling type สำหรับ {symbol} ใช้ FOK เป็นค่าเริ่มต้น")
         return mt5.ORDER_FILLING_FOK
     
+    def close_positions_group(self, tickets: List[int]) -> Dict:
+        """
+        ปิด Position หลายตัวพร้อมกัน (ไม่เช็ค spread - ให้ Simple Position Manager จัดการ)
+        """
+        if not tickets:
+            return {
+                'success': False,
+                'closed_tickets': [],
+                'failed_tickets': [],
+                'rejected_tickets': [],
+                'total_profit': 0.0,
+                'message': 'No tickets provided'
+            }
+        
+        closed_tickets = []
+        failed_tickets = []
+        total_profit = 0.0
+        
+        for ticket in tickets:
+            try:
+                # ปิด Position โดยตรงไม่เช็คอะไร
+                result = self.close_position_direct(ticket)
+                
+                if result and result.get('retcode') == 10009:
+                    closed_tickets.append(ticket)
+                    # เก็บ profit จริงจาก result
+                    if 'profit' in result:
+                        total_profit += result['profit']
+                    logger.info(f"✅ ปิด Position {ticket} สำเร็จ")
+                else:
+                    failed_tickets.append(ticket)
+                    error_msg = result.get('comment', 'Unknown error') if result else 'No result'
+                    logger.error(f"❌ ปิด Position {ticket} ล้มเหลว: {error_msg}")
+                    
+            except Exception as e:
+                failed_tickets.append(ticket)
+                logger.error(f"❌ Error closing position {ticket}: {e}")
+        
+        success = len(closed_tickets) > 0
+        return {
+            'success': success,
+            'closed_tickets': closed_tickets,
+            'failed_tickets': failed_tickets,
+            'rejected_tickets': [],  # ไม่มี rejection เพราะไม่เช็คอะไร
+            'total_profit': total_profit,
+            'message': f'Closed {len(closed_tickets)}/{len(tickets)} positions'
+        }
+    
     def close_positions_group_with_spread_check(self, tickets: List[int]) -> Dict:
         """
         ปิด Position หลายตัวพร้อมกัน โดยเช็ค spread ก่อน
