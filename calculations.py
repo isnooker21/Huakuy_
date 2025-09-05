@@ -317,7 +317,21 @@ class LotSizeCalculator:
                 base_multiplier = 0.0004  # ~0.01-0.02 lot
                 
             # คำนวณ lot จาก risk amount โดยตรง
-            calculated_lot = risk_amount * base_multiplier
+            base_lot = risk_amount * base_multiplier
+            
+            # 🎯 ปรับตามความผันผวนตลาด (Market Volatility Adjustment)
+            if market_volatility > 20.0:
+                volatility_adj = 1.3  # ตลาดผันผวนมาก → เพิ่ม lot
+            elif market_volatility > 15.0:
+                volatility_adj = 1.2  # ตลาดผันผวนปานกลางสูง
+            elif market_volatility > 10.0:
+                volatility_adj = 1.0  # ตลาดปกติ
+            elif market_volatility > 5.0:
+                volatility_adj = 0.9  # ตลาดเงียบ
+            else:
+                volatility_adj = 0.8  # ตลาดเงียบมาก
+                
+            calculated_lot = base_lot * volatility_adj
             
             # ปรับให้เป็น 0.01 step และจำกัดขอบเขต
             portfolio_lot = max(0.01, min(0.10, calculated_lot))
@@ -325,13 +339,14 @@ class LotSizeCalculator:
             
             logger.info(f"📊 Portfolio Risk Lot Calculation (No SL):")
             logger.info(f"   Positions Count: {positions_count}")
-            logger.info(f"   Market Volatility: {market_volatility:.1f}%")
+            logger.info(f"   Market Volatility: {market_volatility:.1f}% → {volatility_adj:.1f}x")
             logger.info(f"   Base Risk: {base_risk_pct:.1f}%")
             logger.info(f"   Volatility Multiplier: {volatility_multiplier:.1f}x")
             logger.info(f"   Final Risk: {final_risk_pct:.1f}%")
             logger.info(f"   Risk Amount: ${risk_amount:.2f}")
             logger.info(f"   Base Multiplier: {base_multiplier:.6f}")
-            logger.info(f"   Calculated Lot: {calculated_lot:.4f}")
+            logger.info(f"   Base Lot: {base_lot:.4f}")
+            logger.info(f"   After Volatility: {calculated_lot:.4f}")
             logger.info(f"   Final Portfolio Lot: {portfolio_lot:.2f}")
             
             return portfolio_lot
