@@ -68,12 +68,13 @@ class PortfolioManager:
         self.order_manager = order_manager
         self.initial_balance = initial_balance
         self.current_balance = initial_balance
+        self.current_symbol = None  # จะถูกตั้งค่าจาก main system
         self.trading_conditions = TradingConditions()
         # Smart Recovery System removed - functionality moved to Smart Profit Taking System
         
-        # เพิ่ม Zone Analysis System
-        self.zone_analyzer = PriceZoneAnalyzer("XAUUSD", num_zones=10)
-        self.zone_rebalancer = ZoneRebalancer(self.zone_analyzer)
+        # เพิ่ม Zone Analysis System (จะถูกตั้งค่าภายหลัง)
+        self.zone_analyzer = None
+        self.zone_rebalancer = None
         
         # เพิ่ม Advanced Breakout Recovery System
         self.advanced_recovery = AdvancedBreakoutRecovery(order_manager.mt5)
@@ -683,6 +684,13 @@ class PortfolioManager:
     def _get_zone_smart_entry(self, signal: Signal, current_price: float) -> Optional[Dict[str, Any]]:
         """ดึงคำแนะนำการเข้าจาก Zone Analysis"""
         try:
+            # Initialize zone analyzer if not done
+            if self.zone_analyzer is None:
+                from price_zone_analysis import PriceZoneAnalyzer
+                from zone_rebalancer import ZoneRebalancer
+                self.zone_analyzer = PriceZoneAnalyzer(signal.symbol, num_zones=10)
+                self.zone_rebalancer = ZoneRebalancer(self.zone_analyzer)
+            
             # อัพเดทราคาปัจจุบัน
             self.zone_analyzer.update_price_history(current_price)
             
@@ -724,6 +732,15 @@ class PortfolioManager:
     def check_and_execute_zone_rebalance(self, current_price: float) -> Dict[str, Any]:
         """ตรวจสอบและดำเนินการปรับสมดุลโซน"""
         try:
+            # Initialize zone analyzer if not done
+            if self.zone_analyzer is None:
+                from price_zone_analysis import PriceZoneAnalyzer
+                from zone_rebalancer import ZoneRebalancer
+                # Use a default symbol if we don't have one
+                symbol = getattr(self, 'current_symbol', 'XAUUSD')
+                self.zone_analyzer = PriceZoneAnalyzer(symbol, num_zones=10)
+                self.zone_rebalancer = ZoneRebalancer(self.zone_analyzer)
+            
             # อัพเดทราคา
             self.zone_analyzer.update_price_history(current_price)
             

@@ -36,6 +36,7 @@ class CandleData:
     close: float
     volume: float
     timestamp: datetime
+    symbol: str = "UNKNOWN"  # เพิ่ม symbol field
     
     @property
     def is_green(self) -> bool:
@@ -140,11 +141,11 @@ class TradingConditions:
         
         # เพิ่ม Market Analysis
         self.session_analyzer = MarketSessionAnalyzer()
-        self.mtf_analyzer = MultiTimeframeAnalyzer("XAUUSD")
+        self.mtf_analyzer = None  # จะถูกตั้งค่าเมื่อใช้งาน
         
     def check_entry_conditions(self, candle: CandleData, positions: List[Position], 
                              account_balance: float, volume_history: List[float] = None, 
-                             symbol: str = "XAUUSD") -> Dict[str, Any]:
+                             symbol: str = None) -> Dict[str, Any]:
         """
         ตรวจสอบเงื่อนไขการเข้า Order
         
@@ -183,7 +184,13 @@ class TradingConditions:
         
         # 3. Multi-Timeframe Confirmation
         direction = "BUY" if candle.close > candle.open else "SELL"
-        mtf_result = self.mtf_analyzer.get_multi_timeframe_confirmation(direction)
+        
+        # Initialize mtf_analyzer with actual symbol if not done
+        if self.mtf_analyzer is None and symbol:
+            from market_analysis import MultiTimeframeAnalyzer
+            self.mtf_analyzer = MultiTimeframeAnalyzer(symbol)
+        
+        mtf_result = self.mtf_analyzer.get_multi_timeframe_confirmation(direction) if self.mtf_analyzer else {'decision': 'WEAK'}
         mtf_decision = mtf_result['decision']
         
         # 4. ตรวจสอบแรงตลาดแบบยืดหยุ่น
