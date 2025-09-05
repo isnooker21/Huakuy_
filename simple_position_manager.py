@@ -364,6 +364,112 @@ class SimplePositionManager:
         except Exception as e:
             logger.error(f"Error in distance profit combination: {e}")
             return None
+
+    def _find_adaptive_closing_combination(self, analyzed_positions: List[Dict], current_price: float, health_analysis: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+        """
+        🚀 หาการจับคู่ปิดแบบ Adaptive ตาม Management Mode
+        
+        Args:
+            analyzed_positions: รายการ positions ที่วิเคราะห์แล้ว
+            current_price: ราคาปัจจุบัน
+            health_analysis: ผลวิเคราะห์สุขภาพ Portfolio
+            
+        Returns:
+            Optional[Dict]: การจับคู่ที่ดีที่สุด หรือ None
+        """
+        mode = health_analysis['mode']
+        logger.info(f"🎯 Using {mode} Mode for combination selection")
+        
+        if mode == 'Normal':
+            return self._find_normal_mode_combination(analyzed_positions, current_price)
+        elif mode == 'Balance':
+            return self._find_balance_mode_combination(analyzed_positions, current_price, health_analysis)
+        else:  # Survival
+            return self._find_survival_mode_combination(analyzed_positions, current_price)
+    
+    def _find_normal_mode_combination(self, analyzed_positions: List[Dict], current_price: float) -> Optional[Dict[str, Any]]:
+        """
+        🟢 Normal Mode: เน้นเก็บกำไรสูงสุด
+        Portfolio สุขภาพดี (Wrong < 40%)
+        """
+        logger.info("🟢 Normal Mode: เน้นเก็บกำไรสูงสุด")
+        return self._find_max_profit_combination(analyzed_positions, current_price)
+    
+    def _find_balance_mode_combination(self, analyzed_positions: List[Dict], current_price: float, health_analysis: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+        """
+        🟡 Balance Mode: เน้นแก้สมดุล Portfolio
+        Portfolio เริ่มเสียสมดุล (Wrong 40-70%)
+        """
+        logger.info("🟡 Balance Mode: เน้นแก้สมดุล Portfolio")
+        return self._find_balance_priority_combination(analyzed_positions, current_price)
+    
+    def _find_survival_mode_combination(self, analyzed_positions: List[Dict], current_price: float) -> Optional[Dict[str, Any]]:
+        """
+        🔴 Survival Mode: เน้นความอยู่รอด
+        Portfolio วิกฤต (Wrong > 70%)
+        """
+        logger.info("🔴 Survival Mode: เน้นความอยู่รอด - ปิดทุก Combination ที่มีกำไร")
+        return self._find_any_profitable_combination(analyzed_positions, current_price)
+    
+    def _find_max_profit_combination(self, analyzed_positions: List[Dict], current_price: float) -> Optional[Dict[str, Any]]:
+        """🟢 หาการจับคู่ที่ให้กำไรสูงสุด"""
+        try:
+            max_combinations = min(1000, len(analyzed_positions) * 20)
+            best_combination = None
+            best_score = 0
+            
+            for size in range(2, min(6, len(analyzed_positions) + 1)):
+                combinations_count = 0
+                for combo in combinations(analyzed_positions, size):
+                    if combinations_count >= max_combinations:
+                        break
+                        
+                    total_pnl = sum(pos['current_pnl'] for pos in combo)
+                    
+                    if total_pnl > 0.50:  # ต้องมีกำไรอย่างน้อย $0.50
+                        # Score = กำไรสูง + ลดไม้เยอะ
+                        score = total_pnl * 10 + len(combo) * 2
+                        
+                        if score > best_score:
+                            best_score = score
+                            best_combination = {
+                                'positions': [pos['position'] for pos in combo],
+                                'total_pnl': total_pnl,
+                                'size': len(combo),
+                                'reason': f'Max profit: ${total_pnl:.2f}',
+                                'type': 'normal_mode'
+                            }
+                    
+                    combinations_count += 1
+                    
+            return best_combination
+            
+        except Exception as e:
+            logger.error(f"Error in max profit combination: {e}")
+            return None
+    
+    def _find_any_profitable_combination(self, analyzed_positions: List[Dict], current_price: float) -> Optional[Dict[str, Any]]:
+        """🔴 หาการจับคู่ใดก็ได้ที่มีกำไร (Survival Mode)"""
+        try:
+            # ใน Survival Mode ปิดทุก Combination ที่มีกำไร แม้น้อย
+            for size in range(2, min(4, len(analyzed_positions) + 1)):  # จำกัดขนาดเพื่อความเร็ว
+                for combo in combinations(analyzed_positions, size):
+                    total_pnl = sum(pos['current_pnl'] for pos in combo)
+                    
+                    if total_pnl > 0.10:  # ลดเกณฑ์เหลือ $0.10 เพื่อความอยู่รอด
+                        return {
+                            'positions': [pos['position'] for pos in combo],
+                            'total_pnl': total_pnl,
+                            'size': len(combo),
+                            'reason': f'Survival mode: ${total_pnl:.2f}',
+                            'type': 'survival_mode'
+                        }
+                        
+            return None
+            
+        except Exception as e:
+            logger.error(f"Error in survival combination: {e}")
+            return None
     
     def close_positions(self, positions_to_close: List[Any]) -> Dict[str, Any]:
         """

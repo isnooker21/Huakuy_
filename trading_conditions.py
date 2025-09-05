@@ -927,3 +927,57 @@ class TradingConditions:
                 
         for key in keys_to_remove:
             del self.orders_per_candle[key]
+    
+    def _check_adaptive_entry_control(self, positions: List[Position], current_price: float, direction: str) -> Dict[str, Any]:
+        """
+        🚀 Adaptive Entry Control - รองรับ Unlimited Entry + Smart Management
+        
+        Args:
+            positions: รายการ positions
+            current_price: ราคาปัจจุบัน
+            direction: ทิศทางที่จะเข้า
+            
+        Returns:
+            Dict: ผลการตรวจสอบ
+        """
+        result = {
+            'should_block': False,
+            'force_trade': False,
+            'reason': '',
+            'forced_direction': direction
+        }
+        
+        if not positions:
+            return result
+            
+        # 🏥 วิเคราะห์สุขภาพ Portfolio
+        wrong_buys = sum(1 for pos in positions if pos.type == 0 and pos.price_open > current_price)
+        wrong_sells = sum(1 for pos in positions if pos.type == 1 and pos.price_open < current_price)
+        total_positions = len(positions)
+        wrong_percentage = ((wrong_buys + wrong_sells) / total_positions) * 100 if total_positions > 0 else 0
+        
+        # 🎯 Adaptive Control Logic
+        if wrong_percentage > 80.0:
+            # 🔴 Critical Mode: บล็อคการเข้าใหม่ชั่วคราว (ยกเว้น Counter-Trade)
+            if direction == "BUY" and current_price <= min([pos.price_open for pos in positions if pos.type == 0], default=current_price):
+                # อนุญาต BUY ที่ราคาต่ำกว่า BUY ที่มีอยู่ (Buy Lower)
+                result['reason'] = f'Critical Mode: Allow BUY lower (Wrong: {wrong_percentage:.1f}%)'
+                return result
+            elif direction == "SELL" and current_price >= max([pos.price_open for pos in positions if pos.type == 1], default=current_price):
+                # อนุญาต SELL ที่ราคาสูงกว่า SELL ที่มีอยู่ (Sell Higher)
+                result['reason'] = f'Critical Mode: Allow SELL higher (Wrong: {wrong_percentage:.1f}%)'
+                return result
+            else:
+                result['should_block'] = True
+                result['reason'] = f'Critical Mode: Block wrong direction (Wrong: {wrong_percentage:.1f}%)'
+                return result
+        
+        elif total_positions > 50:
+            # 🟡 High Volume Mode: ระมัดระวังแต่ไม่บล็อค
+            logger.info(f"🟡 High Volume Mode: {total_positions} positions, Wrong: {wrong_percentage:.1f}%")
+            result['reason'] = f'High Volume Mode: Proceed with caution'
+            return result
+        
+        # 🟢 Normal Mode: อนุญาตทุกการเข้า (Unlimited Entry)
+        result['reason'] = f'Normal Mode: Unlimited entry allowed (Wrong: {wrong_percentage:.1f}%)'
+        return result
