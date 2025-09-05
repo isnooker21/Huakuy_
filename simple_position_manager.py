@@ -70,15 +70,25 @@ class SimplePositionManager:
             best_combination = self._find_best_closing_combination(analyzed_positions)
             
             if best_combination:
-                logger.info(f"🎯 CLOSE READY: {len(best_combination['positions'])} positions, ${best_combination['total_pnl']:.2f}")
-                return {
-                    'should_close': True,
-                    'reason': best_combination['reason'],
-                    'positions_to_close': best_combination['positions'],
-                    'expected_pnl': best_combination['total_pnl'],
-                    'positions_count': len(best_combination['positions']),
-                    'combination_type': best_combination['type']
-                }
+                # 🛡️ ตรวจสอบอีกครั้งก่อนปิด - ต้องมีกำไรจริงๆ
+                expected_pnl = best_combination['total_pnl']
+                if expected_pnl > 0:
+                    logger.info(f"🎯 CLOSE READY: {len(best_combination['positions'])} positions, ${expected_pnl:.2f}")
+                    return {
+                        'should_close': True,
+                        'reason': best_combination['reason'],
+                        'positions_to_close': best_combination['positions'],
+                        'expected_pnl': expected_pnl,
+                        'positions_count': len(best_combination['positions']),
+                        'combination_type': best_combination['type']
+                    }
+                else:
+                    logger.debug(f"🚫 Best combination has no profit: ${expected_pnl:.2f}, skipping")
+                    return {
+                        'should_close': False,
+                        'reason': f'Best combination not profitable: ${expected_pnl:.2f}',
+                        'positions_to_close': []
+                    }
             else:
                 # ไม่ log เพื่อลด noise
                 return {
@@ -127,14 +137,20 @@ class SimplePositionManager:
                 
                 if close_result.success:
                     successful_closes = len(positions_to_close)
-                    # ดึง profit จาก close_result อย่างถูกต้อง
-                    if hasattr(close_result, 'profit'):
-                        total_profit = close_result.profit
-                    elif hasattr(close_result, 'total_profit'):
-                        total_profit = close_result.total_profit
-                    else:
-                        total_profit = 0.0
-                        logger.warning("⚠️ No profit information in close_result")
+                    # ดึง profit จาก close_result
+                    total_profit = getattr(close_result, 'total_profit', 0.0)
+                    
+                    # ถ้าไม่มี profit หรือเป็น 0 ให้คำนวณจาก expected
+                    if total_profit == 0.0:
+                        # คำนวณ profit ที่คาดหวังจากการวิเคราะห์ (ใช้ current price ล่าสุด)
+                        current_price = self._get_current_price()
+                        expected_profit = 0.0
+                        for pos in positions_to_close:
+                            pos_analysis = self._analyze_single_position(pos, current_price)
+                            expected_profit += pos_analysis.get('current_pnl', 0.0)
+                        
+                        total_profit = expected_profit
+                        logger.info(f"📊 Using calculated profit: ${total_profit:.2f} (no actual profit data)")
                     
                     # 📊 แสดงรายละเอียดแต่ละไม้ที่ปิด
                     logger.info(f"✅ GROUP CLOSE SUCCESS:")
@@ -349,8 +365,8 @@ class SimplePositionManager:
                     if loss_count == 0 and profit_count > 1:
                         continue
                     
-                    # 🚫 ไม่ปิดถ้าติดลบเลย (เข้มงวด)
-                    if total_pnl < 0:
+                    # 🚫 ไม่ปิดถ้าติดลบเลย (เข้มงวดมาก)
+                    if total_pnl <= 0:  # เปลี่ยนจาก < 0 เป็น <= 0 (ไม่ยอมแม้แต่ $0)
                         continue
                     
                     # 📊 คำนวณคะแนน
@@ -470,3 +486,42 @@ class SimplePositionManager:
         except Exception as e:
             logger.warning(f"Error getting spread: {e}, using default 45 points")
             return 45.0
+    
+    def _get_current_price(self) -> float:
+        """ดึงราคาปัจจุบันจาก MT5"""
+        try:
+            tick = self.mt5.symbol_info_tick("XAUUSD.v")
+            if tick:
+                return (tick.bid + tick.ask) / 2
+            return 3550.0  # default fallback
+        except Exception as e:
+            logger.warning(f"Error getting current price: {e}, using default 3550.0")
+            return 3550.0
+    
+    def _analyze_single_position(self, pos: Any, current_price: float) -> Dict[str, Any]:
+        """วิเคราะห์ position เดี่ยว"""
+        try:
+            pos_type = pos.type.upper() if isinstance(pos.type, str) else ("BUY" if pos.type == 0 else "SELL")
+            spread = self._get_current_spread()
+            
+            # คำนวณ P&L รวมสเปรดและ commission
+            if pos_type == "BUY":
+                close_price = current_price - (spread * 0.01)
+                pnl_before_costs = (close_price - pos.price_open) * pos.volume * 100
+            else:  # SELL
+                close_price = current_price + (spread * 0.01)
+                pnl_before_costs = (pos.price_open - close_price) * pos.volume * 100
+            
+            # หักค่าธรรมเนียม
+            commission_cost = pos.volume * 0.5
+            pnl = pnl_before_costs - commission_cost
+            
+            return {
+                'ticket': pos.ticket,
+                'current_pnl': pnl,
+                'is_profit': pnl > 0,
+                'is_loss': pnl < 0
+            }
+        except Exception as e:
+            logger.warning(f"Error analyzing position {pos.ticket}: {e}")
+            return {'ticket': pos.ticket, 'current_pnl': 0.0, 'is_profit': False, 'is_loss': False}
