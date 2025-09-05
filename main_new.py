@@ -18,9 +18,8 @@ from order_management import OrderManager
 from portfolio_manager import PortfolioManager
 from gui import TradingGUI
 
-# 🚀 Universal Recovery System
-from universal_recovery_manager import UniversalRecoveryManager
-from recovery_order_manager import RecoveryOrderManager
+# 🎯 Zone-Based Position Management System
+from zone_position_manager import ZonePositionManager, create_zone_position_manager
 
 # Configure logging - เฉพาะระบบเทรดและปิดกำไร
 logging.basicConfig(
@@ -46,10 +45,11 @@ logging.getLogger('price_zone_analysis').setLevel(logging.WARNING)
 logging.getLogger('zone_rebalancer').setLevel(logging.WARNING)
 logging.getLogger('market_analysis').setLevel(logging.WARNING)
 
-# เปิดเฉพาะ Simple Position Manager, Universal Recovery และ Main Trading
-logging.getLogger('simple_position_manager').setLevel(logging.INFO)
-logging.getLogger('universal_recovery_manager').setLevel(logging.INFO)
-logging.getLogger('recovery_order_manager').setLevel(logging.INFO)
+# เปิดเฉพาะ Zone-Based System และ Main Trading
+logging.getLogger('zone_position_manager').setLevel(logging.INFO)
+logging.getLogger('zone_manager').setLevel(logging.INFO)
+logging.getLogger('zone_analyzer').setLevel(logging.INFO)
+logging.getLogger('zone_coordinator').setLevel(logging.INFO)
 logging.getLogger('__main__').setLevel(logging.INFO)
 
 logger = logging.getLogger(__name__)
@@ -75,9 +75,8 @@ class TradingSystem:
         self.portfolio_manager = PortfolioManager(self.order_manager, initial_balance)
         self.trading_conditions = TradingConditions()
         
-        # 🚀 Universal Recovery System (จะถูก initialize หลังจาก MT5 connect)
-        self.recovery_manager = None
-        self.recovery_order_manager = None
+        # 🎯 Zone-Based Position Management System (จะถูก initialize หลังจาก MT5 connect)
+        self.zone_position_manager = None
         
         # สถานะการทำงาน
         self.is_running = False
@@ -137,22 +136,20 @@ class TradingSystem:
             # โหลดข้อมูลราคาเริ่มต้น
             self.load_initial_market_data()
             
-            # 🚀 Initialize Universal Recovery System
-            logger.info("🚀 Initializing Universal Recovery System...")
-            self.recovery_manager = UniversalRecoveryManager(self.mt5_connection)
-            self.recovery_order_manager = RecoveryOrderManager(
-                self.mt5_connection, 
-                self.order_manager, 
-                self.recovery_manager
+            # 🎯 Initialize Zone-Based Position Management System
+            logger.info("🎯 Initializing Zone-Based Position Management System...")
+            self.zone_position_manager = create_zone_position_manager(
+                mt5_connection=self.mt5_connection,
+                order_manager=self.order_manager,
+                zone_size_pips=30.0  # 30 pips per zone
             )
             
             # เชื่อมต่อกับ Portfolio Manager
-            if hasattr(self.portfolio_manager, 'recovery_manager'):
-                self.portfolio_manager.recovery_manager = self.recovery_manager
-                self.portfolio_manager.recovery_order_manager = self.recovery_order_manager
-                logger.info("✅ Universal Recovery System integrated with Portfolio Manager")
+            if hasattr(self.portfolio_manager, 'position_manager'):
+                self.portfolio_manager.position_manager = self.zone_position_manager
+                logger.info("✅ Zone-Based System integrated with Portfolio Manager")
             else:
-                logger.warning("⚠️ Portfolio Manager doesn't support Universal Recovery integration")
+                logger.warning("⚠️ Portfolio Manager doesn't support Zone integration - using direct integration")
             
             logger.info("✅ SYSTEM READY")
             return True
@@ -476,55 +473,26 @@ class TradingSystem:
                 
                 # 2. 🗑️ Smart Recovery REMOVED - functionality moved to Smart Profit Taking System
                 
-                # 🚀 1. Auto Recovery Creation (ตรวจหาไม้โดนลากและสร้าง Recovery)
-                if hasattr(self.portfolio_manager, '_check_and_create_recovery_orders'):
-                    recovery_actions = self.portfolio_manager._check_and_create_recovery_orders(positions, current_price)
-                    if recovery_actions.get('recovery_created', False):
-                        recovery_count = len(recovery_actions.get('recovery_orders', []))
-                        balance_count = len(recovery_actions.get('balance_orders', []))
-                        if recovery_count > 0:
-                            logger.info(f"🚀 Recovery Orders Created: {recovery_count}")
-                        if balance_count > 0:
-                            logger.info(f"⚖️ Balance Orders Created: {balance_count}")
-
-                # 2. 🎯 Simple Position Manager - ระบบจัดการไม้แบบเรียบง่าย (Enhanced with Universal Recovery)
-                if hasattr(self.portfolio_manager, 'position_manager'):
-                    # เตรียม balance_analysis สำหรับ Universal Recovery
-                    balance_analysis = None
-                    if hasattr(self.portfolio_manager.position_manager, '_analyze_portfolio_balance'):
-                        try:
-                            # แปลง positions เป็น analyzed_positions ก่อน
-                            analyzed_positions = self.portfolio_manager.position_manager._analyze_all_positions(positions, current_price)
-                            balance_analysis = self.portfolio_manager.position_manager._analyze_portfolio_balance(analyzed_positions, current_price)
-                        except:
-                            balance_analysis = None
-                    
-                    # เรียกใช้ should_close_positions (compatible with both original and enhanced versions)
-                    try:
-                        # ลองเรียกแบบ 3 parameters ก่อน (Enhanced version)
-                        close_decision = self.portfolio_manager.position_manager.should_close_positions(
-                            positions, current_price, balance_analysis
-                        )
-                    except TypeError:
-                        # ถ้าไม่ได้ ใช้แบบ 2 parameters (Original version)
-                        close_decision = self.portfolio_manager.position_manager.should_close_positions(
-                            positions, current_price
-                        )
+                # 🎯 Zone-Based Position Management
+                if self.zone_position_manager:
+                    close_decision = self.zone_position_manager.should_close_positions(
+                        positions, current_price
+                    )
                     
                     if close_decision.get('should_close', False):
                         positions_to_close = close_decision.get('positions_to_close', [])
                         if positions_to_close:
-                            # 🎯 POSITION CLOSING (Enhanced with Universal Recovery)
+                            # 🎯 ZONE-BASED POSITION CLOSING
                             count = close_decision.get('positions_count', 0)
                             expected_pnl = close_decision.get('expected_pnl', 0.0)
                             reason = close_decision.get('reason', '')
-                            method = close_decision.get('method', 'adaptive')
-                            combination_type = close_decision.get('combination_type', 'unknown')
+                            method = close_decision.get('method', 'zone_based')
+                            zone_info = close_decision.get('zone_id', 'multiple')
                             
-                            logger.info(f"🎯 CLOSING ({method.upper()}): {count} positions, ${expected_pnl:.2f} expected")
-                            logger.info(f"📊 Type: {combination_type} - {reason}")
+                            logger.info(f"🎯 ZONE CLOSING ({method.upper()}): {count} positions, ${expected_pnl:.2f} expected")
+                            logger.info(f"📊 Zone: {zone_info} - {reason}")
                             
-                            close_result = self.portfolio_manager.position_manager.close_positions(positions_to_close)
+                            close_result = self.zone_position_manager.close_positions(positions_to_close)
                             if close_result.get('success', False):
                                 closed_count = close_result.get('closed_count', 0)
                                 total_profit = close_result.get('total_profit', 0.0)
