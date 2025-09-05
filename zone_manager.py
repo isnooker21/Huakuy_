@@ -82,7 +82,7 @@ class ZoneManager:
             max_zones: จำนวน Zone สูงสุดที่ติดตาม (default: 20)
         """
         self.zone_size_pips = zone_size_pips
-        self.zone_size_points = zone_size_pips  # สำหรับ XAUUSD (1 point = 1 pip สำหรับการคำนวณ Zone)
+        self.zone_size_points = zone_size_pips * 10  # สำหรับ XAUUSD (10 points = 1 pip)
         self.max_zones = max_zones
         
         # Zone Storage
@@ -112,7 +112,7 @@ class ZoneManager:
         # 🎯 ใช้ Dynamic Base Price แทนการตั้งครั้งเดียว
         if self.base_price == 0.0:
             # ใช้ราคาที่ปัดลงให้เหมาะกับ Zone Size
-            # สำหรับ 30 pips zones, ปัดลงเป็นหลัก zone_size_points
+            # สำหรับ 30 pips (300 points), ปัดลงเป็นหลัก zone_size_points
             zone_aligned_price = math.floor(price / self.zone_size_points) * self.zone_size_points
             self.base_price = zone_aligned_price
             logger.info(f"🎯 Base Price initialized (zone-aligned): {self.base_price:.2f}")
@@ -158,7 +158,7 @@ class ZoneManager:
         }
         
         # คำนวณ Zone Width เป็น pips
-        zone_width_pips = (zone_range[1] - zone_range[0])
+        zone_width_pips = (zone_range[1] - zone_range[0]) / 10
         
         logger.info(f"🔍 Zone Calculation Debug:")
         logger.info(f"   Current Price: {price:.2f}")
