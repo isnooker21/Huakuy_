@@ -69,10 +69,7 @@ class SmartProfitTakingSystem:
         self.pullback_override_multiplier = 1.5  # ปิดทันทีเมื่อกำไร >= 1.5x ขั้นต่ำ (ลดจาก 2.0)
         self.disable_pullback_completely = False # ปิดการรอ pullback ทั้งหมด
         
-        logger.info(f"⚙️ Smart Profit Taking Settings:")
-        logger.info(f"   💰 ขั้นต่ำ: ${self.min_profit_per_lot}/lot, ${self.min_profit_per_position}/position")
-        logger.info(f"   ⚡ Pullback Override: {self.enable_pullback_override} (>= {self.pullback_override_multiplier}x)")
-        logger.info(f"   ⏳ Pullback Threshold: {self.pullback_threshold_percentage}%")
+        # Smart Profit Taking initialized
         
         # Pullback Detection
         self.price_peaks = {}  # เก็บราคา Peak ของแต่ละ symbol
@@ -200,12 +197,7 @@ class SmartProfitTakingSystem:
             pullback_percentage = (pullback_amount / peak_price * 100) if peak_price > 0 else 0
             pullback_pips = pullback_amount * 10  # สำหรับ XAUUSD
             
-            # Debug logging
-            logger.debug(f"🔍 Pullback Calculation:")
-            logger.debug(f"   Peak Price: {peak_price:.2f}")
-            logger.debug(f"   Current Price: {current_price:.2f}")
-            logger.debug(f"   Pullback Amount: {pullback_amount:.2f}")
-            logger.debug(f"   Pullback %: {pullback_percentage:.2f}%")
+            # Pullback calculation complete
             
             # คำนวณเวลาที่ผ่านไปจาก peak
             time_since_peak = 0.0
@@ -509,10 +501,12 @@ class SmartProfitTakingSystem:
             
             # ตรวจสอบการปิด pullback ทั้งหมด
             if self.disable_pullback_completely:
-                logger.info(f"⚡ ปิด Pullback ทั้งหมด - ปิดทันทีเมื่อกำไรเป็นบวก")
+                # Skip pullback completely
+                pass
             # ตรวจสอบการข้าม pullback เมื่อกำไรดี
             elif self.enable_pullback_override and profit_margin >= self.pullback_override_multiplier:
-                logger.info(f"💰 กำไรดีมาก ({profit_margin:.1f}x >= {self.pullback_override_multiplier}x) - ข้าม pullback")
+                # Override pullback when profit is good
+                pass
             # รอ pullback ตามปกติ
             elif pullback_info.status == PullbackStatus.WAITING_FOR_PULLBACK:
                 return {
