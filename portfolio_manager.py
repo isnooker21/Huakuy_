@@ -19,9 +19,7 @@ from zone_rebalancer import ZoneRebalancer
 # from advanced_breakout_recovery import AdvancedBreakoutRecovery  # DISABLED - ใช้ Simple Position Manager
 from smart_gap_filler import SmartGapFiller
 from force_trading_mode import ForceTradingMode
-from simple_position_manager import SimplePositionManager
-from universal_recovery_manager import UniversalRecoveryManager, integrate_with_position_manager
-from recovery_order_manager import RecoveryOrderManager, integrate_recovery_orders_with_portfolio_manager
+from zone_position_manager import ZonePositionManager, create_zone_position_manager
 from signal_manager import SignalManager, RankedSignal
 from order_management import OrderManager, OrderResult, CloseResult
 
@@ -86,17 +84,15 @@ class PortfolioManager:
         self.gap_filler = SmartGapFiller(order_manager.mt5)
         self.force_trading = ForceTradingMode(order_manager.mt5)
         
-        # 🎯 Simple Position Manager - ระบบจัดการไม้แบบเรียบง่าย
-        self.position_manager = SimplePositionManager(order_manager.mt5, order_manager)
+        # 🎯 Zone Position Manager - ระบบจัดการไม้แบบ Zone-Based
+        self.position_manager = create_zone_position_manager(
+            mt5_connection=order_manager.mt5,
+            order_manager=order_manager,
+            zone_size_pips=30.0
+        )
         
-        # 🚀 Universal Recovery Manager - ระบบกู้คืนและสร้างสมดุลแบบครบวงจร
-        self.recovery_manager = UniversalRecoveryManager(order_manager.mt5)
-        
-        # 🔗 Integration: เชื่อมต่อ Recovery Manager กับ Position Manager
-        integrate_with_position_manager(self.position_manager, self.recovery_manager)
-        
-        # 🚀 Recovery Order Manager - จัดการ Order สำหรับ Recovery System
-        self.recovery_order_manager = integrate_recovery_orders_with_portfolio_manager(self)
+        # 🎯 Zone-Based System ได้ถูก integrate ใน position_manager แล้ว
+        # ไม่จำเป็นต้องมี separate recovery manager
         
         # 🎯 Signal Manager - จัดการสัญญาณจากทุกระบบในจุดเดียว
         self.signal_manager = SignalManager(order_manager.mt5)
@@ -1284,104 +1280,37 @@ class PortfolioManager:
     
     def _check_and_create_recovery_orders(self, positions: List[Any], current_price: float) -> Dict[str, Any]:
         """
-        🚀 ตรวจสอบและสร้าง Recovery Orders อัตโนมัติ
+        🎯 REPLACED: Recovery Orders now handled by Zone-Based System
         
         Args:
             positions: รายการ positions ทั้งหมด
             current_price: ราคาปัจจุบัน
             
         Returns:
-            Dict: ผลการสร้าง Recovery Orders
+            Dict: ผลการสร้าง Recovery Orders (Zone-based)
         """
         
         try:
-            # วิเคราะห์ไม้โดนลาก
-            drag_analysis = self.recovery_manager.analyze_dragged_positions(positions, current_price)
+            # Zone-Based System handles recovery automatically through zone coordination
+            logger.debug("🎯 Recovery Orders handled by Zone-Based Position Management System")
             
-            recovery_results = {
-                'recovery_created': False,
-                'recovery_orders': [],
-                'balance_orders': [],
-                'dragged_positions': drag_analysis['dragged_count'],
-                'total_drag_loss': drag_analysis['total_drag_loss']
-            }
-            
-            # สร้าง Recovery Orders สำหรับไม้โดนลาก
-            for opportunity in drag_analysis.get('recovery_opportunities', []):
-                try:
-                    recovery_result = self.recovery_order_manager.create_drag_recovery_order(
-                        opportunity['dragged_position'], 
-                        opportunity
-                    )
-                    
-                    if recovery_result['success']:
-                        recovery_results['recovery_orders'].append({
-                            'ticket': recovery_result['ticket'],
-                            'type': opportunity['recovery_type'],
-                            'lot': opportunity['recovery_lot'],
-                            'dragged_ticket': opportunity['dragged_ticket']
-                        })
-                        recovery_results['recovery_created'] = True
-                        
-                        logger.info(f"🚀 Recovery Order Created: {recovery_result['ticket']} for dragged position {opportunity['dragged_ticket']}")
-                    else:
-                        logger.warning(f"⚠️ Recovery Order Failed: {recovery_result.get('error', 'Unknown error')}")
-                        
-                except Exception as e:
-                    logger.error(f"🚨 Error creating recovery order: {e}")
-            
-            # เช็คความสมดุลและสร้าง Balance Orders ถ้าจำเป็น
-            balance_analysis = self._analyze_portfolio_balance(positions, current_price)
-            
-            if balance_analysis.get('imbalance_percentage', 0) > 80.0:
-                # สร้าง Balance Position เพื่อแก้สมดุล
-                imbalance_side = balance_analysis.get('imbalance_side', '')
-                
-                if imbalance_side == 'BUY':
-                    # เอียง BUY มากเกินไป → สร้าง SELL
-                    balance_direction = 'SELL'
-                    balance_price = current_price + (10 / 10000)  # SELL สูงกว่าราคาปัจจุบัน 1 pip
-                elif imbalance_side == 'SELL':
-                    # เอียง SELL มากเกินไป → สร้าง BUY
-                    balance_direction = 'BUY'
-                    balance_price = current_price - (10 / 10000)  # BUY ต่ำกว่าราคาปัจจุบัน 1 pip
-                else:
-                    balance_direction = None
-                    balance_price = None
-                
-                if balance_direction and balance_price:
-                    try:
-                        # คำนวณ Lot Size สำหรับ Balance
-                        balance_lot = self._calculate_balance_lot_size(positions, balance_direction)
-                        
-                        balance_result = self.recovery_order_manager.create_balance_position_order(
-                            balance_direction, balance_lot, balance_price
-                        )
-                        
-                        if balance_result['success']:
-                            recovery_results['balance_orders'].append({
-                                'ticket': balance_result['ticket'],
-                                'type': balance_direction,
-                                'lot': balance_lot,
-                                'purpose': 'balance_correction'
-                            })
-                            recovery_results['recovery_created'] = True
-                            
-                            logger.info(f"⚖️ Balance Order Created: {balance_result['ticket']} ({balance_direction})")
-                        else:
-                            logger.warning(f"⚠️ Balance Order Failed: {balance_result.get('error', 'Unknown error')}")
-                            
-                    except Exception as e:
-                        logger.error(f"🚨 Error creating balance order: {e}")
-            
-            return recovery_results
-            
-        except Exception as e:
-            logger.error(f"🚨 Error in recovery order creation: {e}")
             return {
                 'recovery_created': False,
                 'recovery_orders': [],
                 'balance_orders': [],
+                'dragged_positions': 0,
+                'total_drag_loss': 0,
+                'note': 'Recovery handled by Zone-Based System'
+            }
+            
+        except Exception as e:
+            logger.error(f"Error in recovery orders check: {e}")
+            return {
+                'recovery_created': False,
+                'recovery_orders': [],
+                'balance_orders': [],
+                'dragged_positions': 0,
+                'total_drag_loss': 0,
                 'error': str(e)
             }
     
