@@ -106,7 +106,7 @@ class SignalManager:
         """ดึงสัญญาณหลักจาก TradingConditions"""
         try:
             entry_result = self.trading_conditions.check_entry_conditions(
-                candle, positions, account_balance, volume_history
+                candle, positions, account_balance, volume_history, candle.symbol
             )
             
             if entry_result['can_enter'] and entry_result['signal']:

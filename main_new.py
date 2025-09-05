@@ -98,6 +98,9 @@ class TradingSystem:
             logger.info(f"ใช้สัญลักษณ์: {self.base_symbol} -> {self.actual_symbol}")
             logger.info(f"ข้อมูลสัญลักษณ์: {symbol_info}")
             
+            # ส่ง symbol ที่ถูกต้องไปยัง portfolio_manager
+            self.portfolio_manager.current_symbol = self.actual_symbol
+            
             # ซิงค์ข้อมูล Position
             positions = self.order_manager.sync_positions_from_mt5()
             logger.info(f"พบ Position ที่เปิดอยู่: {len(positions)} ตัว")
@@ -329,7 +332,8 @@ class TradingSystem:
                 low=min(self.price_history[-4:]),
                 close=self.price_history[-1],
                 volume=self.volume_history[-1] if self.volume_history else 1000,
-                timestamp=datetime.now()
+                timestamp=datetime.now(),
+                symbol=self.actual_symbol  # ใช้ symbol ที่ถูกต้อง
             )
             
             current_price = candle.close
