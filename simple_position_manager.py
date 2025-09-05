@@ -141,7 +141,7 @@ class SimplePositionManager:
             # 2. เลือกกลยุทธ์ตาม Balance
             if balance_analysis['is_imbalanced']:
                 # Portfolio เบี้ยว → ใช้ Balance Priority Strategy
-                return self._find_balance_priority_combination(analyzed_positions, balance_analysis)
+                return self._find_balance_priority_combination(analyzed_positions, balance_analysis, current_price)
             else:
                 # Portfolio สมดุล → ใช้ Distance + Profit Strategy  
                 return self._find_distance_profit_combination(analyzed_positions, current_price)
@@ -186,7 +186,7 @@ class SimplePositionManager:
             'sell_ratio': sell_ratio
         }
     
-    def _find_balance_priority_combination(self, analyzed_positions: List[Dict], balance_analysis: Dict) -> Optional[Dict]:
+    def _find_balance_priority_combination(self, analyzed_positions: List[Dict], balance_analysis: Dict, current_price: float) -> Optional[Dict]:
         """🎯 หาการจับคู่แบบ Balance Priority (ปิดฝั่งที่เยอะก่อน)"""
         try:
             imbalance_side = balance_analysis['imbalance_side']
