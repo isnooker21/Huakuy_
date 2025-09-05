@@ -219,8 +219,8 @@ class PortfolioManager:
             #     }
             logger.info(f"🚀 ADAPTIVE: Portfolio limits disabled - Unlimited Entry enabled")
             
-            # Zone Analysis & Smart Entry Recommendation
-            zone_recommendation = self._get_zone_smart_entry(signal, candle.close)
+            # 🎯 Zone-Based Entry Analysis (NEW) - แทนที่ระบบเก่า
+            zone_recommendation = self._get_zone_based_entry_analysis(signal, candle.close)
                 
             # คำนวณขนาด Lot พร้อม Zone Multiplier
             lot_calculator = LotSizeCalculator(current_state.account_balance, self.max_risk_per_trade)
@@ -263,7 +263,20 @@ class PortfolioManager:
             candle_strength_adj = self._calculate_candle_strength_multiplier(signal.strength, candle)
             
             # ปรับ lot size ตาม Zone Recommendation
-            zone_multiplier = zone_recommendation.get('lot_multiplier', 1.0) if zone_recommendation else 1.0
+            if zone_recommendation:
+                if zone_recommendation.get('should_enter', True):
+                    zone_multiplier = zone_recommendation.get('lot_multiplier', 1.0)
+                else:
+                    # ถ้า Zone Analysis แนะนำไม่ให้เข้า
+                    logger.warning(f"🚫 Zone Analysis blocks entry: {zone_recommendation.get('reason', 'Unknown')}")
+                    return {
+                        'should_enter': False,
+                        'reasons': [f"Zone Analysis: {zone_recommendation.get('reason', 'Not suitable for zone distribution')}"],
+                        'signal': None,
+                        'lot_size': 0.0
+                    }
+            else:
+                zone_multiplier = 1.0
             
             # รวมทุกปัจจัย
             lot_size = base_lot_size * zone_multiplier * candle_strength_adj
@@ -827,6 +840,208 @@ class PortfolioManager:
         except Exception as e:
             logger.error(f"Error getting zone smart entry: {e}")
             return None
+    
+    def _get_zone_based_entry_analysis(self, signal: Signal, current_price: float) -> Optional[Dict[str, Any]]:
+        """
+        🎯 ใหม่! วิเคราะห์การเข้าไม้แบบ Zone-Based ที่เข้ากับระบบปิดไม้
+        
+        Args:
+            signal: สัญญาณการเทรด
+            current_price: ราคาปัจจุบัน
+            
+        Returns:
+            Dict: คำแนะนำการเข้าไม้แบบ Zone-Based
+        """
+        try:
+            if not self.position_manager:
+                return None
+            
+            # ดึงข้อมูล Positions ปัจจุบัน
+            positions = self.order_manager.active_positions or []
+            
+            # อัพเดท Zones จาก Positions ปัจจุบัน
+            zones_updated = self.position_manager.zone_manager.update_zones_from_positions(positions, current_price)
+            if not zones_updated:
+                # ถ้าไม่มี Zones ให้สร้างใหม่
+                logger.info("🎯 Creating initial zones for entry analysis")
+                return self._create_initial_zone_recommendation(signal, current_price)
+            
+            # วิเคราะห์ Zone Distribution ปัจจุบัน
+            zone_analysis = self._analyze_current_zone_distribution(current_price)
+            
+            # ตรวจสอบว่าการเข้าไม้นี้จะช่วย Zone Balance ไหม
+            entry_impact = self._evaluate_entry_impact_on_zones(signal.direction, current_price, zone_analysis)
+            
+            # ตัดสินใจแนะนำ
+            if entry_impact['should_enter']:
+                logger.info(f"🎯 Zone-Based Entry Recommendation:")
+                logger.info(f"   Direction: {signal.direction}")
+                logger.info(f"   Target Zone: {entry_impact['target_zone_id']}")
+                logger.info(f"   Zone Health Impact: +{entry_impact['health_improvement']:.1f}")
+                logger.info(f"   Portfolio Balance Impact: {entry_impact['balance_impact']}")
+                logger.info(f"   Reason: {entry_impact['reason']}")
+                
+                return {
+                    'should_enter': True,
+                    'target_zone': entry_impact['target_zone_id'],
+                    'lot_multiplier': entry_impact['lot_multiplier'],
+                    'confidence': entry_impact['confidence'],
+                    'reason': entry_impact['reason'],
+                    'zone_health_impact': entry_impact['health_improvement'],
+                    'balance_impact': entry_impact['balance_impact']
+                }
+            else:
+                logger.info(f"🚫 Zone-Based Entry Block: {entry_impact['reason']}")
+                return {
+                    'should_enter': False,
+                    'reason': entry_impact['reason'],
+                    'lot_multiplier': 0.5,  # ลด lot ถ้าไม่เหมาะสม
+                    'confidence': 0.3
+                }
+                
+        except Exception as e:
+            logger.error(f"❌ Error in zone-based entry analysis: {e}")
+            return None
+    
+    def _create_initial_zone_recommendation(self, signal: Signal, current_price: float) -> Dict[str, Any]:
+        """สร้างคำแนะนำสำหรับการเข้าไม้ครั้งแรก"""
+        return {
+            'should_enter': True,
+            'target_zone': 0,
+            'lot_multiplier': 1.0,
+            'confidence': 0.8,
+            'reason': 'Initial position - creating first zone',
+            'zone_health_impact': 0.0,
+            'balance_impact': 'NEUTRAL'
+        }
+    
+    def _analyze_current_zone_distribution(self, current_price: float) -> Dict[str, Any]:
+        """วิเคราะห์การกระจาย Zones ปัจจุบัน"""
+        try:
+            zones = self.position_manager.zone_manager.zones
+            
+            if not zones:
+                return {'total_zones': 0, 'buy_heavy_zones': 0, 'sell_heavy_zones': 0, 'balanced_zones': 0}
+            
+            buy_heavy_count = 0
+            sell_heavy_count = 0
+            balanced_count = 0
+            
+            for zone in zones.values():
+                if zone.total_positions > 0:
+                    if zone.balance_ratio >= 0.7:  # BUY-heavy
+                        buy_heavy_count += 1
+                    elif zone.balance_ratio <= 0.3:  # SELL-heavy
+                        sell_heavy_count += 1
+                    else:
+                        balanced_count += 1
+            
+            return {
+                'total_zones': len([z for z in zones.values() if z.total_positions > 0]),
+                'buy_heavy_zones': buy_heavy_count,
+                'sell_heavy_zones': sell_heavy_count,
+                'balanced_zones': balanced_count,
+                'current_price': current_price
+            }
+            
+        except Exception as e:
+            logger.error(f"❌ Error analyzing zone distribution: {e}")
+            return {'total_zones': 0, 'buy_heavy_zones': 0, 'sell_heavy_zones': 0, 'balanced_zones': 0}
+    
+    def _evaluate_entry_impact_on_zones(self, direction: str, current_price: float, zone_analysis: Dict) -> Dict[str, Any]:
+        """ประเมินผลกระทบของการเข้าไม้ต่อ Zone System"""
+        try:
+            # คำนวณ Zone ที่ราคาปัจจุบันจะเข้าไป
+            target_zone_id = self.position_manager.zone_manager.calculate_zone_id(current_price)
+            target_zone = self.position_manager.zone_manager.zones.get(target_zone_id)
+            
+            # วิเคราะห์ผลกระทบ
+            should_enter = True
+            confidence = 0.7
+            lot_multiplier = 1.0
+            health_improvement = 0.0
+            balance_impact = 'NEUTRAL'
+            reason = f"Enter {direction} in Zone {target_zone_id}"
+            
+            # ถ้ามี Zone อยู่แล้ว
+            if target_zone and target_zone.total_positions > 0:
+                current_balance = target_zone.balance_ratio
+                
+                if direction == "BUY":
+                    # ถ้า Zone นี้ SELL-heavy อยู่ → BUY จะช่วยสมดุล
+                    if current_balance <= 0.3:  # SELL-heavy
+                        health_improvement = 30.0
+                        confidence = 0.9
+                        lot_multiplier = 1.2
+                        balance_impact = 'POSITIVE'
+                        reason = f"BUY helps balance SELL-heavy Zone {target_zone_id}"
+                    
+                    # ถ้า Zone นี้ BUY-heavy อยู่แล้ว → BUY จะทำให้เสียสมดุลมากขึ้น
+                    elif current_balance >= 0.7:  # BUY-heavy
+                        health_improvement = -10.0
+                        confidence = 0.4
+                        lot_multiplier = 0.7
+                        balance_impact = 'NEGATIVE'
+                        
+                        # เช็คว่ามี SELL-heavy zones อื่นไหม ถ้าไม่มีก็ยังให้เข้าได้
+                        if zone_analysis['sell_heavy_zones'] == 0:
+                            should_enter = True
+                            reason = f"BUY in BUY-heavy Zone {target_zone_id} - but no SELL-heavy zones to balance"
+                        else:
+                            should_enter = False
+                            reason = f"Block BUY in BUY-heavy Zone {target_zone_id} - prefer SELL-heavy zones"
+                
+                else:  # SELL
+                    # ถ้า Zone นี้ BUY-heavy อยู่ → SELL จะช่วยสมดุล
+                    if current_balance >= 0.7:  # BUY-heavy
+                        health_improvement = 30.0
+                        confidence = 0.9
+                        lot_multiplier = 1.2
+                        balance_impact = 'POSITIVE'
+                        reason = f"SELL helps balance BUY-heavy Zone {target_zone_id}"
+                    
+                    # ถ้า Zone นี้ SELL-heavy อยู่แล้ว → SELL จะทำให้เสียสมดุลมากขึ้น
+                    elif current_balance <= 0.3:  # SELL-heavy
+                        health_improvement = -10.0
+                        confidence = 0.4
+                        lot_multiplier = 0.7
+                        balance_impact = 'NEGATIVE'
+                        
+                        # เช็คว่ามี BUY-heavy zones อื่นไหม
+                        if zone_analysis['buy_heavy_zones'] == 0:
+                            should_enter = True
+                            reason = f"SELL in SELL-heavy Zone {target_zone_id} - but no BUY-heavy zones to balance"
+                        else:
+                            should_enter = False
+                            reason = f"Block SELL in SELL-heavy Zone {target_zone_id} - prefer BUY-heavy zones"
+            
+            # ถ้าเป็น Zone ใหม่ → อนุญาตเสมอ
+            else:
+                health_improvement = 10.0
+                confidence = 0.8
+                reason = f"Create new Zone {target_zone_id} with {direction}"
+            
+            return {
+                'should_enter': should_enter,
+                'target_zone_id': target_zone_id,
+                'lot_multiplier': lot_multiplier,
+                'confidence': confidence,
+                'health_improvement': health_improvement,
+                'balance_impact': balance_impact,
+                'reason': reason
+            }
+            
+        except Exception as e:
+            logger.error(f"❌ Error evaluating entry impact: {e}")
+            return {
+                'should_enter': True,
+                'target_zone_id': 0,
+                'lot_multiplier': 1.0,
+                'confidence': 0.5,
+                'health_improvement': 0.0,
+                'balance_impact': 'UNKNOWN',
+                'reason': f'Error in analysis: {str(e)}'
+            }
     
     def check_and_execute_zone_rebalance(self, current_price: float) -> Dict[str, Any]:
         """ตรวจสอบและดำเนินการปรับสมดุลโซน"""
