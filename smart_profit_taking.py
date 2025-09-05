@@ -64,6 +64,16 @@ class SmartProfitTakingSystem:
         self.pullback_threshold_percentage = 1.0  # รอ Pullback 1%
         self.max_positions_per_group = 10         # สูงสุด 10 ไม้ต่อกลุ่ม
         
+        # Pullback Override Settings (ตั้งค่าให้ปิดกำไรได้ง่าย)
+        self.enable_pullback_override = True      # เปิดใช้การข้าม pullback เมื่อกำไรดี
+        self.pullback_override_multiplier = 1.5  # ปิดทันทีเมื่อกำไร >= 1.5x ขั้นต่ำ (ลดจาก 2.0)
+        self.disable_pullback_completely = False # ปิดการรอ pullback ทั้งหมด
+        
+        logger.info(f"⚙️ Smart Profit Taking Settings:")
+        logger.info(f"   💰 ขั้นต่ำ: ${self.min_profit_per_lot}/lot, ${self.min_profit_per_position}/position")
+        logger.info(f"   ⚡ Pullback Override: {self.enable_pullback_override} (>= {self.pullback_override_multiplier}x)")
+        logger.info(f"   ⏳ Pullback Threshold: {self.pullback_threshold_percentage}%")
+        
         # Pullback Detection
         self.price_peaks = {}  # เก็บราคา Peak ของแต่ละ symbol
         self.peak_timestamps = {}  # เก็บเวลาที่เกิด Peak
@@ -493,18 +503,27 @@ class SmartProfitTakingSystem:
             
             best_group = profit_groups[0]
             
-            # 4. ตรวจสอบเงื่อนไข Pullback
-            if pullback_info.status == PullbackStatus.WAITING_FOR_PULLBACK:
+            # 4. ตรวจสอบเงื่อนไข Pullback (ยืดหยุ่นตามการตั้งค่า)
+            min_profit_required = self._calculate_minimum_profit_required(best_group)
+            profit_margin = best_group.total_pnl / min_profit_required if min_profit_required > 0 else 1.0
+            
+            # ตรวจสอบการปิด pullback ทั้งหมด
+            if self.disable_pullback_completely:
+                logger.info(f"⚡ ปิด Pullback ทั้งหมด - ปิดทันทีเมื่อกำไรเป็นบวก")
+            # ตรวจสอบการข้าม pullback เมื่อกำไรดี
+            elif self.enable_pullback_override and profit_margin >= self.pullback_override_multiplier:
+                logger.info(f"💰 กำไรดีมาก ({profit_margin:.1f}x >= {self.pullback_override_multiplier}x) - ข้าม pullback")
+            # รอ pullback ตามปกติ
+            elif pullback_info.status == PullbackStatus.WAITING_FOR_PULLBACK:
                 return {
                     'should_execute': False,
-                    'reason': f'รอ Pullback: ราคาวิ่งขึ้น {pullback_info.pullback_percentage:.2f}% (ต้องการ {self.pullback_threshold_percentage:.1f}%)',
+                    'reason': f'รอ Pullback: ราคาวิ่งขึ้น {pullback_info.pullback_percentage:.2f}% (ต้องการ {self.pullback_threshold_percentage:.1f}%) - กำไร: {profit_margin:.1f}x',
                     'pullback_status': pullback_info.status.value,
                     'market_condition': market_condition.value,
                     'best_group': best_group
                 }
             
             # 5. ตรวจสอบกำไรขั้นต่ำ (ตาม lot และจำนวนไม้)
-            min_profit_required = self._calculate_minimum_profit_required(best_group)
             if best_group.total_pnl < min_profit_required:
                 total_positions = len(best_group.profit_positions) + len(best_group.loss_positions)
                 return {
@@ -643,3 +662,29 @@ class SmartProfitTakingSystem:
         except Exception as e:
             logger.error(f"Error getting performance metrics: {e}")
             return {}
+    
+    def configure_pullback_behavior(self, 
+                                  disable_completely: bool = False,
+                                  enable_override: bool = True, 
+                                  override_multiplier: float = 2.0,
+                                  threshold_percentage: float = 1.0):
+        """
+        ปรับแต่งพฤติกรรม Pullback
+        
+        Args:
+            disable_completely: ปิดการรอ pullback ทั้งหมด (ปิดทันทีเมื่อกำไรเป็นบวก)
+            enable_override: เปิดใช้การข้าม pullback เมื่อกำไรดี
+            override_multiplier: ข้าม pullback เมื่อกำไร >= X เท่าของขั้นต่ำ
+            threshold_percentage: เปอร์เซ็นต์ pullback ที่ต้องรอ
+        """
+        self.disable_pullback_completely = disable_completely
+        self.enable_pullback_override = enable_override
+        self.pullback_override_multiplier = override_multiplier
+        self.pullback_threshold_percentage = threshold_percentage
+        
+        if disable_completely:
+            logger.info("⚡ ปิดการรอ Pullback ทั้งหมด - จะปิดทันทีเมื่อกำไรเป็นบวก")
+        elif enable_override:
+            logger.info(f"💰 เปิดการข้าม Pullback เมื่อกำไร >= {override_multiplier}x ขั้นต่ำ")
+        else:
+            logger.info(f"⏳ รอ Pullback {threshold_percentage}% ตามปกติ")
