@@ -251,9 +251,14 @@ class PortfolioManager:
             # เลือกใช้ Portfolio Lot เป็นหลัก แต่ไม่ต่ำกว่า Traditional Lot
             base_lot_size = max(portfolio_lot, traditional_lot * 0.5)  # ไม่ให้ต่ำเกินไป
             
+            # 🎯 ปรับตามแรงแท่งเทียน (Candle Strength Adjustment)
+            candle_strength_adj = self._calculate_candle_strength_multiplier(signal.strength, candle)
+            
             # ปรับ lot size ตาม Zone Recommendation
             zone_multiplier = zone_recommendation.get('lot_multiplier', 1.0) if zone_recommendation else 1.0
-            lot_size = base_lot_size * zone_multiplier
+            
+            # รวมทุกปัจจัย
+            lot_size = base_lot_size * zone_multiplier * candle_strength_adj
             
             logger.info(f"📊 Enhanced Lot Size Calculation:")
             logger.info(f"   Positions Count: {positions_count}")
@@ -261,6 +266,7 @@ class PortfolioManager:
             logger.info(f"   Portfolio Risk Lot: {portfolio_lot:.3f}")
             logger.info(f"   Traditional Lot: {traditional_lot:.3f}")
             logger.info(f"   Selected Base Lot: {base_lot_size:.3f}")
+            logger.info(f"   Candle Strength Adj: {candle_strength_adj:.2f}x (Strength: {signal.strength:.1f}%)")
             if zone_recommendation:
                 logger.info(f"   Zone Multiplier: {zone_multiplier:.2f}x ({zone_recommendation.get('reason', 'N/A')})")
             logger.info(f"   Final Lot Size: {lot_size:.3f}")
@@ -549,6 +555,61 @@ class PortfolioManager:
         adjusted_lot = max(0.01, min(adjusted_lot, 2.0))
         
         return round(adjusted_lot, 2)
+    
+    def _calculate_candle_strength_multiplier(self, signal_strength: float, candle: CandleData) -> float:
+        """
+        🎯 คำนวณตัวคูณ lot ตามแรงแท่งเทียนและแรงสัญญาณ
+        
+        Args:
+            signal_strength: แรงสัญญาณ (0-100)
+            candle: ข้อมูลแท่งเทียน
+            
+        Returns:
+            float: ตัวคูณ lot (0.7-1.5x)
+        """
+        try:
+            # 1. แรงสัญญาณ (Signal Strength)
+            if signal_strength >= 80.0:
+                signal_multiplier = 1.4  # แรงมาก
+            elif signal_strength >= 60.0:
+                signal_multiplier = 1.2  # แรงปานกลางสูง
+            elif signal_strength >= 40.0:
+                signal_multiplier = 1.0  # แรงปานกลาง
+            elif signal_strength >= 20.0:
+                signal_multiplier = 0.9  # แรงน้อย
+            else:
+                signal_multiplier = 0.8  # แรงน้อยมาก
+                
+            # 2. แรงแท่งเทียน (Candle Body Strength)
+            if hasattr(candle, 'body_size_percentage'):
+                body_strength = candle.body_size_percentage
+            else:
+                # คำนวณ body strength
+                body_strength = abs((candle.close - candle.open) / candle.open) * 100 if candle.open != 0 else 0
+                
+            if body_strength >= 0.3:  # แท่งแรงมาก (>0.3%)
+                candle_multiplier = 1.3
+            elif body_strength >= 0.2:  # แท่งแรงปานกลาง (>0.2%)
+                candle_multiplier = 1.1
+            elif body_strength >= 0.1:  # แท่งแรงน้อย (>0.1%)
+                candle_multiplier = 1.0
+            else:  # แท่งอ่อน (<0.1%)
+                candle_multiplier = 0.9
+                
+            # 3. รวมและจำกัดขอบเขต
+            combined_multiplier = (signal_multiplier + candle_multiplier) / 2
+            final_multiplier = max(0.7, min(1.5, combined_multiplier))
+            
+            logger.info(f"🎯 Candle Strength Analysis:")
+            logger.info(f"   Signal Strength: {signal_strength:.1f}% → {signal_multiplier:.1f}x")
+            logger.info(f"   Body Strength: {body_strength:.3f}% → {candle_multiplier:.1f}x")
+            logger.info(f"   Combined: {final_multiplier:.2f}x")
+            
+            return final_multiplier
+            
+        except Exception as e:
+            logger.error(f"Error calculating candle strength multiplier: {e}")
+            return 1.0  # fallback
         
     def _estimate_market_volatility(self) -> float:
         """
