@@ -231,21 +231,35 @@ class PortfolioManager:
                 current_state.account_balance, self.initial_balance
             )
             
-            # ใช้ Dynamic Lot Size ตามแรงตลาด Volume และทุน รวม Zone Analysis
-            base_lot_size = lot_calculator.calculate_dynamic_lot_size(
+            # 🆕 Portfolio-Based Risk Lot Sizing (ใหม่!)
+            positions_count = len(current_state.positions)
+            
+            # คำนวณ market volatility จาก candle data (ถ้ามี)
+            market_volatility = volatility  # ใช้ volatility ที่คำนวณแล้ว
+            
+            # ใช้ Portfolio Risk Calculator แทนระบบเดิม
+            portfolio_lot = lot_calculator.calculate_portfolio_risk_lot(
+                positions_count, market_volatility, current_state.account_balance
+            )
+            
+            # รวมกับ Dynamic Lot Size เดิม (เป็น fallback)
+            traditional_lot = lot_calculator.calculate_dynamic_lot_size(
                 market_strength, volatility, volume_factor, balance_factor
             )
+            
+            # เลือกใช้ Portfolio Lot เป็นหลัก แต่ไม่ต่ำกว่า Traditional Lot
+            base_lot_size = max(portfolio_lot, traditional_lot * 0.5)  # ไม่ให้ต่ำเกินไป
             
             # ปรับ lot size ตาม Zone Recommendation
             zone_multiplier = zone_recommendation.get('lot_multiplier', 1.0) if zone_recommendation else 1.0
             lot_size = base_lot_size * zone_multiplier
             
-            logger.info(f"📊 Lot Size Calculation:")
-            logger.info(f"   Market Strength: {market_strength:.1f}%")
-            logger.info(f"   Volatility: {volatility:.1f}%")
-            logger.info(f"   Volume Factor: {volume_factor:.2f}x")
-            logger.info(f"   Balance Factor: {balance_factor:.2f}x")
-            logger.info(f"   Base Lot Size: {base_lot_size:.3f}")
+            logger.info(f"📊 Enhanced Lot Size Calculation:")
+            logger.info(f"   Positions Count: {positions_count}")
+            logger.info(f"   Market Volatility: {market_volatility:.1f}%")
+            logger.info(f"   Portfolio Risk Lot: {portfolio_lot:.3f}")
+            logger.info(f"   Traditional Lot: {traditional_lot:.3f}")
+            logger.info(f"   Selected Base Lot: {base_lot_size:.3f}")
             if zone_recommendation:
                 logger.info(f"   Zone Multiplier: {zone_multiplier:.2f}x ({zone_recommendation.get('reason', 'N/A')})")
             logger.info(f"   Final Lot Size: {lot_size:.3f}")
