@@ -18,15 +18,34 @@ from order_management import OrderManager
 from portfolio_manager import PortfolioManager
 from gui import TradingGUI
 
-# Configure logging
+# Configure logging - เฉพาะระบบเทรดและปิดกำไร
 logging.basicConfig(
-    level=logging.DEBUG,  # เปลี่ยนเป็น DEBUG เพื่อดู debug logs
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    level=logging.INFO,  # ลดเป็น INFO เพื่อลด noise
+    format='%(asctime)s - %(levelname)s - %(message)s',  # ลบ module name
     handlers=[
         logging.FileHandler('trading_system.log', encoding='utf-8'),
         logging.StreamHandler()
     ]
 )
+
+# ปิด debug logs จากระบบอื่นๆ
+logging.getLogger('mt5_connection').setLevel(logging.WARNING)
+logging.getLogger('order_management').setLevel(logging.WARNING)
+logging.getLogger('trading_conditions').setLevel(logging.WARNING)
+logging.getLogger('portfolio_manager').setLevel(logging.WARNING)
+logging.getLogger('calculations').setLevel(logging.WARNING)
+logging.getLogger('signal_manager').setLevel(logging.WARNING)
+logging.getLogger('smart_gap_filler').setLevel(logging.WARNING)
+logging.getLogger('force_trading_mode').setLevel(logging.WARNING)
+logging.getLogger('advanced_breakout_recovery').setLevel(logging.WARNING)
+logging.getLogger('price_zone_analysis').setLevel(logging.WARNING)
+logging.getLogger('zone_rebalancer').setLevel(logging.WARNING)
+logging.getLogger('market_analysis').setLevel(logging.WARNING)
+
+# เปิดเฉพาะ Smart Profit Taking และ Main Trading
+logging.getLogger('smart_profit_taking').setLevel(logging.INFO)
+logging.getLogger('__main__').setLevel(logging.INFO)
+
 logger = logging.getLogger(__name__)
 
 class TradingSystem:
@@ -64,7 +83,7 @@ class TradingSystem:
         # GUI
         self.gui = None
         
-        logger.info(f"เริ่มต้นระบบเทรด - Base Symbol: {symbol}, Initial Balance: {initial_balance}")
+        # Initialize trading system
         
     def initialize_system(self) -> bool:
         """
@@ -74,7 +93,7 @@ class TradingSystem:
             bool: สำเร็จหรือไม่
         """
         try:
-            logger.info("กำลังเริ่มต้นระบบเทรด...")
+            # Starting system initialization
             
             # เชื่อมต่อ MT5
             if not self.mt5_connection.connect_mt5():
@@ -108,7 +127,7 @@ class TradingSystem:
             # โหลดข้อมูลราคาเริ่มต้น
             self.load_initial_market_data()
             
-            logger.info("เริ่มต้นระบบเทรดสำเร็จ")
+            logger.info("✅ SYSTEM READY")
             return True
             
         except Exception as e:
@@ -132,7 +151,7 @@ class TradingSystem:
                 latest_rate = rates[-1]
                 self.current_prices[self.actual_symbol] = latest_rate['close']
                 
-                logger.info(f"โหลดข้อมูลตลาดสำเร็จ - ราคาปัจจุบัน: {latest_rate['close']}")
+                # Market data loaded successfully
             else:
                 logger.warning("ไม่สามารถโหลดข้อมูลตลาดได้")
                 
@@ -276,17 +295,8 @@ class TradingSystem:
     def process_new_candle(self, candle: CandleData):
         """ประมวลผลแท่งเทียนใหม่ (เหลือไว้เฉพาะ logging)"""
         try:
-            logger.info(f"📊 แท่งเทียนใหม่ - {candle.timestamp}: "
-                       f"O:{candle.open} H:{candle.high} L:{candle.low} C:{candle.close} "
-                       f"V:{candle.volume}")
-                       
-            # แสดงทิศทางแท่งเทียน (สำหรับ reference)
-            if candle.is_green:
-                logger.info("🟢 แท่งเทียนเขียว (ราคาขึ้น)")
-            elif candle.is_red:
-                logger.info("🔴 แท่งเทียนแดง (ราคาลง)")
-            else:
-                logger.info("⚪ แท่งเทียน Doji")
+            # แสดงเฉพาะราคาปิด
+            logger.info(f"📊 PRICE: {candle.close}")
                 
             # Signal generation ย้ายไป SignalManager แล้ว
             
@@ -358,27 +368,18 @@ class TradingSystem:
             )
             
             if decision['should_enter']:
-                logger.info(f"🎯 {unified_signal.source} Signal Accepted!")
-                logger.info(f"   Direction: {unified_signal.signal.direction}, Lot: {decision['lot_size']:.2f}")
-                logger.info(f"   Priority: {unified_signal.priority.name}, Score: {unified_signal.confidence_score:.1f}")
-                logger.info(f"   Reasons: {'; '.join(decision['reasons'])}")
+                # 🎯 TRADE ENTRY
+                logger.info(f"🎯 ENTRY: {unified_signal.signal.direction} {decision['lot_size']:.2f} lots @ {unified_signal.signal.price}")
                 
                 # ดำเนินการเทรด
                 result = self.portfolio_manager.execute_trade_decision(decision)
                 
                 if result.success:
-                    logger.info(f"✅ Order สำเร็จ - Ticket: {result.ticket} ({unified_signal.source})")
+                    logger.info(f"✅ ORDER SUCCESS: Ticket #{result.ticket}")
                     self.portfolio_manager.update_trade_timing(trade_executed=True)
                 else:
-                    logger.error(f"❌ Order ไม่สำเร็จ: {result.error_message}")
+                    logger.error(f"❌ ORDER FAILED: {result.error_message}")
                     
-            else:
-                logger.debug(f"⏸️ {unified_signal.source} Signal ถูกปฏิเสธ")
-                logger.debug(f"   Reasons: {'; '.join(decision['reasons'])}")
-                
-                # อัพเดทเวลาสัญญาณ (แม้จะไม่เทรด)
-                self.portfolio_manager.update_trade_timing(signal_generated=True)
-                
             # ล้าง signal หลังจากประมวลผล
             self.last_signal = None
             
@@ -403,14 +404,10 @@ class TradingSystem:
                 should_block_recovery = breakout_info.get('should_block_recovery', False)
                 
                 if breakout_info.get('is_breakout_pending'):
-                    logger.info(f"🎯 Advanced Breakout Recovery: {breakout_info['reason']}")
-                    logger.info(f"   Recovery Groups: {breakout_info['recovery_groups']}")
-                    logger.info(f"   Actions Needed: {len(breakout_info.get('actions_needed', []))}")
-                    
-                    # แสดงผล Recovery ที่สำเร็จ
+                    # Show only successful recovery results
                     for result in breakout_info.get('recovery_results', []):
                         if result['success']:
-                            logger.info(f"✅ Triple Recovery: ${result['net_profit']:.2f} profit")
+                            logger.info(f"✅ RECOVERY SUCCESS: ${result['net_profit']:.2f} profit")
                 
                 # 2. 🗑️ Smart Recovery REMOVED - functionality moved to Smart Profit Taking System
                 
@@ -423,21 +420,19 @@ class TradingSystem:
                     if profit_decision.get('should_execute', False):
                         best_group = profit_decision.get('best_group')
                         if best_group:
-                            logger.info(f"🎯 Smart Profit Taking: {profit_decision.get('reason', 'N/A')}")
-                            logger.info(f"   Market: {profit_decision.get('market_condition', 'N/A')}, Pullback: {profit_decision.get('pullback_status', 'N/A')}")
+                            # 💰 PROFIT TAKING
+                            total_positions = len(best_group.profit_positions) + len(best_group.loss_positions)
+                            logger.info(f"💰 PROFIT TAKING: {total_positions} positions, ${best_group.total_pnl:.2f} profit")
                             
                             profit_result = self.portfolio_manager.smart_profit_taking.execute_profit_taking(best_group)
                             if profit_result.get('success', False):
-                                logger.info(f"✅ Smart Profit Taking สำเร็จ: {profit_result.get('message', 'N/A')}")
+                                logger.info(f"✅ PROFIT SUCCESS: {profit_result.get('message', 'Closed successfully')}")
                             else:
-                                logger.warning(f"❌ Smart Profit Taking ล้มเหลว: {profit_result.get('message', 'N/A')}")
-                    else:
-                        logger.debug(f"⏸️ Smart Profit Taking: {profit_decision.get('reason', 'N/A')}")
+                                logger.warning(f"❌ PROFIT FAILED: {profit_result.get('message', 'Unknown error')}")
+                    # Profit taking not ready - no logging to reduce noise
                 
-                # 3. Zone Analysis & Rebalancing (ไม่ถูกบล็อค)
+                # 3. Zone Analysis & Rebalancing (silent)
                 zone_result = self.portfolio_manager.check_and_execute_zone_rebalance(current_price)
-                if zone_result['executed']:
-                    logger.info(f"📊 Zone Analysis: Score {zone_result['zone_score']:.1f}/100 ({zone_result['zone_quality']})")
             
             # 🗑️ Emergency Exit REMOVED - All exits handled by Smart Profit Taking System
         except Exception as e:
@@ -470,9 +465,7 @@ class TradingSystem:
 def main():
     """ฟังก์ชันหลัก"""
     try:
-        logger.info("=" * 60)
-        logger.info("🚀 เริ่มต้น Trading System - Percentage Based")
-        logger.info("=" * 60)
+        logger.info("🚀 TRADING SYSTEM STARTING")
         
         # สร้างระบบเทรด
         trading_system = TradingSystem(
@@ -485,12 +478,9 @@ def main():
             logger.error("ไม่สามารถเริ่มต้นระบบได้")
             return
             
-        # แสดงข้อมูลเริ่มต้น
-        logger.info("📊 ข้อมูลเริ่มต้น:")
-        logger.info(f"   - เงินทุนเริ่มต้น: {trading_system.initial_balance:,.2f}")
-        logger.info(f"   - สัญลักษณ์: {trading_system.base_symbol} -> {trading_system.actual_symbol}")
-        logger.info(f"   - ความเสี่ยงต่อ Trade: {trading_system.portfolio_manager.max_risk_per_trade}%")
-        logger.info(f"   - เป้าหมายกำไร: {trading_system.portfolio_manager.profit_target}%")
+        # แสดงข้อมูลสำคัญ
+        logger.info(f"💰 Balance: ${trading_system.initial_balance:,.2f}")
+        logger.info(f"📊 Symbol: {trading_system.actual_symbol}")
         logger.info("")
         logger.info("⚠️  ระบบพร้อมใช้งาน - กดปุ่ม 'Start Trading' ใน GUI เพื่อเริ่มเทรด")
         logger.info("=" * 60)
