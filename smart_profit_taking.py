@@ -118,7 +118,7 @@ class SmartProfitTakingSystem:
             # Market Condition Classification
             if current_atr_ratio > 1.5 and price_std > price_range * 0.3:
                 condition = MarketCondition.VOLATILE
-            elif trend_strength > 0.5 and abs(closes[-1] - closes[-10]) / closes[-10] * 100 > 1.0:
+            elif trend_strength > 0.5 and closes[-10] > 0 and abs(closes[-1] - closes[-10]) / closes[-10] * 100 > 1.0:
                 condition = MarketCondition.TRENDING  
             else:
                 condition = MarketCondition.RANGING
@@ -300,19 +300,20 @@ class SmartProfitTakingSystem:
             
             # 1. Distance Risk (30%) - ไม้ที่ห่างจากราคาปัจจุบันมีความเสี่ยงน้อย
             total_distance = 0.0
-            for pos in profit_positions + loss_positions:
-                distance = abs(pos.price_open - current_price) / current_price * 100
-                total_distance += distance
+            if current_price > 0:  # ป้องกัน division by zero
+                for pos in profit_positions + loss_positions:
+                    distance = abs(pos.price_open - current_price) / current_price * 100
+                    total_distance += distance
             
             avg_distance = total_distance / len(profit_positions + loss_positions) if profit_positions + loss_positions else 0
             distance_score = min(avg_distance * 2, 30.0)
             score += distance_score
             
             # 2. P&L Balance Risk (40%) - สมดุลระหว่างกำไรและขาดทุน
-            total_profit = sum(pos.profit for pos in profit_positions)
-            total_loss = abs(sum(pos.profit for pos in loss_positions))
+            total_profit = sum(pos.profit for pos in profit_positions) if profit_positions else 0.0
+            total_loss = abs(sum(pos.profit for pos in loss_positions)) if loss_positions else 0.0
             
-            if total_loss > 0:
+            if total_loss > 0 and total_profit > 0:  # ป้องกัน division by zero
                 balance_ratio = total_profit / total_loss
                 if 0.8 <= balance_ratio <= 2.0:  # สมดุลดี
                     balance_score = 40.0
@@ -320,7 +321,11 @@ class SmartProfitTakingSystem:
                     balance_score = 25.0
                 else:  # ไม่สมดุล
                     balance_score = 10.0
-            else:
+            elif total_profit > 0:  # มีแต่กำไร
+                balance_score = 30.0
+            elif total_loss > 0:  # มีแต่ขาดทุน
+                balance_score = 5.0
+            else:  # ไม่มีทั้งคู่
                 balance_score = 20.0
             
             score += balance_score
@@ -363,10 +368,10 @@ class SmartProfitTakingSystem:
                 quality += min(pnl_ratio * 100, 50.0)
             
             # 2. Size Balance (30%)
-            profit_lots = sum(pos.volume for pos in profit_positions)
-            loss_lots = sum(pos.volume for pos in loss_positions)
+            profit_lots = sum(pos.volume for pos in profit_positions) if profit_positions else 0.0
+            loss_lots = sum(pos.volume for pos in loss_positions) if loss_positions else 0.0
             
-            if loss_lots > 0:
+            if loss_lots > 0 and profit_lots > 0:  # ป้องกัน division by zero
                 size_ratio = profit_lots / loss_lots
                 if 0.5 <= size_ratio <= 2.0:  # สมดุลดี
                     quality += 30.0
@@ -374,6 +379,12 @@ class SmartProfitTakingSystem:
                     quality += 20.0
                 else:
                     quality += 10.0
+            elif profit_lots > 0:  # มีแต่กำไร
+                quality += 25.0
+            elif loss_lots > 0:  # มีแต่ขาดทุน
+                quality += 5.0
+            else:  # ไม่มีทั้งคู่
+                quality += 15.0
             
             # 3. Diversification (20%)
             total_positions = len(profit_positions) + len(loss_positions)
@@ -440,7 +451,7 @@ class SmartProfitTakingSystem:
                 }
             
             # 5. ตรวจสอบกำไรขั้นต่ำ
-            min_profit_required = account_balance * (self.min_group_profit_percentage / 100)
+            min_profit_required = (account_balance * (self.min_group_profit_percentage / 100)) if account_balance > 0 else 1.0
             if best_group.total_pnl < min_profit_required:
                 return {
                     'should_execute': False,
@@ -491,7 +502,7 @@ class SmartProfitTakingSystem:
                 # อัพเดทสถิติ
                 self.successful_exits += 1
                 self.total_exits += 1
-                self.success_rate = self.successful_exits / self.total_exits * 100
+                self.success_rate = (self.successful_exits / self.total_exits * 100) if self.total_exits > 0 else 0.0
                 
                 logger.info(f"✅ ปิดกำไรกลุ่มสำเร็จ: P&L ${profit_group.total_pnl:.2f}")
                 logger.info(f"📊 Success Rate: {self.success_rate:.1f}% ({self.successful_exits}/{self.total_exits})")
@@ -505,7 +516,7 @@ class SmartProfitTakingSystem:
                 }
             else:
                 self.total_exits += 1
-                self.success_rate = self.successful_exits / self.total_exits * 100
+                self.success_rate = (self.successful_exits / self.total_exits * 100) if self.total_exits > 0 else 0.0
                 
                 logger.warning(f"❌ ปิดกำไรกลุ่มล้มเหลว: {result.get('reason', 'Unknown error')}")
                 
