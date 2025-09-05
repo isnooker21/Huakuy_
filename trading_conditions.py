@@ -278,30 +278,29 @@ class TradingConditions:
         # 🗑️ Portfolio Quality Check REMOVED - ให้ระบบเข้าไม้ได้เสมอ
         # เพื่อไม่ให้พอร์ตแย่ยิ่งแย่หนัก จากการไม่ออกไม้
 
-        # 🚀 Adaptive Entry Control - Smart Portfolio Management
+        # 🚀 Adaptive Entry Control - MODIFIED for Zone-Based System
+        # ลดการบล็อคเพื่อให้ Zone System ทำงานได้เต็มที่
         adaptive_control = self._check_adaptive_entry_control(positions, candle.close, strength_analysis['direction'])
         if adaptive_control['force_trade']:
             # บังคับ Counter-Trade เพื่อแก้สมดุล Portfolio
             strength_analysis['direction'] = adaptive_control['forced_direction']
             logger.info(f"🚀 Adaptive Force Trade: {adaptive_control['reason']}")
         elif adaptive_control['should_block']:
-            result['can_enter'] = False
-            result['reasons'].append(f"Adaptive Block: {adaptive_control['reason']}")
-            result['signal'] = None
-            return result
+            # แทนที่จะบล็อค ให้แสดงคำเตือนแล้วให้ Zone System ตัดสินใจ
+            logger.warning(f"⚠️ Adaptive Warning: {adaptive_control['reason']} - Let Zone System decide")
+            # ไม่ return ให้ดำเนินการต่อ
 
-        # 🛡️ Dynamic Zone Protection - ป้องกัน Price Inversion (รองรับ Adaptive)
+        # 🛡️ Dynamic Zone Protection - DISABLED for Zone-Based System
+        # เดิมจะบล็อคการเข้าไม้ ตอนนี้ให้ Zone System จัดการแทน
         dynamic_zone_check = self._check_dynamic_zone_protection(positions, candle.close, strength_analysis['direction'])
         if dynamic_zone_check['force_counter_trade'] and not adaptive_control['force_trade']:
-            # บังคับ counter trade เพื่อป้องกัน price inversion (ถ้า Adaptive ไม่ได้ Force แล้ว)
-            original_direction = strength_analysis['direction']
-            strength_analysis['direction'] = dynamic_zone_check['forced_direction']
-            logger.info(f"🛡️ Dynamic Zone Protection: Forced {strength_analysis['direction']} at {candle.close:.2f} - {dynamic_zone_check['reason']}")
+            # แสดงคำเตือนแต่ไม่บังคับเปลี่ยนทิศทาง
+            logger.info(f"🛡️ Dynamic Zone Info: Would suggest {dynamic_zone_check['forced_direction']} - {dynamic_zone_check['reason']}")
+            # ไม่เปลี่ยน direction ให้ Zone System ตัดสินใจ
         elif not dynamic_zone_check['can_enter'] and not adaptive_control['force_trade']:
-            result['can_enter'] = False
-            result['reasons'].append(f"Dynamic Zone Block: {dynamic_zone_check['reason']}")
-            result['signal'] = None
-            return result
+            # แสดงคำเตือนแต่ไม่บล็อค
+            logger.warning(f"⚠️ Dynamic Zone Warning: {dynamic_zone_check['reason']} - Let Zone System decide")
+            # ไม่ return ให้ดำเนินการต่อ
 
         # สร้างสัญญาณการเทรด
         signal = Signal(
