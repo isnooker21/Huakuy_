@@ -278,6 +278,19 @@ class TradingConditions:
         # 🗑️ Portfolio Quality Check REMOVED - ให้ระบบเข้าไม้ได้เสมอ
         # เพื่อไม่ให้พอร์ตแย่ยิ่งแย่หนัก จากการไม่ออกไม้
 
+        # 🛡️ Dynamic Zone Protection - ป้องกัน Price Inversion
+        dynamic_zone_check = self._check_dynamic_zone_protection(positions, candle.close, strength_analysis['direction'])
+        if dynamic_zone_check['force_counter_trade']:
+            # บังคับ counter trade เพื่อป้องกัน price inversion
+            original_direction = strength_analysis['direction']
+            strength_analysis['direction'] = dynamic_zone_check['forced_direction']
+            logger.info(f"🛡️ Dynamic Zone Protection: Forced {strength_analysis['direction']} at {candle.close:.2f} - {dynamic_zone_check['reason']}")
+        elif not dynamic_zone_check['can_enter']:
+            result['can_enter'] = False
+            result['reasons'].append(f"Dynamic Zone Block: {dynamic_zone_check['reason']}")
+            result['signal'] = None
+            return result
+
         # สร้างสัญญาณการเทรด
         signal = Signal(
             direction=strength_analysis['direction'],
@@ -360,7 +373,7 @@ class TradingConditions:
         
     def _check_portfolio_balance(self, positions: List[Position], direction: str) -> Dict[str, Any]:
         """
-        ตรวจสอบสมดุลพอร์ตแบบ Zone-Based (300 จุด = 30 pips)
+        ตรวจสอบสมดุลพอร์ตแบบ Zone-Based (100 จุด = 10 pips)
         
         Args:
             positions: รายการ Position
@@ -377,7 +390,7 @@ class TradingConditions:
         if not positions:
             return result
             
-        # 🎯 Zone-Based Balance Check (300 points = 30 pips per zone)
+        # 🎯 Zone-Based Balance Check (100 points = 10 pips per zone)
         zone_balance = self._analyze_zone_balance(positions, direction)
         
         # ถ้ามี position น้อยกว่า 5 ตัว ไม่เช็คสมดุล zone
@@ -407,7 +420,7 @@ class TradingConditions:
     
     def _analyze_zone_balance(self, positions: List[Position], direction: str) -> Dict[str, Any]:
         """
-        🎯 วิเคราะห์สมดุลแบบ Zone-Based (300 จุด = 30 pips ต่อ zone)
+        🎯 วิเคราะห์สมดุลแบบ Zone-Based (100 จุด = 10 pips ต่อ zone)
         
         Args:
             positions: รายการ positions
@@ -422,8 +435,8 @@ class TradingConditions:
         # หาราคาปัจจุบัน (ใช้ราคาเฉลี่ยจาก positions)
         current_price = sum(pos.price_open for pos in positions) / len(positions)
         
-        # แบ่ง positions เป็น zones (300 points = 30 pips per zone)
-        zone_size = 3.0  # 300 points = 3.0 price units สำหรับ XAUUSD
+        # แบ่ง positions เป็น zones (100 points = 10 pips per zone)
+        zone_size = 1.0  # 100 points = 1.0 price units สำหรับ XAUUSD
         zones = {}
         
         for pos in positions:
@@ -501,10 +514,10 @@ class TradingConditions:
             # ตรวจสอบว่าเป็น Breakout Scenario หรือไม่
             gap_pips = (max_buy_price - min_sell_price) * 10  # แปลงเป็น pips
             
-            # ยืดหยุ่นมาก: อนุญาตถ้า gap ไม่ใหญ่มาก (< 150 pips = 1500 จุด)
-            if gap_pips < 150.0:  # เพิ่มจาก 60 เป็น 150 pips
+            # เข้มงวดกว่า: อนุญาตถ้า gap ไม่ใหญ่มาก (< 50 pips = 500 จุด)
+            if gap_pips < 50.0:  # ลดจาก 150 เป็น 50 pips เพื่อให้เหมาะกับ 10 pips spacing
                 logger.info(f"⚡ Price Hierarchy Override: Gap={gap_pips:.1f} pips ({gap_pips*10:.0f} จุด) - Normal Trading")
-                return {'valid': True, 'reason': f'Acceptable gap - {gap_pips:.1f} pips < 150 pips'}
+                return {'valid': True, 'reason': f'Acceptable gap - {gap_pips:.1f} pips < 50 pips'}
             
             # อนุญาตถ้ามี positions น้อย (< 10 ไม้) - เพิ่มจาก 5 เป็น 10
             if len(positions) < 10:
@@ -522,6 +535,109 @@ class TradingConditions:
             }
             
         return {'valid': True, 'reason': ''}
+    
+    def _check_dynamic_zone_protection(self, positions: List[Position], current_price: float, direction: str) -> Dict[str, Any]:
+        """
+        🛡️ ระบบป้องกัน Price Inversion แบบ Dynamic Zone
+        
+        Args:
+            positions: รายการ positions ปัจจุบัน
+            current_price: ราคาปัจจุบัน
+            direction: ทิศทางที่ต้องการเทรด
+            
+        Returns:
+            Dict: ผลการตรวจสอบ Dynamic Zone
+        """
+        result = {
+            'can_enter': True,
+            'force_counter_trade': False,
+            'forced_direction': direction,
+            'reason': ''
+        }
+        
+        if not positions or len(positions) < 3:
+            return result
+            
+        # คำนวณขอบเขต zones
+        zone_boundaries = self._calculate_zone_boundaries(positions)
+        
+        # ตรวจสอบ Force Counter Trade
+        force_check = self._should_force_counter_trade(positions, current_price, zone_boundaries)
+        
+        if force_check['should_force']:
+            result['force_counter_trade'] = True
+            result['forced_direction'] = force_check['forced_direction']
+            result['reason'] = force_check['reason']
+            return result
+            
+        # ตรวจสอบการบล็อคการเทรดในโซนอันตราย
+        if self._is_in_danger_zone(current_price, zone_boundaries, direction):
+            result['can_enter'] = False
+            result['reason'] = f"Price in danger zone for {direction} at {current_price:.2f}"
+            
+        return result
+    
+    def _calculate_zone_boundaries(self, positions: List[Position]) -> Dict[str, float]:
+        """📊 คำนวณขอบเขต Upper/Lower Zone"""
+        buy_positions = [pos for pos in positions if pos.type == 0]  # BUY
+        sell_positions = [pos for pos in positions if pos.type == 1]  # SELL
+        
+        zone_buffer = 20.0  # 200 pips = 20.0 points สำหรับ XAUUSD
+        
+        boundaries = {
+            'upper_zone_start': 0.0,
+            'lower_zone_start': 0.0,
+            'safe_range_top': 0.0,
+            'safe_range_bottom': 0.0
+        }
+        
+        if sell_positions:
+            max_sell_price = max(pos.price_open for pos in sell_positions)
+            boundaries['upper_zone_start'] = max_sell_price + zone_buffer
+            boundaries['safe_range_top'] = max_sell_price + (zone_buffer * 0.5)
+            
+        if buy_positions:
+            min_buy_price = min(pos.price_open for pos in buy_positions)
+            boundaries['lower_zone_start'] = min_buy_price - zone_buffer
+            boundaries['safe_range_bottom'] = min_buy_price - (zone_buffer * 0.5)
+            
+        return boundaries
+    
+    def _should_force_counter_trade(self, positions: List[Position], current_price: float, boundaries: Dict[str, float]) -> Dict[str, Any]:
+        """⚡ ตรวจสอบว่าต้อง Force Trade หรือไม่"""
+        result = {
+            'should_force': False,
+            'forced_direction': '',
+            'reason': ''
+        }
+        
+        # ตรวจสอบ Upper Zone (ราคาสูงเกินไป → บังคับ SELL)
+        if boundaries['upper_zone_start'] > 0 and current_price >= boundaries['upper_zone_start']:
+            # เช็คว่ามี SELL ในโซนนี้หรือไม่
+            sell_positions = [pos for pos in positions if pos.type == 1 and pos.price_open >= boundaries['upper_zone_start']]
+            
+            if not sell_positions:  # ไม่มี SELL ในโซนบน → บังคับ SELL
+                result['should_force'] = True
+                result['forced_direction'] = 'SELL'
+                result['reason'] = f"Force SELL: Price {current_price:.2f} above upper zone {boundaries['upper_zone_start']:.2f}, no SELL positions in zone"
+                
+        # ตรวจสอบ Lower Zone (ราคาต่ำเกินไป → บังคับ BUY)
+        elif boundaries['lower_zone_start'] > 0 and current_price <= boundaries['lower_zone_start']:
+            # เช็คว่ามี BUY ในโซนนี้หรือไม่
+            buy_positions = [pos for pos in positions if pos.type == 0 and pos.price_open <= boundaries['lower_zone_start']]
+            
+            if not buy_positions:  # ไม่มี BUY ในโซนล่าง → บังคับ BUY
+                result['should_force'] = True
+                result['forced_direction'] = 'BUY'
+                result['reason'] = f"Force BUY: Price {current_price:.2f} below lower zone {boundaries['lower_zone_start']:.2f}, no BUY positions in zone"
+                
+        return result
+    
+    def _is_in_danger_zone(self, current_price: float, boundaries: Dict[str, float], direction: str) -> bool:
+        """🚨 ตรวจสอบว่าอยู่ในโซนอันตรายหรือไม่"""
+        # สำหรับตอนนี้ไม่บล็อค เพื่อให้ระบบยืดหยุ่น
+        # สามารถเพิ่มเงื่อนไขเพิ่มเติมได้ในอนาคต
+        return False
         
     def _check_capital_exposure(self, positions: List[Position], account_balance: float, 
                                max_exposure_percentage: float = 65.0) -> Dict[str, Any]:
