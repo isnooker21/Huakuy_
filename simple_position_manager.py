@@ -118,7 +118,7 @@ class SimplePositionManager:
             'health_status': health_status
         }
 
-    def should_close_positions(self, positions: List[Any], current_price: float) -> Dict[str, Any]:
+    def should_close_positions(self, positions: List[Any], current_price: float, balance_analysis: Optional[Dict] = None) -> Dict[str, Any]:
         """
         🔍 ตรวจสอบว่าควรปิดไม้หรือไม่ (Enhanced with Universal Recovery)
         
@@ -142,8 +142,9 @@ class SimplePositionManager:
             # 🚀 1. Universal Recovery Check (ถ้าเปิดใช้)
             if self.enable_universal_recovery and self.recovery_manager:
                 try:
-                    # วิเคราะห์ Balance
-                    balance_analysis = self._analyze_portfolio_balance(positions, current_price)
+                    # วิเคราะห์ Balance (ใช้ที่ส่งมาก่อน ถ้าไม่มีค่อยสร้างใหม่)
+                    if balance_analysis is None:
+                        balance_analysis = self._analyze_portfolio_balance(positions, current_price)
                     
                     # วิเคราะห์ Drag Recovery
                     drag_analysis = self.recovery_manager.analyze_dragged_positions(positions, current_price)
@@ -200,7 +201,7 @@ class SimplePositionManager:
                 expected_pnl = best_combination['total_pnl']
                 
                 # Double-check P&L โดยใช้ profit จาก position จริง
-                actual_pnl = sum(pos.profit for pos in best_combination['positions'] if hasattr(pos, 'profit'))
+                actual_pnl = sum(getattr(pos, 'profit', 0) for pos in best_combination['positions'] if hasattr(pos, 'profit'))
                 if actual_pnl != 0.0:
                     expected_pnl = actual_pnl  # ใช้ค่าจริงจาก MT5
                     logger.info(f"🔍 Using actual P&L from positions: ${actual_pnl:.2f}")
@@ -291,8 +292,8 @@ class SimplePositionManager:
     
     def _analyze_portfolio_balance(self, analyzed_positions: List[Dict], current_price: float) -> Dict[str, Any]:
         """📊 วิเคราะห์ความสมดุลของ Portfolio"""
-        buy_positions = [pos for pos in analyzed_positions if pos['position'].type == 0]
-        sell_positions = [pos for pos in analyzed_positions if pos['position'].type == 1]
+        buy_positions = [pos for pos in analyzed_positions if getattr(pos['position'], 'type', None) == 0]
+        sell_positions = [pos for pos in analyzed_positions if getattr(pos['position'], 'type', None) == 1]
         
         total_positions = len(analyzed_positions)
         buy_count = len(buy_positions)
@@ -330,12 +331,12 @@ class SimplePositionManager:
             imbalance_side = balance_analysis['imbalance_side']
             
             # แยกไม้ตามฝั่ง
-            buy_positions = [pos for pos in analyzed_positions if pos['position'].type == 0]
-            sell_positions = [pos for pos in analyzed_positions if pos['position'].type == 1]
+            buy_positions = [pos for pos in analyzed_positions if getattr(pos['position'], 'type', None) == 0]
+            sell_positions = [pos for pos in analyzed_positions if getattr(pos['position'], 'type', None) == 1]
             
             # เรียงตามระยะห่าง (ห่างมาก → ปิดก่อน) - ใช้ current_price แทน distance_from_price
-            buy_positions.sort(key=lambda x: abs(x['position'].price_open - current_price), reverse=True)
-            sell_positions.sort(key=lambda x: abs(x['position'].price_open - current_price), reverse=True)
+            buy_positions.sort(key=lambda x: abs(getattr(x['position'], 'price_open', current_price) - current_price), reverse=True)
+            sell_positions.sort(key=lambda x: abs(getattr(x['position'], 'price_open', current_price) - current_price), reverse=True)
             
             best_combination = None
             best_score = -999999
@@ -343,8 +344,8 @@ class SimplePositionManager:
             # ทดสอบการจับคู่ต่างๆ โดยให้ความสำคัญกับการลดฝั่งที่เยอะ
             for size in range(2, min(6, len(analyzed_positions) + 1)):  # 2-5 positions
                 for combination in combinations(analyzed_positions, size):
-                    combo_buy = [pos for pos in combination if pos['position'].type == 0]
-                    combo_sell = [pos for pos in combination if pos['position'].type == 1]
+                    combo_buy = [pos for pos in combination if getattr(pos['position'], 'type', None) == 0]
+                    combo_sell = [pos for pos in combination if getattr(pos['position'], 'type', None) == 1]
                     
                     # คำนวณ P&L
                     total_pnl = sum(pos['current_pnl'] for pos in combination)
@@ -362,7 +363,7 @@ class SimplePositionManager:
                         score += 50  # โบนัสการลด SELL
                     
                     # โบนัสสำหรับการปิดไม้ห่าง - คำนวณจาก current_price
-                    distance_bonus = sum(abs(pos['position'].price_open - current_price) for pos in combination) * 0.1
+                    distance_bonus = sum(abs(getattr(pos['position'], 'price_open', current_price) - current_price) for pos in combination) * 0.1
                     score += distance_bonus
                     
                     if score > best_score:
@@ -398,7 +399,7 @@ class SimplePositionManager:
                         
                     # คำนวณคะแนน Distance + Profit
                     profit_score = total_pnl * 10  # กำไรมีน้ำหนักมาก
-                    distance_score = sum(abs(pos['position'].price_open - current_price) for pos in combination)
+                    distance_score = sum(abs(getattr(pos['position'], 'price_open', current_price) - current_price) for pos in combination)
                     
                     # รวมคะแนน
                     total_score = profit_score + distance_score
