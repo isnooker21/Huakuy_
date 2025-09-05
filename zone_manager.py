@@ -82,7 +82,7 @@ class ZoneManager:
             max_zones: จำนวน Zone สูงสุดที่ติดตาม (default: 20)
         """
         self.zone_size_pips = zone_size_pips
-        self.zone_size_points = zone_size_pips * 10  # สำหรับ XAUUSD (10 points = 1 pip)
+        self.zone_size_points = zone_size_pips  # สำหรับ XAUUSD (1 point = 1 pip สำหรับการคำนวณ Zone)
         self.max_zones = max_zones
         
         # Zone Storage
@@ -109,14 +109,68 @@ class ZoneManager:
         Returns:
             int: Zone ID
         """
+        # 🎯 ใช้ Dynamic Base Price แทนการตั้งครั้งเดียว
         if self.base_price == 0.0:
-            self.base_price = price
+            # ใช้ราคาที่ปัดลงให้เหมาะกับ Zone Size
+            # สำหรับ 30 pips zones, ปัดลงเป็นหลัก zone_size_points
+            zone_aligned_price = math.floor(price / self.zone_size_points) * self.zone_size_points
+            self.base_price = zone_aligned_price
+            logger.info(f"🎯 Base Price initialized (zone-aligned): {self.base_price:.2f}")
             
         # คำนวณ Zone ID จากการหาร
         zone_offset = (price - self.base_price) / self.zone_size_points
         zone_id = int(math.floor(zone_offset))
         
+        # 🔧 ปรับ Base Price ถ้า Zone ID ติดลบมากเกินไป
+        if zone_id < -5:
+            # ปรับ Base Price ลงเพื่อให้ Zone ID เป็นบวก
+            zone_aligned_price = math.floor(price / self.zone_size_points) * self.zone_size_points
+            logger.info(f"🔧 Adjusting Base Price: {self.base_price:.2f} → {zone_aligned_price:.2f}")
+            self.base_price = zone_aligned_price
+            zone_offset = (price - self.base_price) / self.zone_size_points
+            zone_id = int(math.floor(zone_offset))
+        
         return zone_id
+    
+    def debug_zone_calculation(self, price: float) -> Dict[str, Any]:
+        """
+        🔍 Debug การคำนวณ Zone เพื่อแสดงรายละเอียด
+        
+        Args:
+            price: ราคาที่ต้องการ debug
+            
+        Returns:
+            Dict: ข้อมูลการคำนวณ Zone
+        """
+        zone_id = self.calculate_zone_id(price)
+        zone_range = self.get_zone_price_range(zone_id)
+        
+        debug_info = {
+            'current_price': price,
+            'base_price': self.base_price,
+            'zone_size_pips': self.zone_size_pips,
+            'zone_size_points': self.zone_size_points,
+            'price_difference': price - self.base_price,
+            'zone_offset': (price - self.base_price) / self.zone_size_points,
+            'zone_id': zone_id,
+            'zone_range': zone_range,
+            'zone_center': (zone_range[0] + zone_range[1]) / 2
+        }
+        
+        # คำนวณ Zone Width เป็น pips
+        zone_width_pips = (zone_range[1] - zone_range[0])
+        
+        logger.info(f"🔍 Zone Calculation Debug:")
+        logger.info(f"   Current Price: {price:.2f}")
+        logger.info(f"   Base Price: {self.base_price:.2f}")
+        logger.info(f"   Price Difference: {debug_info['price_difference']:.2f}")
+        logger.info(f"   Zone Size: {self.zone_size_pips} pips ({self.zone_size_points} points)")
+        logger.info(f"   Zone Offset: {debug_info['zone_offset']:.3f}")
+        logger.info(f"   Zone ID: {zone_id}")
+        logger.info(f"   Zone Range: {zone_range[0]:.2f} - {zone_range[1]:.2f} (Width: {zone_width_pips:.1f} pips)")
+        logger.info(f"   Zone Center: {debug_info['zone_center']:.2f}")
+        
+        return debug_info
     
     def get_zone_price_range(self, zone_id: int) -> Tuple[float, float]:
         """
