@@ -66,8 +66,8 @@ class SimplePositionManager:
                     'positions_to_close': []
                 }
             
-            # 🎯 หาการจับคู่ที่ดีที่สุด
-            best_combination = self._find_best_closing_combination(analyzed_positions)
+            # 🎯 หาการจับคู่ที่ดีที่สุด (แบบสมดุล Portfolio)
+            best_combination = self._find_best_closing_combination_balanced(analyzed_positions, current_price)
             
             if best_combination:
                 # 🛡️ ตรวจสอบอีกครั้งก่อนปิด - ต้องมีกำไรจริงๆ
@@ -114,6 +114,172 @@ class SimplePositionManager:
                 'reason': f'Analysis error: {e}',
                 'positions_to_close': []
             }
+    
+    def _find_best_closing_combination_balanced(self, analyzed_positions: List[Dict], current_price: float) -> Optional[Dict]:
+        """
+        🎯 หาการจับคู่ที่ดีที่สุดแบบสมดุล Portfolio
+        
+        Logic:
+        1. เช็ค Portfolio Balance
+        2. ถ้าเบี้ยว → บังคับปิดฝั่งที่เยอะ
+        3. ถ้าสมดุล → ปิดตามระยะห่าง + กำไร
+        
+        Args:
+            analyzed_positions: รายการ positions ที่วิเคราะห์แล้ว
+            current_price: ราคาปัจจุบัน
+            
+        Returns:
+            Dict: การจับคู่ที่ดีที่สุด หรือ None
+        """
+        try:
+            if len(analyzed_positions) < 2:
+                return None
+                
+            # 1. วิเคราะห์ Portfolio Balance
+            balance_analysis = self._analyze_portfolio_balance(analyzed_positions, current_price)
+            
+            # 2. เลือกกลยุทธ์ตาม Balance
+            if balance_analysis['is_imbalanced']:
+                # Portfolio เบี้ยว → ใช้ Balance Priority Strategy
+                return self._find_balance_priority_combination(analyzed_positions, balance_analysis)
+            else:
+                # Portfolio สมดุล → ใช้ Distance + Profit Strategy  
+                return self._find_distance_profit_combination(analyzed_positions, current_price)
+                
+        except Exception as e:
+            logger.error(f"Error finding balanced combination: {e}")
+            # Fallback ไปใช้ระบบเดิม
+            return self._find_best_closing_combination(analyzed_positions)
+    
+    def _analyze_portfolio_balance(self, analyzed_positions: List[Dict], current_price: float) -> Dict[str, Any]:
+        """📊 วิเคราะห์ความสมดุลของ Portfolio"""
+        buy_positions = [pos for pos in analyzed_positions if pos['position'].type == 0]
+        sell_positions = [pos for pos in analyzed_positions if pos['position'].type == 1]
+        
+        total_positions = len(analyzed_positions)
+        buy_count = len(buy_positions)
+        sell_count = len(sell_positions)
+        
+        if total_positions == 0:
+            return {'is_imbalanced': False, 'imbalance_side': None}
+        
+        buy_ratio = buy_count / total_positions
+        sell_ratio = sell_count / total_positions
+        
+        # เบี้ยวถ้าฝั่งหนึ่งมากกว่า 70%
+        imbalanced = max(buy_ratio, sell_ratio) > 0.7
+        
+        if imbalanced:
+            imbalance_side = 'BUY' if buy_ratio > sell_ratio else 'SELL'
+            imbalance_severity = max(buy_ratio, sell_ratio)
+        else:
+            imbalance_side = None
+            imbalance_severity = 0.0
+            
+        return {
+            'is_imbalanced': imbalanced,
+            'imbalance_side': imbalance_side,
+            'imbalance_severity': imbalance_severity,
+            'buy_count': buy_count,
+            'sell_count': sell_count,
+            'buy_ratio': buy_ratio,
+            'sell_ratio': sell_ratio
+        }
+    
+    def _find_balance_priority_combination(self, analyzed_positions: List[Dict], balance_analysis: Dict) -> Optional[Dict]:
+        """🎯 หาการจับคู่แบบ Balance Priority (ปิดฝั่งที่เยอะก่อน)"""
+        try:
+            imbalance_side = balance_analysis['imbalance_side']
+            
+            # แยกไม้ตามฝั่ง
+            buy_positions = [pos for pos in analyzed_positions if pos['position'].type == 0]
+            sell_positions = [pos for pos in analyzed_positions if pos['position'].type == 1]
+            
+            # เรียงตามระยะห่าง (ห่างมาก → ปิดก่อน)
+            buy_positions.sort(key=lambda x: x['distance_from_price'], reverse=True)
+            sell_positions.sort(key=lambda x: x['distance_from_price'], reverse=True)
+            
+            best_combination = None
+            best_score = -999999
+            
+            # ทดสอบการจับคู่ต่างๆ โดยให้ความสำคัญกับการลดฝั่งที่เยอะ
+            for size in range(2, min(6, len(analyzed_positions) + 1)):  # 2-5 positions
+                for combination in combinations(analyzed_positions, size):
+                    combo_buy = [pos for pos in combination if pos['position'].type == 0]
+                    combo_sell = [pos for pos in combination if pos['position'].type == 1]
+                    
+                    # คำนวณ P&L
+                    total_pnl = sum(pos['current_pnl'] for pos in combination)
+                    
+                    if total_pnl <= 0:  # ต้องมีกำไรเท่านั้น
+                        continue
+                        
+                    # คำนวณคะแนน Balance Priority
+                    score = total_pnl  # เริ่มจากกำไร
+                    
+                    # โบนัสสำหรับการลดฝั่งที่เยอะ
+                    if imbalance_side == 'BUY' and len(combo_buy) > len(combo_sell):
+                        score += 50  # โบนัสการลด BUY
+                    elif imbalance_side == 'SELL' and len(combo_sell) > len(combo_buy):
+                        score += 50  # โบนัสการลด SELL
+                    
+                    # โบนัสสำหรับการปิดไม้ห่าง
+                    distance_bonus = sum(pos['distance_from_price'] for pos in combination) * 0.1
+                    score += distance_bonus
+                    
+                    if score > best_score:
+                        best_score = score
+                        best_combination = {
+                            'positions': [pos['position'] for pos in combination],
+                            'total_pnl': total_pnl,
+                            'combination_size': size,
+                            'strategy': 'Balance Priority',
+                            'balance_improvement': f"Reduce {imbalance_side} imbalance"
+                        }
+            
+            return best_combination
+            
+        except Exception as e:
+            logger.error(f"Error in balance priority combination: {e}")
+            return None
+    
+    def _find_distance_profit_combination(self, analyzed_positions: List[Dict], current_price: float) -> Optional[Dict]:
+        """🎯 หาการจับคู่แบบ Distance + Profit Priority (Portfolio สมดุลแล้ว)"""
+        try:
+            best_combination = None
+            best_score = -999999
+            
+            # ทดสอบการจับคู่ต่างๆ โดยให้ความสำคัญกับไม้ห่าง + กำไร
+            for size in range(2, min(6, len(analyzed_positions) + 1)):  # 2-5 positions
+                for combination in combinations(analyzed_positions, size):
+                    # คำนวณ P&L
+                    total_pnl = sum(pos['current_pnl'] for pos in combination)
+                    
+                    if total_pnl <= 0:  # ต้องมีกำไรเท่านั้น
+                        continue
+                        
+                    # คำนวณคะแนน Distance + Profit
+                    profit_score = total_pnl * 10  # กำไรมีน้ำหนักมาก
+                    distance_score = sum(pos['distance_from_price'] for pos in combination)
+                    
+                    # รวมคะแนน
+                    total_score = profit_score + distance_score
+                    
+                    if total_score > best_score:
+                        best_score = total_score
+                        best_combination = {
+                            'positions': [pos['position'] for pos in combination],
+                            'total_pnl': total_pnl,
+                            'combination_size': size,
+                            'strategy': 'Distance + Profit',
+                            'balance_improvement': 'Maintain balance'
+                        }
+            
+            return best_combination
+            
+        except Exception as e:
+            logger.error(f"Error in distance profit combination: {e}")
+            return None
     
     def close_positions(self, positions_to_close: List[Any]) -> Dict[str, Any]:
         """

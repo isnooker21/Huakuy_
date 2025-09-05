@@ -268,6 +268,165 @@ class LotSizeCalculator:
         
         return final_lot
     
+    def calculate_portfolio_risk_lot(self, positions_count: int, market_volatility: float, 
+                                   account_balance: float = None) -> float:
+        """
+        คำนวณ Lot Size จากขนาด Portfolio และความผันผวนตลาด
+        
+        Args:
+            positions_count: จำนวน positions ปัจจุบัน
+            market_volatility: ความผันผวนตลาดเป็นเปอร์เซ็นต์ (ATR/Price * 100)
+            account_balance: ยอดเงินในบัญชี (optional)
+            
+        Returns:
+            float: ขนาด Lot ที่เหมาะสม (0.01 step)
+        """
+        try:
+            # Base risk ตามจำนวนไม้ในพอร์ต
+            if positions_count <= 5:       base_risk_pct = 15.0    # 15% - พอร์ตเล็ก เสี่ยงได้มาก
+            elif positions_count <= 15:    base_risk_pct = 12.0    # 12% - พอร์ตปานกลาง
+            elif positions_count <= 25:    base_risk_pct = 10.0    # 10% - พอร์ตใหญ่
+            else:                          base_risk_pct = 8.0     # 8% - พอร์ตใหญ่มาก ระวัง
+            
+            # ปรับตามความผันผวนตลาด
+            if market_volatility > 20.0:     volatility_multiplier = 1.3    # ตลาดผันผวนมาก เพิ่ม lot
+            elif market_volatility > 10.0:   volatility_multiplier = 1.0    # ตลาดปกติ
+            elif market_volatility > 5.0:    volatility_multiplier = 0.9    # ตลาดเงียบ ลด lot เล็กน้อย
+            else:                            volatility_multiplier = 0.8    # ตลาดเงียบมาก ลด lot
+            
+            # คำนวณ risk percentage สุดท้าย
+            final_risk_pct = base_risk_pct * volatility_multiplier
+            final_risk_pct = max(8.0, min(20.0, final_risk_pct))  # จำกัด 8-20%
+            
+            # แปลงเป็น lot size
+            balance = account_balance or self.account_balance
+            risk_amount = balance * (final_risk_pct / 100)
+            
+            # สมมติ stop loss 50 pips สำหรับ XAUUSD
+            stop_loss_pips = 50.0
+            pip_value = 1000.0  # XAUUSD pip value
+            
+            calculated_lot = risk_amount / (stop_loss_pips * pip_value)
+            
+            # ปรับให้เป็น 0.01 step และจำกัดขอบเขต
+            portfolio_lot = max(0.01, min(0.10, calculated_lot))
+            portfolio_lot = round(portfolio_lot, 2)
+            
+            logger.info(f"📊 Portfolio Risk Lot Calculation:")
+            logger.info(f"   Positions Count: {positions_count}")
+            logger.info(f"   Market Volatility: {market_volatility:.1f}%")
+            logger.info(f"   Base Risk: {base_risk_pct:.1f}%")
+            logger.info(f"   Volatility Multiplier: {volatility_multiplier:.1f}x")
+            logger.info(f"   Final Risk: {final_risk_pct:.1f}%")
+            logger.info(f"   Risk Amount: ${risk_amount:.2f}")
+            logger.info(f"   Portfolio Lot: {portfolio_lot:.2f}")
+            
+            return portfolio_lot
+            
+        except Exception as e:
+            logger.error(f"Error calculating portfolio risk lot: {e}")
+            return 0.01  # fallback
+    
+    @staticmethod
+    def calculate_market_volatility(candle_data: List[Any], atr_period: int = 14) -> float:
+        """
+        คำนวณความผันผวนตลาดจาก ATR และ Price Movement
+        
+        Args:
+            candle_data: รายการข้อมูลแท่งเทียน (ต้องมี high, low, close)
+            atr_period: ช่วงเวลาสำหรับคำนวณ ATR
+            
+        Returns:
+            float: ความผันผวนเป็นเปอร์เซ็นต์
+        """
+        try:
+            if not candle_data or len(candle_data) < atr_period:
+                return 10.0  # default volatility
+                
+            # คำนวณ True Range สำหรับแต่ละแท่ง
+            true_ranges = []
+            
+            for i in range(1, len(candle_data)):
+                current = candle_data[i]
+                previous = candle_data[i-1]
+                
+                # True Range = max(high-low, |high-prev_close|, |low-prev_close|)
+                tr1 = current.high - current.low
+                tr2 = abs(current.high - previous.close)
+                tr3 = abs(current.low - previous.close)
+                
+                true_range = max(tr1, tr2, tr3)
+                true_ranges.append(true_range)
+            
+            # คำนวณ ATR (Average True Range)
+            if len(true_ranges) >= atr_period:
+                recent_tr = true_ranges[-atr_period:]  # ใช้ข้อมูลล่าสุด
+                atr = sum(recent_tr) / len(recent_tr)
+                
+                # แปลง ATR เป็นเปอร์เซ็นต์ของราคา
+                current_price = candle_data[-1].close
+                volatility_percentage = (atr / current_price) * 100
+                
+                # จำกัดให้อยู่ในช่วงสมเหตุสมผล
+                volatility_percentage = max(1.0, min(50.0, volatility_percentage))
+                
+                logger.info(f"📊 Market Volatility Calculation:")
+                logger.info(f"   ATR ({atr_period} periods): {atr:.4f}")
+                logger.info(f"   Current Price: {current_price:.2f}")
+                logger.info(f"   Volatility: {volatility_percentage:.2f}%")
+                
+                return volatility_percentage
+            else:
+                return 10.0  # default
+                
+        except Exception as e:
+            logger.error(f"Error calculating market volatility: {e}")
+            return 10.0  # default volatility
+    
+    @staticmethod
+    def assess_volatility_level(volatility_pct: float) -> Dict[str, Any]:
+        """
+        ประเมินระดับความผันผวนและแนะนำ Risk Level
+        
+        Args:
+            volatility_pct: ความผันผวนเป็นเปอร์เซ็นต์
+            
+        Returns:
+            Dict: ข้อมูลระดับความผันผวนและคำแนะนำ
+        """
+        if volatility_pct > 25.0:
+            level = "EXTREME"
+            risk_suggestion = 20.0  # 20% risk
+            description = "ตลาดผันผวนสุดขั้ว - เสี่ยงสูง แต่โอกาสมาก"
+        elif volatility_pct > 20.0:
+            level = "VERY_HIGH"  
+            risk_suggestion = 18.0  # 18% risk
+            description = "ตลาดผันผวนมากมาย - เสี่ยงสูง"
+        elif volatility_pct > 15.0:
+            level = "HIGH"
+            risk_suggestion = 15.0  # 15% risk  
+            description = "ตลาดผันผวนสูง - เสี่ยงปานกลางสูง"
+        elif volatility_pct > 10.0:
+            level = "MODERATE"
+            risk_suggestion = 12.0  # 12% risk
+            description = "ตลาดผันผวนปานกลาง - เสี่ยงปกติ"
+        elif volatility_pct > 5.0:
+            level = "LOW"
+            risk_suggestion = 10.0  # 10% risk
+            description = "ตลาดผันผวนต่ำ - เสี่ยงน้อย"
+        else:
+            level = "VERY_LOW"
+            risk_suggestion = 8.0   # 8% risk
+            description = "ตลาดเงียบมาก - เสี่ยงน้อยมาก"
+        
+        return {
+            'level': level,
+            'volatility_pct': volatility_pct,
+            'risk_suggestion': risk_suggestion,
+            'description': description,
+            'lot_multiplier': risk_suggestion / 12.0  # normalize to 12% base
+        }
+        
     @staticmethod
     def round_to_volume_step(lot_size: float, volume_step: float = 0.01) -> float:
         """
