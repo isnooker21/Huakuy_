@@ -489,9 +489,25 @@ class TradingSystem:
 
                 # 2. 🎯 Simple Position Manager - ระบบจัดการไม้แบบเรียบง่าย (Enhanced with Universal Recovery)
                 if hasattr(self.portfolio_manager, 'position_manager'):
-                    close_decision = self.portfolio_manager.position_manager.should_close_positions(
-                        positions, current_price
-                    )
+                    # เตรียม balance_analysis สำหรับ Universal Recovery
+                    balance_analysis = None
+                    if hasattr(self.portfolio_manager.position_manager, '_analyze_portfolio_balance'):
+                        try:
+                            balance_analysis = self.portfolio_manager.position_manager._analyze_portfolio_balance(positions, current_price)
+                        except:
+                            balance_analysis = None
+                    
+                    # เรียกใช้ should_close_positions (compatible with both original and enhanced versions)
+                    try:
+                        # ลองเรียกแบบ 3 parameters ก่อน (Enhanced version)
+                        close_decision = self.portfolio_manager.position_manager.should_close_positions(
+                            positions, current_price, balance_analysis
+                        )
+                    except TypeError:
+                        # ถ้าไม่ได้ ใช้แบบ 2 parameters (Original version)
+                        close_decision = self.portfolio_manager.position_manager.should_close_positions(
+                            positions, current_price
+                        )
                     
                     if close_decision.get('should_close', False):
                         positions_to_close = close_decision.get('positions_to_close', [])

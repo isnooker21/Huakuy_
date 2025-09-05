@@ -136,12 +136,12 @@ class UniversalRecoveryManager:
                 'dragged_count': len(dragged_positions),
                 'dragged_positions': dragged_positions,
                 'recovery_opportunities': recovery_opportunities,
-                'total_drag_loss': sum(pos['drag_info']['loss_pips'] for pos in dragged_positions)
+                'total_drag_loss': sum(pos['drag_info']['loss_pips'] for pos in dragged_positions if pos.get('drag_info', {}).get('loss_pips', 0) > 0)
             }
             
         except Exception as e:
             logger.error(f"🚨 Error analyzing dragged positions: {e}")
-            return {'dragged_count': 0, 'dragged_positions': [], 'recovery_opportunities': []}
+            return {'dragged_count': 0, 'dragged_positions': [], 'recovery_opportunities': [], 'total_drag_loss': 0}
     
     def _analyze_single_position_drag(self, position: Any, current_price: float) -> Dict:
         """วิเคราะห์ไม้เดี่ยวว่าโดนลากไหม"""
@@ -153,21 +153,30 @@ class UniversalRecoveryManager:
             loss_pips = (current_price - position.price_open) * 10000
             
         # เช็คอายุไม้
-        position_age = datetime.now() - datetime.fromtimestamp(position.time)
+        # คำนวณอายุของไม้
+        position_age = timedelta(minutes=0)  # default
+        if hasattr(position, 'time_open') and position.time_open:
+            try:
+                if isinstance(position.time_open, datetime):
+                    position_age = datetime.now() - position.time_open
+                else:
+                    position_age = datetime.now() - datetime.fromtimestamp(position.time_open)
+            except:
+                position_age = timedelta(minutes=0)
         age_hours = position_age.total_seconds() / 3600
         
         # เช็คเงื่อนไข Drag
         is_dragged = (
             loss_pips > self.config['drag_threshold_pips'] and
             age_hours > self.config['drag_age_hours'] and
-            position.profit < 0
+            getattr(position, 'profit', 0) < 0
         )
         
         return {
             'is_dragged': is_dragged,
             'loss_pips': loss_pips,
             'age_hours': age_hours,
-            'profit_usd': position.profit,
+            'profit_usd': getattr(position, 'profit', 0),
             'drag_severity': min(loss_pips / 50.0, 5.0)  # 1-5 scale
         }
     
@@ -281,7 +290,7 @@ class UniversalRecoveryManager:
             recovery_pos = self._find_position_by_ticket(positions, pair_info.recovery_ticket)
             
             if primary_pos and recovery_pos:
-                total_profit = primary_pos.profit + recovery_pos.profit
+                total_profit = getattr(primary_pos, 'profit', 0) + getattr(recovery_pos, 'profit', 0)
                 
                 if total_profit > 0:  # มีกำไรรวม
                     combinations.append({
@@ -298,8 +307,8 @@ class UniversalRecoveryManager:
         """หา Multi-Position Profit Combinations"""
         
         combinations = []
-        profitable_positions = [pos for pos in positions if pos.profit > 0]
-        losing_positions = [pos for pos in positions if pos.profit < 0]
+        profitable_positions = [pos for pos in positions if getattr(pos, 'profit', 0) > 0]
+        losing_positions = [pos for pos in positions if getattr(pos, 'profit', 0) < 0]
         
         if not profitable_positions or not losing_positions:
             return combinations
@@ -309,13 +318,13 @@ class UniversalRecoveryManager:
             
             # ลองทุก combination
             for combo_positions in itertools.combinations(positions, combo_size):
-                total_profit = sum(pos.profit for pos in combo_positions)
+                total_profit = sum(getattr(pos, 'profit', 0) for pos in combo_positions)
                 
                 if total_profit >= self.config['min_profit_usd']:
                     
                     # ต้องมีทั้งไม้กำไรและขาดทุน
-                    profit_count = sum(1 for pos in combo_positions if pos.profit > 0)
-                    loss_count = sum(1 for pos in combo_positions if pos.profit < 0)
+                    profit_count = sum(1 for pos in combo_positions if getattr(pos, 'profit', 0) > 0)
+                    loss_count = sum(1 for pos in combo_positions if getattr(pos, 'profit', 0) < 0)
                     
                     if profit_count > 0 and loss_count > 0:
                         combinations.append({
@@ -337,8 +346,8 @@ class UniversalRecoveryManager:
         if balance_analysis.get('imbalance_percentage', 0) < self.config['imbalance_threshold']:
             return combinations  # ไม่เสียสมดุล
         
-        buy_positions = [pos for pos in positions if pos.type == 0]
-        sell_positions = [pos for pos in positions if pos.type == 1]
+        buy_positions = [pos for pos in positions if getattr(pos, 'type', None) == 0]
+        sell_positions = [pos for pos in positions if getattr(pos, 'type', None) == 1]
         
         imbalance_side = balance_analysis.get('imbalance_side', '')
         
@@ -361,7 +370,7 @@ class UniversalRecoveryManager:
                     for balance_combo in itertools.combinations(balance_positions, balance_count):
                         
                         all_positions = list(target_combo) + list(balance_combo)
-                        total_profit = sum(pos.profit for pos in all_positions)
+                        total_profit = sum(getattr(pos, 'profit', 0) for pos in all_positions)
                         
                         if total_profit >= self.config['min_profit_usd']:
                             combinations.append({
@@ -403,7 +412,7 @@ class UniversalRecoveryManager:
                     for normal_combo in itertools.combinations(normal_positions, normal_count):
                         
                         all_positions = list(recovery_combo) + list(normal_combo)
-                        total_profit = sum(pos.profit for pos in all_positions)
+                        total_profit = sum(getattr(pos, 'profit', 0) for pos in all_positions)
                         
                         if total_profit >= self.config['min_profit_usd']:
                             combinations.append({
@@ -443,8 +452,8 @@ class UniversalRecoveryManager:
         score += recovery_score
         
         # 4. ⚖️ Balance Score
-        buy_count = len([pos for pos in positions if pos.type == 0])
-        sell_count = len([pos for pos in positions if pos.type == 1])
+        buy_count = len([pos for pos in positions if getattr(pos, 'type', None) == 0])
+        sell_count = len([pos for pos in positions if getattr(pos, 'type', None) == 1])
         
         imbalance_side = balance_analysis.get('imbalance_side', '')
         imbalance_pct = balance_analysis.get('imbalance_percentage', 0)
@@ -462,7 +471,7 @@ class UniversalRecoveryManager:
         score += reduction_score
         
         # 6. 📊 Loss Recovery Score
-        losing_positions = [pos for pos in positions if pos.profit < 0]
+        losing_positions = [pos for pos in positions if getattr(pos, 'profit', 0) < 0]
         loss_recovery_score = len(losing_positions) * 15
         score += loss_recovery_score
         
@@ -544,7 +553,7 @@ class UniversalRecoveryManager:
                 return False
         
         # 4. ต้องมีไม้ขาดทุนอย่างน้อย 1 ไม้
-        losing_positions = [pos for pos in positions if pos.profit < 0]
+        losing_positions = [pos for pos in positions if getattr(pos, 'profit', 0) < 0]
         if not losing_positions:
             return False
         
@@ -610,8 +619,8 @@ class UniversalRecoveryManager:
                     opposite_direction = 'SELL' if balance_info.direction == 'BUY' else 'BUY'
                     
                     has_opposite = any(
-                        (pos.type == 0 and opposite_direction == 'BUY') or
-                        (pos.type == 1 and opposite_direction == 'SELL')
+                        (getattr(pos, 'type', None) == 0 and opposite_direction == 'BUY') or
+                        (getattr(pos, 'type', None) == 1 and opposite_direction == 'SELL')
                         for pos in positions if pos.ticket != position.ticket
                     )
                     
@@ -661,7 +670,7 @@ class UniversalRecoveryManager:
                     'ticket': position.ticket,
                     'lot': position.volume,
                     'type': 'BUY' if position.type == 0 else 'SELL',
-                    'profit': position.profit
+                    'profit': getattr(position, 'profit', 0)
                 })
                 total_lot += position.volume
             
