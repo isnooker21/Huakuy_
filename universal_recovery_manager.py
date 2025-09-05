@@ -941,7 +941,9 @@ def integrate_with_position_manager(position_manager, recovery_manager: Universa
             
             # 2. หา Smart Combinations
             if balance_analysis is None:
-                balance_analysis = position_manager._analyze_portfolio_balance(positions, current_price)
+                # แปลง positions เป็น analyzed_positions ก่อนส่งไป _analyze_portfolio_balance
+                analyzed_positions = position_manager._analyze_all_positions(positions, current_price)
+                balance_analysis = position_manager._analyze_portfolio_balance(analyzed_positions, current_price)
             
             smart_combinations = recovery_manager.find_smart_combinations(positions, current_price, balance_analysis)
             
