@@ -240,10 +240,18 @@ class ZonePositionManager:
         """
         try:
             # วิเคราะห์ Market Structure
+            logger.info("🎯 Starting Trend-Aware Analysis...")
             trend_analysis = self.price_action_analyzer.analyze_market_structure()
             
-            if trend_analysis.direction == 'SIDEWAYS' or trend_analysis.strength < 50:
-                # ถ้าตลาด sideways หรือ trend อ่อน ใช้ Zone Logic เดิม
+            logger.info(f"📈 Trend Analysis Result:")
+            logger.info(f"   Direction: {trend_analysis.direction}")
+            logger.info(f"   Strength: {trend_analysis.strength:.1f}%")
+            logger.info(f"   Confidence: {trend_analysis.confidence:.1f}%")
+            logger.info(f"   Momentum: {trend_analysis.momentum}")
+            
+            # ปรับเงื่อนไขให้ยืดหยุ่นกว่า (ลดจาก 50 เป็น 30)
+            if trend_analysis.direction == 'SIDEWAYS' or trend_analysis.strength < 30:
+                logger.info(f"⏸️ Trend too weak ({trend_analysis.strength:.1f}%) or sideways - using Zone Logic")
                 return {'should_close': False}
             
             # หา Zones ที่มี positions
@@ -252,15 +260,36 @@ class ZonePositionManager:
                 if self.zone_manager.zones[zone_id].total_positions > 0
             }
             
+            logger.info(f"📊 Found {len(zones_with_positions)} zones with positions")
+            
             if not zones_with_positions:
+                logger.info("⏸️ No zones with positions - skipping trend analysis")
                 return {'should_close': False}
             
             # วิเคราะห์การปิดแบบ Trend-Aware
-            if trend_analysis.direction == 'BULLISH':
-                return self._analyze_bullish_trend_closing(zones_with_positions, trend_analysis, current_price)
-            elif trend_analysis.direction == 'BEARISH':
-                return self._analyze_bearish_trend_closing(zones_with_positions, trend_analysis, current_price)
+            logger.info(f"🎯 Analyzing {trend_analysis.direction} trend closing...")
             
+            if trend_analysis.direction == 'BULLISH':
+                result = self._analyze_bullish_trend_closing(zones_with_positions, trend_analysis, current_price)
+                if result['should_close']:
+                    logger.info(f"✅ Bullish trend closing recommended: {result['reason']}")
+                else:
+                    logger.info("⏸️ No suitable bullish trend closing found")
+                return result
+            elif trend_analysis.direction == 'BEARISH':
+                result = self._analyze_bearish_trend_closing(zones_with_positions, trend_analysis, current_price)
+                if result['should_close']:
+                    logger.info(f"✅ Bearish trend closing recommended: {result['reason']}")
+                else:
+                    logger.info("⏸️ No suitable bearish trend closing found")
+                    # 🆕 Emergency: ถ้าไม่มี profitable SELL แต่มี BUY ขาดทุนหนัก ให้ปิด BUY เดี่ยว
+                    emergency_result = self._check_emergency_trend_closing(zones_with_positions, 'BEARISH')
+                    if emergency_result['should_close']:
+                        logger.info(f"🚨 Emergency bearish closing: {emergency_result['reason']}")
+                        return emergency_result
+                return result
+            
+            logger.info(f"⏸️ Trend direction '{trend_analysis.direction}' not supported")
             return {'should_close': False}
             
         except Exception as e:
@@ -300,8 +329,11 @@ class ZonePositionManager:
                             'zone_id': zone_id
                         })
             
-            # ตัดสินใจปิด Pair
-            if profitable_buys and losing_sells and total_profit_potential > 20.0:
+            logger.info(f"📊 Bullish Analysis: {len(profitable_buys)} profitable BUYs, {len(losing_sells)} losing SELLs")
+            logger.info(f"💰 Total BUY profit potential: ${total_profit_potential:.2f}")
+            
+            # ปรับเงื่อนไขให้ยืดหยุ่นกว่า
+            if profitable_buys and losing_sells and total_profit_potential > 10.0:  # ลดจาก 20 เป็น 10
                 # เลือก BUY ที่กำไรดีที่สุด และ SELL ที่ขาดทุนน้อยที่สุด
                 best_buy = max(profitable_buys, key=lambda x: x['profit'])
                 best_sell = max(losing_sells, key=lambda x: x['loss'])  # loss ที่น้อยที่สุด (ใกล้ 0)
@@ -309,7 +341,10 @@ class ZonePositionManager:
                 positions_to_close = [best_buy['position'], best_sell['position']]
                 expected_pnl = best_buy['profit'] + best_sell['loss']
                 
-                if expected_pnl > 5.0:  # Net profit อย่างน้อย $5
+                logger.info(f"🎯 Best pair: BUY +${best_buy['profit']:.2f} + SELL ${best_sell['loss']:.2f} = ${expected_pnl:.2f}")
+                
+                # ยอมรับ Net loss เล็กน้อยถ้าเป็นการลด exposure
+                if expected_pnl > -5.0:  # ยอมรับขาดทุนไม่เกิน $5 เพื่อลด exposure
                     logger.info(f"📈 Bullish Trend Closing: BUY ${best_buy['profit']:.2f} + SELL ${best_sell['loss']:.2f}")
                     
                     return {
@@ -362,8 +397,11 @@ class ZonePositionManager:
                             'zone_id': zone_id
                         })
             
-            # ตัดสินใจปิด Pair
-            if profitable_sells and losing_buys and total_profit_potential > 20.0:
+            logger.info(f"📊 Bearish Analysis: {len(profitable_sells)} profitable SELLs, {len(losing_buys)} losing BUYs")
+            logger.info(f"💰 Total SELL profit potential: ${total_profit_potential:.2f}")
+            
+            # ปรับเงื่อนไขให้ยืดหยุ่นกว่า
+            if profitable_sells and losing_buys and total_profit_potential > 10.0:  # ลดจาก 20 เป็น 10
                 # เลือก SELL ที่กำไรดีที่สุด และ BUY ที่ขาดทุนน้อยที่สุด
                 best_sell = max(profitable_sells, key=lambda x: x['profit'])
                 best_buy = max(losing_buys, key=lambda x: x['loss'])  # loss ที่น้อยที่สุด
@@ -371,7 +409,10 @@ class ZonePositionManager:
                 positions_to_close = [best_sell['position'], best_buy['position']]
                 expected_pnl = best_sell['profit'] + best_buy['loss']
                 
-                if expected_pnl > 5.0:  # Net profit อย่างน้อย $5
+                logger.info(f"🎯 Best pair: SELL +${best_sell['profit']:.2f} + BUY ${best_buy['loss']:.2f} = ${expected_pnl:.2f}")
+                
+                # ยอมรับ Net loss เล็กน้อยถ้าเป็นการลด exposure
+                if expected_pnl > -5.0:  # ยอมรับขาดทุนไม่เกิน $5 เพื่อลด exposure
                     logger.info(f"📉 Bearish Trend Closing: SELL ${best_sell['profit']:.2f} + BUY ${best_buy['loss']:.2f}")
                     
                     return {
@@ -389,6 +430,59 @@ class ZonePositionManager:
             
         except Exception as e:
             logger.error(f"❌ Error analyzing bearish trend closing: {e}")
+            return {'should_close': False}
+    
+    def _check_emergency_trend_closing(self, zones_with_positions: Dict, trend_direction: str) -> Dict[str, Any]:
+        """
+        🚨 Emergency Trend Closing - ปิดไม้ที่ against trend หนักๆ
+        สำหรับกรณีที่ไม่มี profitable positions ในทิศทาง trend
+        """
+        try:
+            worst_positions = []
+            
+            for zone_id, analysis in zones_with_positions.items():
+                zone = self.zone_manager.zones[zone_id]
+                
+                for pos in zone.positions:
+                    pos_profit = getattr(pos, 'profit', 0.0)
+                    pos_type = getattr(pos, 'type', 0)
+                    
+                    # หา positions ที่ขาดทุนหนักและ against trend
+                    if trend_direction == 'BEARISH' and pos_type == 0 and pos_profit < -15.0:  # BUY ขาดทุนหนัก
+                        worst_positions.append({
+                            'position': pos,
+                            'loss': pos_profit,
+                            'zone_id': zone_id,
+                            'type': 'BUY'
+                        })
+                    elif trend_direction == 'BULLISH' and pos_type == 1 and pos_profit < -15.0:  # SELL ขาดทุนหนัก
+                        worst_positions.append({
+                            'position': pos,
+                            'loss': pos_profit,
+                            'zone_id': zone_id,
+                            'type': 'SELL'
+                        })
+            
+            if worst_positions:
+                # เลือกตัวที่ขาดทุนหนักที่สุด
+                worst_position = min(worst_positions, key=lambda x: x['loss'])
+                
+                logger.info(f"🚨 Emergency: {worst_position['type']} position losing ${abs(worst_position['loss']):.2f} against {trend_direction} trend")
+                
+                return {
+                    'should_close': True,
+                    'reason': f'Emergency {trend_direction} trend: Cut heavy loss {worst_position["type"]} (${worst_position["loss"]:.2f})',
+                    'positions_to_close': [worst_position['position']],
+                    'positions_count': 1,
+                    'expected_pnl': worst_position['loss'],
+                    'method': f'emergency_trend_{trend_direction.lower()}',
+                    'zone_id': worst_position['zone_id']
+                }
+            
+            return {'should_close': False}
+            
+        except Exception as e:
+            logger.error(f"❌ Error in emergency trend closing: {e}")
             return {'should_close': False}
     
     def _check_balance_recovery(self, zone_analyses: Dict[int, ZoneAnalysis], 
