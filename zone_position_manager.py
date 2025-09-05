@@ -20,6 +20,7 @@ from zone_manager import ZoneManager, Zone, create_zone_manager
 from zone_analyzer import ZoneAnalyzer, ZoneAnalysis, create_zone_analyzer  
 from zone_coordinator import ZoneCoordinator, SupportPlan, create_zone_coordinator
 from calculations import Position
+from price_action_analyzer import PriceActionAnalyzer, TrendAnalysis, PriceActionSignal
 
 logger = logging.getLogger(__name__)
 
@@ -42,6 +43,9 @@ class ZonePositionManager:
         self.zone_manager = create_zone_manager(zone_size_pips=zone_size_pips, max_zones=15)
         self.zone_analyzer = create_zone_analyzer(self.zone_manager)
         self.zone_coordinator = create_zone_coordinator(self.zone_manager, self.zone_analyzer)
+        
+        # 🎯 Price Action Analyzer for Trend-Aware Closing
+        self.price_action_analyzer = PriceActionAnalyzer()
         
         # Configuration
         self.min_profit_threshold = 5.0   # กำไรขั้นต่ำที่ยอมรับ
@@ -101,23 +105,28 @@ class ZonePositionManager:
                     'method': 'zone_based'
                 }
             
-            # 2. 🎯 Single Zone Closing (Priority 1)
+            # 2. 🎯 NEW: Trend-Aware Smart Closing (Priority 1)
+            trend_aware_result = self._check_trend_aware_closing(zone_analyses, current_price)
+            if trend_aware_result['should_close']:
+                return trend_aware_result
+            
+            # 3. 🎯 Single Zone Closing (Priority 2)
             single_zone_result = self._check_single_zone_closing(zone_analyses, current_price)
             if single_zone_result['should_close']:
                 return single_zone_result
             
-            # 3. ⚖️ Cross-Zone Balance Recovery (Priority 2)
+            # 4. ⚖️ Cross-Zone Balance Recovery (Priority 3)
             balance_recovery_result = self._check_balance_recovery(zone_analyses, current_price)
             if balance_recovery_result['should_close']:
                 return balance_recovery_result
             
-            # 4. 🤝 Cross-Zone Support (Priority 3)
+            # 5. 🤝 Cross-Zone Support (Priority 4)
             if self.enable_cross_zone_support:
                 cross_zone_result = self._check_cross_zone_support(zone_analyses, current_price)
                 if cross_zone_result['should_close']:
                     return cross_zone_result
             
-            # 5. 🚀 Emergency Zone Recovery (Priority 4)
+            # 6. 🚀 Emergency Zone Recovery (Priority 5)
             if self.enable_auto_recovery:
                 recovery_result = self._check_emergency_recovery(zone_analyses, current_price)
                 if recovery_result['should_close']:
@@ -221,6 +230,165 @@ class ZonePositionManager:
             
         except Exception as e:
             logger.error(f"❌ Error in single zone checking: {e}")
+            return {'should_close': False}
+    
+    def _check_trend_aware_closing(self, zone_analyses: Dict[int, ZoneAnalysis], 
+                                  current_price: float) -> Dict[str, Any]:
+        """
+        🎯 NEW: Trend-Aware Smart Closing
+        ใช้ Price Action เพื่อตัดสินใจปิดไม้ให้เหมาะกับทิศทางตลาด
+        """
+        try:
+            # วิเคราะห์ Market Structure
+            trend_analysis = self.price_action_analyzer.analyze_market_structure()
+            
+            if trend_analysis.direction == 'SIDEWAYS' or trend_analysis.strength < 50:
+                # ถ้าตลาด sideways หรือ trend อ่อน ใช้ Zone Logic เดิม
+                return {'should_close': False}
+            
+            # หา Zones ที่มี positions
+            zones_with_positions = {
+                zone_id: analysis for zone_id, analysis in zone_analyses.items()
+                if self.zone_manager.zones[zone_id].total_positions > 0
+            }
+            
+            if not zones_with_positions:
+                return {'should_close': False}
+            
+            # วิเคราะห์การปิดแบบ Trend-Aware
+            if trend_analysis.direction == 'BULLISH':
+                return self._analyze_bullish_trend_closing(zones_with_positions, trend_analysis, current_price)
+            elif trend_analysis.direction == 'BEARISH':
+                return self._analyze_bearish_trend_closing(zones_with_positions, trend_analysis, current_price)
+            
+            return {'should_close': False}
+            
+        except Exception as e:
+            logger.error(f"❌ Error in trend-aware closing: {e}")
+            return {'should_close': False}
+    
+    def _analyze_bullish_trend_closing(self, zones_with_positions: Dict, 
+                                     trend_analysis: TrendAnalysis, current_price: float) -> Dict[str, Any]:
+        """📈 วิเคราะห์การปิดในช่วง Bullish Trend"""
+        try:
+            profitable_buys = []
+            losing_sells = []
+            total_profit_potential = 0.0
+            
+            # หา BUY positions ที่กำไร และ SELL positions ที่ขาดทุน
+            for zone_id, analysis in zones_with_positions.items():
+                zone = self.zone_manager.zones[zone_id]
+                
+                for pos in zone.positions:
+                    pos_profit = getattr(pos, 'profit', 0.0)
+                    pos_type = getattr(pos, 'type', 0)
+                    
+                    # BUY positions ที่กำไร (ride the trend)
+                    if pos_type == 0 and pos_profit > 5.0:
+                        profitable_buys.append({
+                            'position': pos,
+                            'profit': pos_profit,
+                            'zone_id': zone_id
+                        })
+                        total_profit_potential += pos_profit
+                    
+                    # SELL positions ที่ขาดทุน (cut against trend)
+                    elif pos_type == 1 and pos_profit < -10.0:
+                        losing_sells.append({
+                            'position': pos,
+                            'loss': pos_profit,
+                            'zone_id': zone_id
+                        })
+            
+            # ตัดสินใจปิด Pair
+            if profitable_buys and losing_sells and total_profit_potential > 20.0:
+                # เลือก BUY ที่กำไรดีที่สุด และ SELL ที่ขาดทุนน้อยที่สุด
+                best_buy = max(profitable_buys, key=lambda x: x['profit'])
+                best_sell = max(losing_sells, key=lambda x: x['loss'])  # loss ที่น้อยที่สุด (ใกล้ 0)
+                
+                positions_to_close = [best_buy['position'], best_sell['position']]
+                expected_pnl = best_buy['profit'] + best_sell['loss']
+                
+                if expected_pnl > 5.0:  # Net profit อย่างน้อย $5
+                    logger.info(f"📈 Bullish Trend Closing: BUY ${best_buy['profit']:.2f} + SELL ${best_sell['loss']:.2f}")
+                    
+                    return {
+                        'should_close': True,
+                        'reason': f'Bullish trend: Close profitable BUY + losing SELL (Net: ${expected_pnl:.2f})',
+                        'positions_to_close': positions_to_close,
+                        'positions_count': len(positions_to_close),
+                        'expected_pnl': expected_pnl,
+                        'method': 'trend_aware_bullish',
+                        'trend_strength': trend_analysis.strength,
+                        'trend_confidence': trend_analysis.confidence
+                    }
+            
+            return {'should_close': False}
+            
+        except Exception as e:
+            logger.error(f"❌ Error analyzing bullish trend closing: {e}")
+            return {'should_close': False}
+    
+    def _analyze_bearish_trend_closing(self, zones_with_positions: Dict, 
+                                     trend_analysis: TrendAnalysis, current_price: float) -> Dict[str, Any]:
+        """📉 วิเคราะห์การปิดในช่วง Bearish Trend"""
+        try:
+            profitable_sells = []
+            losing_buys = []
+            total_profit_potential = 0.0
+            
+            # หา SELL positions ที่กำไร และ BUY positions ที่ขาดทุน
+            for zone_id, analysis in zones_with_positions.items():
+                zone = self.zone_manager.zones[zone_id]
+                
+                for pos in zone.positions:
+                    pos_profit = getattr(pos, 'profit', 0.0)
+                    pos_type = getattr(pos, 'type', 0)
+                    
+                    # SELL positions ที่กำไร (ride the trend)
+                    if pos_type == 1 and pos_profit > 5.0:
+                        profitable_sells.append({
+                            'position': pos,
+                            'profit': pos_profit,
+                            'zone_id': zone_id
+                        })
+                        total_profit_potential += pos_profit
+                    
+                    # BUY positions ที่ขาดทุน (cut against trend)
+                    elif pos_type == 0 and pos_profit < -10.0:
+                        losing_buys.append({
+                            'position': pos,
+                            'loss': pos_profit,
+                            'zone_id': zone_id
+                        })
+            
+            # ตัดสินใจปิด Pair
+            if profitable_sells and losing_buys and total_profit_potential > 20.0:
+                # เลือก SELL ที่กำไรดีที่สุด และ BUY ที่ขาดทุนน้อยที่สุด
+                best_sell = max(profitable_sells, key=lambda x: x['profit'])
+                best_buy = max(losing_buys, key=lambda x: x['loss'])  # loss ที่น้อยที่สุด
+                
+                positions_to_close = [best_sell['position'], best_buy['position']]
+                expected_pnl = best_sell['profit'] + best_buy['loss']
+                
+                if expected_pnl > 5.0:  # Net profit อย่างน้อย $5
+                    logger.info(f"📉 Bearish Trend Closing: SELL ${best_sell['profit']:.2f} + BUY ${best_buy['loss']:.2f}")
+                    
+                    return {
+                        'should_close': True,
+                        'reason': f'Bearish trend: Close profitable SELL + losing BUY (Net: ${expected_pnl:.2f})',
+                        'positions_to_close': positions_to_close,
+                        'positions_count': len(positions_to_close),
+                        'expected_pnl': expected_pnl,
+                        'method': 'trend_aware_bearish',
+                        'trend_strength': trend_analysis.strength,
+                        'trend_confidence': trend_analysis.confidence
+                    }
+            
+            return {'should_close': False}
+            
+        except Exception as e:
+            logger.error(f"❌ Error analyzing bearish trend closing: {e}")
             return {'should_close': False}
     
     def _check_balance_recovery(self, zone_analyses: Dict[int, ZoneAnalysis], 
