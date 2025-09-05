@@ -261,7 +261,7 @@ class PortfolioManager:
             base_lot_size = max(portfolio_lot, traditional_lot * 0.6)  # ลดจาก 0.8 เป็น 0.6 เพื่อความยืดหยุ่น
             
             # 🎯 ปรับตามแรงแท่งเทียน (Candle Strength Adjustment)
-            candle_strength_adj = self._calculate_candle_strength_multiplier(signal.strength, candle)
+            candle_strength_adj = lot_calculator.calculate_candle_strength_multiplier(candle)
             
             # ปรับ lot size ตาม Zone Recommendation
             if zone_recommendation:
@@ -291,7 +291,7 @@ class PortfolioManager:
             logger.info(f"   Portfolio Risk Lot: {portfolio_lot:.3f}")
             logger.info(f"   Traditional Lot: {traditional_lot:.3f}")
             logger.info(f"   Selected Base Lot: {base_lot_size:.3f}")
-            logger.info(f"   Candle Strength Adj: {candle_strength_adj:.2f}x (Strength: {signal.strength:.1f}%)")
+            logger.info(f"   Candle Strength Adj: {candle_strength_adj:.2f}x")
             if zone_recommendation:
                 logger.info(f"   Zone Multiplier: {zone_multiplier:.2f}x ({zone_recommendation.get('reason', 'N/A')})")
             logger.info(f"   Total Multiplier: {multiplier_total:.2f}x (capped at 1.5x)")
