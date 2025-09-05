@@ -153,10 +153,20 @@ class ZonePositionManager:
             for zone_id, analysis in zone_analyses.items():
                 zone = self.zone_manager.zones[zone_id]
                 
-                # เงื่อนไข 1: Zone มีกำไรดี และ Health Score สูง (ปรับเงื่อนไขให้เข้มงวดขึ้น)
-                if (analysis.total_pnl >= self.min_profit_threshold * 1.5 and  # เพิ่มเป็น 1.5x
-                    analysis.health_score >= 75 and  # เพิ่มจาก 70 เป็น 75
-                    analysis.risk_level == 'LOW' and
+                # เงื่อนไข 1: Zone มีกำไรดี (ปรับให้ยืดหยุ่นกว่าเดิม)
+                # ถ้า Portfolio ขาดทุนหนัก ให้ปิดกำไรง่ายขึ้น
+                portfolio_loss_factor = 1.0
+                if hasattr(self, 'order_manager') and self.order_manager.active_positions:
+                    total_portfolio_pnl = sum(getattr(pos, 'profit', 0.0) for pos in self.order_manager.active_positions)
+                    if total_portfolio_pnl < -100:  # Portfolio ขาดทุนเกิน $100
+                        portfolio_loss_factor = 0.7  # ลดเงื่อนไขลง 30%
+                
+                min_profit_required = self.min_profit_threshold * portfolio_loss_factor
+                min_health_required = max(65, 75 * portfolio_loss_factor)  # ลดจาก 75
+                
+                if (analysis.total_pnl >= min_profit_required and 
+                    analysis.health_score >= min_health_required and 
+                    analysis.risk_level in ['LOW', 'MEDIUM'] and  # เพิ่ม MEDIUM
                     analysis.total_pnl > 0):  # ต้องมีกำไรจริง
                     
                     # เพิ่มการตรวจสอบ Portfolio Impact
@@ -185,10 +195,10 @@ class ZonePositionManager:
                     else:
                         logger.warning(f"⚠️ Skip closing Zone {zone_id}: {portfolio_impact['reason']}")
                 
-                # เงื่อนไข 2: Zone เสี่ยงสูง - ปิดเพื่อลดความเสี่ยง
-                elif (analysis.risk_level == 'CRITICAL' and 
-                      analysis.total_pnl > self.max_loss_threshold and
-                      analysis.health_score < 30):
+                # เงื่อนไข 2: Zone เสี่ยงสูง หรือขาดทุนหนักมาก - ปิดเพื่อลดความเสี่ยง
+                elif (analysis.risk_level in ['HIGH', 'CRITICAL'] and 
+                      (analysis.total_pnl > self.max_loss_threshold or analysis.total_pnl < -50) and  # ขาดทุนเกิน $50
+                      analysis.health_score < 40):  # ลดจาก 30 เป็น 40
                     
                     zone_range = f"{zone.price_min:.2f}-{zone.price_max:.2f}"
                     logger.info(f"🚨 Critical Zone Closing: Zone {zone_id} [{zone_range}]")
@@ -664,11 +674,17 @@ class ZonePositionManager:
             reason = "Safe to close"
             impact_description = f"Close {closing_count} positions, P&L: ${closing_pnl:.2f}"
             
-            # 1. ตรวจสอบการปิดทำให้ Portfolio P&L แย่ลง
-            if closing_pnl > 0 and portfolio_pnl_after < current_portfolio_pnl * 0.8:
-                safe_to_close = False
-                reason = "Closing would significantly worsen portfolio P&L"
-                impact_description += f" → Portfolio P&L: ${current_portfolio_pnl:.2f} → ${portfolio_pnl_after:.2f}"
+            # 1. ตรวจสอบการปิดทำให้ Portfolio P&L แย่ลง (ปรับให้อ่อนลง)
+            # ถ้า Portfolio ขาดทุนอยู่แล้ว ให้ปิดกำไรได้
+            if closing_pnl > 0:
+                if current_portfolio_pnl > 0 and portfolio_pnl_after < current_portfolio_pnl * 0.7:
+                    safe_to_close = False
+                    reason = "Closing would significantly worsen profitable portfolio"
+                    impact_description += f" → Portfolio P&L: ${current_portfolio_pnl:.2f} → ${portfolio_pnl_after:.2f}"
+                elif current_portfolio_pnl < 0 and closing_pnl < abs(current_portfolio_pnl) * 0.1:
+                    safe_to_close = False
+                    reason = "Profit too small compared to portfolio loss"
+                    impact_description += f" → Portfolio P&L: ${current_portfolio_pnl:.2f} → ${portfolio_pnl_after:.2f}"
             
             # 2. ตรวจสอบว่าเหลือ Position น้อยเกินไป
             elif remaining_positions_count < 3:
@@ -676,10 +692,10 @@ class ZonePositionManager:
                 reason = f"Would leave only {remaining_positions_count} positions in portfolio"
                 impact_description += f" → {remaining_positions_count} positions remaining"
             
-            # 3. ตรวจสอบว่ากำไรน้อยเกินไป
-            elif closing_pnl < 10.0:  # กำไรต่ำกว่า $10
+            # 3. ตรวจสอบว่ากำไรน้อยเกินไป (ปรับให้ยืดหยุ่น)
+            elif closing_pnl < 5.0:  # ลดจาก $10 เป็น $5
                 safe_to_close = False
-                reason = f"Profit too small (${closing_pnl:.2f} < $10.00)"
+                reason = f"Profit too small (${closing_pnl:.2f} < $5.00)"
                 impact_description += " → Profit too small"
             
             else:

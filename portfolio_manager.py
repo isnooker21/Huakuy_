@@ -972,6 +972,24 @@ class PortfolioManager:
             if target_zone and target_zone.total_positions > 0:
                 current_balance = target_zone.balance_ratio
                 
+                # 🚫 ตรวจสอบการกระจุกของ Position (ป้องกันการมี Position มากเกินไปใน Zone เดียว)
+                if target_zone.total_positions >= 25:  # ถ้ามี Position เกิน 25 ตัวใน Zone เดียว
+                    should_enter = False
+                    confidence = 0.2
+                    lot_multiplier = 0.5
+                    balance_impact = 'NEGATIVE'
+                    reason = f"Block entry: Zone {target_zone_id} overcrowded ({target_zone.total_positions} positions)"
+                    
+                    return {
+                        'should_enter': should_enter,
+                        'target_zone_id': target_zone_id,
+                        'lot_multiplier': lot_multiplier,
+                        'confidence': confidence,
+                        'health_improvement': -20.0,
+                        'balance_impact': balance_impact,
+                        'reason': reason
+                    }
+                
                 if direction == "BUY":
                     # ถ้า Zone นี้ SELL-heavy อยู่ → BUY จะช่วยสมดุล
                     if current_balance <= 0.3:  # SELL-heavy
