@@ -1256,51 +1256,71 @@ class PortfolioManager:
             Dict: ผลการตรวจสอบคุณภาพ
         """
         try:
-            # 1. ตรวจสอบ Signal Strength
-            if signal.strength < 25.0:  # Strength < 25%
+            # 1. ตรวจสอบ Signal Strength (ยืดหยุ่นตามจำนวนไม้)
+            min_strength = 15.0 if len(positions) == 0 else 25.0  # ยืดหยุ่นเมื่อไม่มีไม้
+            if signal.strength < min_strength:
                 return {
                     'valid': False,
-                    'reason': f'Weak signal strength: {signal.strength:.1f}% < 25%'
+                    'reason': f'Weak signal strength: {signal.strength:.1f}% < {min_strength:.1f}%'
                 }
             
-            # 2. ตรวจสอบ Confidence Score
-            if signal.confidence < 60.0:  # Confidence < 60%
+            # 2. ตรวจสอบ Confidence Score (ยืดหยุ่นตามจำนวนไม้)
+            min_confidence = 40.0 if len(positions) == 0 else 60.0  # ยืดหยุ่นเมื่อไม่มีไม้
+            if signal.confidence < min_confidence:
                 return {
                     'valid': False,
-                    'reason': f'Low confidence: {signal.confidence:.1f}% < 60%'
+                    'reason': f'Low confidence: {signal.confidence:.1f}% < {min_confidence:.1f}%'
                 }
             
-            # 3. ตรวจสอบการเข้าไม้ซ้ำทิศทางเดิม (ป้องกันการ Martingale)
-            same_direction_positions = [pos for pos in positions 
-                                     if hasattr(pos, 'type') and 
-                                     ((signal.direction == "BUY" and pos.type == 0) or 
-                                      (signal.direction == "SELL" and pos.type == 1))]
+            # 3. ตรวจสอบการเข้าไม้ซ้ำทิศทางเดิม (ป้องกันการ Martingale) - ข้ามถ้าไม่มีไม้
+            if len(positions) > 0:  # เช็คเฉพาะเมื่อมีไม้อยู่แล้ว
+                same_direction_positions = [pos for pos in positions 
+                                         if hasattr(pos, 'type') and 
+                                         ((signal.direction == "BUY" and pos.type == 0) or 
+                                          (signal.direction == "SELL" and pos.type == 1))]
+                
+                if len(same_direction_positions) >= 5:  # เกิน 5 ไม้ทิศทางเดียวกัน
+                    return {
+                        'valid': False,
+                        'reason': f'Too many {signal.direction} positions: {len(same_direction_positions)}/5'
+                    }
             
-            if len(same_direction_positions) >= 5:  # เกิน 5 ไม้ทิศทางเดียวกัน
-                return {
-                    'valid': False,
-                    'reason': f'Too many {signal.direction} positions: {len(same_direction_positions)}/5'
-                }
-            
-            # 4. ตรวจสอบระยะห่างจากไม้ล่าสุด (ป้องกันการเข้าใกล้กันเกินไป)
-            recent_positions = [pos for pos in positions 
-                              if hasattr(pos, 'price_open') and 
-                              abs(pos.price_open - signal.price) < 5.0]  # ห่างกันไม่เกิน 5 pips
-            
-            if len(recent_positions) >= 2:  # มีไม้ใกล้กัน >= 2 ไม้
-                return {
-                    'valid': False,
-                    'reason': f'Too close to existing positions: {len(recent_positions)} positions within 5 pips'
-                }
+            # 4. ตรวจสอบระยะห่างจากไม้ล่าสุด (ป้องกันการเข้าใกล้กันเกินไป) - ข้ามถ้าไม่มีไม้
+            if len(positions) > 0:  # เช็คเฉพาะเมื่อมีไม้อยู่แล้ว
+                recent_positions = [pos for pos in positions 
+                                  if hasattr(pos, 'price_open') and 
+                                  abs(pos.price_open - signal.price) < 5.0]  # ห่างกันไม่เกิน 5 pips
+                
+                if len(recent_positions) >= 2:  # มีไม้ใกล้กัน >= 2 ไม้
+                    return {
+                        'valid': False,
+                        'reason': f'Too close to existing positions: {len(recent_positions)} positions within 5 pips'
+                    }
             
             # ✅ Entry quality is acceptable
+            same_direction_count = 0
+            nearby_positions_count = 0
+            
+            if len(positions) > 0:
+                same_direction_positions = [pos for pos in positions 
+                                         if hasattr(pos, 'type') and 
+                                         ((signal.direction == "BUY" and pos.type == 0) or 
+                                          (signal.direction == "SELL" and pos.type == 1))]
+                recent_positions = [pos for pos in positions 
+                                  if hasattr(pos, 'price_open') and 
+                                  abs(pos.price_open - signal.price) < 5.0]
+                same_direction_count = len(same_direction_positions)
+                nearby_positions_count = len(recent_positions)
+            
             return {
                 'valid': True,
-                'reason': 'Entry quality validation passed',
+                'reason': f'Entry quality validation passed (flexible mode for {len(positions)} positions)',
                 'signal_strength': signal.strength,
                 'signal_confidence': signal.confidence,
-                'same_direction_count': len(same_direction_positions),
-                'nearby_positions': len(recent_positions)
+                'min_strength_required': min_strength,
+                'min_confidence_required': min_confidence,
+                'same_direction_count': same_direction_count,
+                'nearby_positions': nearby_positions_count
             }
             
         except Exception as e:
