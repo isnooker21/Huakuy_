@@ -201,15 +201,16 @@ class PortfolioManager:
                     'lot_size': 0.0
                 }
                 
-            # ตรวจสอบข้อจำกัดพอร์ต
-            portfolio_checks = self._check_portfolio_limits(current_state, signal.direction)
-            if not portfolio_checks['can_enter']:
-                return {
-                    'should_enter': False,
-                    'reasons': portfolio_checks['reasons'],
-                    'signal': None,
-                    'lot_size': 0.0
-                }
+            # 🚀 ADAPTIVE ENTRY: ปิดการตรวจสอบ Portfolio Limits เพื่อ Unlimited Entry
+            # portfolio_checks = self._check_portfolio_limits(current_state, signal.direction)
+            # if not portfolio_checks['can_enter']:
+            #     return {
+            #         'should_enter': False,
+            #         'reasons': portfolio_checks['reasons'],
+            #         'signal': None,
+            #         'lot_size': 0.0
+            #     }
+            logger.info(f"🚀 ADAPTIVE: Portfolio limits disabled - Unlimited Entry enabled")
             
             # Zone Analysis & Smart Entry Recommendation
             zone_recommendation = self._get_zone_smart_entry(signal, candle.close)
@@ -421,26 +422,31 @@ class PortfolioManager:
         # ตรวจสอบสมดุล Buy:Sell (ยืดหยุ่นกว่าเดิม)
         total_positions = current_state.buy_sell_ratio.get('total_positions', 0)
         
-        # ถ้ามี position น้อยกว่า 3 ตัว ไม่เช็คสมดุล
-        if total_positions < 3:
-            logger.info(f"💡 Portfolio มี Position {total_positions} ตัว - ข้ามการเช็คสมดุล")
-        else:
-            # เช็คสมดุลเมื่อมี position หลายตัว
-            if direction == "BUY":
-                buy_pct = current_state.buy_sell_ratio['buy_percentage']
-                if buy_pct >= self.balance_stop_threshold:
-                    result['can_enter'] = False
-                    result['reasons'].append(f"Buy positions เกิน {self.balance_stop_threshold}% ({buy_pct:.1f}%)")
-            else:  # SELL
-                sell_pct = current_state.buy_sell_ratio['sell_percentage']
-                if sell_pct >= self.balance_stop_threshold:
-                    result['can_enter'] = False
-                    result['reasons'].append(f"Sell positions เกิน {self.balance_stop_threshold}% ({sell_pct:.1f}%)")
+        # 🚀 ADAPTIVE BALANCE MANAGEMENT - ให้ Adaptive Entry Control จัดการแทน
+        # ปิดการใช้ balance_stop_threshold เพราะ Adaptive System จัดการแล้ว
+        # if total_positions < 3:
+        #     logger.info(f"💡 Portfolio มี Position {total_positions} ตัว - ข้ามการเช็คสมดุล")
+        # else:
+        #     # เช็คสมดุลเมื่อมี position หลายตัว
+        #     if direction == "BUY":
+        #         buy_pct = current_state.buy_sell_ratio['buy_percentage']
+        #         if buy_pct >= self.balance_stop_threshold:
+        #             result['can_enter'] = False
+        #             result['reasons'].append(f"Buy positions เกิน {self.balance_stop_threshold}% ({buy_pct:.1f}%)")
+        #     else:  # SELL
+        #         sell_pct = current_state.buy_sell_ratio['sell_percentage']
+        #         if sell_pct >= self.balance_stop_threshold:
+        #             result['can_enter'] = False
+        #             result['reasons'].append(f"Sell positions เกิน {self.balance_stop_threshold}% ({sell_pct:.1f}%)")
+        
+        logger.info(f"🚀 ADAPTIVE: Balance management handled by Adaptive Entry Control")
                 
-        # ตรวจสอบความเสี่ยงรวม
-        if current_state.risk_percentage >= 20.0:  # ความเสี่ยงสูงสุด 20%
-            result['can_enter'] = False
-            result['reasons'].append(f"ความเสี่ยงรวมเกิน 20% ({current_state.risk_percentage:.1f}%)")
+        # 🚀 ADAPTIVE RISK MANAGEMENT - ไม่บล็อค Risk % เพื่อให้ระบบปิดทำงาน
+        # ปิดการตรวจสอบ Risk % เพื่อรองรับ Unlimited Entry Strategy
+        # if current_state.risk_percentage >= 20.0:  # ความเสี่ยงสูงสุด 20%
+        #     result['can_enter'] = False
+        #     result['reasons'].append(f"ความเสี่ยงรวมเกิน 20% ({current_state.risk_percentage:.1f}%)")
+        logger.info(f"🚀 ADAPTIVE: Risk {current_state.risk_percentage:.1f}% - Allow entry for portfolio management")
             
         return result
         
