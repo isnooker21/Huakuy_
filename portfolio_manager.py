@@ -1184,12 +1184,19 @@ class PortfolioManager:
                     'reason': f'Too many open positions: {len(positions)}/50 (need cleanup first)'
                 }
             
-            # 2. ตรวจสอบ Drawdown สูงเกินไป
-            if current_state.drawdown_percentage > 20.0:  # Drawdown > 20%
-                return {
-                    'allow_entry': False,
-                    'reason': f'High drawdown: {current_state.drawdown_percentage:.1f}% > 20%'
-                }
+            # 2. ตรวจสอบ Drawdown สูงเกินไป (คำนวณจาก balance vs equity)
+            try:
+                if current_state.equity > 0 and current_state.account_balance > 0:
+                    current_drawdown = ((current_state.account_balance - current_state.equity) / current_state.account_balance) * 100
+                    if current_drawdown > 20.0:  # Drawdown > 20%
+                        return {
+                            'allow_entry': False,
+                            'reason': f'High drawdown: {current_drawdown:.1f}% > 20%'
+                        }
+                else:
+                    current_drawdown = 0.0
+            except:
+                current_drawdown = 0.0
             
             # 3. ตรวจสอบ Balance ติดลบมากเกินไป
             if current_state.account_balance < self.initial_balance * 0.7:  # เหลือ < 70% ของเงินทุน
@@ -1215,7 +1222,7 @@ class PortfolioManager:
                 'reason': 'Portfolio health check passed',
                 'positions_count': len(positions),
                 'losing_ratio': losing_positions / len(positions) if positions else 0,
-                'drawdown': current_state.drawdown_percentage,
+                'drawdown': current_drawdown,
                 'balance_ratio': (current_state.account_balance / self.initial_balance) * 100
             }
             
