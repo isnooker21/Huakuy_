@@ -27,7 +27,7 @@ class SimplePositionManager:
         self.order_manager = order_manager
         
         # 🎯 การตั้งค่าเรียบง่าย
-        self.max_acceptable_loss = 2.0  # ยอมรับขาดทุนสูงสุด $2 เพื่อลดไม้
+        self.max_acceptable_loss = 5.0  # ยอมรับขาดทุนสูงสุด $5 เพื่อลดไม้ (รวมสเปรด)
         self.min_positions_to_close = 2  # ปิดอย่างน้อย 2 ไม้ขึ้นไป
         self.max_positions_per_round = 10  # ปิดสูงสุด 10 ไม้ต่อรอบ
         
@@ -127,38 +127,63 @@ class SimplePositionManager:
             total_profit = 0.0
             close_details = []
             
-            # 🔥 ปิดไม้ทีละตัว
-            for position in positions_to_close:
-                try:
-                    close_result = self.order_manager.close_position(position.ticket)
+            # 🔥 ปิดไม้เป็นกลุ่ม (ใช้ close_positions_group)
+            try:
+                close_result = self.order_manager.close_positions_group(positions_to_close, "Simple Position Manager")
+                
+                if close_result.success:
+                    successful_closes = len(positions_to_close)
+                    total_profit = close_result.profit if hasattr(close_result, 'profit') else 0.0
                     
-                    if close_result.success:
-                        successful_closes += 1
-                        profit = getattr(close_result, 'profit', 0.0)
-                        total_profit += profit
+                    for position in positions_to_close:
                         close_details.append({
                             'ticket': position.ticket,
-                            'profit': profit,
+                            'profit': total_profit / len(positions_to_close),  # แบ่งกำไรเฉลี่ย
                             'success': True
                         })
-                        logger.info(f"✅ Closed #{position.ticket}: ${profit:.2f}")
-                    else:
-                        close_details.append({
-                            'ticket': position.ticket,
-                            'profit': 0.0,
-                            'success': False,
-                            'error': close_result.error_message
-                        })
-                        logger.warning(f"❌ Failed to close #{position.ticket}: {close_result.error_message}")
-                        
-                except Exception as e:
-                    logger.error(f"Error closing position #{position.ticket}: {e}")
-                    close_details.append({
-                        'ticket': position.ticket,
-                        'profit': 0.0,
-                        'success': False,
-                        'error': str(e)
-                    })
+                    
+                    logger.info(f"✅ Group close success: {successful_closes} positions, ${total_profit:.2f} total")
+                else:
+                    # ถ้า group close ไม่สำเร็จ ลองปิดทีละตัว
+                    logger.warning("Group close failed, trying individual closes...")
+                    for position in positions_to_close:
+                        try:
+                            # ใช้ MT5 direct close
+                            individual_result = self.mt5.close_position_direct(position.ticket)
+                            if individual_result:
+                                successful_closes += 1
+                                profit = getattr(individual_result, 'profit', 0.0)
+                                total_profit += profit
+                                close_details.append({
+                                    'ticket': position.ticket,
+                                    'profit': profit,
+                                    'success': True
+                                })
+                                logger.info(f"✅ Individual close #{position.ticket}: ${profit:.2f}")
+                            else:
+                                close_details.append({
+                                    'ticket': position.ticket,
+                                    'profit': 0.0,
+                                    'success': False,
+                                    'error': 'MT5 close failed'
+                                })
+                        except Exception as e:
+                            logger.error(f"Error closing position #{position.ticket}: {e}")
+                            close_details.append({
+                                'ticket': position.ticket,
+                                'profit': 0.0,
+                                'success': False,
+                                'error': str(e)
+                            })
+                            
+            except Exception as e:
+                logger.error(f"Error in group close: {e}")
+                close_details.append({
+                    'ticket': 'GROUP',
+                    'profit': 0.0,
+                    'success': False,
+                    'error': str(e)
+                })
             
             # 📊 สรุปผลลัพธ์
             execution_time = (datetime.now() - start_time).total_seconds()
@@ -199,16 +224,25 @@ class SimplePositionManager:
         """🔍 วิเคราะห์ทุกไม้ในพอร์ต"""
         analyzed = []
         
+        # 📊 ดึงข้อมูลสเปรดจาก MT5
+        spread = self._get_current_spread()
+        logger.info(f"🔍 Current spread: {spread} points")
+        
         for pos in positions:
             try:
-                # คำนวณ P&L ปัจจุบัน
+                # คำนวณ P&L ปัจจุบัน รวมสเปรด
                 if hasattr(pos, 'type') and hasattr(pos, 'price_open') and hasattr(pos, 'volume'):
                     pos_type = pos.type.upper() if isinstance(pos.type, str) else ("BUY" if pos.type == 0 else "SELL")
                     
+                    # คำนวณ P&L พื้นฐาน
                     if pos_type == "BUY":
-                        pnl = (current_price - pos.price_open) * pos.volume * 100
+                        # BUY: ปิดที่ bid price (current_price - spread)
+                        close_price = current_price - (spread / 100)  # spread มาเป็น points
+                        pnl = (close_price - pos.price_open) * pos.volume * 100
                     else:  # SELL
-                        pnl = (pos.price_open - current_price) * pos.volume * 100
+                        # SELL: ปิดที่ ask price (current_price + spread)
+                        close_price = current_price + (spread / 100)
+                        pnl = (pos.price_open - close_price) * pos.volume * 100
                     
                     # คำนวณระยะห่างจากราคาปัจจุบัน
                     distance_pips = abs(current_price - pos.price_open) * 100
@@ -397,3 +431,19 @@ class SimplePositionManager:
             self.max_positions_per_round = settings['max_positions_per_round']
         
         logger.info("⚙️ Simple Position Manager settings updated")
+    
+    def _get_current_spread(self) -> float:
+        """📊 ดึงข้อมูลสเปรดปัจจุบัน"""
+        try:
+            # ลองดึงจาก MT5 symbol info
+            if hasattr(self.mt5, 'get_symbol_info'):
+                symbol_info = self.mt5.get_symbol_info('XAUUSD.v')  # หรือ symbol ที่ใช้
+                if symbol_info and hasattr(symbol_info, 'spread'):
+                    return float(symbol_info.spread)
+            
+            # Fallback: ใช้ค่าเฉลี่ยสำหรับ Gold
+            return 45.0  # 45 points สำหรับ XAUUSD
+            
+        except Exception as e:
+            logger.warning(f"Error getting spread: {e}, using default 45 points")
+            return 45.0
