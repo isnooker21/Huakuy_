@@ -19,6 +19,7 @@ from typing import List, Dict, Any, Optional, Tuple
 from zone_manager import ZoneManager, Zone, create_zone_manager
 from zone_analyzer import ZoneAnalyzer, ZoneAnalysis, create_zone_analyzer  
 from zone_coordinator import ZoneCoordinator, SupportPlan, create_zone_coordinator
+from calculations import Position
 
 logger = logging.getLogger(__name__)
 
@@ -149,17 +150,20 @@ class ZonePositionManager:
                     analysis.health_score >= 70 and 
                     analysis.risk_level == 'LOW'):
                     
-                    logger.info(f"💰 Single Zone Closing: Zone {zone_id} "
-                               f"(P&L: ${analysis.total_pnl:.2f}, Health: {analysis.health_score:.0f})")
+                    zone_range = f"{zone.price_min:.2f}-{zone.price_max:.2f}"
+                    logger.info(f"💰 Single Zone Closing: Zone {zone_id} [{zone_range}]")
+                    logger.info(f"   Positions: B{zone.buy_count}:S{zone.sell_count} | "
+                               f"P&L: ${analysis.total_pnl:.2f} | Health: {analysis.health_score:.0f}")
                     
                     return {
                         'should_close': True,
-                        'reason': f'Profitable zone closure: ${analysis.total_pnl:.2f} profit',
+                        'reason': f'Profitable Zone {zone_id} [{zone_range}]: ${analysis.total_pnl:.2f} profit',
                         'positions_to_close': zone.positions,
                         'positions_count': zone.total_positions,
                         'expected_pnl': analysis.total_pnl,
                         'method': 'single_zone_profit',
                         'zone_id': zone_id,
+                        'zone_range': zone_range,
                         'zone_health': analysis.health_score
                     }
                 
@@ -168,17 +172,20 @@ class ZonePositionManager:
                       analysis.total_pnl > self.max_loss_threshold and
                       analysis.health_score < 30):
                     
-                    logger.info(f"🚨 Critical Zone Closing: Zone {zone_id} "
-                               f"(P&L: ${analysis.total_pnl:.2f}, Risk: {analysis.risk_level})")
+                    zone_range = f"{zone.price_min:.2f}-{zone.price_max:.2f}"
+                    logger.info(f"🚨 Critical Zone Closing: Zone {zone_id} [{zone_range}]")
+                    logger.info(f"   Positions: B{zone.buy_count}:S{zone.sell_count} | "
+                               f"P&L: ${analysis.total_pnl:.2f} | Risk: {analysis.risk_level}")
                     
                     return {
                         'should_close': True,
-                        'reason': f'Critical risk zone: {analysis.risk_level} risk level',
+                        'reason': f'Critical Zone {zone_id} [{zone_range}]: {analysis.risk_level} risk',
                         'positions_to_close': zone.positions,
                         'positions_count': zone.total_positions,
                         'expected_pnl': analysis.total_pnl,
                         'method': 'single_zone_risk',
                         'zone_id': zone_id,
+                        'zone_range': zone_range,
                         'risk_level': analysis.risk_level
                     }
             
@@ -361,10 +368,10 @@ class ZonePositionManager:
     
     def close_positions(self, positions_to_close: List[Any]) -> Dict[str, Any]:
         """
-        ปิด Positions (เรียกใช้ Order Manager)
+        🎯 ปิด Positions แบบ Zone-Based (เรียกใช้ Order Manager)
         
         Args:
-            positions_to_close: รายการ Positions ที่ต้องปิด
+            positions_to_close: รายการ ZonePosition หรือ Position ที่ต้องปิด
             
         Returns:
             Dict: ผลการปิด
@@ -378,33 +385,72 @@ class ZonePositionManager:
                     'total_profit': 0.0
                 }
             
-            # ใช้ Order Manager ปิด Positions
-            # (สมมติว่า Order Manager มี method close_multiple_positions)
-            close_result = self.order_manager.close_multiple_positions(positions_to_close)
+            # แปลง ZonePosition เป็น Position objects สำหรับ Order Manager
+            position_objects = []
+            zone_info = []
             
-            if close_result.get('success', False):
-                closed_count = close_result.get('closed_count', 0)
-                total_profit = close_result.get('total_profit', 0.0)
+            for pos in positions_to_close:
+                # ถ้าเป็น ZonePosition ให้แปลงเป็น Position
+                if hasattr(pos, 'ticket'):  # ZonePosition
+                    position_obj = Position(
+                        ticket=pos.ticket,
+                        symbol=pos.symbol,
+                        type=pos.type,
+                        volume=pos.volume,
+                        price_open=pos.price_open,
+                        price_current=pos.price_current,
+                        profit=pos.profit,
+                        comment=f"Zone-based closing"
+                    )
+                    position_objects.append(position_obj)
+                    
+                    # เก็บข้อมูล Zone สำหรับ logging
+                    zone_id = self.zone_manager.calculate_zone_id(pos.price_open)
+                    zone_info.append(f"Zone {zone_id}")
+                    
+                else:  # Position object ปกติ
+                    position_objects.append(pos)
+                    zone_id = self.zone_manager.calculate_zone_id(getattr(pos, 'price_open', 0))
+                    zone_info.append(f"Zone {zone_id}")
+            
+            # สร้างเหตุผลการปิด
+            unique_zones = list(set(zone_info))
+            if len(unique_zones) == 1:
+                reason = f"Zone-based closing: {unique_zones[0]}"
+            else:
+                reason = f"Multi-zone closing: {', '.join(unique_zones[:3])}"
+                if len(unique_zones) > 3:
+                    reason += f" (+{len(unique_zones)-3} more)"
+            
+            # ใช้ Order Manager ปิด Positions
+            close_result = self.order_manager.close_positions_group(position_objects, reason)
+            
+            if close_result.success:
+                closed_count = len(close_result.closed_tickets)
+                total_profit = close_result.total_profit if hasattr(close_result, 'total_profit') else 0.0
                 
-                logger.info(f"✅ Zone-based closing: {closed_count} positions closed, "
-                           f"${total_profit:.2f} profit")
+                logger.info(f"✅ Zone-based closing: {closed_count}/{len(positions_to_close)} positions closed")
+                logger.info(f"💰 Zones affected: {', '.join(unique_zones)} | Profit: ${total_profit:.2f}")
                 
                 return {
                     'success': True,
-                    'message': f'Successfully closed {closed_count} positions',
+                    'message': f'Successfully closed {closed_count} positions from zones',
                     'closed_count': closed_count,
-                    'total_profit': total_profit
+                    'total_profit': total_profit,
+                    'zones_affected': unique_zones,
+                    'reason': reason
                 }
             else:
+                logger.warning(f"❌ Zone-based closing failed: {close_result.error_message}")
                 return {
                     'success': False,
-                    'message': close_result.get('message', 'Unknown error'),
+                    'message': close_result.error_message,
                     'closed_count': 0,
                     'total_profit': 0.0
                 }
                 
         except Exception as e:
-            logger.error(f"❌ Error closing positions: {e}")
+            logger.error(f"❌ Error in zone-based position closing: {e}")
             return {
                 'success': False,
                 'message': str(e),
