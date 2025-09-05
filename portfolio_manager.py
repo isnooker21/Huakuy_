@@ -270,44 +270,14 @@ class PortfolioManager:
                 'lot_size': 0.0
             }
             
+    # 🗑️ EMERGENCY EXIT SYSTEM REMOVED
+    # All exit logic handled by Smart Profit Taking System only
+    
     def should_exit_positions(self, current_state: PortfolioState, 
                             current_prices: Dict[str, float]) -> Dict[str, Any]:
-        """
-        🚨 EMERGENCY EXIT ONLY - ตัดสินใจปิด Position เฉพาะกรณีฉุกเฉิน
-        ระบบปิดกำไรหลักย้ายไป Smart Profit Taking System แล้ว
-        
-        Args:
-            current_state: สถานะพอร์ตปัจจุบัน
-            current_prices: ราคาปัจจุบัน
-            
-        Returns:
-            Dict: ผลการตัดสินใจ (เฉพาะ Stop Loss และ Emergency)
-        """
-        try:
-            positions = self.order_manager.active_positions
-            if not positions:
-                return {'should_exit': False, 'reason': 'ไม่มี Position'}
-                
-            # เฉพาะ Emergency Exit เท่านั้น
-            portfolio_exit_check = self._check_portfolio_exit_conditions(current_state)
-            if portfolio_exit_check['should_exit'] and portfolio_exit_check.get('exit_type') in ['stop_loss', 'emergency']:
-                return portfolio_exit_check
-                
-            # ตรวจสอบ Daily Loss Limit
-            daily_loss_check = self._check_daily_loss_limit(current_state)
-            if daily_loss_check['should_exit']:
-                return daily_loss_check
-                
-            # ตรวจสอบ Maximum Drawdown
-            drawdown_check = self._check_maximum_drawdown()
-            if drawdown_check['should_exit']:
-                return drawdown_check
-                
-            return {'should_exit': False, 'reason': 'ไม่ถึงเงื่อนไขการปิด'}
-            
-        except Exception as e:
-            logger.error(f"เกิดข้อผิดพลาดในการตัดสินใจปิด Position: {str(e)}")
-            return {'should_exit': False, 'reason': f'เกิดข้อผิดพลาด: {str(e)}'}
+        """🗑️ REMOVED - All exit logic handled by Smart Profit Taking System"""
+        logger.debug("🗑️ Emergency Exit removed - all exits handled by Smart Profit Taking System")
+        return {'should_exit': False, 'reason': 'Emergency Exit removed - using Smart Profit Taking System only'}
             
     def execute_trade_decision(self, decision: Dict[str, Any]) -> OrderResult:
         """

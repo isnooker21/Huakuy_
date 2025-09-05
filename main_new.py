@@ -479,29 +479,7 @@ class TradingSystem:
                 if zone_result['executed']:
                     logger.info(f"📊 Zone Analysis: Score {zone_result['zone_score']:.1f}/100 ({zone_result['zone_quality']})")
             
-            # 4. ตัดสินใจว่าควรปิด Position หรือไม่ (เฉพาะกรณีฉุกเฉิน)
-            # หมายเหตุ: Smart Profit Taking และ Zone Analysis จัดการการปิดไม้แล้ว
-            # ระบบนี้เหลือไว้เฉพาะกรณีฉุกเฉิน (Stop Loss, Emergency)
-            if not should_block_recovery:  # ไม่ปิดถ้า Advanced Recovery กำลังทำงาน
-                decision = self.portfolio_manager.should_exit_positions(
-                    portfolio_state, self.current_prices
-                )
-                
-                if decision['should_exit'] and decision.get('exit_type') in ['stop_loss', 'emergency']:
-                    logger.info(f"🚨 ฉุกเฉิน! ตัดสินใจปิด Position - Type: {decision.get('exit_type', 'unknown')}, "
-                               f"Reason: {decision.get('reason', 'No reason')}")
-                    
-                    # ดำเนินการปิด Position
-                    result = self.portfolio_manager.execute_exit_decision(decision)
-                    
-                    if result.success:
-                        logger.info(f"✅ ปิด Position ฉุกเฉิน - จำนวน: {len(result.closed_tickets)}, "
-                                   f"Profit: {result.total_profit:.2f}")
-                    else:
-                        logger.error(f"❌ ปิด Position ฉุกเฉิน ไม่สำเร็จ: {result.error_message}")
-                elif decision['should_exit']:
-                    logger.info(f"🔄 ระบบเก่าต้องการปิด Position แต่ถูกบล็อคโดย Advanced Recovery")
-                    
+            # 🗑️ Emergency Exit REMOVED - All exits handled by Smart Profit Taking System
         except Exception as e:
             logger.error(f"เกิดข้อผิดพลาดในการตรวจสอบเงื่อนไขการปิด: {str(e)}")
             
