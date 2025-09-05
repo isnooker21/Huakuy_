@@ -401,7 +401,11 @@ class SimplePositionManager:
         Portfolio เริ่มเสียสมดุล (Wrong 40-70%)
         """
         logger.info("🟡 Balance Mode: เน้นแก้สมดุล Portfolio")
-        return self._find_balance_priority_combination(analyzed_positions, current_price)
+        
+        # ใช้ _analyze_portfolio_balance ที่มีอยู่แล้ว
+        balance_analysis = self._analyze_portfolio_balance(analyzed_positions, current_price)
+        
+        return self._find_balance_priority_combination(analyzed_positions, balance_analysis, current_price)
     
     def _find_survival_mode_combination(self, analyzed_positions: List[Dict], current_price: float) -> Optional[Dict[str, Any]]:
         """
