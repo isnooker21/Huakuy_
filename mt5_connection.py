@@ -1058,14 +1058,32 @@ class MT5Connection:
             
             # ปิด Position
             result = mt5.order_send(request)
-            if result:
+            if result and result.retcode == 10009:  # TRADE_RETCODE_DONE
+                # ดึง profit จาก deal ที่เพิ่งปิด
+                profit = 0.0
+                if result.deal:
+                    deal = mt5.history_deals_get(result.deal, result.deal)
+                    if deal and len(deal) > 0:
+                        profit = deal[0].profit
+                
                 return {
                     'retcode': result.retcode,
                     'deal': result.deal,
                     'order': result.order,
                     'volume': result.volume,
                     'price': result.price,
-                    'comment': result.comment
+                    'comment': result.comment,
+                    'profit': profit  # เพิ่ม profit จริง
+                }
+            elif result:
+                return {
+                    'retcode': result.retcode,
+                    'deal': getattr(result, 'deal', 0),
+                    'order': getattr(result, 'order', 0),
+                    'volume': getattr(result, 'volume', 0.0),
+                    'price': getattr(result, 'price', 0.0),
+                    'comment': getattr(result, 'comment', ''),
+                    'profit': 0.0
                 }
             else:
                 return None

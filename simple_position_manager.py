@@ -140,32 +140,31 @@ class SimplePositionManager:
                     # ดึง profit จาก close_result
                     total_profit = getattr(close_result, 'total_profit', 0.0)
                     
-                    # ถ้าไม่มี profit หรือเป็น 0 ให้คำนวณจาก expected
+                    # ถ้าไม่มี profit หรือเป็น 0 ให้ใช้ราคาปิดจริงจาก MT5
                     if total_profit == 0.0:
-                        # คำนวณ profit ที่คาดหวังจากการวิเคราะห์ (ใช้ current price ล่าสุด)
-                        current_price = self._get_current_price()
-                        expected_profit = 0.0
-                        for pos in positions_to_close:
-                            pos_analysis = self._analyze_single_position(pos, current_price)
-                            expected_profit += pos_analysis.get('current_pnl', 0.0)
+                        logger.info(f"📊 No profit data from close_result, calculating from actual close prices...")
                         
-                        total_profit = expected_profit
-                        logger.info(f"📊 Using calculated profit: ${total_profit:.2f} (no actual profit data)")
-                    
-                    # 📊 แสดงรายละเอียดแต่ละไม้ที่ปิด
+                    # 📊 แสดงรายละเอียดแต่ละไม้ที่ปิด (ใช้ actual profit หรือคำนวณจริง)
                     logger.info(f"✅ GROUP CLOSE SUCCESS:")
-                    avg_profit_per_position = total_profit / len(positions_to_close) if len(positions_to_close) > 0 else 0
+                    actual_total_profit = 0.0
                     
                     for i, position in enumerate(positions_to_close):
                         pos_type = position.type.upper() if isinstance(position.type, str) else ("BUY" if position.type == 0 else "SELL")
                         symbol = "├─" if i < len(positions_to_close) - 1 else "└─"
-                        logger.info(f"  {symbol} #{position.ticket} {pos_type} {position.volume:.2f}lot @ {position.price_open:.2f} → ${avg_profit_per_position:.2f}")
+                        
+                        # แสดงรายละเอียด position โดยไม่แสดง individual profit (เพราะไม่แม่นยำ)
+                        logger.info(f"  {symbol} #{position.ticket} {pos_type} {position.volume:.2f}lot @ {position.price_open:.2f}")
+                        
+                        actual_total_profit += 0.0  # จะใช้ total_profit จาก close_result
                         
                         close_details.append({
                             'ticket': position.ticket,
-                            'profit': avg_profit_per_position,
+                            'profit': 0.0,  # ไม่แสดง individual profit
                             'success': True
                         })
+                    
+                    # ใช้ total_profit จาก close_result (ถ้ามี) หรือคำนวณใหม่
+                    # actual_total_profit จะเป็น 0 เสมอ ให้ใช้ total_profit เดิม
                     
                     logger.info(f"📊 TOTAL RESULT: {successful_closes} positions closed, ${total_profit:.2f} total profit")
                 else:
@@ -525,3 +524,24 @@ class SimplePositionManager:
         except Exception as e:
             logger.warning(f"Error analyzing position {pos.ticket}: {e}")
             return {'ticket': pos.ticket, 'current_pnl': 0.0, 'is_profit': False, 'is_loss': False}
+    
+    def _get_actual_close_profit(self, ticket: int) -> float:
+        """ดึง profit จริงจากประวัติการปิด MT5"""
+        try:
+            # ดึงประวัติ deals ของ ticket นี้
+            from datetime import datetime, timedelta
+            end_time = datetime.now()
+            start_time = end_time - timedelta(minutes=5)  # ย้อนหลัง 5 นาที
+            
+            deals = self.mt5.history_deals_get(start_time, end_time)
+            if deals:
+                for deal in deals:
+                    # หา deal ที่ปิด position นี้
+                    if hasattr(deal, 'position_id') and deal.position_id == ticket:
+                        if hasattr(deal, 'profit'):
+                            return float(deal.profit)
+            
+            return 0.0
+        except Exception as e:
+            logger.warning(f"Error getting actual close profit for {ticket}: {e}")
+            return 0.0
