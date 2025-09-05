@@ -273,31 +273,24 @@ class PortfolioManager:
     def should_exit_positions(self, current_state: PortfolioState, 
                             current_prices: Dict[str, float]) -> Dict[str, Any]:
         """
-        ตัดสินใจว่าควรปิด Position หรือไม่
+        🚨 EMERGENCY EXIT ONLY - ตัดสินใจปิด Position เฉพาะกรณีฉุกเฉิน
+        ระบบปิดกำไรหลักย้ายไป Smart Profit Taking System แล้ว
         
         Args:
             current_state: สถานะพอร์ตปัจจุบัน
             current_prices: ราคาปัจจุบัน
             
         Returns:
-            Dict: ผลการตัดสินใจ
+            Dict: ผลการตัดสินใจ (เฉพาะ Stop Loss และ Emergency)
         """
         try:
             positions = self.order_manager.active_positions
             if not positions:
                 return {'should_exit': False, 'reason': 'ไม่มี Position'}
                 
-            # ตรวจสอบเงื่อนไขการปิดพื้นฐาน
-            exit_conditions = self.trading_conditions.check_exit_conditions(
-                positions, current_state.account_balance, current_prices
-            )
-            
-            if exit_conditions['should_exit']:
-                return exit_conditions
-                
-            # ตรวจสอบเงื่อนไขพิเศษของพอร์ต
+            # เฉพาะ Emergency Exit เท่านั้น
             portfolio_exit_check = self._check_portfolio_exit_conditions(current_state)
-            if portfolio_exit_check['should_exit']:
+            if portfolio_exit_check['should_exit'] and portfolio_exit_check.get('exit_type') in ['stop_loss', 'emergency']:
                 return portfolio_exit_check
                 
             # ตรวจสอบ Daily Loss Limit
