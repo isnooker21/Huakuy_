@@ -275,13 +275,8 @@ class TradingConditions:
             result['signal'] = None
             return result
         
-        # 🔍 Portfolio Quality Check - ประเมินคุณภาพไม้ในพอร์ต
-        portfolio_quality = self._assess_portfolio_quality(positions, candle.close)
-        if portfolio_quality['bad_position_ratio'] > 0.7:  # ไม้เสียเกิน 70%
-            result['can_enter'] = False
-            result['reasons'].append(f"Too many bad positions: {portfolio_quality['bad_position_ratio']:.1%}")
-            result['signal'] = None
-            return result
+        # 🗑️ Portfolio Quality Check REMOVED - ให้ระบบเข้าไม้ได้เสมอ
+        # เพื่อไม่ให้พอร์ตแย่ยิ่งแย่หนัก จากการไม่ออกไม้
 
         # สร้างสัญญาณการเทรด
         signal = Signal(
@@ -365,7 +360,7 @@ class TradingConditions:
         
     def _check_portfolio_balance(self, positions: List[Position], direction: str) -> Dict[str, Any]:
         """
-        ตรวจสอบสมดุลพอร์ต
+        ตรวจสอบสมดุลพอร์ตแบบ Zone-Based (300 จุด = 30 pips)
         
         Args:
             positions: รายการ Position
@@ -382,34 +377,101 @@ class TradingConditions:
         if not positions:
             return result
             
-        # คำนวณสัดส่วน Buy:Sell
-        balance_info = PercentageCalculator.calculate_buy_sell_ratio(positions)
+        # 🎯 Zone-Based Balance Check (300 points = 30 pips per zone)
+        zone_balance = self._analyze_zone_balance(positions, direction)
         
-        # ตรวจสอบความไม่สมดุล (ยืดหยุ่นกว่าเดิม)
-        total_positions = balance_info['total_positions']
-        
-        # ถ้ามี position น้อยกว่า 3 ตัว ไม่เช็คสมดุล
-        if total_positions < 3:
-            logger.info(f"💡 มี Position {total_positions} ตัว - ข้ามการเช็คสมดุล")
+        # ถ้ามี position น้อยกว่า 5 ตัว ไม่เช็คสมดุล zone
+        if len(positions) < 5:
+            logger.info(f"💡 มี Position {len(positions)} ตัว - ข้ามการเช็ค Zone Balance")
         else:
-            # เช็คสมดุลเมื่อมี position หลายตัว
-            if direction == "BUY":
-                if balance_info['buy_percentage'] >= 80:  # เพิ่มจาก 70% เป็น 80%
+            # เช็คสมดุล zone เมื่อมี position หลายตัว
+            current_zone = zone_balance['current_zone']
+            zone_imbalance = zone_balance['zone_imbalance']
+            
+            # ถ้า zone ปัจจุบันไม่สมดุล (เกิน 3 zones)
+            if zone_imbalance > 3:
+                if direction == "BUY" and zone_balance['buy_heavy']:
                     result['can_enter'] = False
-                    result['reasons'].append(f"Buy positions เกิน 80% ({balance_info['buy_percentage']:.1f}%)")
-            else:  # SELL
-                if balance_info['sell_percentage'] >= 80:  # เพิ่มจาก 70% เป็น 80%
+                    result['reasons'].append(f"Zone {current_zone} BUY heavy: {zone_imbalance} zones imbalance")
+                elif direction == "SELL" and zone_balance['sell_heavy']:
                     result['can_enter'] = False
-                    result['reasons'].append(f"Sell positions เกิน 80% ({balance_info['sell_percentage']:.1f}%)")
-                
-        # ตรวจสอบ Price Hierarchy Rule
+                    result['reasons'].append(f"Zone {current_zone} SELL heavy: {zone_imbalance} zones imbalance")
+                    
+        # ตรวจสอบ Price Hierarchy Rule (ซื้อถูกขายแพง)
         hierarchy_check = self._check_price_hierarchy(positions, direction)
         if not hierarchy_check['valid']:
             result['can_enter'] = False
             result['reasons'].append(hierarchy_check['reason'])
             
         return result
+    
+    def _analyze_zone_balance(self, positions: List[Position], direction: str) -> Dict[str, Any]:
+        """
+        🎯 วิเคราะห์สมดุลแบบ Zone-Based (300 จุด = 30 pips ต่อ zone)
         
+        Args:
+            positions: รายการ positions
+            direction: ทิศทางที่จะเทรด
+            
+        Returns:
+            Dict: ผลการวิเคราะห์ zone balance
+        """
+        if not positions:
+            return {'current_zone': 0, 'zone_imbalance': 0, 'buy_heavy': False, 'sell_heavy': False}
+        
+        # หาราคาปัจจุบัน (ใช้ราคาเฉลี่ยจาก positions)
+        current_price = sum(pos.price_open for pos in positions) / len(positions)
+        
+        # แบ่ง positions เป็น zones (300 points = 30 pips per zone)
+        zone_size = 3.0  # 300 points = 3.0 price units สำหรับ XAUUSD
+        zones = {}
+        
+        for pos in positions:
+            # คำนวณ zone number จากราคา
+            zone_num = int(pos.price_open / zone_size)
+            
+            if zone_num not in zones:
+                zones[zone_num] = {'BUY': 0, 'SELL': 0, 'total': 0}
+            
+            pos_type = "BUY" if pos.type == 0 else "SELL"
+            zones[zone_num][pos_type] += 1
+            zones[zone_num]['total'] += 1
+        
+        # หา zone ปัจจุบัน
+        current_zone = int(current_price / zone_size)
+        
+        # วิเคราะห์ความไม่สมดุล
+        max_imbalance = 0
+        buy_heavy = False
+        sell_heavy = False
+        
+        for zone_num, counts in zones.items():
+            if counts['total'] >= 3:  # เช็คเฉพาะ zone ที่มี positions >= 3 ตัว
+                buy_ratio = counts['BUY'] / counts['total']
+                sell_ratio = counts['SELL'] / counts['total']
+                
+                # คำนวณความไม่สมดุล (0.8 = 80%)
+                if buy_ratio >= 0.8:
+                    imbalance = abs(zone_num - current_zone)
+                    if imbalance > max_imbalance:
+                        max_imbalance = imbalance
+                        buy_heavy = True
+                        sell_heavy = False
+                elif sell_ratio >= 0.8:
+                    imbalance = abs(zone_num - current_zone)
+                    if imbalance > max_imbalance:
+                        max_imbalance = imbalance
+                        buy_heavy = False
+                        sell_heavy = True
+        
+        return {
+            'current_zone': current_zone,
+            'zone_imbalance': max_imbalance,
+            'buy_heavy': buy_heavy,
+            'sell_heavy': sell_heavy,
+            'total_zones': len(zones)
+        }
+    
     def _check_price_hierarchy(self, positions: List[Position], direction: str) -> Dict[str, Any]:
         """
         ตรวจสอบ Price Hierarchy Rule
