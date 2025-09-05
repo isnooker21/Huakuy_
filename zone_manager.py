@@ -82,7 +82,7 @@ class ZoneManager:
             max_zones: จำนวน Zone สูงสุดที่ติดตาม (default: 20)
         """
         self.zone_size_pips = zone_size_pips
-        self.zone_size_points = zone_size_pips * 10  # สำหรับ XAUUSD (10 points = 1 pip)
+        self.zone_size_points = zone_size_pips / 10  # สำหรับ XAUUSD (30 pips = 3.0 points)
         self.max_zones = max_zones
         
         # Zone Storage
@@ -158,7 +158,7 @@ class ZoneManager:
         }
         
         # คำนวณ Zone Width เป็น pips
-        zone_width_pips = (zone_range[1] - zone_range[0]) / 10
+        zone_width_pips = (zone_range[1] - zone_range[0]) * 10
         
         logger.info(f"🔍 Zone Calculation Debug:")
         logger.info(f"   Current Price: {price:.2f}")
