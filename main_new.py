@@ -42,8 +42,8 @@ logging.getLogger('price_zone_analysis').setLevel(logging.WARNING)
 logging.getLogger('zone_rebalancer').setLevel(logging.WARNING)
 logging.getLogger('market_analysis').setLevel(logging.WARNING)
 
-# เปิดเฉพาะ Smart Profit Taking และ Main Trading
-logging.getLogger('smart_profit_taking').setLevel(logging.INFO)
+# เปิดเฉพาะ Lightning Portfolio Cleanup และ Main Trading
+logging.getLogger('lightning_portfolio_cleanup').setLevel(logging.INFO)
 logging.getLogger('__main__').setLevel(logging.INFO)
 
 logger = logging.getLogger(__name__)
@@ -368,17 +368,31 @@ class TradingSystem:
             )
             
             if decision['should_enter']:
-                # 🎯 TRADE ENTRY
-                logger.info(f"🎯 ENTRY: {unified_signal.signal.direction} {decision['lot_size']:.2f} lots @ {unified_signal.signal.price}")
+                # 🛡️ Portfolio Health Check
+                positions = self.portfolio_manager.order_manager.active_positions
+                portfolio_health = self.portfolio_manager._check_portfolio_health_before_entry(positions, portfolio_state)
                 
-                # ดำเนินการเทรด
-                result = self.portfolio_manager.execute_trade_decision(decision)
-                
-                if result.success:
-                    logger.info(f"✅ ORDER SUCCESS: Ticket #{result.ticket}")
-                    self.portfolio_manager.update_trade_timing(trade_executed=True)
+                if not portfolio_health['allow_entry']:
+                    logger.info(f"⏸️ Portfolio Health Block: {portfolio_health['reason']}")
                 else:
-                    logger.error(f"❌ ORDER FAILED: {result.error_message}")
+                    # 🔍 Entry Quality Validation
+                    entry_validation = self.portfolio_manager._validate_entry_quality(
+                        unified_signal.signal, positions, portfolio_state)
+                    
+                    if not entry_validation['valid']:
+                        logger.info(f"⏸️ Entry Quality Block: {entry_validation['reason']}")
+                    else:
+                        # 🎯 TRADE ENTRY (Validated)
+                        logger.info(f"🎯 ENTRY: {unified_signal.signal.direction} {decision['lot_size']:.2f} lots @ {unified_signal.signal.price}")
+                        
+                        # ดำเนินการเทรด
+                        result = self.portfolio_manager.execute_trade_decision(decision)
+                        
+                        if result.success:
+                            logger.info(f"✅ ORDER SUCCESS: Ticket #{result.ticket}")
+                            self.portfolio_manager.update_trade_timing(trade_executed=True)
+                        else:
+                            logger.error(f"❌ ORDER FAILED: {result.error_message}")
                     
             # ล้าง signal หลังจากประมวลผล
             self.last_signal = None
@@ -411,25 +425,24 @@ class TradingSystem:
                 
                 # 2. 🗑️ Smart Recovery REMOVED - functionality moved to Smart Profit Taking System
                 
-                # 2. 🆕 Smart Profit Taking System - ระบบปิดกำไรอัจฉริยะ
-                if hasattr(self.portfolio_manager, 'smart_profit_taking'):
-                    profit_decision = self.portfolio_manager.smart_profit_taking.should_execute_profit_taking(
+                # 2. ⚡ Lightning Portfolio Cleanup System - ระบบปิดไม้แบบฟ้าผ่า
+                if hasattr(self.portfolio_manager, 'lightning_cleanup'):
+                    cleanup_decision = self.portfolio_manager.lightning_cleanup.should_execute_cleanup(
                         positions, current_price, portfolio_state.account_balance
                     )
                     
-                    if profit_decision.get('should_execute', False):
-                        best_group = profit_decision.get('best_group')
+                    if cleanup_decision.get('should_execute', False):
+                        best_group = cleanup_decision.get('best_group')
                         if best_group:
-                            # 💰 PROFIT TAKING
-                            total_positions = len(best_group.profit_positions) + len(best_group.loss_positions)
-                            logger.info(f"💰 PROFIT TAKING: {total_positions} positions, ${best_group.total_pnl:.2f} profit")
+                            # ⚡ LIGHTNING CLEANUP
+                            logger.info(f"⚡ CLEANUP: {best_group.total_positions} positions, ${best_group.total_pnl:.2f} profit ({best_group.priority.value})")
                             
-                            profit_result = self.portfolio_manager.smart_profit_taking.execute_profit_taking(best_group)
-                            if profit_result.get('success', False):
-                                logger.info(f"✅ PROFIT SUCCESS: {profit_result.get('message', 'Closed successfully')}")
+                            cleanup_result = self.portfolio_manager.lightning_cleanup.execute_lightning_cleanup(best_group)
+                            if cleanup_result.get('success', False):
+                                logger.info(f"✅ CLEANUP SUCCESS: {cleanup_result.get('message', 'Closed successfully')}")
                             else:
-                                logger.warning(f"❌ PROFIT FAILED: {profit_result.get('message', 'Unknown error')}")
-                    # Profit taking not ready - no logging to reduce noise
+                                logger.warning(f"❌ CLEANUP FAILED: {cleanup_result.get('message', 'Unknown error')}")
+                    # Cleanup not ready - no logging to reduce noise
                 
                 # 3. Zone Analysis & Rebalancing (silent)
                 zone_result = self.portfolio_manager.check_and_execute_zone_rebalance(current_price)
