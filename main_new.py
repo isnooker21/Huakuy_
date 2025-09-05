@@ -379,12 +379,48 @@ class TradingSystem:
                     self.portfolio_manager.update_trade_timing(trade_executed=True)
                 else:
                     logger.error(f"❌ ORDER FAILED: {result.error_message}")
+            else:
+                # 🚫 แสดงสาเหตุที่ไม่เข้าไม้ (สั้นๆ)
+                reasons = decision.get('reasons', ['Unknown reason'])
+                if reasons and len(reasons) > 0:
+                    # เอาแค่เหตุผลแรก และทำให้สั้น
+                    main_reason = reasons[0] if isinstance(reasons, list) else str(reasons)
+                    # ทำให้เหตุผลสั้นลง
+                    short_reason = self._simplify_reason(main_reason)
+                    logger.info(f"⏸️ NO ENTRY: {short_reason}")
+                else:
+                    logger.info(f"⏸️ NO ENTRY: No specific reason provided")
                     
             # ล้าง signal หลังจากประมวลผล
             self.last_signal = None
             
         except Exception as e:
             logger.error(f"เกิดข้อผิดพลาดในการตรวจสอบเงื่อนไขการเข้าเทรด: {str(e)}")
+    
+    def _simplify_reason(self, reason: str) -> str:
+        """ทำให้เหตุผลสั้นลงเพื่อ log ที่อ่านง่าย"""
+        # แปลงข้อความยาวๆ ให้สั้น
+        simplifications = {
+            "มี Order ในแท่งเทียนนี้แล้ว": "Already ordered this candle",
+            "แรงตลาดไม่เพียงพอ": "Market strength insufficient", 
+            "Volume ต่ำกว่าเกณฑ์": "Volume too low",
+            "Entry price invalid": "Price invalid",
+            "Too many bad positions": "Too many losing positions",
+            "Buy positions เกิน 80%": "Too many BUY positions",
+            "Sell positions เกิน 80%": "Too many SELL positions",
+            "การใช้เงินทุนเกิน": "Capital exposure exceeded"
+        }
+        
+        # หาคำที่ตรงกัน
+        for long_phrase, short_phrase in simplifications.items():
+            if long_phrase in reason:
+                return short_phrase
+        
+        # ถ้าไม่เจอ ตัดให้สั้น
+        if len(reason) > 50:
+            return reason[:47] + "..."
+        
+        return reason
             
     def check_exit_conditions(self, portfolio_state):
         """ตรวจสอบเงื่อนไขการปิด Position"""
@@ -399,9 +435,11 @@ class TradingSystem:
             if self.current_prices:
                 current_price = self.current_prices.get('close', 0)
                 
-                # ตรวจสอบ Advanced Breakout Recovery Strategy
-                breakout_info = self.portfolio_manager.check_advanced_breakout_recovery(current_price)
-                should_block_recovery = breakout_info.get('should_block_recovery', False)
+                # Advanced Breakout Recovery DISABLED - ใช้ Simple Position Manager แทน
+                # breakout_info = self.portfolio_manager.check_advanced_breakout_recovery(current_price)
+                # should_block_recovery = breakout_info.get('should_block_recovery', False)
+                breakout_info = {'should_block_recovery': False, 'reason': 'Advanced Breakout Recovery disabled'}
+                should_block_recovery = False
                 
                 if breakout_info.get('is_breakout_pending'):
                     # Show only successful recovery results

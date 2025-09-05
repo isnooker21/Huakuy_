@@ -16,7 +16,7 @@ from trading_conditions import Signal, TradingConditions, CandleData
 # Smart Recovery System removed - replaced by Smart Profit Taking System
 from price_zone_analysis import PriceZoneAnalyzer
 from zone_rebalancer import ZoneRebalancer
-from advanced_breakout_recovery import AdvancedBreakoutRecovery
+# from advanced_breakout_recovery import AdvancedBreakoutRecovery  # DISABLED - ใช้ Simple Position Manager
 from smart_gap_filler import SmartGapFiller
 from force_trading_mode import ForceTradingMode
 from simple_position_manager import SimplePositionManager
@@ -76,8 +76,9 @@ class PortfolioManager:
         self.zone_analyzer = None
         self.zone_rebalancer = None
         
-        # เพิ่ม Advanced Breakout Recovery System
-        self.advanced_recovery = AdvancedBreakoutRecovery(order_manager.mt5)
+        # Advanced Breakout Recovery System DISABLED - ใช้ Simple Position Manager แทน
+        # self.advanced_recovery = AdvancedBreakoutRecovery(order_manager.mt5)
+        self.advanced_recovery = None
         
         # เพิ่ม Continuous Trading Systems
         self.gap_filler = SmartGapFiller(order_manager.mt5)
@@ -796,7 +797,16 @@ class PortfolioManager:
             }
     
     def check_advanced_breakout_recovery(self, current_price: float) -> Dict[str, Any]:
-        """ตรวจสอบ Advanced Breakout Recovery Strategy"""
+        """Advanced Breakout Recovery Strategy DISABLED - ใช้ Simple Position Manager แทน"""
+        return {
+            'should_block_recovery': False,
+            'reason': 'Advanced Breakout Recovery disabled - using Simple Position Manager',
+            'is_breakout_pending': False,
+            'recovery_results': []
+        }
+        
+        # ORIGINAL CODE DISABLED
+        """
         try:
             positions = self.order_manager.active_positions
             
@@ -900,12 +910,17 @@ class PortfolioManager:
             }
     
     def _should_block_traditional_recovery(self, breakout_analysis: Dict, update_results: Dict) -> bool:
-        """ตัดสินใจว่าควรบล็อค Traditional Recovery หรือไม่ (ยืดหยุ่นมาก)"""
+        # Traditional Recovery Blocking DISABLED - use Simple Position Manager instead
+        # Do not block anything, let Simple Position Manager handle it
+        return False
+        
+        # ORIGINAL CODE DISABLED
+        """
         try:
             now = datetime.now()
             
             # เช็ค Advanced Recovery groups (ยืดหยุ่นมาก)
-            active_groups = len(self.advanced_recovery.active_recoveries)
+            active_groups = len(self.advanced_recovery.active_recoveries) if self.advanced_recovery else 0
             
             if active_groups > 0:
                 # ตรวจสอบว่า groups ค้างนานเกินไปหรือไม่
