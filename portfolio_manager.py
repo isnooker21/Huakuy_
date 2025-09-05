@@ -874,13 +874,27 @@ class PortfolioManager:
             # วิเคราะห์ Zone Distribution ปัจจุบัน
             zone_analysis = self._analyze_current_zone_distribution(current_price)
             
+            # 🎯 Zone-Intelligent Entry: ดูว่า Zone ต้องการไม้อะไร
+            zone_needs = self._analyze_zone_needs(current_price)
+            
+            # ปรับ Signal Direction ตามความต้องการของ Zone (ถ้าจำเป็น)
+            original_direction = signal.direction
+            intelligent_direction = self._get_zone_intelligent_direction(signal.direction, current_price, zone_needs)
+            
             # ตรวจสอบว่าการเข้าไม้นี้จะช่วย Zone Balance ไหม
-            entry_impact = self._evaluate_entry_impact_on_zones(signal.direction, current_price, zone_analysis)
+            entry_impact = self._evaluate_entry_impact_on_zones(intelligent_direction, current_price, zone_analysis)
+            
+            # Log การปรับ Direction
+            if intelligent_direction != original_direction:
+                logger.info(f"🧠 Zone-Intelligent Override: {original_direction} → {intelligent_direction}")
+                logger.info(f"   Reason: Zone needs {intelligent_direction} for better balance")
             
             # ตัดสินใจแนะนำ
             if entry_impact['should_enter']:
                 logger.info(f"🎯 Zone-Based Entry Recommendation:")
-                logger.info(f"   Direction: {signal.direction}")
+                logger.info(f"   Direction: {intelligent_direction}")
+                if intelligent_direction != original_direction:
+                    logger.info(f"   Original Signal: {original_direction} → Zone-Intelligent: {intelligent_direction}")
                 logger.info(f"   Target Zone: {entry_impact['target_zone_id']}")
                 logger.info(f"   Zone Health Impact: +{entry_impact['health_improvement']:.1f}")
                 logger.info(f"   Portfolio Balance Impact: {entry_impact['balance_impact']}")
@@ -1065,6 +1079,242 @@ class PortfolioManager:
                 'balance_impact': 'UNKNOWN',
                 'reason': f'Error in analysis: {str(e)}'
             }
+    
+    def _analyze_zone_needs(self, current_price: float) -> Dict[str, Any]:
+        """
+        🧠 วิเคราะห์ความต้องการของ Zones ในการช่วยเหลือ
+        
+        Args:
+            current_price: ราคาปัจจุบัน
+            
+        Returns:
+            Dict: ความต้องการของแต่ละ Zone
+        """
+        try:
+            zones = self.position_manager.zone_manager.zones
+            zone_needs = {
+                'urgent_zones': [],      # Zone ที่ต้องการความช่วยเหลือด่วน
+                'target_zone_id': None,  # Zone ที่ราคาปัจจุบันจะเข้าไป
+                'target_zone_needs': None,  # สิ่งที่ Target Zone ต้องการ
+                'nearby_zones_needs': [],   # Zone ใกล้เคียงที่ต้องการความช่วยเหลือ
+                'overall_recommendation': None  # คำแนะนำโดยรวม
+            }
+            
+            if not zones:
+                return zone_needs
+            
+            # คำนวณ Zone ที่ราคาปัจจุบันจะเข้าไป
+            target_zone_id = self.position_manager.zone_manager.calculate_zone_id(current_price)
+            zone_needs['target_zone_id'] = target_zone_id
+            
+            # วิเคราะห์ความต้องการของแต่ละ Zone
+            for zone_id, zone in zones.items():
+                if zone.total_positions == 0:
+                    continue
+                
+                zone_need = self._evaluate_single_zone_needs(zone_id, zone)
+                
+                # Zone ที่ต้องการความช่วยเหลือด่วน
+                if zone_need['urgency'] == 'HIGH':
+                    zone_needs['urgent_zones'].append({
+                        'zone_id': zone_id,
+                        'needs': zone_need['needs'],
+                        'reason': zone_need['reason'],
+                        'distance_from_current': abs(zone_id - target_zone_id)
+                    })
+                
+                # ถ้าเป็น Target Zone
+                if zone_id == target_zone_id:
+                    zone_needs['target_zone_needs'] = zone_need
+                
+                # Zone ใกล้เคียง (±1 zone)
+                elif abs(zone_id - target_zone_id) <= 1 and zone_need['urgency'] in ['MEDIUM', 'HIGH']:
+                    zone_needs['nearby_zones_needs'].append({
+                        'zone_id': zone_id,
+                        'needs': zone_need['needs'],
+                        'reason': zone_need['reason'],
+                        'distance': abs(zone_id - target_zone_id)
+                    })
+            
+            # สร้างคำแนะนำโดยรวม
+            zone_needs['overall_recommendation'] = self._create_zone_needs_recommendation(zone_needs)
+            
+            return zone_needs
+            
+        except Exception as e:
+            logger.error(f"❌ Error analyzing zone needs: {e}")
+            return {'urgent_zones': [], 'target_zone_id': None, 'target_zone_needs': None, 'nearby_zones_needs': [], 'overall_recommendation': None}
+    
+    def _evaluate_single_zone_needs(self, zone_id: int, zone: Any) -> Dict[str, Any]:
+        """
+        🔍 ประเมินความต้องการของ Zone เดี่ยว
+        
+        Args:
+            zone_id: Zone ID
+            zone: Zone object
+            
+        Returns:
+            Dict: ความต้องการของ Zone
+        """
+        try:
+            needs = []
+            urgency = 'LOW'
+            reason = "Zone is healthy"
+            
+            # คำนวณ P&L ของ Zone
+            total_pnl = zone.total_pnl if hasattr(zone, 'total_pnl') else 0.0
+            
+            # 1. ตรวจสอบ Balance
+            if zone.balance_ratio <= 0.2:  # SELL-heavy มาก
+                needs.append('BUY')
+                urgency = 'HIGH'
+                reason = f"SELL-heavy zone (ratio: {zone.balance_ratio:.2f}) needs BUY positions"
+            elif zone.balance_ratio >= 0.8:  # BUY-heavy มาก
+                needs.append('SELL')
+                urgency = 'HIGH'
+                reason = f"BUY-heavy zone (ratio: {zone.balance_ratio:.2f}) needs SELL positions"
+            elif zone.balance_ratio <= 0.3:  # SELL-heavy
+                needs.append('BUY')
+                urgency = 'MEDIUM'
+                reason = f"SELL-heavy zone (ratio: {zone.balance_ratio:.2f}) would benefit from BUY"
+            elif zone.balance_ratio >= 0.7:  # BUY-heavy
+                needs.append('SELL')
+                urgency = 'MEDIUM'
+                reason = f"BUY-heavy zone (ratio: {zone.balance_ratio:.2f}) would benefit from SELL"
+            
+            # 2. ตรวจสอบ P&L (ถ้ามีข้อมูล)
+            if total_pnl < -50:  # ขาดทุนหนัก
+                # ถ้า Zone ขาดทุนหนัก แนะนำให้เพิ่มไม้ที่จะช่วยลด Loss
+                if zone.buy_count > zone.sell_count and total_pnl < -50:
+                    needs.append('SELL')  # เพิ่ม SELL เพื่อ hedge BUY ที่ขาดทุน
+                    urgency = 'HIGH'
+                    reason += f" + Heavy loss (${total_pnl:.2f}) needs hedging"
+                elif zone.sell_count > zone.buy_count and total_pnl < -50:
+                    needs.append('BUY')   # เพิ่ม BUY เพื่อ hedge SELL ที่ขาดทุน
+                    urgency = 'HIGH'
+                    reason += f" + Heavy loss (${total_pnl:.2f}) needs hedging"
+            
+            # 3. ตรวจสอบจำนวน Position
+            if zone.total_positions == 1:  # Zone มี Position เดียว
+                opposite_type = 'SELL' if zone.buy_count == 1 else 'BUY'
+                needs.append(opposite_type)
+                urgency = max(urgency, 'MEDIUM') if urgency != 'HIGH' else urgency
+                reason += f" + Single position zone needs {opposite_type} for balance"
+            
+            # ลบ needs ที่ซ้ำ
+            needs = list(set(needs))
+            
+            return {
+                'needs': needs,
+                'urgency': urgency,
+                'reason': reason,
+                'zone_pnl': total_pnl,
+                'balance_ratio': zone.balance_ratio,
+                'total_positions': zone.total_positions
+            }
+            
+        except Exception as e:
+            logger.error(f"❌ Error evaluating zone {zone_id} needs: {e}")
+            return {'needs': [], 'urgency': 'LOW', 'reason': f'Error: {str(e)}', 'zone_pnl': 0.0, 'balance_ratio': 0.5, 'total_positions': 0}
+    
+    def _create_zone_needs_recommendation(self, zone_needs: Dict) -> Dict[str, Any]:
+        """
+        💡 สร้างคำแนะนำจากความต้องการของ Zones
+        
+        Args:
+            zone_needs: ข้อมูลความต้องการของ Zones
+            
+        Returns:
+            Dict: คำแนะนำ
+        """
+        try:
+            recommendation = {
+                'suggested_direction': None,
+                'confidence': 0.5,
+                'reason': 'No specific zone needs detected',
+                'priority': 'LOW'
+            }
+            
+            # 1. ตรวจสอบ Target Zone ก่อน
+            if zone_needs['target_zone_needs']:
+                target_needs = zone_needs['target_zone_needs']
+                if target_needs['needs'] and target_needs['urgency'] in ['HIGH', 'MEDIUM']:
+                    recommendation['suggested_direction'] = target_needs['needs'][0]  # เอาความต้องการแรก
+                    recommendation['confidence'] = 0.8 if target_needs['urgency'] == 'HIGH' else 0.6
+                    recommendation['reason'] = f"Target zone needs: {target_needs['reason']}"
+                    recommendation['priority'] = target_needs['urgency']
+                    return recommendation
+            
+            # 2. ตรวจสอบ Urgent Zones
+            if zone_needs['urgent_zones']:
+                # หา Urgent Zone ที่ใกล้ที่สุด
+                nearest_urgent = min(zone_needs['urgent_zones'], key=lambda x: x['distance_from_current'])
+                recommendation['suggested_direction'] = nearest_urgent['needs'][0]
+                recommendation['confidence'] = 0.7
+                recommendation['reason'] = f"Urgent Zone {nearest_urgent['zone_id']}: {nearest_urgent['reason']}"
+                recommendation['priority'] = 'HIGH'
+                return recommendation
+            
+            # 3. ตรวจสอบ Nearby Zones
+            if zone_needs['nearby_zones_needs']:
+                # หา Nearby Zone ที่มีความต้องการสูงสุด
+                nearest_need = min(zone_needs['nearby_zones_needs'], key=lambda x: x['distance'])
+                recommendation['suggested_direction'] = nearest_need['needs'][0]
+                recommendation['confidence'] = 0.6
+                recommendation['reason'] = f"Nearby Zone {nearest_need['zone_id']}: {nearest_need['reason']}"
+                recommendation['priority'] = 'MEDIUM'
+                return recommendation
+            
+            return recommendation
+            
+        except Exception as e:
+            logger.error(f"❌ Error creating zone needs recommendation: {e}")
+            return {'suggested_direction': None, 'confidence': 0.5, 'reason': f'Error: {str(e)}', 'priority': 'LOW'}
+    
+    def _get_zone_intelligent_direction(self, original_direction: str, current_price: float, zone_needs: Dict) -> str:
+        """
+        🧠 ได้ทิศทางการเทรดที่ฉลาดตาม Zone ต้องการ
+        
+        Args:
+            original_direction: ทิศทางเดิมจาก Signal
+            current_price: ราคาปัจจุบัน
+            zone_needs: ความต้องการของ Zones
+            
+        Returns:
+            str: ทิศทางที่ปรับแล้ว
+        """
+        try:
+            if not zone_needs or not zone_needs.get('overall_recommendation'):
+                return original_direction
+            
+            recommendation = zone_needs['overall_recommendation']
+            suggested_direction = recommendation.get('suggested_direction')
+            confidence = recommendation.get('confidence', 0.5)
+            priority = recommendation.get('priority', 'LOW')
+            
+            # ถ้าไม่มีคำแนะนำเฉพาะ ใช้ทิศทางเดิม
+            if not suggested_direction:
+                return original_direction
+            
+            # ถ้าความมั่นใจสูงและเป็นลำดับความสำคัญสูง ให้ Override
+            if confidence >= 0.7 and priority in ['HIGH', 'MEDIUM']:
+                logger.info(f"🎯 Zone Override: {original_direction} → {suggested_direction} (Confidence: {confidence:.1f}, Priority: {priority})")
+                logger.info(f"   Reason: {recommendation.get('reason', 'Zone needs analysis')}")
+                return suggested_direction
+            
+            # ถ้าทิศทางตรงกัน ให้เพิ่ม Confidence
+            elif suggested_direction == original_direction:
+                logger.info(f"✅ Zone Alignment: {original_direction} matches zone needs (Confidence: {confidence:.1f})")
+                return original_direction
+            
+            # ถ้าความมั่นใจต่ำ ใช้ทิศทางเดิม
+            else:
+                logger.info(f"🤔 Zone Suggestion: {suggested_direction} (Confidence: {confidence:.1f}) vs Signal: {original_direction} → Keep original")
+                return original_direction
+            
+        except Exception as e:
+            logger.error(f"❌ Error in zone intelligent direction: {e}")
+            return original_direction
     
     def check_and_execute_zone_rebalance(self, current_price: float) -> Dict[str, Any]:
         """ตรวจสอบและดำเนินการปรับสมดุลโซน"""
