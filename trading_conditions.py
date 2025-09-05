@@ -519,17 +519,8 @@ class TradingConditions:
         if not positions:
             return result
             
-        # 1. ตรวจสอบ Profit Target
-        profit_target_check = self._check_profit_target(positions, account_balance)
-        if profit_target_check['should_exit']:
-            result.update(profit_target_check)
-            return result
-            
-        # 2. ตรวจสอบ Stop Loss
-        stop_loss_check = self._check_stop_loss(positions, account_balance)
-        if stop_loss_check['should_exit']:
-            result.update(stop_loss_check)
-            return result
+        # 🗑️ OLD PROFIT TARGET & STOP LOSS REMOVED
+        # Now handled by Smart Profit Taking System
             
         # 3. ตรวจสอบ Pullback Wait Strategy
         pullback_check = self._check_pullback_conditions(positions, current_prices)
@@ -545,59 +536,8 @@ class TradingConditions:
             
         return result
         
-    def _check_profit_target(self, positions: List[Position], account_balance: float,
-                           profit_target_percentage: float = 5.0) -> Dict[str, Any]:
-        """
-        ตรวจสอบเป้าหมายกำไร
-        
-        Args:
-            positions: รายการ Position
-            account_balance: ยอดเงินในบัญชี
-            profit_target_percentage: เป้าหมายกำไรเป็นเปอร์เซ็นต์ (เพิ่มเป็น 5% เพื่อให้ Advanced Recovery ทำงาน)
-            
-        Returns:
-            Dict: ผลการตรวจสอบ
-        """
-        current_profit_pct = PercentageCalculator.calculate_group_profit_percentage(
-            positions, account_balance
-        )
-        
-        if current_profit_pct >= profit_target_percentage:
-            return {
-                'should_exit': True,
-                'exit_type': 'profit_target',
-                'positions_to_close': positions,
-                'reasons': [f'ถึงเป้าหมายกำไร {profit_target_percentage}% (ปัจจุบัน {current_profit_pct:.2f}%)']
-            }
-            
-        return {'should_exit': False}
-        
-    def _check_stop_loss(self, positions: List[Position], account_balance: float,
-                        max_loss_percentage: float = 10.0) -> Dict[str, Any]:
-        """
-        ตรวจสอบ Stop Loss
-        
-        Args:
-            positions: รายการ Position
-            account_balance: ยอดเงินในบัญชี
-            max_loss_percentage: ขาดทุนสูงสุดที่ยอมรับ
-            
-        Returns:
-            Dict: ผลการตรวจสอบ
-        """
-        current_loss_pct = abs(min(0, PercentageCalculator.calculate_group_profit_percentage(
-            positions, account_balance
-        )))
-        
-        if current_loss_pct >= max_loss_percentage:
-            return {
-                'should_exit': True,
-                'exit_type': 'stop_loss',
-                'positions_to_close': positions,
-                'reasons': [f'ถึง Stop Loss {max_loss_percentage}% (ปัจจุบัน -{current_loss_pct:.2f}%)']
-            }
-            
-        return {'should_exit': False}
+    # 🗑️ OLD PROFIT/STOP LOSS METHODS REMOVED
+    # Replaced by Smart Profit Taking System in smart_profit_taking.py
         
     def _check_pullback_conditions(self, positions: List[Position], current_prices: Dict[str, float],
                                   min_pullback_percentage: float = 0.3) -> Dict[str, Any]:
