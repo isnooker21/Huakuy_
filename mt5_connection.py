@@ -1035,6 +1035,7 @@ class MT5Connection:
                 return None
                 
             pos = position[0]
+            current_profit = getattr(pos, 'profit', 0.0)  # เก็บ profit ปัจจุบันก่อนปิด
             
             # กำหนดประเภท Order สำหรับปิด Position
             if pos.type == mt5.POSITION_TYPE_BUY:
@@ -1060,11 +1061,26 @@ class MT5Connection:
             result = mt5.order_send(request)
             if result and result.retcode == 10009:  # TRADE_RETCODE_DONE
                 # ดึง profit จาก deal ที่เพิ่งปิด
-                profit = 0.0
+                profit = current_profit  # ใช้ profit ก่อนปิดเป็น fallback
+                
                 if result.deal:
-                    deal = mt5.history_deals_get(result.deal, result.deal)
-                    if deal and len(deal) > 0:
-                        profit = deal[0].profit
+                    try:
+                        # รอสักครู่ให้ deal เข้า history
+                        import time
+                        time.sleep(0.1)
+                        
+                        deal = mt5.history_deals_get(result.deal, result.deal)
+                        if deal and len(deal) > 0:
+                            deal_profit = deal[0].profit
+                            if deal_profit != 0.0:
+                                profit = deal_profit
+                                logger.info(f"📊 Deal {result.deal} profit: ${profit:.2f}")
+                            else:
+                                logger.info(f"📊 Using position profit: ${profit:.2f} (deal profit was 0)")
+                        else:
+                            logger.info(f"📊 Using position profit: ${profit:.2f} (no deal found)")
+                    except Exception as e:
+                        logger.warning(f"Error getting deal profit: {e}, using position profit: ${profit:.2f}")
                 
                 return {
                     'retcode': result.retcode,
@@ -1073,7 +1089,7 @@ class MT5Connection:
                     'volume': result.volume,
                     'price': result.price,
                     'comment': result.comment,
-                    'profit': profit  # เพิ่ม profit จริง
+                    'profit': profit  # ใช้ profit จริง (จาก deal หรือ position)
                 }
             elif result:
                 return {
