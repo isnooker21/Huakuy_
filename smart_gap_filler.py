@@ -272,16 +272,17 @@ class SmartGapFiller:
                 symbol=symbol,
                 strength=strength,
                 confidence=0.6,  # ความเชื่อมั่นปานกลาง
-                entry_price=price,
+                price=price,
                 timestamp=datetime.now(),
-                timeframe='M5',
-                indicators={
-                    'source': 'GAP_FILLER',
-                    'gap_fill': True,
-                    'synthetic': True,
-                    'reason': recommendation.get('reason', 'Gap filling')
-                }
-            )
+                comment=f"Gap Fill: {direction} at {price}")
+            
+            # เพิ่ม indicators แบบ manual
+            signal.indicators = {
+                'source': 'GAP_FILLER',
+                'gap_fill': True,
+                'synthetic': True,
+                'reason': recommendation.get('reason', 'Gap filling')
+            }
             
             logger.info(f"🤖 Synthetic Signal Created: {direction} at {price:.2f} (Strength: {strength}%)")
             
