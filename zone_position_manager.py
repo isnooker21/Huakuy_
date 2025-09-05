@@ -604,6 +604,21 @@ class ZonePositionManager:
         except Exception as e:
             logger.error(f"❌ Error in detailed zone analysis: {e}")
     
+    def debug_zone_calculation_for_price(self, price: float):
+        """
+        🔍 Debug Zone calculation สำหรับราคาที่กำหนด
+        
+        Args:
+            price: ราคาที่ต้องการ debug
+        """
+        try:
+            logger.info(f"🔍 Debugging Zone Calculation for Price: {price:.2f}")
+            debug_info = self.zone_manager.debug_zone_calculation(price)
+            return debug_info
+        except Exception as e:
+            logger.error(f"❌ Error debugging zone calculation: {e}")
+            return None
+    
     def get_zone_price_ranges(self) -> List[Dict[str, Any]]:
         """
         📊 ดึงข้อมูลช่วงราคาของแต่ละ Zone
