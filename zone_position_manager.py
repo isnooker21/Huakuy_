@@ -430,24 +430,108 @@ class ZonePositionManager:
             logger.info(f"📊 Zones: {total_zones} active, {profitable_zones} profitable, "
                        f"{critical_zones} critical | Total P&L: ${total_pnl:+.2f}")
             
-            # แสดงเฉพาะ Zones ที่น่าสนใจ
-            interesting_zones = []
-            for zone_id, analysis in zone_analyses.items():
-                if (analysis.total_pnl > 30 or analysis.total_pnl < -50 or 
-                    analysis.risk_level in ['HIGH', 'CRITICAL']):
-                    interesting_zones.append((zone_id, analysis))
-            
-            if interesting_zones:
-                for zone_id, analysis in interesting_zones[:3]:  # แสดงสูงสุด 3 zones
-                    zone = self.zone_manager.zones[zone_id]
-                    status_emoji = {'LOW': '💚', 'MEDIUM': '🟡', 'HIGH': '🔴', 'CRITICAL': '💀'}
-                    emoji = status_emoji.get(analysis.risk_level, '⚪')
-                    
-                    logger.info(f"  Zone {zone_id}: B{zone.buy_count}:S{zone.sell_count} | "
-                               f"${analysis.total_pnl:+.2f} | {analysis.risk_level} {emoji}")
+            # แสดงรายละเอียดทุก Zones
+            self._log_detailed_zone_breakdown(zone_analyses)
                                
         except Exception as e:
             logger.error(f"❌ Error logging zone summary: {e}")
+    
+    def _log_detailed_zone_breakdown(self, zone_analyses: Dict[int, ZoneAnalysis]):
+        """
+        📋 แสดงรายละเอียดครบถ้วนของทุก Zones
+        
+        Args:
+            zone_analyses: ผลการวิเคราะห์ Zones
+        """
+        try:
+            if not zone_analyses:
+                logger.info("📋 No active zones to display")
+                return
+            
+            logger.info("=" * 100)
+            logger.info("📋 DETAILED ZONE BREAKDOWN")
+            logger.info("=" * 100)
+            
+            # เรียงตาม Zone ID
+            sorted_zones = sorted(zone_analyses.items())
+            
+            for zone_id, analysis in sorted_zones:
+                zone = self.zone_manager.zones[zone_id]
+                
+                # Zone Header
+                balance_status = self._get_balance_status_emoji(zone.balance_ratio)
+                risk_emoji = {'LOW': '💚', 'MEDIUM': '🟡', 'HIGH': '🔴', 'CRITICAL': '💀'}
+                risk_icon = risk_emoji.get(analysis.risk_level, '⚪')
+                
+                logger.info(f"🏷️  ZONE {zone_id} [{zone.price_min:.2f} - {zone.price_max:.2f}] "
+                           f"({(zone.price_max - zone.price_min) * 100:.0f} pips)")
+                logger.info(f"    📊 Positions: B{zone.buy_count}:S{zone.sell_count} | "
+                           f"P&L: ${analysis.total_pnl:+7.2f} | Risk: {analysis.risk_level} {risk_icon} | {balance_status}")
+                
+                # BUY Positions Detail
+                if zone.buy_positions:
+                    logger.info(f"    📈 BUY Positions ({len(zone.buy_positions)}):")
+                    buy_total_pnl = 0.0
+                    for pos in sorted(zone.buy_positions, key=lambda x: x.price_open):
+                        profit_icon = "💚" if pos.profit > 0 else "🔴" if pos.profit < 0 else "⚪"
+                        logger.info(f"        #{pos.ticket} | Open: {pos.price_open:.2f} → Current: {pos.price_current:.2f} | "
+                                   f"P&L: ${pos.profit:+6.2f} {profit_icon} | Vol: {pos.volume:.2f}")
+                        buy_total_pnl += pos.profit
+                    logger.info(f"        📊 BUY Total: ${buy_total_pnl:+.2f}")
+                
+                # SELL Positions Detail  
+                if zone.sell_positions:
+                    logger.info(f"    📉 SELL Positions ({len(zone.sell_positions)}):")
+                    sell_total_pnl = 0.0
+                    for pos in sorted(zone.sell_positions, key=lambda x: x.price_open, reverse=True):
+                        profit_icon = "💚" if pos.profit > 0 else "🔴" if pos.profit < 0 else "⚪"
+                        logger.info(f"        #{pos.ticket} | Open: {pos.price_open:.2f} → Current: {pos.price_current:.2f} | "
+                                   f"P&L: ${pos.profit:+6.2f} {profit_icon} | Vol: {pos.volume:.2f}")
+                        sell_total_pnl += pos.profit
+                    logger.info(f"        📊 SELL Total: ${sell_total_pnl:+.2f}")
+                
+                # Zone Summary
+                logger.info(f"    🎯 Zone Health: {analysis.health_score:.0f}/100 | "
+                           f"Balance Score: {analysis.balance_score:.0f}/100 | "
+                           f"Confidence: {analysis.confidence:.2f}")
+                
+                # Action Recommendation
+                action_emoji = {'HOLD': '✋', 'REBALANCE': '⚖️', 'CLOSE': '💰', 'RECOVER': '🚀'}
+                action_icon = action_emoji.get(analysis.action_needed, '❓')
+                logger.info(f"    💡 Recommended: {analysis.action_needed} {action_icon} | "
+                           f"Priority: {analysis.priority}")
+                
+                logger.info("")  # Blank line between zones
+            
+            logger.info("=" * 100)
+            
+        except Exception as e:
+            logger.error(f"❌ Error logging detailed zone breakdown: {e}")
+    
+    def _get_balance_status_emoji(self, balance_ratio: float) -> str:
+        """
+        ดึง Balance Status Emoji
+        
+        Args:
+            balance_ratio: อัตราส่วน Balance (0.0-1.0)
+            
+        Returns:
+            str: Balance status พร้อม emoji
+        """
+        try:
+            if balance_ratio >= 0.8:
+                return "📈 BUY-HEAVY"
+            elif balance_ratio <= 0.2:
+                return "📉 SELL-HEAVY"
+            elif balance_ratio >= 0.6:
+                return "📊 BUY-LEANING"
+            elif balance_ratio <= 0.4:
+                return "📊 SELL-LEANING"
+            else:
+                return "⚖️ BALANCED"
+                
+        except Exception:
+            return "❓ UNKNOWN"
     
     def _log_balance_opportunities(self, current_price: float):
         """
