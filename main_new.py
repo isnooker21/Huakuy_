@@ -44,7 +44,6 @@ logging.getLogger('market_analysis').setLevel(logging.WARNING)
 
 # เปิดเฉพาะ Lightning Portfolio Cleanup และ Main Trading
 logging.getLogger('lightning_portfolio_cleanup').setLevel(logging.INFO)
-logging.getLogger('portfolio_manager').setLevel(logging.DEBUG)  # เปิด debug เพื่อดูค่า balance
 logging.getLogger('__main__').setLevel(logging.INFO)
 
 logger = logging.getLogger(__name__)
@@ -369,31 +368,17 @@ class TradingSystem:
             )
             
             if decision['should_enter']:
-                # 🛡️ Portfolio Health Check
-                positions = self.portfolio_manager.order_manager.active_positions
-                portfolio_health = self.portfolio_manager._check_portfolio_health_before_entry(positions, portfolio_state)
+                # 🎯 TRADE ENTRY (Trust the system - let Lightning Cleanup handle risk)
+                logger.info(f"🎯 ENTRY: {unified_signal.signal.direction} {decision['lot_size']:.2f} lots @ {unified_signal.signal.price}")
                 
-                if not portfolio_health['allow_entry']:
-                    logger.info(f"⏸️ Portfolio Health Block: {portfolio_health['reason']}")
+                # ดำเนินการเทรด
+                result = self.portfolio_manager.execute_trade_decision(decision)
+                
+                if result.success:
+                    logger.info(f"✅ ORDER SUCCESS: Ticket #{result.ticket}")
+                    self.portfolio_manager.update_trade_timing(trade_executed=True)
                 else:
-                    # 🔍 Entry Quality Validation
-                    entry_validation = self.portfolio_manager._validate_entry_quality(
-                        unified_signal.signal, positions, portfolio_state)
-                    
-                    if not entry_validation['valid']:
-                        logger.info(f"⏸️ Entry Quality Block: {entry_validation['reason']}")
-                    else:
-                        # 🎯 TRADE ENTRY (Validated)
-                        logger.info(f"🎯 ENTRY: {unified_signal.signal.direction} {decision['lot_size']:.2f} lots @ {unified_signal.signal.price}")
-                        
-                        # ดำเนินการเทรด
-                        result = self.portfolio_manager.execute_trade_decision(decision)
-                        
-                        if result.success:
-                            logger.info(f"✅ ORDER SUCCESS: Ticket #{result.ticket}")
-                            self.portfolio_manager.update_trade_timing(trade_executed=True)
-                        else:
-                            logger.error(f"❌ ORDER FAILED: {result.error_message}")
+                    logger.error(f"❌ ORDER FAILED: {result.error_message}")
                     
             # ล้าง signal หลังจากประมวลผล
             self.last_signal = None
