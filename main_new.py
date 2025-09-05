@@ -236,8 +236,8 @@ class TradingSystem:
                     # ตรวจสอบเงื่อนไขการเข้าเทรดใหม่
                     self.check_entry_conditions(portfolio_state)
                 
-                # รอ 3 วินาที (เพิ่มจาก 1 วินาที)
-                time.sleep(3)
+                # รอ 1 วินาที (ลดจาก 3 วินาทีเพื่อความเร็ว)
+                time.sleep(1)
                 
             except Exception as e:
                 logger.error(f"เกิดข้อผิดพลาดใน Trading Loop: {str(e)}")

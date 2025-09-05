@@ -48,23 +48,18 @@ class SimplePositionManager:
             Dict: ผลการตรวจสอบพร้อมรายการไม้ที่ควรปิด
         """
         try:
-            logger.info(f"🔍 Simple Position Manager: Analyzing {len(positions)} positions at price {current_price:.2f}")
-            
+            # เช็คเบื้องต้น
             if len(positions) < 2:
-                logger.info("🔍 Not enough positions (need at least 2)")
                 return {
                     'should_close': False,
                     'reason': 'Need at least 2 positions to close',
                     'positions_to_close': []
                 }
             
-            # 🔍 วิเคราะห์ทุกไม้
-            logger.info("🔍 Starting position analysis...")
+            # 🔍 วิเคราะห์ทุกไม้ (ไม่ log เพื่อความเร็ว)
             analyzed_positions = self._analyze_all_positions(positions, current_price)
-            logger.info(f"🔍 Analyzed {len(analyzed_positions)} positions successfully")
             
             if len(analyzed_positions) < 2:
-                logger.info("🔍 Not enough valid analyzed positions")
                 return {
                     'should_close': False,
                     'reason': 'Not enough valid positions after analysis',
@@ -72,11 +67,10 @@ class SimplePositionManager:
                 }
             
             # 🎯 หาการจับคู่ที่ดีที่สุด
-            logger.info("🔍 Finding best combination...")
             best_combination = self._find_best_closing_combination(analyzed_positions)
             
             if best_combination:
-                logger.info(f"🎯 Found combination: {len(best_combination['positions'])} positions, ${best_combination['total_pnl']:.2f}")
+                logger.info(f"🎯 CLOSE READY: {len(best_combination['positions'])} positions, ${best_combination['total_pnl']:.2f}")
                 return {
                     'should_close': True,
                     'reason': best_combination['reason'],
@@ -86,7 +80,7 @@ class SimplePositionManager:
                     'combination_type': best_combination['type']
                 }
             else:
-                logger.info("🔍 No suitable combination found")
+                # ไม่ log เพื่อลด noise
                 return {
                     'should_close': False,
                     'reason': 'No suitable closing combination found',
@@ -238,9 +232,8 @@ class SimplePositionManager:
         """🔍 วิเคราะห์ทุกไม้ในพอร์ต"""
         analyzed = []
         
-        # 📊 ดึงข้อมูลสเปรดจาก MT5
+        # 📊 ดึงข้อมูลสเปรดจาก MT5 (เงียบๆ)
         spread = self._get_current_spread()
-        logger.info(f"🔍 Current spread: {spread} points")
         
         for pos in positions:
             try:
@@ -287,8 +280,7 @@ class SimplePositionManager:
                         'is_loss': pnl < 0
                     })
                     
-                    # Debug log สำหรับแต่ละไม้
-                    logger.info(f"🔍 #{pos.ticket} {pos_type} {pos.volume:.2f}lot @ {pos.price_open:.2f} → P&L: ${pnl:.2f} (spread-adjusted)")
+                    # Skip individual position logging for speed
                     
             except Exception as e:
                 logger.warning(f"Error analyzing position {pos.ticket}: {e}")
@@ -299,22 +291,19 @@ class SimplePositionManager:
     def _find_best_closing_combination(self, analyzed_positions: List[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
         """🎯 หาการจับคู่ที่ดีที่สุดสำหรับการปิด"""
         try:
-            logger.info(f"🔍 Finding combinations from {len(analyzed_positions)} positions")
             best_combination = None
             best_score = -999999
             combinations_tested = 0
-            max_combinations = 1000  # จำกัดจำนวนการทดสอบ
+            max_combinations = 500  # ลดจำนวนการทดสอบเพื่อความเร็ว
             
-            # แยกไม้กำไรและไม้เสีย
+            # แยกไม้กำไรและไม้เสีย (เงียบๆ)
             profit_positions = [p for p in analyzed_positions if p['is_profit']]
             loss_positions = [p for p in analyzed_positions if p['is_loss']]
-            logger.info(f"🔍 Profit positions: {len(profit_positions)}, Loss positions: {len(loss_positions)}")
             
             # 🎯 ลองทุกแบบการจับคู่ (2 ไม้ ถึง max_positions_per_round ไม้)
-            max_size = min(len(analyzed_positions) + 1, self.max_positions_per_round + 1, 6)  # จำกัดไม่เกิน 5 ไม้
+            max_size = min(len(analyzed_positions) + 1, self.max_positions_per_round + 1, 5)  # จำกัดไม่เกิน 4 ไม้
             
             for size in range(self.min_positions_to_close, max_size):
-                logger.info(f"🔍 Testing combinations of size {size}")
                 
                 # ใช้ simple iteration แทน combinations เพื่อป้องกัน memory issue
                 try:
@@ -328,9 +317,8 @@ class SimplePositionManager:
                 for combination in combination_iter:
                     combinations_tested += 1
                     
-                    # จำกัดจำนวนการทดสอบ
+                    # จำกัดจำนวนการทดสอบ (เงียบๆ)
                     if combinations_tested > max_combinations:
-                        logger.warning(f"🚨 Reached max combinations limit ({max_combinations})")
                         break
                     
                     # คำนวณผลรวม
@@ -369,10 +357,7 @@ class SimplePositionManager:
                 if combinations_tested > max_combinations:
                     break
             
-            logger.info(f"🔍 Tested {combinations_tested} combinations total")
-            if best_combination:
-                logger.info(f"🎯 Best combination found: {best_combination['score']:.2f} score")
-            
+            # ไม่ log จำนวนการทดสอบเพื่อความเร็ว
             return best_combination
             
         except Exception as e:
