@@ -163,22 +163,31 @@ class SimplePositionManager:
                     expected_pnl = actual_pnl  # ใช้ค่าจริงจาก MT5
                     logger.info(f"🔍 Using actual P&L from positions: ${actual_pnl:.2f}")
                 
+                # 🎯 ADAPTIVE PROFIT THRESHOLD ตาม Mode
+                mode = health_analysis['mode']
+                if mode == 'Survival':
+                    min_profit = 0.10  # Survival: ยอมรับกำไรน้อย
+                elif mode == 'Balance':
+                    min_profit = 0.25  # Balance: กำไรปานกลาง
+                else:  # Normal
+                    min_profit = 0.50  # Normal: ต้องการกำไรดี
+                
                 # ป้องกันการปิดติดลบอย่างเข้มงวด
-                if expected_pnl > 0.50:  # ต้องมีกำไรอย่างน้อย $0.50
-                    logger.info(f"🎯 CLOSE READY: {len(best_combination['positions'])} positions, ${expected_pnl:.2f}")
+                if expected_pnl > min_profit:
+                    logger.info(f"🎯 CLOSE READY ({mode} Mode): {len(best_combination['positions'])} positions, ${expected_pnl:.2f}")
                     return {
                         'should_close': True,
-                        'reason': best_combination.get('balance_improvement', 'Profitable combination found'),
+                        'reason': best_combination.get('reason', f'{mode} mode: Profitable combination'),
                         'positions_to_close': best_combination['positions'],
                         'expected_pnl': expected_pnl,
                         'positions_count': len(best_combination['positions']),
-                        'combination_type': best_combination.get('strategy', 'Enhanced Strategy')
+                        'combination_type': best_combination.get('type', mode)
                     }
                 else:
-                    logger.info(f"🚫 Not profitable enough: ${expected_pnl:.2f} < $0.50 minimum")
+                    logger.info(f"🚫 Not profitable enough ({mode} Mode): ${expected_pnl:.2f} < ${min_profit:.2f}")
                     return {
                         'should_close': False,
-                        'reason': f'Not profitable enough: ${expected_pnl:.2f} < $0.50',
+                        'reason': f'{mode} Mode: ${expected_pnl:.2f} < ${min_profit:.2f}',
                         'positions_to_close': []
                     }
             else:
