@@ -72,7 +72,15 @@ class SimplePositionManager:
             if best_combination:
                 # 🛡️ ตรวจสอบอีกครั้งก่อนปิด - ต้องมีกำไรจริงๆ
                 expected_pnl = best_combination['total_pnl']
-                if expected_pnl > 0:
+                
+                # 🔍 Double-check P&L โดยใช้ profit จาก position จริง
+                actual_pnl = sum(pos.profit for pos in best_combination['positions'] if hasattr(pos, 'profit'))
+                if actual_pnl != 0.0:
+                    expected_pnl = actual_pnl  # ใช้ค่าจริงจาก MT5
+                    logger.info(f"🔍 Using actual P&L from positions: ${actual_pnl:.2f}")
+                
+                # ป้องกันการปิดติดลบอย่างเข้มงวด
+                if expected_pnl > 0.50:  # ต้องมีกำไรอย่างน้อย $0.50
                     logger.info(f"🎯 CLOSE READY: {len(best_combination['positions'])} positions, ${expected_pnl:.2f}")
                     return {
                         'should_close': True,
@@ -83,10 +91,10 @@ class SimplePositionManager:
                         'combination_type': best_combination['type']
                     }
                 else:
-                    logger.debug(f"🚫 Best combination has no profit: ${expected_pnl:.2f}, skipping")
+                    logger.info(f"🚫 Not profitable enough: ${expected_pnl:.2f} < $0.50 minimum")
                     return {
                         'should_close': False,
-                        'reason': f'Best combination not profitable: ${expected_pnl:.2f}',
+                        'reason': f'Not profitable enough: ${expected_pnl:.2f} < $0.50',
                         'positions_to_close': []
                     }
             else:
@@ -271,19 +279,23 @@ class SimplePositionManager:
                 if hasattr(pos, 'type') and hasattr(pos, 'price_open') and hasattr(pos, 'volume'):
                     pos_type = pos.type.upper() if isinstance(pos.type, str) else ("BUY" if pos.type == 0 else "SELL")
                     
-                    # คำนวณ P&L พื้นฐาน รวมสเปรดและ commission
-                    if pos_type == "BUY":
-                        # BUY: ปิดที่ bid price (current_price - spread)
-                        close_price = current_price - (spread * 0.01)  # spread points -> price
-                        pnl_before_costs = (close_price - pos.price_open) * pos.volume * 100
-                    else:  # SELL
-                        # SELL: ปิดที่ ask price (current_price + spread)  
-                        close_price = current_price + (spread * 0.01)
-                        pnl_before_costs = (pos.price_open - close_price) * pos.volume * 100
-                    
-                    # หักค่าธรรมเนียมและต้นทุนเพิ่มเติม (conservative estimate)
-                    commission_cost = pos.volume * 0.5  # ประมาณ $0.5 per 0.01 lot
-                    pnl = pnl_before_costs - commission_cost
+                    # ใช้ profit จาก position โดยตรง (แม่นยำที่สุด)
+                    if hasattr(pos, 'profit'):
+                        pnl = pos.profit
+                    else:
+                        # Fallback: คำนวณ P&L พื้นฐาน (ถ้าไม่มี profit field)
+                        if pos_type == "BUY":
+                            # BUY: ปิดที่ bid price 
+                            close_price = current_price - (spread / 100)  # spread points -> price
+                            pnl_before_costs = (close_price - pos.price_open) * pos.volume * 100
+                        else:  # SELL
+                            # SELL: ปิดที่ ask price
+                            close_price = current_price + (spread / 100)
+                            pnl_before_costs = (pos.price_open - close_price) * pos.volume * 100
+                        
+                        # หักค่าธรรมเนียม
+                        commission_cost = pos.volume * 0.5
+                        pnl = pnl_before_costs - commission_cost
                     
                     # คำนวณระยะห่างจากราคาปัจจุบัน
                     distance_pips = abs(current_price - pos.price_open) * 100
@@ -500,20 +512,24 @@ class SimplePositionManager:
     def _analyze_single_position(self, pos: Any, current_price: float) -> Dict[str, Any]:
         """วิเคราะห์ position เดี่ยว"""
         try:
-            pos_type = pos.type.upper() if isinstance(pos.type, str) else ("BUY" if pos.type == 0 else "SELL")
-            spread = self._get_current_spread()
-            
-            # คำนวณ P&L รวมสเปรดและ commission
-            if pos_type == "BUY":
-                close_price = current_price - (spread * 0.01)
-                pnl_before_costs = (close_price - pos.price_open) * pos.volume * 100
-            else:  # SELL
-                close_price = current_price + (spread * 0.01)
-                pnl_before_costs = (pos.price_open - close_price) * pos.volume * 100
-            
-            # หักค่าธรรมเนียม
-            commission_cost = pos.volume * 0.5
-            pnl = pnl_before_costs - commission_cost
+            # ใช้ profit จาก position โดยตรง (แม่นยำที่สุด)
+            if hasattr(pos, 'profit'):
+                pnl = pos.profit
+            else:
+                # Fallback: คำนวณ P&L เอง
+                pos_type = pos.type.upper() if isinstance(pos.type, str) else ("BUY" if pos.type == 0 else "SELL")
+                spread = self._get_current_spread()
+                
+                if pos_type == "BUY":
+                    close_price = current_price - (spread / 100)
+                    pnl_before_costs = (close_price - pos.price_open) * pos.volume * 100
+                else:  # SELL
+                    close_price = current_price + (spread / 100)
+                    pnl_before_costs = (pos.price_open - close_price) * pos.volume * 100
+                
+                # หักค่าธรรมเนียม
+                commission_cost = pos.volume * 0.5
+                pnl = pnl_before_costs - commission_cost
             
             return {
                 'ticket': pos.ticket,
