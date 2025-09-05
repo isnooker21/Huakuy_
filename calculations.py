@@ -282,78 +282,140 @@ class LotSizeCalculator:
             float: ขนาด Lot ที่เหมาะสม (0.01 step)
         """
         try:
-            # Base risk ตามจำนวนไม้ในพอร์ต
-            if positions_count <= 5:       base_risk_pct = 15.0    # 15% - พอร์ตเล็ก เสี่ยงได้มาก
-            elif positions_count <= 15:    base_risk_pct = 12.0    # 12% - พอร์ตปานกลาง
-            elif positions_count <= 25:    base_risk_pct = 10.0    # 10% - พอร์ตใหญ่
-            else:                          base_risk_pct = 8.0     # 8% - พอร์ตใหญ่มาก ระวัง
-            
-            # ปรับตามความผันผวนตลาด
-            if market_volatility > 20.0:     volatility_multiplier = 1.3    # ตลาดผันผวนมาก เพิ่ม lot
-            elif market_volatility > 10.0:   volatility_multiplier = 1.0    # ตลาดปกติ
-            elif market_volatility > 5.0:    volatility_multiplier = 0.9    # ตลาดเงียบ ลด lot เล็กน้อย
-            else:                            volatility_multiplier = 0.8    # ตลาดเงียบมาก ลด lot
-            
-            # คำนวณ risk percentage สุดท้าย
-            final_risk_pct = base_risk_pct * volatility_multiplier
-            final_risk_pct = max(8.0, min(20.0, final_risk_pct))  # จำกัด 8-20%
-            
-            # แปลงเป็น lot size
             balance = account_balance or self.account_balance
-            risk_amount = balance * (final_risk_pct / 100)
             
-            # ✅ ไม่มี SL - ใช้วิธีคำนวณแบบ Direct Risk Allocation
-            # คำนวณ lot โดยตรงจาก risk percentage และ portfolio size
+            # 🎯 Capital-Appropriate Lot Sizing (เหมาะกับทุน $2000)
+            # แทนที่จะใช้ Risk % ที่ซับซ้อน ใช้ Fixed Base Lot ตามทุน
             
-            # Base lot calculation จาก risk amount (เพิ่มขึ้นเพื่อ lot หลากหลาย)
+            if balance <= 1000:
+                # ทุนน้อย - ระวังมาก
+                base_lot = 0.01
+            elif balance <= 2500:
+                # ทุนปานกลาง ($2000) - เหมาะสม
+                base_lot = 0.02  # แทนที่จะเป็น 0.08
+            elif balance <= 5000:
+                # ทุนดี - เพิ่มได้
+                base_lot = 0.03
+            else:
+                # ทุนมาก - ยืดหยุ่นได้
+                base_lot = 0.04
+            
+            # ปรับตามจำนวน Positions (ยิ่งมีเยอะ ยิ่งลดขนาด)
             if positions_count <= 5:
-                # Portfolio เล็ก - เสี่ยงได้มาก
-                base_multiplier = 0.0012  # เพิ่มจาก 0.0008 → ~0.04-0.06 lot
+                position_multiplier = 1.0  # ไม่เพิ่มเมื่อไม้น้อย
             elif positions_count <= 15:
-                # Portfolio ปานกลาง - เสี่ยงปานกลาง
-                base_multiplier = 0.0010  # เพิ่มจาก 0.0006 → ~0.03-0.05 lot
+                position_multiplier = 0.9  # ลดเล็กน้อย
+            elif positions_count <= 25:
+                position_multiplier = 0.8  # ลดลงเมื่อไม้เยอะ
             else:
-                # Portfolio ใหญ่ - เสี่ยงน้อย
-                base_multiplier = 0.0008  # เพิ่มจาก 0.0004 → ~0.02-0.04 lot
-                
-            # คำนวณ lot จาก risk amount โดยตรง
-            base_lot = risk_amount * base_multiplier
+                position_multiplier = 0.7  # ลดมากเมื่อไม้เยอะมาก
             
-            # 🎯 ปรับตามความผันผวนตลาด (Market Volatility Adjustment)
-            if market_volatility > 20.0:
-                volatility_adj = 1.3  # ตลาดผันผวนมาก → เพิ่ม lot
-            elif market_volatility > 15.0:
-                volatility_adj = 1.2  # ตลาดผันผวนปานกลางสูง
-            elif market_volatility > 10.0:
-                volatility_adj = 1.0  # ตลาดปกติ
-            elif market_volatility > 5.0:
-                volatility_adj = 0.9  # ตลาดเงียบ
+            # ปรับตามความผันผวนตลาด (แต่ไม่มากเกินไป)
+            if market_volatility > 80:
+                volatility_multiplier = 0.8  # ลดเมื่อผันผวนสูง
+            elif market_volatility > 60:
+                volatility_multiplier = 0.9
+            elif market_volatility < 20:
+                volatility_multiplier = 1.1  # เพิ่มเล็กน้อยเมื่อผันผวนต่ำ
             else:
-                volatility_adj = 0.8  # ตลาดเงียบมาก
-                
-            calculated_lot = base_lot * volatility_adj
+                volatility_multiplier = 1.0
             
-            # ปรับให้เป็น 0.01 step และจำกัดขอบเขต
-            portfolio_lot = max(0.01, min(0.10, calculated_lot))
-            portfolio_lot = round(portfolio_lot, 2)
+            # คำนวณ Final Lot Size
+            final_lot = base_lot * position_multiplier * volatility_multiplier
             
-            logger.info(f"📊 Portfolio Risk Lot Calculation (No SL):")
-            logger.info(f"   Positions Count: {positions_count}")
-            logger.info(f"   Market Volatility: {market_volatility:.1f}% → {volatility_adj:.1f}x")
-            logger.info(f"   Base Risk: {base_risk_pct:.1f}%")
-            logger.info(f"   Volatility Multiplier: {volatility_multiplier:.1f}x")
-            logger.info(f"   Final Risk: {final_risk_pct:.1f}%")
-            logger.info(f"   Risk Amount: ${risk_amount:.2f}")
-            logger.info(f"   Base Multiplier: {base_multiplier:.6f}")
-            logger.info(f"   Base Lot: {base_lot:.4f}")
-            logger.info(f"   After Volatility: {calculated_lot:.4f}")
-            logger.info(f"   Final Portfolio Lot: {portfolio_lot:.2f}")
+            # จำกัดขอบเขต Lot Size
+            min_lot = 0.01
+            max_lot = 0.05 if balance <= 2500 else 0.08  # จำกัด max lot สำหรับทุนน้อย
             
-            return portfolio_lot
+            final_lot = max(min_lot, min(final_lot, max_lot))
+            
+            # ปรับให้เป็น step 0.01
+            final_lot = round(final_lot, 2)
+            
+            
+            # Log การคำนวณ
+            logger.info(f"💰 Capital-Appropriate Lot Calculation:")
+            logger.info(f"   Balance: ${balance:.0f}")
+            logger.info(f"   Base Lot: {base_lot:.2f}")
+            logger.info(f"   Positions: {positions_count} (×{position_multiplier:.1f})")
+            logger.info(f"   Volatility: {market_volatility:.1f}% (×{volatility_multiplier:.1f})")
+            logger.info(f"   Final Lot: {final_lot:.2f}")
+            
+            return final_lot
             
         except Exception as e:
             logger.error(f"Error calculating portfolio risk lot: {e}")
             return 0.01  # fallback
+    
+    def calculate_candle_strength_multiplier(self, candle_data: Any) -> float:
+        """
+        🎯 คำนวณ Multiplier จากความแข็งแรงของแท่งเทียน
+        
+        Args:
+            candle_data: ข้อมูลแท่งเทียน (มี open, high, low, close, volume)
+            
+        Returns:
+            float: Multiplier (0.8-1.2)
+        """
+        try:
+            if not candle_data:
+                return 1.0
+            
+            # ดึงข้อมูลแท่งเทียน
+            open_price = getattr(candle_data, 'open', 0)
+            high_price = getattr(candle_data, 'high', 0)
+            low_price = getattr(candle_data, 'low', 0)
+            close_price = getattr(candle_data, 'close', 0)
+            volume = getattr(candle_data, 'volume', 0)
+            
+            if not all([open_price, high_price, low_price, close_price]):
+                return 1.0
+            
+            # 1. คำนวณ Body Size (ขนาดตัวเทียน)
+            body_size = abs(close_price - open_price)
+            total_range = high_price - low_price
+            
+            if total_range == 0:
+                return 1.0
+            
+            body_ratio = body_size / total_range  # 0-1
+            
+            # 2. คำนวณ Direction Strength
+            if close_price > open_price:
+                # แท่งเขียว - แรงขึ้น
+                direction_strength = (close_price - open_price) / total_range
+            else:
+                # แท่งแดง - แรงลง  
+                direction_strength = (open_price - close_price) / total_range
+            
+            # 3. Volume Factor (ถ้ามีข้อมูล)
+            volume_factor = 1.0
+            if volume > 0:
+                # สมมติว่า average volume = 1000 (ปรับได้ตามจริง)
+                avg_volume = 1000
+                volume_ratio = min(2.0, volume / avg_volume)
+                volume_factor = 0.9 + (volume_ratio * 0.1)  # 0.9-1.1
+            
+            # 4. รวมคะแนน
+            strength_score = (body_ratio * 0.5) + (direction_strength * 0.4) + (volume_factor * 0.1 - 0.1)
+            
+            # 5. แปลงเป็น Multiplier
+            if strength_score >= 0.8:
+                multiplier = 1.2  # แท่งแข็งแรงมาก
+            elif strength_score >= 0.6:
+                multiplier = 1.1  # แท่งแข็งแรง
+            elif strength_score >= 0.4:
+                multiplier = 1.0  # แท่งปกติ
+            elif strength_score >= 0.2:
+                multiplier = 0.9  # แท่งอ่อน
+            else:
+                multiplier = 0.8  # แท่งอ่อนมาก
+            
+            return multiplier
+            
+        except Exception as e:
+            logger.error(f"Error calculating candle strength: {e}")
+            return 1.0
     
     @staticmethod
     def calculate_market_volatility(candle_data: List[Any], atr_period: int = 14) -> float:

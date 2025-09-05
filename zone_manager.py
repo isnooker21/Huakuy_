@@ -378,22 +378,33 @@ class ZoneManager:
             pnl_penalty = max(zone.total_pnl / 10, -40)  # -$10 = -40 คะแนน
             score += pnl_penalty
             
-        # 2. Balance Score (30 คะแนน)
+        # 2. Volume-Weighted Balance Score (30 คะแนน) - ปรับให้ดู Volume แทนจำนวน
         if zone.buy_count > 0 and zone.sell_count > 0:
             # มีทั้ง BUY และ SELL = ดี
             balance_bonus = 30
             
-            # ลดคะแนนถ้าเสียสมดุลมาก
-            total = zone.buy_count + zone.sell_count
-            buy_ratio = zone.buy_count / total
+            # 🎯 คำนวณ Volume-Weighted Balance แทนการนับไม้
+            buy_volume = sum(getattr(pos, 'volume', 0.01) for pos in zone.positions if getattr(pos, 'type', 0) == 0)
+            sell_volume = sum(getattr(pos, 'volume', 0.01) for pos in zone.positions if getattr(pos, 'type', 0) == 1)
+            total_volume = buy_volume + sell_volume
             
-            if buy_ratio < 0.2 or buy_ratio > 0.8:  # เสียสมดุลมาก
-                balance_bonus *= 0.5
-            elif buy_ratio < 0.3 or buy_ratio > 0.7:  # เสียสมดุลปานกลาง  
-                balance_bonus *= 0.7
+            if total_volume > 0:
+                volume_buy_ratio = buy_volume / total_volume
+                
+                # ลดคะแนนถ้าเสียสมดุลมาก (ตาม Volume)
+                if volume_buy_ratio < 0.2 or volume_buy_ratio > 0.8:  # เสียสมดุลมาก
+                    balance_bonus *= 0.5
+                elif volume_buy_ratio < 0.3 or volume_buy_ratio > 0.7:  # เสียสมดุลปานกลาง  
+                    balance_bonus *= 0.7
+                
+                zone.balance_ratio = volume_buy_ratio
+            else:
+                # Fallback ถ้าไม่มี Volume data
+                total = zone.buy_count + zone.sell_count
+                buy_ratio = zone.buy_count / total if total > 0 else 0.5
+                zone.balance_ratio = buy_ratio
                 
             score += balance_bonus
-            zone.balance_ratio = buy_ratio
         else:
             # มีฝั่งเดียว = ไม่ดี
             score -= 15
