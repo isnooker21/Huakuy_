@@ -671,8 +671,11 @@ class ZoneAnalyzer:
             candidates_loss = abs(min(0, candidates_profit))
             risk_reduction = candidates_loss * 0.5  # ลดความเสี่ยง
             
+            # คำนวณ current balance score จาก balance_ratio
+            current_balance_score = 100.0 - abs(zone.balance_ratio - 0.5) * 200
+            
             # รวมคะแนน
-            balance_factor = max(0, new_balance_score - zone.balance_score) * 0.4
+            balance_factor = max(0, new_balance_score - current_balance_score) * 0.4
             profit_factor = min(50, pnl_improvement) * 0.4
             risk_factor = min(30, risk_reduction) * 0.2
             
