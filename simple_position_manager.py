@@ -195,9 +195,9 @@ class SimplePositionManager:
             buy_positions = [pos for pos in analyzed_positions if pos['position'].type == 0]
             sell_positions = [pos for pos in analyzed_positions if pos['position'].type == 1]
             
-            # เรียงตามระยะห่าง (ห่างมาก → ปิดก่อน)
-            buy_positions.sort(key=lambda x: x['distance_from_price'], reverse=True)
-            sell_positions.sort(key=lambda x: x['distance_from_price'], reverse=True)
+            # เรียงตามระยะห่าง (ห่างมาก → ปิดก่อน) - ใช้ current_price แทน distance_from_price
+            buy_positions.sort(key=lambda x: abs(x['position'].price_open - current_price), reverse=True)
+            sell_positions.sort(key=lambda x: abs(x['position'].price_open - current_price), reverse=True)
             
             best_combination = None
             best_score = -999999
@@ -223,8 +223,8 @@ class SimplePositionManager:
                     elif imbalance_side == 'SELL' and len(combo_sell) > len(combo_buy):
                         score += 50  # โบนัสการลด SELL
                     
-                    # โบนัสสำหรับการปิดไม้ห่าง
-                    distance_bonus = sum(pos['distance_from_price'] for pos in combination) * 0.1
+                    # โบนัสสำหรับการปิดไม้ห่าง - คำนวณจาก current_price
+                    distance_bonus = sum(abs(pos['position'].price_open - current_price) for pos in combination) * 0.1
                     score += distance_bonus
                     
                     if score > best_score:
@@ -260,7 +260,7 @@ class SimplePositionManager:
                         
                     # คำนวณคะแนน Distance + Profit
                     profit_score = total_pnl * 10  # กำไรมีน้ำหนักมาก
-                    distance_score = sum(pos['distance_from_price'] for pos in combination)
+                    distance_score = sum(abs(pos['position'].price_open - current_price) for pos in combination)
                     
                     # รวมคะแนน
                     total_score = profit_score + distance_score

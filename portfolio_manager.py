@@ -232,7 +232,8 @@ class PortfolioManager:
             )
             
             # 🆕 Portfolio-Based Risk Lot Sizing (ใหม่!)
-            positions_count = len(current_state.positions)
+            # ใช้ positions จาก parameter แทน current_state.positions
+            positions_count = len(positions) if positions else 0
             
             # คำนวณ market volatility จาก candle data (ถ้ามี)
             market_volatility = volatility  # ใช้ volatility ที่คำนวณแล้ว
