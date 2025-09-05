@@ -277,17 +277,18 @@ class ForceTradingMode:
                 symbol=symbol,
                 strength=strength,
                 confidence=confidence,
-                entry_price=entry_price,
+                price=entry_price,
                 timestamp=datetime.now(),
-                timeframe='M5',
-                indicators={
-                    'source': 'FORCE_TRADING',
-                    'forced': True,
-                    'activation_level': recommendation.get('priority', 'MEDIUM'),
-                    'momentum_data': recommendation.get('momentum_data', {}),
-                    'reason': recommendation.get('reason', 'Force trade')
-                }
-            )
+                comment=f"Force Trade: {direction} at {entry_price}")
+            
+            # เพิ่ม indicators แบบ manual
+            signal.indicators = {
+                'source': 'FORCE_TRADING',
+                'forced': True,
+                'activation_level': recommendation.get('priority', 'MEDIUM'),
+                'momentum_data': recommendation.get('momentum_data', {}),
+                'reason': recommendation.get('reason', 'Force trade')
+            }
             
             logger.info(f"🚨 Force Signal Created: {direction} at {entry_price:.2f} "
                        f"(Strength: {strength:.1f}%, Confidence: {confidence:.1f})")
