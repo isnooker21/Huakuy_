@@ -133,7 +133,14 @@ class SimplePositionManager:
                 
                 if close_result.success:
                     successful_closes = len(positions_to_close)
-                    total_profit = close_result.profit if hasattr(close_result, 'profit') else 0.0
+                    # ดึง profit จาก close_result อย่างถูกต้อง
+                    if hasattr(close_result, 'profit'):
+                        total_profit = close_result.profit
+                    elif hasattr(close_result, 'total_profit'):
+                        total_profit = close_result.total_profit
+                    else:
+                        total_profit = 0.0
+                        logger.warning("⚠️ No profit information in close_result")
                     
                     for position in positions_to_close:
                         close_details.append({
@@ -142,7 +149,7 @@ class SimplePositionManager:
                             'success': True
                         })
                     
-                    logger.info(f"✅ Group close success: {successful_closes} positions, ${total_profit:.2f} total")
+                    logger.info(f"✅ Group close success: {successful_closes} positions, ${total_profit:.2f} actual profit")
                 else:
                     # ถ้า group close ไม่สำเร็จ ลองปิดทีละตัว
                     logger.warning("Group close failed, trying individual closes...")
@@ -150,16 +157,23 @@ class SimplePositionManager:
                         try:
                             # ใช้ MT5 direct close
                             individual_result = self.mt5.close_position_direct(position.ticket)
-                            if individual_result:
+                            if individual_result and hasattr(individual_result, 'success') and individual_result.success:
                                 successful_closes += 1
-                                profit = getattr(individual_result, 'profit', 0.0)
+                                # ดึง profit จาก result
+                                if hasattr(individual_result, 'profit'):
+                                    profit = individual_result.profit
+                                elif hasattr(individual_result, 'total_profit'):
+                                    profit = individual_result.total_profit
+                                else:
+                                    profit = 0.0
+                                    
                                 total_profit += profit
                                 close_details.append({
                                     'ticket': position.ticket,
                                     'profit': profit,
                                     'success': True
                                 })
-                                logger.info(f"✅ Individual close #{position.ticket}: ${profit:.2f}")
+                                logger.info(f"✅ Individual close #{position.ticket}: ${profit:.2f} actual")
                             else:
                                 close_details.append({
                                     'ticket': position.ticket,
@@ -234,15 +248,19 @@ class SimplePositionManager:
                 if hasattr(pos, 'type') and hasattr(pos, 'price_open') and hasattr(pos, 'volume'):
                     pos_type = pos.type.upper() if isinstance(pos.type, str) else ("BUY" if pos.type == 0 else "SELL")
                     
-                    # คำนวณ P&L พื้นฐาน
+                    # คำนวณ P&L พื้นฐาน รวมสเปรดและ commission
                     if pos_type == "BUY":
                         # BUY: ปิดที่ bid price (current_price - spread)
-                        close_price = current_price - (spread / 100)  # spread มาเป็น points
-                        pnl = (close_price - pos.price_open) * pos.volume * 100
+                        close_price = current_price - (spread * 0.01)  # spread points -> price
+                        pnl_before_costs = (close_price - pos.price_open) * pos.volume * 100
                     else:  # SELL
-                        # SELL: ปิดที่ ask price (current_price + spread)
-                        close_price = current_price + (spread / 100)
-                        pnl = (pos.price_open - close_price) * pos.volume * 100
+                        # SELL: ปิดที่ ask price (current_price + spread)  
+                        close_price = current_price + (spread * 0.01)
+                        pnl_before_costs = (pos.price_open - close_price) * pos.volume * 100
+                    
+                    # หักค่าธรรมเนียมและต้นทุนเพิ่มเติม (conservative estimate)
+                    commission_cost = pos.volume * 0.5  # ประมาณ $0.5 per 0.01 lot
+                    pnl = pnl_before_costs - commission_cost
                     
                     # คำนวณระยะห่างจากราคาปัจจุบัน
                     distance_pips = abs(current_price - pos.price_open) * 100
@@ -268,6 +286,9 @@ class SimplePositionManager:
                         'is_profit': pnl > 0,
                         'is_loss': pnl < 0
                     })
+                    
+                    # Debug log สำหรับแต่ละไม้
+                    logger.info(f"🔍 #{pos.ticket} {pos_type} {pos.volume:.2f}lot @ {pos.price_open:.2f} → P&L: ${pnl:.2f} (spread-adjusted)")
                     
             except Exception as e:
                 logger.warning(f"Error analyzing position {pos.ticket}: {e}")
@@ -325,8 +346,8 @@ class SimplePositionManager:
                     if loss_count == 0 and profit_count > 1:
                         continue
                     
-                    # 🚫 ไม่ปิดถ้าขาดทุนเกินที่ยอมรับได้
-                    if total_pnl < -self.max_acceptable_loss:
+                    # 🚫 ไม่ปิดถ้าติดลบเลย (เข้มงวด)
+                    if total_pnl < 0:
                         continue
                     
                     # 📊 คำนวณคะแนน
@@ -404,12 +425,14 @@ class SimplePositionManager:
     
     def _get_combination_reason(self, total_pnl: float, profit_count: int, loss_count: int, total_count: int) -> str:
         """📝 อธิบายเหตุผลการปิด"""
-        if total_pnl > 1.0:
-            return f"Good profit: ${total_pnl:.2f} from {total_count} positions"
-        elif total_pnl >= 0:
-            return f"Break-even closure: ${total_pnl:.2f}, reduce {total_count} positions"
+        if total_pnl > 2.0:
+            return f"Excellent profit: ${total_pnl:.2f} from {total_count} positions (after spread & commission)"
+        elif total_pnl > 0.5:
+            return f"Good profit: ${total_pnl:.2f} from {total_count} positions (after spread & commission)"
+        elif total_pnl > 0:
+            return f"Small profit: ${total_pnl:.2f} from {total_count} positions (after spread & commission)"
         else:
-            return f"Small loss acceptable: ${total_pnl:.2f} to reduce {total_count} positions ({loss_count} losing)"
+            return f"REJECTED: Would lose ${abs(total_pnl):.2f} - only profitable closes allowed"
     
     def get_statistics(self) -> Dict[str, Any]:
         """📊 ดึงสถิติการทำงาน"""
