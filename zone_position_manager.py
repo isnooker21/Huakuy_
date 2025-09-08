@@ -1560,6 +1560,10 @@ def _check_cross_zone_support_with_7d(self, position_scores: List[Any], current_
                     logger.info(f"❌ No profitable 7D Cross-Zone balance plans found")
             else:
                 logger.info(f"❌ No balance recovery opportunities detected")
+                
+                # Fallback: ถ้าไม่มี Cross-Zone ให้ใช้ 7D เลือก positions ดีที่สุดใน zone เดียว
+                logger.info(f"🔄 Fallback: Single-Zone 7D analysis...")
+                return self._single_zone_7d_analysis(position_scores)
         else:
             logger.warning(f"⚠️ zone_analyzer not available")
         
@@ -1569,11 +1573,69 @@ def _check_cross_zone_support_with_7d(self, position_scores: List[Any], current_
         logger.error(f"❌ Error in 7D Cross-Zone integration: {e}")
         return {'should_close': False}
 
+def _single_zone_7d_analysis(self, position_scores: List[Any]) -> Dict[str, Any]:
+    """🎯 Single-Zone analysis ด้วย 7D scores เมื่อไม่มี Cross-Zone opportunities"""
+    try:
+        logger.info(f"🎯 Single-Zone 7D Analysis: {len(position_scores)} positions")
+        
+        if len(position_scores) < 2:
+            return {'should_close': False, 'reason': 'Need at least 2 positions'}
+        
+        # เรียงตาม 7D score (ดีที่สุดก่อน)
+        sorted_positions = sorted(position_scores, key=lambda x: x.total_score, reverse=True)
+        
+        # หา combination ที่ดีที่สุด (2-6 positions)
+        best_combination = None
+        best_net_pnl = 0
+        
+        for combo_size in range(2, min(7, len(sorted_positions) + 1)):
+            candidate_positions = sorted_positions[:combo_size]
+            
+            total_pnl = sum([pos.position.profit for pos in candidate_positions])
+            avg_7d_score = sum([pos.total_score for pos in candidate_positions]) / len(candidate_positions)
+            
+            # ต้องมีกำไรสุทธิ > $2 และ 7D score > 40
+            if total_pnl > 2.0 and avg_7d_score > 40 and total_pnl > best_net_pnl:
+                best_net_pnl = total_pnl
+                profitable_count = len([pos for pos in candidate_positions if pos.position.profit > 0])
+                losing_count = len([pos for pos in candidate_positions if pos.position.profit <= 0])
+                
+                best_combination = {
+                    'positions': [pos.position for pos in candidate_positions],
+                    'net_pnl': total_pnl,
+                    'avg_score': avg_7d_score,
+                    'combo_size': combo_size,
+                    'profitable_count': profitable_count,
+                    'losing_count': losing_count
+                }
+        
+        if best_combination:
+            logger.info(f"🎯 Found Single-Zone 7D combination: {best_combination['profitable_count']}P + {best_combination['losing_count']}L "
+                       f"(7D Score: {best_combination['avg_score']:.1f}) = ${best_combination['net_pnl']:.2f}")
+            
+            return {
+                'should_close': True,
+                'reason': f"Single-Zone 7D: {best_combination['profitable_count']}P+{best_combination['losing_count']}L",
+                'positions_to_close': best_combination['positions'],
+                'positions_count': len(best_combination['positions']),
+                'expected_pnl': best_combination['net_pnl'],
+                'method': 'single_zone_7d',
+                'avg_7d_score': best_combination['avg_score']
+            }
+        else:
+            logger.info(f"❌ No profitable Single-Zone 7D combinations found")
+            return {'should_close': False, 'reason': 'No profitable 7D combinations'}
+        
+    except Exception as e:
+        logger.error(f"❌ Error in Single-Zone 7D analysis: {e}")
+        return {'should_close': False}
+
 # ลบ Cross-Zone Flow ออกแล้ว - ใช้ระบบเดิมใน zone_analyzer + zone_coordinator แทน
 
 # Add methods to ZonePositionManager class
 ZonePositionManager.should_close_positions_with_7d = should_close_positions_with_7d
 ZonePositionManager._check_cross_zone_support_with_7d = _check_cross_zone_support_with_7d
+ZonePositionManager._single_zone_7d_analysis = _single_zone_7d_analysis
 
 if __name__ == "__main__":
     # Demo Zone Position Management
