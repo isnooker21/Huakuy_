@@ -923,7 +923,7 @@ class MT5Connection:
     
     def close_positions_group(self, tickets: List[int]) -> Dict:
         """
-        ปิด Position หลายตัวพร้อมกัน (ไม่เช็ค spread - ให้ Simple Position Manager จัดการ)
+        ปิด Position หลายตัวพร้อมกัน - ใช้ Threading สำหรับความเร็ว
         """
         if not tickets:
             return {
@@ -935,29 +935,63 @@ class MT5Connection:
                 'message': 'No tickets provided'
             }
         
+        import threading
+        import time
+        from concurrent.futures import ThreadPoolExecutor, as_completed
+        
         closed_tickets = []
         failed_tickets = []
         total_profit = 0.0
+        results_lock = threading.Lock()
         
-        for ticket in tickets:
+        def close_single_position(ticket):
+            """ปิดตำแหน่งเดียวใน thread แยก"""
             try:
-                # ปิด Position โดยตรงไม่เช็คอะไร
                 result = self.close_position_direct(ticket)
                 
-                if result and result.get('retcode') == 10009:
-                    closed_tickets.append(ticket)
-                    # เก็บ profit จริงจาก result
-                    if 'profit' in result:
-                        total_profit += result['profit']
-                    logger.info(f"✅ ปิด Position {ticket} สำเร็จ")
-                else:
-                    failed_tickets.append(ticket)
-                    error_msg = result.get('comment', 'Unknown error') if result else 'No result'
-                    logger.error(f"❌ ปิด Position {ticket} ล้มเหลว: {error_msg}")
-                    
+                with results_lock:
+                    if result and result.get('retcode') == 10009:
+                        closed_tickets.append(ticket)
+                        if 'profit' in result:
+                            nonlocal total_profit
+                            total_profit += result['profit']
+                        logger.info(f"✅ ปิด Position {ticket} สำเร็จ (Parallel)")
+                        return {'success': True, 'ticket': ticket, 'profit': result.get('profit', 0)}
+                    else:
+                        failed_tickets.append(ticket)
+                        error_msg = result.get('comment', 'Unknown error') if result else 'No result'
+                        logger.error(f"❌ ปิด Position {ticket} ล้มเหลว: {error_msg}")
+                        return {'success': False, 'ticket': ticket, 'error': error_msg}
+                        
             except Exception as e:
-                failed_tickets.append(ticket)
+                with results_lock:
+                    failed_tickets.append(ticket)
                 logger.error(f"❌ Error closing position {ticket}: {e}")
+                return {'success': False, 'ticket': ticket, 'error': str(e)}
+        
+        # ปิดแบบ Parallel ถ้ามีหลายตัว
+        if len(tickets) > 1:
+            logger.info(f"🚀 เริ่มปิดกลุ่ม Position แบบ Parallel: {len(tickets)} ตัว")
+            
+            # ใช้ ThreadPoolExecutor เพื่อปิดพร้อมกัน
+            max_workers = min(len(tickets), 10)  # ไม่เกิน 10 threads
+            with ThreadPoolExecutor(max_workers=max_workers) as executor:
+                # Submit ทุก position
+                future_to_ticket = {executor.submit(close_single_position, ticket): ticket for ticket in tickets}
+                
+                # รอผลลัพธ์
+                for future in as_completed(future_to_ticket, timeout=30):
+                    ticket = future_to_ticket[future]
+                    try:
+                        result = future.result()
+                    except Exception as e:
+                        logger.error(f"❌ Thread error for ticket {ticket}: {e}")
+                        with results_lock:
+                            failed_tickets.append(ticket)
+        else:
+            # ถ้ามีตัวเดียว ใช้วิธีปกติ
+            logger.info(f"🎯 ปิด Position เดียว: {tickets[0]}")
+            close_single_position(tickets[0])
         
         success = len(closed_tickets) > 0
         return {

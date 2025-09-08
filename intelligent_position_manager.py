@@ -272,12 +272,12 @@ class IntelligentPositionManager:
                 positions_to_close.extend([score.position for score in high_impact])
                 closing_reasons.append(f'CRITICAL margin level: {margin_health.margin_level:.1f}%')
             
-            # 2. 🎯 MUST_CLOSE: ปิดตำแหน่งที่ได้คะแนนสูง
+            # 2. 🎯 MUST_CLOSE: ปิดตำแหน่งที่ได้คะแนนสูง (ไม่จำกัดจำนวน)
             must_close = [score for score in position_scores if score.priority == 'MUST_CLOSE']
             if must_close:
-                # ปิดไม่เกิน 5 ตำแหน่ง เพื่อไม่ให้กระทบตลาด
-                positions_to_close.extend([score.position for score in must_close[:5]])
-                closing_reasons.append(f'{len(must_close)} high-priority positions')
+                # ปิดทั้งหมดที่ได้คะแนนสูง - ไม่จำกัดจำนวน
+                positions_to_close.extend([score.position for score in must_close])
+                closing_reasons.append(f'{len(must_close)} high-priority positions (unlimited)')
             
             # 3. ⚖️ BALANCE: ปิดเพื่อปรับสมดุล
             if balance_analysis.get('needs_rebalance', False):
@@ -286,12 +286,19 @@ class IntelligentPositionManager:
                 if balance_closes:
                     closing_reasons.append(f'Portfolio rebalancing: {len(balance_closes)} positions')
             
-            # 4. 🎯 SMART PAIRING: จับคู่กำไร-ขาดทุน
+            # 4. 🎯 SMART PAIRING: จับคู่กำไร-ขาดทุน (หลายคู่)
             if not positions_to_close:  # ถ้ายังไม่มีอะไรให้ปิด
-                smart_pairs = self._find_smart_pairs(position_scores)
+                smart_pairs = self._find_multiple_smart_pairs(position_scores)
                 if smart_pairs:
                     positions_to_close.extend(smart_pairs)
                     closing_reasons.append(f'Smart profit-loss pairing: {len(smart_pairs)} positions')
+            
+            # 5. 💰 MASS PROFIT TAKING: ปิดกำไรแบบกลุ่มไม่จำกัด (ถ้ามีโอกาส)
+            if not positions_to_close:  # ถ้ายังไม่มีอะไรให้ปิด
+                mass_profit_positions = self._find_mass_profit_opportunities(position_scores, margin_health)
+                if mass_profit_positions:
+                    positions_to_close.extend(mass_profit_positions)
+                    closing_reasons.append(f'Mass profit taking: {len(mass_profit_positions)} positions')
             
             # 🚫 ป้องกันไม่ให้ทิ้งไม้แย่ไว้
             if positions_to_close:
@@ -331,20 +338,24 @@ class IntelligentPositionManager:
         try:
             positions_to_close = []
             
-            # ถ้า BUY มากเกินไป → ปิด BUY ที่แย่ที่สุด
+            # ถ้า BUY มากเกินไป → ปิด BUY ที่แย่ทั้งหมด
             if balance_analysis['buy_ratio'] > 0.65:
                 buy_positions = [score for score in position_scores 
                                if getattr(score.position, 'type', 0) == 0]
-                # เรียงจากแย่สุดไปดีสุด และปิดแย่สุด 2 ตำแหน่ง
+                # เรียงจากแย่สุดไปดีสุด และปิดที่แย่กว่าค่าเฉลี่ย
                 buy_positions.sort(key=lambda x: x.total_score)
-                positions_to_close.extend([score.position for score in buy_positions[:2]])
+                avg_score = sum(score.total_score for score in buy_positions) / len(buy_positions) if buy_positions else 0
+                bad_buys = [score for score in buy_positions if score.total_score < avg_score]
+                positions_to_close.extend([score.position for score in bad_buys])
             
-            # ถ้า SELL มากเกินไป → ปิด SELL ที่แย่ที่สุด  
+            # ถ้า SELL มากเกินไป → ปิด SELL ที่แย่ทั้งหมด
             elif balance_analysis['sell_ratio'] > 0.65:
                 sell_positions = [score for score in position_scores 
                                 if getattr(score.position, 'type', 0) == 1]
                 sell_positions.sort(key=lambda x: x.total_score)
-                positions_to_close.extend([score.position for score in sell_positions[:2]])
+                avg_score = sum(score.total_score for score in sell_positions) / len(sell_positions) if sell_positions else 0
+                bad_sells = [score for score in sell_positions if score.total_score < avg_score]
+                positions_to_close.extend([score.position for score in bad_sells])
             
             return positions_to_close
             
@@ -353,7 +364,7 @@ class IntelligentPositionManager:
             return []
     
     def _find_smart_pairs(self, position_scores: List[PositionScore]) -> List[Any]:
-        """🎯 หาคู่ profit-loss ที่ดี"""
+        """🎯 หาคู่ profit-loss ที่ดี (เดิม - สำหรับ backward compatibility)"""
         try:
             profitable = [score for score in position_scores if getattr(score.position, 'profit', 0) > 3.0]
             losing = [score for score in position_scores if getattr(score.position, 'profit', 0) < -8.0]
@@ -375,6 +386,86 @@ class IntelligentPositionManager:
             
         except Exception as e:
             logger.error(f"❌ Error finding smart pairs: {e}")
+            return []
+    
+    def _find_multiple_smart_pairs(self, position_scores: List[PositionScore]) -> List[Any]:
+        """🎯 หาคู่ profit-loss หลายคู่ (ไม่จำกัดจำนวน)"""
+        try:
+            profitable = [score for score in position_scores if getattr(score.position, 'profit', 0) > 3.0]
+            losing = [score for score in position_scores if getattr(score.position, 'profit', 0) < -8.0]
+            
+            if not profitable or not losing:
+                return []
+            
+            # เรียงตามกำไร/ขาดทุน
+            profitable.sort(key=lambda x: getattr(x.position, 'profit', 0), reverse=True)  # กำไรมากสุดก่อน
+            losing.sort(key=lambda x: getattr(x.position, 'profit', 0))  # ขาดทุนมากสุดก่อน
+            
+            positions_to_close = []
+            used_profitable = []
+            used_losing = []
+            
+            # จับคู่ทีละคู่จนหมด
+            for profit_score in profitable:
+                if profit_score in used_profitable:
+                    continue
+                    
+                for loss_score in losing:
+                    if loss_score in used_losing:
+                        continue
+                    
+                    profit_val = getattr(profit_score.position, 'profit', 0)
+                    loss_val = getattr(loss_score.position, 'profit', 0)
+                    expected_pnl = profit_val + loss_val
+                    
+                    # จับคู่ถ้าผลรวมไม่ขาดทุนเกิน $2
+                    if expected_pnl > -2.0:
+                        positions_to_close.extend([profit_score.position, loss_score.position])
+                        used_profitable.append(profit_score)
+                        used_losing.append(loss_score)
+                        logger.info(f"🎯 Smart Pair: Profit ${profit_val:.2f} + Loss ${loss_val:.2f} = ${expected_pnl:.2f}")
+                        break
+            
+            return positions_to_close
+            
+        except Exception as e:
+            logger.error(f"❌ Error finding multiple smart pairs: {e}")
+            return []
+    
+    def _find_mass_profit_opportunities(self, position_scores: List[PositionScore], 
+                                       margin_health: MarginHealth) -> List[Any]:
+        """💰 หาโอกาสปิดกำไรแบบกลุ่มไม่จำกัดจำนวน"""
+        try:
+            # เงื่อนไขการปิดกำไรแบบกลุ่ม
+            if margin_health.risk_level in ['CRITICAL', 'HIGH']:
+                # ถ้า Margin เสี่ยง ปิดแค่กำไรดีมาก
+                min_profit = 8.0
+                reason = "High margin risk - only excellent profits"
+            elif margin_health.risk_level == 'MEDIUM':
+                # ถ้า Margin ปานกลาง ปิดกำไรดี
+                min_profit = 5.0
+                reason = "Medium margin risk - good profits"
+            else:
+                # ถ้า Margin ปลอดภัย ปิดกำไรปานกลาง
+                min_profit = 3.0
+                reason = "Safe margin - moderate profits"
+            
+            # หาตำแหน่งกำไรที่เข้าเกณฑ์
+            profitable_positions = [
+                score.position for score in position_scores 
+                if getattr(score.position, 'profit', 0) > min_profit
+            ]
+            
+            if profitable_positions:
+                total_profit = sum(getattr(pos, 'profit', 0) for pos in profitable_positions)
+                logger.info(f"💰 Mass Profit Opportunity: {len(profitable_positions)} positions, ${total_profit:.2f} total")
+                logger.info(f"   Reason: {reason}")
+                return profitable_positions
+            
+            return []
+            
+        except Exception as e:
+            logger.error(f"❌ Error finding mass profit opportunities: {e}")
             return []
     
     def _avoid_leaving_bad_positions(self, positions_to_close: List[Any], 
