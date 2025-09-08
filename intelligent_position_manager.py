@@ -265,12 +265,7 @@ class IntelligentPositionManager:
             positions_to_close = []
             closing_reasons = []
             
-            # 1. 🚨 CRITICAL: ปิดทันทีถ้า margin วิกฤต
-            if margin_health.risk_level == 'CRITICAL':
-                # ปิดตำแหน่งที่มี margin impact สูงสุด 3 อันดับแรก
-                high_impact = [score for score in position_scores if score.margin_impact > 50][:3]
-                positions_to_close.extend([score.position for score in high_impact])
-                closing_reasons.append(f'CRITICAL margin level: {margin_health.margin_level:.1f}%')
+            # 🚫 ลบ CRITICAL margin closing - อาจปิดติดลบได้
             
             # 🚫 ลบระบบเดิมออกทั้งหมด - ใช้เฉพาะ Intelligent Mass Closing
             
@@ -646,59 +641,63 @@ class IntelligentPositionManager:
             # เริ่มจากการปิดกำไรทั้งหมด
             all_profitable = profitable_positions.copy()
             
-            # ลองเพิ่มตำแหน่งขาดทุนทีละตัว เพื่อเพิ่มประสิทธิภาพ
-            for num_losing in range(len(losing_positions) + 1):
-                if num_losing == 0:
-                    # ปิดเฉพาะกำไร
-                    combination = all_profitable
-                else:
-                    # ปิดกำไร + ขาดทุนที่เลือก
-                    selected_losing = losing_positions[:num_losing]
-                    combination = all_profitable + selected_losing
-                
-                if not combination:
-                    continue
-                
-                # คำนวณผลลัพธ์
-                total_profit = sum(item['profit'] for item in combination)
-                total_volume = sum(item['volume'] for item in combination)
-                positions_list = [item['position'] for item in combination]
+            # 🚫 ปิดเฉพาะกำไรเท่านั้น - ไม่รวมขาดทุนเลย
+            combination = all_profitable
+            
+            if not combination:
+                logger.info("🚫 No profitable positions to close")
+                return None
+            
+            # คำนวณผลลัพธ์
+            total_profit = sum(item['profit'] for item in combination)
+            total_volume = sum(item['volume'] for item in combination)
+            positions_list = [item['position'] for item in combination]
+            total_cost = self._calculate_closing_cost(total_volume, positions_list)
+            net_profit = total_profit - total_cost
+            
+            # ต้องกำไรสุทธิอย่างน้อย $10
+            if net_profit >= 10.0:
+                best_combination = {
+                    'positions': combination,
+                    'total_profit': total_profit,
+                    'total_cost': total_cost,
+                    'net_profit': net_profit,
+                    'count': len(combination)
+                }
+                logger.info(f"💰 All profits closing: {len(combination)} positions, Net: +${net_profit:.2f}")
+                return best_combination
+            
+            # ถ้าปิดทั้งหมดไม่คุ้ม ลองปิดเฉพาะกำไรดีมาก (>$15)
+            excellent_profits = [pos for pos in profitable_positions if pos['profit'] > 15.0]
+            if excellent_profits:
+                total_profit = sum(item['profit'] for item in excellent_profits)
+                total_volume = sum(item['volume'] for item in excellent_profits)
+                positions_list = [item['position'] for item in excellent_profits]
                 total_cost = self._calculate_closing_cost(total_volume, positions_list)
                 net_profit = total_profit - total_cost
                 
-                # เลือกเฉพาะที่กำไรสุทธิ และดีกว่าเดิม
-                if net_profit >= 5.0 and net_profit > best_net_profit:
-                    best_net_profit = net_profit
+                # เกณฑ์สูงสำหรับกำไรดีมาก
+                if net_profit >= 8.0:  # ลดจาก $10 เป็น $8 สำหรับกำไรดีมาก
                     best_combination = {
-                        'positions': combination,
+                        'positions': excellent_profits,
                         'total_profit': total_profit,
                         'total_cost': total_cost,
                         'net_profit': net_profit,
-                        'count': len(combination)
+                        'count': len(excellent_profits)
                     }
-                    logger.info(f"🎯 Better combination found: {len(combination)} positions, Net: +${net_profit:.2f}")
+                    logger.info(f"💎 Excellent profits only: {len(excellent_profits)} positions, Net: +${net_profit:.2f}")
+                    return best_combination
             
-            # ถ้าไม่มีชุดที่ดี ลองปิดเฉพาะกำไรดีมาก
-            if not best_combination:
-                excellent_profits = [pos for pos in profitable_positions if pos['profit'] > 15.0]
-                if excellent_profits:
-                    total_profit = sum(item['profit'] for item in excellent_profits)
-                    total_volume = sum(item['volume'] for item in excellent_profits)
-                    positions_list = [item['position'] for item in excellent_profits]
-                    total_cost = self._calculate_closing_cost(total_volume, positions_list)
-                    net_profit = total_profit - total_cost
-                    
-                    if net_profit >= 10.0:  # เกณฑ์สูงสำหรับกำไรดีมาก
-                        best_combination = {
-                            'positions': excellent_profits,
-                            'total_profit': total_profit,
-                            'total_cost': total_cost,
-                            'net_profit': net_profit,
-                            'count': len(excellent_profits)
-                        }
-                        logger.info(f"💎 Excellent profits only: {len(excellent_profits)} positions, Net: +${net_profit:.2f}")
+            # ไม่มีชุดไหนที่คุ้มค่า
+            logger.info(f"🚫 No profitable combinations found. All profits net: ${net_profit:.2f} < $10.00")
+            if excellent_profits:
+                excellent_net = sum(item['profit'] for item in excellent_profits) - self._calculate_closing_cost(
+                    sum(item['volume'] for item in excellent_profits), 
+                    [item['position'] for item in excellent_profits]
+                )
+                logger.info(f"   Excellent profits net: ${excellent_net:.2f} < $8.00")
             
-            return best_combination
+            return None
             
         except Exception as e:
             logger.error(f"❌ Error finding best closing combination: {e}")
