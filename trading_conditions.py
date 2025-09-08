@@ -273,15 +273,16 @@ class TradingConditions:
             can_enter_analysis = True
             entry_reason = f"แรงตลาดเพียงพอ ({strength_analysis['total_strength']:.2f}% >= {session_params['entry_threshold']}%)"
         else:
-            # 🚀 UNLIMITED ENTRY: ผ่อนปรนเงื่อนไขให้เทรดได้ต่อ
-            can_enter_analysis = True
-            if session_params['current_session'] in ['OVERLAP_LONDON_NY', 'LONDON'] and strength_analysis['total_strength'] >= 10.0:
-                entry_reason = f"Session สูง + แรงตลาดพอใช้ ({strength_analysis['total_strength']:.2f}%)"
-                strength_analysis['total_strength'] = 15.0  # ให้คะแนนขั้นต่ำ
+            # 🔴 STRICT ENTRY: ต้องมีแรงตลาดเพียงพอถึงจะเทรด
+            can_enter_analysis = False
+            if session_params['current_session'] in ['OVERLAP_LONDON_NY', 'LONDON'] and strength_analysis['total_strength'] >= 15.0:
+                can_enter_analysis = True
+                entry_reason = f"Session สูง + แรงตลาดพอ ({strength_analysis['total_strength']:.2f}%)"
             else:
-                entry_reason = f"🚀 UNLIMITED ENTRY: ยอมรับแรงตลาดต่ำ ({strength_analysis['total_strength']:.2f}%) เพื่อเทรดต่อเนื่อง"
-                strength_analysis['total_strength'] = 10.0  # ให้คะแนนขั้นต่ำ
-                logger.info(f"🚀 เงื่อนไข 2: {entry_reason}")
+                entry_reason = f"❌ BLOCKED: แรงตลาดไม่เพียงพอ ({strength_analysis['total_strength']:.2f}% < 15%)"
+                result['reasons'].append(entry_reason)
+                logger.warning(f"❌ เงื่อนไข 2: {entry_reason}")
+                return result
         
         logger.info(f"✅ เงื่อนไข 2: {entry_reason}")
             
@@ -1079,8 +1080,8 @@ class TradingConditions:
         # 📊 Debug Portfolio Balance
         logger.info(f"📊 Portfolio Balance: BUY={buy_count} ({buy_percentage:.1f}%) | SELL={sell_count} ({sell_percentage:.1f}%) | Total={total_positions}")
         
-        # 🚀 SMART LOGIC: เมื่อเสียสมดุล → Force Counter-Trade (เข้มงวดขึ้น)
-        if sell_percentage > 55.0:  # ลดจาก 65% เป็น 55% เพื่อ Balance เร็วขึ้น
+        # 🚀 SMART LOGIC: เมื่อเสียสมดุล → Force Counter-Trade (เข้มงวดมาก)
+        if sell_percentage > 45.0:  # ลดจาก 55% เป็น 45% เพื่อ Balance เร็วมาก
             # Portfolio เอียงไป SELL มาก → ต้อง BUY เพื่อแก้สมดุล
             if direction == "BUY":
                 result['force_trade'] = True
@@ -1092,7 +1093,7 @@ class TradingConditions:
                 result['reason'] = f'❌ BLOCK: Too many SELL already ({sell_percentage:.1f}%)'
                 return result
                 
-        elif buy_percentage > 55.0:  # ลดจาก 65% เป็น 55% เพื่อ Balance เร็วขึ้น
+        elif buy_percentage > 45.0:  # ลดจาก 55% เป็น 45% เพื่อ Balance เร็วมาก
             # Portfolio เอียงไป BUY มาก → บังคับ SELL เพื่อแก้สมดุล
             result['force_trade'] = True
             result['forced_direction'] = "SELL"  # บังคับ SELL ไม่ว่า signal จะเป็นอะไร
@@ -1100,10 +1101,11 @@ class TradingConditions:
             logger.info(f"🚀 FORCE SELL: Portfolio เอียง BUY {buy_percentage:.1f}% → บังคับขายเพื่อแก้สมดุล")
             return result
         
-        elif total_positions > 50:
-            # 🟡 High Volume Mode: ระมัดระวังแต่ไม่บล็อค
-            logger.info(f"🟡 High Volume Mode: {total_positions} positions, Wrong: {wrong_percentage:.1f}%")
-            result['reason'] = f'High Volume Mode: Proceed with caution'
+        elif total_positions > 30:
+            # 🔴 High Volume Block: บล็อคเมื่อมี positions มากเกินไป
+            result['should_block'] = True
+            result['reason'] = f'❌ BLOCK: Too many positions ({total_positions} > 30)'
+            logger.warning(f"🔴 HIGH VOLUME BLOCK: {total_positions} positions เกินขีดจำกัด → หยุดเปิดออเดอร์")
             return result
         
         # 🟢 Normal Mode: อนุญาตทุกการเข้า (Unlimited Entry)
