@@ -49,11 +49,11 @@ logging.getLogger('zone_rebalancer').setLevel(logging.WARNING)
 logging.getLogger('market_analysis').setLevel(logging.WARNING)
 
 # 🚀 PERFORMANCE-OPTIMIZED LOGGING
-logging.getLogger('zone_position_manager').setLevel(logging.INFO)  # ลดจาก DEBUG
-logging.getLogger('zone_manager').setLevel(logging.WARNING)  # ลดจาก INFO
-logging.getLogger('zone_analyzer').setLevel(logging.WARNING)  # ลดจาก INFO
-logging.getLogger('zone_coordinator').setLevel(logging.WARNING)  # ลดจาก INFO
-logging.getLogger('intelligent_position_manager').setLevel(logging.DEBUG)  # เปิด debug เพื่อ debug ระบบปิดไม้
+logging.getLogger('zone_position_manager').setLevel(logging.WARNING)  # ปิด DEBUG logs
+logging.getLogger('zone_manager').setLevel(logging.WARNING)  # ปิด INFO logs
+logging.getLogger('zone_analyzer').setLevel(logging.WARNING)  # ปิด INFO logs
+logging.getLogger('zone_coordinator').setLevel(logging.WARNING)  # ปิด INFO logs
+logging.getLogger('intelligent_position_manager').setLevel(logging.WARNING)  # ปิด DEBUG logs ที่เยอะมาก
 logging.getLogger('__main__').setLevel(logging.INFO)
 
 logger = logging.getLogger(__name__)
