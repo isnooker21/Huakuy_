@@ -242,15 +242,10 @@ class Dynamic7DSmartCloser:
             # ไม่ให้ต่ำกว่า minimum
             max_size = max(max_size, 5)
             
-            # 💰 Dynamic Safety Buffer
-            if margin_level < self.critical_margin_threshold:
-                safety_buffer = 0.5  # เร่งด่วน - ลดเกณฑ์
-            elif margin_level < self.emergency_margin_threshold:
-                safety_buffer = 1.0  # เสี่ยงสูง - ลดเกณฑ์
-            elif total_positions > 100:
-                safety_buffer = 1.5  # ไม้เยอะ - เกณฑ์ปานกลาง
-            else:
-                safety_buffer = self.base_safety_buffer  # ปกติ - เกณฑ์มาตรฐาน
+            # 💰 DYNAMIC PROFIT TAKING - ปรับตามสถานการณ์จริง
+            safety_buffer = self._calculate_dynamic_profit_threshold(
+                margin_level, total_positions, imbalance, portfolio_health
+            )
             
             # 🎯 Dynamic Priority Multiplier
             if margin_level < self.critical_margin_threshold:
@@ -299,6 +294,97 @@ class Dynamic7DSmartCloser:
                 'margin_level': portfolio_health.margin_level,
                 'imbalance': portfolio_health.imbalance_percentage
             }
+    
+    def _calculate_dynamic_profit_threshold(self, margin_level: float, total_positions: int, 
+                                          imbalance: float, portfolio_health: PortfolioHealth) -> float:
+        """💰 คำนวณเกณฑ์กำไรแบบ Dynamic"""
+        try:
+            # 🎯 Base threshold
+            base_threshold = self.base_safety_buffer
+            
+            # 📊 Analyze losing positions ratio
+            losing_ratio = 0
+            total_loss_amount = 0
+            if hasattr(portfolio_health, 'total_pnl') and portfolio_health.total_pnl < 0:
+                # Estimate losing positions (simplified)
+                losing_ratio = min(0.9, abs(portfolio_health.total_pnl) / max(portfolio_health.equity * 0.1, 100))
+                total_loss_amount = abs(portfolio_health.total_pnl)
+            
+            # 🚨 CRITICAL CONDITIONS - ลดเกณฑ์มาก
+            if margin_level < self.critical_margin_threshold:
+                dynamic_threshold = 0.3  # เร่งด่วนมาก - ยอมขาดทุนเล็กน้อย
+                reason = "Critical Margin - Emergency Exit"
+                
+            elif margin_level < self.emergency_margin_threshold:
+                dynamic_threshold = 0.8  # เร่งด่วน - เกณฑ์ต่ำ
+                reason = "Emergency Margin - Quick Exit"
+                
+            # ⚖️ HIGH IMBALANCE - ลดเกณฑ์เพื่อปรับสมดุล
+            elif imbalance > 85:
+                dynamic_threshold = 0.5  # ไม่สมดุลมาก - เร่งปรับ
+                reason = "Severe Imbalance - Force Balance"
+                
+            elif imbalance > 70:
+                dynamic_threshold = 1.0  # ไม่สมดุล - ลดเกณฑ์
+                reason = "High Imbalance - Balance Recovery"
+                
+            # 📊 HIGH POSITION COUNT - ลดเกณฑ์เพื่อลดไม้
+            elif total_positions > 150:
+                dynamic_threshold = 0.5  # ไม้เยอะมาก - เร่งลด
+                reason = "Massive Position Count - Urgent Reduction"
+                
+            elif total_positions > 100:
+                dynamic_threshold = 1.0  # ไม้เยอะ - ลดเกณฑ์
+                reason = "High Position Count - Position Reduction"
+                
+            elif total_positions > 50:
+                dynamic_threshold = 1.5  # ไม้ปานกลาง - เกณฑ์ปานกลาง
+                reason = "Medium Position Count - Moderate Exit"
+                
+            # 💔 HIGH LOSING RATIO - ลดเกณฑ์เพื่อเครียไม้แย่
+            elif losing_ratio > 0.7:  # 70% ของ equity ขาดทุน
+                dynamic_threshold = 0.2  # ขาดทุนหนัก - เร่งเครีย
+                reason = "Heavy Loss Situation - Clear Bad Positions"
+                
+            elif losing_ratio > 0.5:  # 50% ของ equity ขาดทุน
+                dynamic_threshold = 0.8  # ขาดทุนปานกลาง - ลดเกณฑ์
+                reason = "Moderate Loss Situation - Recovery Mode"
+                
+            elif losing_ratio > 0.3:  # 30% ของ equity ขาดทุน
+                dynamic_threshold = 1.2  # ขาดทุนน้อย - เกณฑ์ปานกลาง
+                reason = "Light Loss Situation - Cautious Exit"
+                
+            # 😊 GOOD CONDITIONS - เกณฑ์ปกติ
+            elif total_positions < 20:
+                dynamic_threshold = base_threshold * 1.2  # ไม้น้อย - เกณฑ์สูงขึ้น
+                reason = "Low Position Count - Higher Standards"
+                
+            else:
+                dynamic_threshold = base_threshold  # ปกติ - เกณฑ์มาตรฐาน
+                reason = "Normal Conditions - Standard Threshold"
+            
+            # 🔄 PORTFOLIO HEALTH ADJUSTMENT
+            if portfolio_health.free_margin > 5000:
+                # Free Margin ดี - ยืดหยุ่นได้มากขึ้น
+                if losing_ratio > 0.5:  # แต่ถ้าขาดทุนเยอะ ก็ลดเกณฑ์
+                    dynamic_threshold *= 0.7  # ลดเกณฑ์ 30%
+                    reason += " + High Free Margin Flexibility"
+                elif total_positions > 80:  # หรือไม้เยอะ ก็ลดเกณฑ์
+                    dynamic_threshold *= 0.8  # ลดเกณฑ์ 20%
+                    reason += " + Position Count Adjustment"
+            
+            # 🎯 MINIMUM & MAXIMUM LIMITS
+            dynamic_threshold = max(0.1, min(dynamic_threshold, 3.0))  # ระหว่าง $0.1 - $3.0
+            
+            logger.info(f"💰 DYNAMIC PROFIT: ${dynamic_threshold:.1f} (Reason: {reason})")
+            logger.info(f"📊 Analysis: Positions {total_positions}, Imbalance {imbalance:.1f}%, "
+                       f"Losing Ratio {losing_ratio*100:.1f}%, Margin {margin_level:.1f}%")
+            
+            return dynamic_threshold
+            
+        except Exception as e:
+            logger.error(f"❌ Error calculating dynamic profit threshold: {e}")
+            return self.base_safety_buffer  # Fallback
     
     def _select_dynamic_methods(self, portfolio_health: PortfolioHealth, 
                                market_conditions: Optional[Dict] = None,
