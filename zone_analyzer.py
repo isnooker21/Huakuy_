@@ -985,17 +985,23 @@ class ZoneAnalyzer:
             for candidate in selected_buys:
                 pos = candidate['position']
                 positions_to_close.append((buy_analysis.zone_id, pos))
-                expected_profit += pos.profit
+                expected_profit += pos.profit  # รวมทั้งกำไรและขาดทุน
                 total_7d_score += candidate['score_7d']
             
             # เพิ่ม SELL positions
             for candidate in selected_sells:
                 pos = candidate['position']
                 positions_to_close.append((sell_analysis.zone_id, pos))
-                expected_profit += pos.profit
+                expected_profit += pos.profit  # รวมทั้งกำไรและขาดทุน
                 total_7d_score += candidate['score_7d']
             
             avg_7d_score = total_7d_score / (len(selected_buys) + len(selected_sells)) if positions_to_close else 0
+            
+            # ✅ DYNAMIC ZERO LOSS POLICY: ปรับตามสภาพตลาดและ 7D score
+            min_profit_threshold = self._calculate_dynamic_profit_threshold(avg_7d_score, len(positions_to_close))
+            if expected_profit <= min_profit_threshold:
+                logger.warning(f"❌ 7D Balance Plan REJECTED: Expected profit ${expected_profit:.2f} <= ${min_profit_threshold:.2f} (Dynamic threshold)")
+                return self._create_empty_balance_plan(buy_analysis.zone_id, sell_analysis.zone_id)
             
             # คำนวณ Health Improvement
             health_improvement = {
@@ -1042,6 +1048,73 @@ class ZoneAnalyzer:
             execution_priority='LOW',
             confidence_score=0.0
         )
+    
+    def _calculate_dynamic_profit_threshold(self, avg_7d_score: float, position_count: int) -> float:
+        """
+        🎯 คำนวณ Dynamic Profit Threshold ตามสภาพตลาดและคุณภาพ positions
+        
+        Args:
+            avg_7d_score: คะแนน 7D เฉลี่ย
+            position_count: จำนวน positions ที่จะปิด
+            
+        Returns:
+            float: Minimum profit threshold ($0.5 - $8.0)
+        """
+        try:
+            # Base threshold
+            base_threshold = 2.0  # เริ่มต้น $2
+            
+            # 🎯 7D Score Factor (score สูง = ยอมรับกำไรน้อยได้)
+            if avg_7d_score >= 70.0:
+                # 7D score สูงมาก → ยอมรับกำไรน้อย (positions คุณภาพดี)
+                score_bonus = -1.0  # ลด threshold $1
+                logger.debug(f"🎯 High 7D Score Bonus: -{score_bonus:.1f} (Score: {avg_7d_score:.1f})")
+            elif avg_7d_score >= 50.0:
+                # 7D score ปานกลาง → ปกติ
+                score_bonus = 0.0
+            else:
+                # 7D score ต่ำ → ต้องการกำไรมากขึ้น (positions คุณภาพแย่)
+                score_bonus = min(3.0, (50.0 - avg_7d_score) * 0.1)  # เพิ่มสูงสุด $3
+                logger.debug(f"🔻 Low 7D Score Penalty: +{score_bonus:.1f} (Score: {avg_7d_score:.1f})")
+            
+            base_threshold += score_bonus
+            
+            # 📊 Position Count Factor (positions เยอะ = ต้องกำไรมากขึ้น)
+            if position_count >= 6:
+                # ปิดเยอะ → ต้องกำไรมาก (ค่าใช้จ่ายสูง)
+                count_penalty = min(2.0, (position_count - 6) * 0.5)  # สูงสุด +$2
+                base_threshold += count_penalty
+                logger.debug(f"📊 High Position Count Penalty: +{count_penalty:.1f} ({position_count} positions)")
+            elif position_count <= 2:
+                # ปิดน้อย → ยอมรับกำไรน้อย (ค่าใช้จ่ายต่ำ)
+                count_bonus = min(1.0, (2 - position_count) * 0.5)  # สูงสุด -$1
+                base_threshold -= count_bonus
+                logger.debug(f"📈 Low Position Count Bonus: -{count_bonus:.1f} ({position_count} positions)")
+            
+            # 🕐 Market Session Factor (ถ้ามี session analyzer)
+            try:
+                if hasattr(self, 'session_analyzer') and self.session_analyzer:
+                    current_session = self.session_analyzer.get_current_session()
+                    if current_session in ['OVERLAP_LONDON_NY', 'LONDON']:
+                        # Session ดี → ยอมรับกำไรน้อย (โอกาสมาก)
+                        base_threshold -= 0.5
+                        logger.debug(f"🕐 Good Session Bonus: -0.5 ({current_session})")
+                    elif current_session in ['SYDNEY', 'ASIAN']:
+                        # Session อ่อน → ต้องกำไรมาก (โอกาสน้อย)
+                        base_threshold += 1.0
+                        logger.debug(f"🕐 Weak Session Penalty: +1.0 ({current_session})")
+            except:
+                pass  # ไม่มี session analyzer
+            
+            # จำกัดขอบเขต $0.5 - $8.0
+            final_threshold = max(0.5, min(8.0, base_threshold))
+            
+            logger.debug(f"🎯 Dynamic Profit Threshold: {base_threshold:.2f} → ${final_threshold:.2f}")
+            return final_threshold
+            
+        except Exception as e:
+            logger.error(f"❌ Error calculating dynamic profit threshold: {e}")
+            return 2.0  # Fallback to default
     
     def log_zone_analysis(self, current_price: float, detailed: bool = False):
         """
