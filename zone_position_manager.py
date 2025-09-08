@@ -1481,6 +1481,164 @@ def create_zone_position_manager(mt5_connection, order_manager, zone_size_pips: 
     """
     return ZonePositionManager(mt5_connection, order_manager, zone_size_pips, symbol)
 
+# ==========================================
+# 🧠 7D INTEGRATION METHODS
+# ==========================================
+
+def should_close_positions_with_7d(self, positions: List[Any], current_price: float, 
+                                 position_scores: List[Any] = None) -> Dict[str, Any]:
+    """
+    🎯 Zone-Based Position Management with 7D Intelligence Integration
+    
+    Args:
+        positions: รายการ Positions
+        current_price: ราคาปัจจุบัน
+        position_scores: 7D scores จาก Intelligent Manager
+        
+    Returns:
+        Dict: ผลการตัดสินใจ
+    """
+    try:
+        logger.info(f"🔗 Zone-Based + 7D Analysis: {len(positions)} positions")
+        
+        if position_scores:
+            logger.info(f"✅ Received 7D scores for {len(position_scores)} positions")
+            
+            # 🌟 Enhanced Cross-Zone Analysis with 7D Intelligence
+            cross_zone_7d_result = self._check_cross_zone_support_with_7d(position_scores, current_price)
+            if cross_zone_7d_result['should_close']:
+                logger.info(f"🌟 Cross-Zone 7D Success!")
+                return cross_zone_7d_result
+        else:
+            logger.info(f"⚠️ No 7D scores provided, using standard analysis")
+        
+        # Fallback to standard zone analysis
+        return self.should_close_positions(positions, current_price)
+        
+    except Exception as e:
+        logger.error(f"❌ Error in 7D integrated zone management: {str(e)}")
+        return self.should_close_positions(positions, current_price)
+
+def _check_cross_zone_support_with_7d(self, position_scores: List[Any], current_price: float) -> Dict[str, Any]:
+    """🌟 Cross-Zone Support enhanced with 7D Intelligence"""
+    try:
+        logger.info(f"🌟 Cross-Zone + 7D Analysis...")
+        
+        # Group positions by zones with 7D scores
+        zones_with_7d = {}
+        for pos_score in position_scores:
+            position = pos_score.position
+            zone_id = getattr(position, 'zone_id', 'unknown')
+            
+            if zone_id not in zones_with_7d:
+                zones_with_7d[zone_id] = {
+                    'profitable': [],
+                    'losing': [],
+                    'total_pnl': 0,
+                    'total_7d_score': 0,
+                    'avg_7d_score': 0
+                }
+            
+            zone_data = zones_with_7d[zone_id]
+            zone_data['total_pnl'] += position.profit
+            zone_data['total_7d_score'] += pos_score.total_score
+            
+            pos_data = {
+                'position': position,
+                'profit': position.profit,
+                'score_7d': pos_score.total_score,
+                'priority': pos_score.priority
+            }
+            
+            if position.profit > 0:
+                zone_data['profitable'].append(pos_data)
+            else:
+                zone_data['losing'].append(pos_data)
+        
+        # Calculate average 7D scores per zone
+        for zone_id, data in zones_with_7d.items():
+            total_positions = len(data['profitable']) + len(data['losing'])
+            if total_positions > 0:
+                data['avg_7d_score'] = data['total_7d_score'] / total_positions
+        
+        logger.info(f"📊 7D Zone Analysis: {len(zones_with_7d)} zones analyzed")
+        
+        # Find best Cross-Zone combination using 7D scores
+        best_combination = self._find_best_7d_cross_zone_combination(zones_with_7d)
+        
+        if best_combination:
+            logger.info(f"🌟 Found 7D Cross-Zone combination: {best_combination['description']}")
+            return {
+                'should_close': True,
+                'reason': f"7D Cross-Zone: {best_combination['description']}",
+                'positions_to_close': best_combination['positions'],
+                'positions_count': len(best_combination['positions']),
+                'expected_pnl': best_combination['net_pnl'],
+                'method': '7d_cross_zone',
+                'zones_involved': best_combination['zones_involved'],
+                'avg_7d_score': best_combination['avg_score']
+            }
+        
+        logger.info(f"❌ No 7D Cross-Zone opportunities found")
+        return {'should_close': False}
+        
+    except Exception as e:
+        logger.error(f"❌ Error in 7D Cross-Zone analysis: {e}")
+        return {'should_close': False}
+
+def _find_best_7d_cross_zone_combination(self, zones_with_7d: Dict) -> Optional[Dict]:
+    """🎯 Find best Cross-Zone combination using 7D Intelligence"""
+    try:
+        # Strategy 1: Pure profit zones with high 7D scores
+        profitable_zones = []
+        for zone_id, data in zones_with_7d.items():
+            if data['total_pnl'] > 0 and data['avg_7d_score'] >= 50:  # Lower threshold for testing
+                profitable_zones.append({
+                    'zone_id': zone_id,
+                    'total_pnl': data['total_pnl'],
+                    'avg_7d_score': data['avg_7d_score'],
+                    'positions': [p['position'] for p in data['profitable'][:3]]  # Top 3
+                })
+        
+        if len(profitable_zones) >= 2:
+            # Sort by 7D score
+            profitable_zones.sort(key=lambda x: x['avg_7d_score'], reverse=True)
+            
+            # Take top 2 zones
+            selected_zones = profitable_zones[:2]
+            all_positions = []
+            total_pnl = 0
+            total_score = 0
+            zones_involved = []
+            
+            for zone in selected_zones:
+                all_positions.extend(zone['positions'])
+                total_pnl += zone['total_pnl']
+                total_score += zone['avg_7d_score']
+                zones_involved.append(zone['zone_id'])
+            
+            avg_score = total_score / len(selected_zones)
+            
+            if total_pnl > 2.0:  # Lower threshold for testing
+                return {
+                    'positions': all_positions,
+                    'net_pnl': total_pnl,
+                    'avg_score': avg_score,
+                    'zones_involved': zones_involved,
+                    'description': f"Zones {zones_involved} (7D Score: {avg_score:.1f}) = ${total_pnl:.2f}"
+                }
+        
+        return None
+        
+    except Exception as e:
+        logger.error(f"❌ Error finding 7D combination: {e}")
+        return None
+
+# Add methods to ZonePositionManager class
+ZonePositionManager.should_close_positions_with_7d = should_close_positions_with_7d
+ZonePositionManager._check_cross_zone_support_with_7d = _check_cross_zone_support_with_7d  
+ZonePositionManager._find_best_7d_cross_zone_combination = _find_best_7d_cross_zone_combination
+
 if __name__ == "__main__":
     # Demo Zone Position Management
     logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
