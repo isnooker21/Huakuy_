@@ -156,10 +156,11 @@ class IntelligentPositionManager:
                 return []
             
             # 🚀 เลือกใช้ Parallel หรือ Sequential ตามจำนวน positions
-            if len(positions) > 50:
-                return self._score_positions_parallel(positions, account_info, margin_health)
-            else:
-                return self._score_positions_sequential(positions, account_info, margin_health)
+        # เน้น Sequential เพื่อความเร็วและความเสถียร (Parallel ใช้เมื่อจำเป็นจริงๆ)
+        if len(positions) > 100:  # เพิ่มจาก 50 เป็น 100
+            return self._score_positions_parallel(positions, account_info, margin_health)
+        else:
+            return self._score_positions_sequential(positions, account_info, margin_health)
                 
         except Exception as e:
             logger.error(f"❌ Error scoring positions: {e}")
@@ -175,9 +176,16 @@ class IntelligentPositionManager:
             sell_count = len(positions) - buy_count
             
             for pos in positions:
-                # 📊 คะแนนกำไร (-100 to +100)
+                # 📊 คะแนนกำไร (-100 to +100) - ENHANCED FOR PROFIT
                 profit = getattr(pos, 'profit', 0)
-                profit_score = min(100, max(-100, profit * 10))  # $1 = 10 points
+                if profit > 5:
+                    profit_score = min(100, 50 + (profit * 5))  # กำไร >$5 ได้คะแนนสูงมาก
+                elif profit > 0:
+                    profit_score = profit * 20  # กำไรเล็กๆ ได้คะแนนดี $1 = 20 points
+                elif profit > -10:
+                    profit_score = profit * 8   # ขาดทุนน้อย ลดคะแนนปานกลาง
+                else:
+                    profit_score = max(-100, -80 + (profit + 10) * 2)  # ขาดทุนมาก ลดคะแนนหนัก
                 
                 # ⚖️ คะแนนความสมดุล (0 to 100)
                 pos_type = getattr(pos, 'type', 0)
@@ -321,9 +329,16 @@ class IntelligentPositionManager:
                 
                 for pos in chunk:
                     try:
-                        # 📊 คะแนนกำไร (-100 to +100)
+                        # 📊 คะแนนกำไร (-100 to +100) - ENHANCED FOR PROFIT
                         profit = getattr(pos, 'profit', 0)
-                        profit_score = min(100, max(-100, profit * 10))
+                        if profit > 5:
+                            profit_score = min(100, 50 + (profit * 5))  # กำไร >$5 ได้คะแนนสูงมาก
+                        elif profit > 0:
+                            profit_score = profit * 20  # กำไรเล็กๆ ได้คะแนนดี $1 = 20 points
+                        elif profit > -10:
+                            profit_score = profit * 8   # ขาดทุนน้อย ลดคะแนนปานกลาง
+                        else:
+                            profit_score = max(-100, -80 + (profit + 10) * 2)  # ขาดทุนมาก ลดคะแนนหนัก
                         
                         # ⚖️ คะแนนความสมดุล (0 to 100)
                         pos_type = getattr(pos, 'type', 0)
@@ -388,24 +403,24 @@ class IntelligentPositionManager:
                         else:
                             volatility_score = 30
                         
-                        # 🧮 คะแนนรวม 7 มิติ
+                        # 🧮 คะแนนรวม 7 มิติ - PROFIT-FOCUSED
                         if margin_health.risk_level == 'CRITICAL':
                             total_score = (
-                                (profit_score * 0.30) + (margin_impact * 0.25) + (time_score * 0.20) +
-                                (volatility_score * 0.10) + (balance_score * 0.08) + 
-                                (recovery_potential * 0.05) + (correlation_score * 0.02)
+                                (profit_score * 0.40) + (balance_score * 0.20) + (recovery_potential * 0.15) +
+                                (margin_impact * 0.10) + (correlation_score * 0.08) + 
+                                (time_score * 0.05) + (volatility_score * 0.02)
                             )
                         elif margin_health.risk_level == 'HIGH':
                             total_score = (
-                                (profit_score * 0.25) + (balance_score * 0.20) + (volatility_score * 0.18) +
-                                (margin_impact * 0.15) + (time_score * 0.12) + 
-                                (recovery_potential * 0.07) + (correlation_score * 0.03)
+                                (profit_score * 0.35) + (balance_score * 0.25) + (recovery_potential * 0.15) +
+                                (correlation_score * 0.10) + (margin_impact * 0.08) + 
+                                (time_score * 0.05) + (volatility_score * 0.02)
                             )
-                        else:
+                        else:  # NORMAL/LOW risk
                             total_score = (
-                                (balance_score * 0.22) + (recovery_potential * 0.20) + (correlation_score * 0.18) +
-                                (profit_score * 0.15) + (volatility_score * 0.12) + 
-                                (time_score * 0.08) + (margin_impact * 0.05)
+                                (profit_score * 0.30) + (balance_score * 0.25) + (recovery_potential * 0.20) +
+                                (correlation_score * 0.12) + (margin_impact * 0.08) + 
+                                (time_score * 0.03) + (volatility_score * 0.02)
                             )
                         
                         # 🎯 กำหนด Priority
