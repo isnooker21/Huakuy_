@@ -306,9 +306,10 @@ class MT5Connection:
         """
         logger.debug(f"🔍 get_market_data called: {symbol}, TF={timeframe}, count={count}")
         
+        # ลองเรียก MT5 โดยตรงก่อน แม้ health check จะล้มเหลว
         if not self.check_connection_health():
-            logger.warning("❌ MT5 connection health check failed")
-            return None
+            logger.warning("⚠️ MT5 connection health check failed - trying direct call anyway")
+            # ไม่ return None, ให้ลองต่อ
             
         try:
             logger.debug(f"📡 Calling mt5.copy_rates_from_pos({symbol}, {timeframe}, 0, {count})")
@@ -336,6 +337,25 @@ class MT5Connection:
                 # เพิ่ม error info จาก MT5
                 last_error = mt5.last_error()
                 logger.warning(f"MT5 last error: {last_error}")
+                
+                # ลอง reinitialize MT5 และลองใหม่
+                logger.info("🔄 Attempting MT5 reinitialization...")
+                if mt5.initialize():
+                    logger.info("✅ MT5 reinitialized successfully - retrying data request")
+                    rates = mt5.copy_rates_from_pos(symbol, timeframe, 0, count)
+                    if rates is not None and len(rates) > 0:
+                        result = [
+                            {
+                                'time': rate[0], 'open': rate[1], 'high': rate[2],
+                                'low': rate[3], 'close': rate[4], 'tick_volume': rate[5],
+                                'spread': rate[6], 'real_volume': rate[7]
+                            }
+                            for rate in rates
+                        ]
+                        logger.info(f"✅ Successfully got {len(result)} rates after reinitialization")
+                        return result
+                else:
+                    logger.error("❌ MT5 reinitialization failed")
                 
         except Exception as e:
             logger.error(f"❌ เกิดข้อผิดพลาดในการดึงข้อมูลราคา {symbol}: {e}")
