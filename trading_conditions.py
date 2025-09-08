@@ -578,20 +578,20 @@ class TradingConditions:
             # ตรวจสอบว่าเป็น Breakout Scenario หรือไม่
             gap_pips = (max_buy_price - min_sell_price) * 10  # แปลงเป็น pips
             
-            # เข้มงวดกว่า: อนุญาตถ้า gap ไม่ใหญ่มาก (< 50 pips = 500 จุด)
-            if gap_pips < 50.0:  # ลดจาก 150 เป็น 50 pips เพื่อให้เหมาะกับ 10 pips spacing
-                logger.info(f"⚡ Price Hierarchy Override: Gap={gap_pips:.1f} pips ({gap_pips*10:.0f} จุด) - Normal Trading")
-                return {'valid': True, 'reason': f'Acceptable gap - {gap_pips:.1f} pips < 50 pips'}
+            # หลวมขึ้น: อนุญาตถ้า gap ไม่ใหญ่มาก (< 200 pips สำหรับ Recovery System)
+            if gap_pips < 200.0:  # เพิ่มจาก 50 เป็น 200 pips เพื่อให้เหมาะกับ Recovery/Grid System
+                logger.info(f"⚡ Price Hierarchy Override: Gap={gap_pips:.1f} pips ({gap_pips*10:.0f} จุด) - Recovery System")
+                return {'valid': True, 'reason': f'Recovery System - {gap_pips:.1f} pips < 200 pips'}
             
             # อนุญาตถ้ามี positions น้อย (< 10 ไม้) - เพิ่มจาก 5 เป็น 10
             if len(positions) < 10:
                 logger.info(f"⚡ Price Hierarchy Override: Only {len(positions)} positions (Allow flexibility)")
                 return {'valid': True, 'reason': f'Few positions ({len(positions)}) - Allow flexibility'}
             
-            # อนุญาตถ้ามี positions เยอะมาก (> 15 ไม้) - เพื่อ recovery
-            if len(positions) > 15:
-                logger.info(f"⚡ Price Hierarchy Override: Many positions ({len(positions)}) - Recovery mode")
-                return {'valid': True, 'reason': f'Many positions ({len(positions)}) - Recovery priority'}
+            # อนุญาตถ้ามี positions เยอะ (> 8 ไม้) - เพื่อ recovery
+            if len(positions) > 8:  # ลดจาก 15 เป็น 8 เพื่อให้เข้า Recovery mode เร็วขึ้น
+                logger.info(f"⚡ Price Hierarchy Override: Recovery mode ({len(positions)} positions)")
+                return {'valid': True, 'reason': f'Recovery mode ({len(positions)} positions) - Hierarchy relaxed'}
             
             return {
                 'valid': False,
