@@ -156,11 +156,11 @@ class IntelligentPositionManager:
                 return []
             
             # 🚀 เลือกใช้ Parallel หรือ Sequential ตามจำนวน positions
-        # เน้น Sequential เพื่อความเร็วและความเสถียร (Parallel ใช้เมื่อจำเป็นจริงๆ)
-        if len(positions) > 100:  # เพิ่มจาก 50 เป็น 100
-            return self._score_positions_parallel(positions, account_info, margin_health)
-        else:
-            return self._score_positions_sequential(positions, account_info, margin_health)
+            # เน้น Sequential เพื่อความเร็วและความเสถียร (Parallel ใช้เมื่อจำเป็นจริงๆ)
+            if len(positions) > 100:  # เพิ่มจาก 50 เป็น 100
+                return self._score_positions_parallel(positions, account_info, margin_health)
+            else:
+                return self._score_positions_sequential(positions, account_info, margin_health)
                 
         except Exception as e:
             logger.error(f"❌ Error scoring positions: {e}")
