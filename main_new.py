@@ -21,6 +21,9 @@ from gui import TradingGUI
 # 🎯 Zone-Based Position Management System
 from zone_position_manager import ZonePositionManager, create_zone_position_manager
 
+# 🧠 Intelligent Position Management System
+from intelligent_position_manager import IntelligentPositionManager, create_intelligent_position_manager
+
 # Configure logging - เฉพาะระบบเทรดและปิดกำไร
 logging.basicConfig(
     level=logging.INFO,  # ลดเป็น INFO เพื่อลด noise
@@ -143,6 +146,14 @@ class TradingSystem:
                 order_manager=self.order_manager,
                 zone_size_pips=30.0,  # 30 pips per zone
                 symbol=self.actual_symbol  # ใช้ symbol ที่ auto-detect ได้
+            )
+            
+            # 🧠 Initialize Intelligent Position Management System
+            logger.info("🧠 Initializing Intelligent Position Management System...")
+            self.intelligent_manager = create_intelligent_position_manager(
+                mt5_connection=self.mt5_connection,
+                order_manager=self.order_manager,
+                symbol=self.actual_symbol
             )
             
             # เชื่อมต่อกับ Portfolio Manager
@@ -474,7 +485,39 @@ class TradingSystem:
                 
                 # 2. 🗑️ Smart Recovery REMOVED - functionality moved to Smart Profit Taking System
                 
-                # 🎯 Zone-Based Position Management
+                # 🧠 INTELLIGENT POSITION MANAGEMENT (ลำดับความสำคัญสูงสุด)
+                if hasattr(self, 'intelligent_manager') and self.intelligent_manager:
+                    account_info = self.mt5_connection.get_account_info()
+                    intelligent_decision = self.intelligent_manager.analyze_closing_decision(
+                        positions, account_info
+                    )
+                    
+                    if intelligent_decision.get('should_close', False):
+                        positions_to_close = intelligent_decision.get('positions_to_close', [])
+                        if positions_to_close:
+                            count = intelligent_decision.get('positions_count', 0)
+                            expected_pnl = intelligent_decision.get('expected_pnl', 0.0)
+                            reasons = intelligent_decision.get('reasons', [])
+                            margin_health = intelligent_decision.get('margin_health', 'UNKNOWN')
+                            reduction_pct = intelligent_decision.get('reduction_percentage', 0)
+                            
+                            logger.info(f"🧠 INTELLIGENT CLOSING: {count} positions ({reduction_pct:.1f}% reduction)")
+                            logger.info(f"💊 Margin Health: {margin_health} | Expected P&L: ${expected_pnl:.2f}")
+                            for reason in reasons:
+                                logger.info(f"   📋 {reason}")
+                            
+                            # ใช้ zone_position_manager เป็น executor
+                            close_result = self.zone_position_manager.close_positions(positions_to_close)
+                            if close_result.get('success', False):
+                                closed_count = close_result.get('closed_count', 0)
+                                total_profit = close_result.get('total_profit', 0.0)
+                                logger.info(f"✅ INTELLIGENT SUCCESS: {closed_count} positions closed, ${total_profit:.2f} profit")
+                            else:
+                                logger.warning(f"❌ INTELLIGENT FAILED: {close_result.get('message', 'Unknown error')}")
+                        # Skip zone-based if intelligent made decision
+                        return
+                
+                # 🎯 Zone-Based Position Management (Fallback)
                 if self.zone_position_manager:
                     close_decision = self.zone_position_manager.should_close_positions(
                         positions, current_price
