@@ -551,10 +551,10 @@ class IntelligentPositionManager:
                 
                 logger.info(f"🔍 Zone {zone_id}: {buy_count} BUY, {sell_count} SELL")
                 
-                # ถ้า Zone มีตำแหน่งเดียว → ปิดได้ (ไม่กระทบสมดุล)
+                # 🚫 ไม่ปิดตำแหน่งเดี่ยว - ต้องมีการจับคู่เสมอ
                 if total_in_zone == 1:
-                    safe_positions.extend(zone_positions['BUY'] + zone_positions['SELL'])
-                    logger.info(f"✅ Zone {zone_id}: Single position - safe to close")
+                    logger.info(f"🚫 Zone {zone_id}: Single position - BLOCKED (no pairing available)")
+                    continue  # ข้ามไป ไม่ปิด
                 
                 # ถ้า Zone สมดุลดี (ต่างกันไม่เกิน 1 ตัว) → ปิดได้ทั้งหมด
                 elif abs(buy_count - sell_count) <= 1:
@@ -575,6 +575,12 @@ class IntelligentPositionManager:
                         safe_positions.extend(zone_positions['SELL'][:excess_sells])
                         safe_positions.extend(zone_positions['BUY'])
                         logger.info(f"⚖️ Zone {zone_id}: SELL-heavy - closing {excess_sells} excess SELLs + all BUYs")
+            
+            # 🎯 Cross-Zone Pairing: หาคู่จาก Zone อื่นสำหรับตำแหน่งเดี่ยว
+            cross_zone_pairs = self._find_cross_zone_pairs(zone_groups)
+            if cross_zone_pairs:
+                safe_positions.extend(cross_zone_pairs)
+                logger.info(f"🔄 Cross-Zone Pairing: Added {len(cross_zone_pairs)} positions")
             
             return safe_positions
             
@@ -635,6 +641,85 @@ class IntelligentPositionManager:
             fallback_cost = (total_volume / 0.01) * 7.0
             logger.warning(f"⚠️ Using fallback cost: ${fallback_cost:.2f}")
             return fallback_cost
+    
+    def _find_cross_zone_pairs(self, zone_groups: Dict) -> List[Any]:
+        """🔄 หาคู่ตำแหน่งจาก Zone อื่นๆ เพื่อไม่ให้ปิดเดี่ยว"""
+        try:
+            cross_zone_pairs = []
+            
+            # หา Zone ที่มีตำแหน่งเดี่ยว
+            single_zones = []
+            losing_zones = []  # Zone ที่มีตำแหน่งขาดทุน
+            
+            for zone_id, zone_positions in zone_groups.items():
+                buy_count = len(zone_positions['BUY'])
+                sell_count = len(zone_positions['SELL'])
+                total_in_zone = buy_count + sell_count
+                
+                if total_in_zone == 1:
+                    # Zone เดี่ยว - ต้องหาคู่
+                    single_pos = (zone_positions['BUY'] + zone_positions['SELL'])[0]
+                    profit = getattr(single_pos, 'profit', 0)
+                    pos_type = getattr(single_pos, 'type', 0)
+                    
+                    single_zones.append({
+                        'zone_id': zone_id,
+                        'position': single_pos,
+                        'profit': profit,
+                        'type': 'BUY' if pos_type == 0 else 'SELL'
+                    })
+                
+                # หา Zone ที่มีตำแหน่งขาดทุนหนัก
+                for pos in zone_positions['BUY'] + zone_positions['SELL']:
+                    profit = getattr(pos, 'profit', 0)
+                    pos_type = getattr(pos, 'type', 0)
+                    if profit < -15.0:  # ขาดทุนหนัก
+                        losing_zones.append({
+                            'zone_id': zone_id,
+                            'position': pos,
+                            'profit': profit,
+                            'type': 'BUY' if pos_type == 0 else 'SELL'
+                        })
+            
+            # จับคู่ตำแหน่งเดี่ยวกับตำแหน่งขาดทุนจาก Zone อื่น
+            for single in single_zones:
+                best_pair = None
+                best_net_profit = -999999
+                
+                for losing in losing_zones:
+                    if losing['zone_id'] == single['zone_id']:
+                        continue  # ไม่จับคู่ Zone เดียวกัน
+                    
+                    expected_pnl = single['profit'] + losing['profit']
+                    
+                    # คำนวณ cost การปิด
+                    single_volume = getattr(single['position'], 'volume', 0.01)
+                    losing_volume = getattr(losing['position'], 'volume', 0.01)
+                    total_volume = single_volume + losing_volume
+                    closing_cost = self._calculate_closing_cost(total_volume, [single['position'], losing['position']])
+                    net_profit = expected_pnl - closing_cost
+                    
+                    # เลือกคู่ที่ net profit ดีที่สุด (หรือขาดทุนน้อยสุด)
+                    if net_profit > best_net_profit and net_profit > -10.0:  # ขาดทุนไม่เกิน $10
+                        best_net_profit = net_profit
+                        best_pair = losing
+                
+                # เพิ่มคู่ที่ดีที่สุด
+                if best_pair and best_net_profit > -10.0:
+                    cross_zone_pairs.extend([single['position'], best_pair['position']])
+                    logger.info(f"🔄 Cross-Zone Pair: Zone {single['zone_id']} {single['type']} ${single['profit']:.2f} + Zone {best_pair['zone_id']} {best_pair['type']} ${best_pair['profit']:.2f}")
+                    logger.info(f"   💰 Net Profit: ${best_net_profit:.2f}")
+                    
+                    # ลบ losing position ที่ใช้แล้วออกจาก list
+                    losing_zones.remove(best_pair)
+                else:
+                    logger.info(f"🚫 No suitable pair for Zone {single['zone_id']} {single['type']} ${single['profit']:.2f}")
+            
+            return cross_zone_pairs
+            
+        except Exception as e:
+            logger.error(f"❌ Error finding cross-zone pairs: {e}")
+            return []
     
     def _avoid_leaving_bad_positions(self, positions_to_close: List[Any], 
                                    position_scores: List[PositionScore]) -> List[Any]:
