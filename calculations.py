@@ -350,69 +350,70 @@ class LotSizeCalculator:
         Returns:
             float: ขนาด Lot ที่แนะนำ
         """
-        # Capital-Appropriate Lot Sizing (เหมาะกับทุน $2000)
-        # แทนที่จะใช้ Risk % ที่ซับซ้อน ใช้ Fixed Base Lot ตามทุน
-        
-        balance = account_balance if account_balance else self.account_balance
-        
-        if balance <= 1000:
-            # ทุนน้อย - ระวังมาก
-            base_lot = 0.01
-        elif balance <= 2500:
-            # ทุนปานกลาง ($2000) - เหมาะสม
-            base_lot = 0.02  # แทนที่จะเป็น 0.08
-        elif balance <= 5000:
-            # ทุนดี - เพิ่มได้
-            base_lot = 0.03
-        else:
-            # ทุนมาก - ยืดหยุ่นได้
-            base_lot = 0.04
+        try:
+            # Capital-Appropriate Lot Sizing (เหมาะกับทุน $2000)
+            # แทนที่จะใช้ Risk % ที่ซับซ้อน ใช้ Fixed Base Lot ตามทุน
             
-        # ปรับตามจำนวน Positions (ยิ่งมีเยอะ ยิ่งลดขนาด)
-        if positions_count <= 5:
-            position_multiplier = 1.0  # ไม่เพิ่มเมื่อไม้น้อย
-        elif positions_count <= 15:
-            position_multiplier = 0.9  # ลดเล็กน้อย
-        elif positions_count <= 25:
-            position_multiplier = 0.8  # ลดลงเมื่อไม้เยอะ
-        else:
-            position_multiplier = 0.7  # ลดมากเมื่อไม้เยอะมาก
-        
-        # ปรับตามความผันผวนตลาด (แต่ไม่มากเกินไป)
-        if market_volatility > 80:
-            volatility_multiplier = 0.8  # ลดเมื่อผันผวนสูง
-        elif market_volatility > 60:
-            volatility_multiplier = 0.9
-        elif market_volatility < 20:
-            volatility_multiplier = 1.1  # เพิ่มเล็กน้อยเมื่อผันผวนต่ำ
-        else:
-            volatility_multiplier = 1.0
-        
-        # คำนวณ Final Lot Size
-        final_lot = base_lot * position_multiplier * volatility_multiplier
-        
-        # จำกัดขอบเขต Lot Size
-        min_lot = 0.01
-        max_lot = 0.05 if balance <= 2500 else 0.08  # จำกัด max lot สำหรับทุนน้อย
-        
-        final_lot = max(min_lot, min(final_lot, max_lot))
-        
-        # ปรับให้เป็น step 0.01
-        final_lot = round(final_lot, 2)
-        
-        # Log การคำนวณ
-        logger.info(f"💰 Capital-Appropriate Lot Calculation:")
-        logger.info(f"   Balance: ${balance:.0f}")
-        logger.info(f"   Base Lot: {base_lot:.2f}")
-        logger.info(f"   Positions: {positions_count} (×{position_multiplier:.1f})")
-        logger.info(f"   Volatility: {market_volatility:.1f}% (×{volatility_multiplier:.1f})")
-        logger.info(f"   Final Lot: {final_lot:.2f}")
-        
-        return final_lot
-        
-    except Exception as e:
-        logger.error(f"Error calculating portfolio risk lot: {e}")
-        return 0.01  # fallback
+            balance = account_balance if account_balance else self.account_balance
+            
+            if balance <= 1000:
+                # ทุนน้อย - ระวังมาก
+                base_lot = 0.01
+            elif balance <= 2500:
+                # ทุนปานกลาง ($2000) - เหมาะสม
+                base_lot = 0.02  # แทนที่จะเป็น 0.08
+            elif balance <= 5000:
+                # ทุนดี - เพิ่มได้
+                base_lot = 0.03
+            else:
+                # ทุนมาก - ยืดหยุ่นได้
+                base_lot = 0.04
+                
+            # ปรับตามจำนวน Positions (ยิ่งมีเยอะ ยิ่งลดขนาด)
+            if positions_count <= 5:
+                position_multiplier = 1.0  # ไม่เพิ่มเมื่อไม้น้อย
+            elif positions_count <= 15:
+                position_multiplier = 0.9  # ลดเล็กน้อย
+            elif positions_count <= 25:
+                position_multiplier = 0.8  # ลดลงเมื่อไม้เยอะ
+            else:
+                position_multiplier = 0.7  # ลดมากเมื่อไม้เยอะมาก
+            
+            # ปรับตามความผันผวนตลาด (แต่ไม่มากเกินไป)
+            if market_volatility > 80:
+                volatility_multiplier = 0.8  # ลดเมื่อผันผวนสูง
+            elif market_volatility > 60:
+                volatility_multiplier = 0.9
+            elif market_volatility < 20:
+                volatility_multiplier = 1.1  # เพิ่มเล็กน้อยเมื่อผันผวนต่ำ
+            else:
+                volatility_multiplier = 1.0
+            
+            # คำนวณ Final Lot Size
+            final_lot = base_lot * position_multiplier * volatility_multiplier
+            
+            # จำกัดขอบเขต Lot Size
+            min_lot = 0.01
+            max_lot = 0.05 if balance <= 2500 else 0.08  # จำกัด max lot สำหรับทุนน้อย
+            
+            final_lot = max(min_lot, min(final_lot, max_lot))
+            
+            # ปรับให้เป็น step 0.01
+            final_lot = round(final_lot, 2)
+            
+            # Log การคำนวณ
+            logger.info(f"💰 Capital-Appropriate Lot Calculation:")
+            logger.info(f"   Balance: ${balance:.0f}")
+            logger.info(f"   Base Lot: {base_lot:.2f}")
+            logger.info(f"   Positions: {positions_count} (×{position_multiplier:.1f})")
+            logger.info(f"   Volatility: {market_volatility:.1f}% (×{volatility_multiplier:.1f})")
+            logger.info(f"   Final Lot: {final_lot:.2f}")
+            
+            return final_lot
+            
+        except Exception as e:
+            logger.error(f"Error calculating portfolio risk lot: {e}")
+            return 0.01  # fallback
     
     def calculate_candle_strength_multiplier(self, candle_data: Any) -> float:
         """
