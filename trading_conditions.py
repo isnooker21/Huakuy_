@@ -291,7 +291,7 @@ class TradingConditions:
         logger.info(f"✅ เงื่อนไข 3: Volume เพียงพอ (ข้าม Volume Filter)")
             
         # 4. ตรวจสอบสมดุลพอร์ต
-        balance_check = self._check_portfolio_balance(positions, strength_analysis['direction'])
+        balance_check = self._check_portfolio_balance(positions, strength_analysis['direction'], force_balance_mode)
         if not balance_check['can_enter']:
             result['reasons'].extend(balance_check['reasons'])
             logger.info(f"❌ เงื่อนไข 4: {'; '.join(balance_check['reasons'])}")
@@ -430,7 +430,7 @@ class TradingConditions:
             
         return result
         
-    def _check_portfolio_balance(self, positions: List[Position], direction: str) -> Dict[str, Any]:
+    def _check_portfolio_balance(self, positions: List[Position], direction: str, force_balance_mode: bool = False) -> Dict[str, Any]:
         """
         ตรวจสอบสมดุลพอร์ตแบบ Zone-Based (100 จุด = 10 pips)
         
