@@ -136,9 +136,13 @@ class ZonePositionManager:
             
             # 5. 🤝 Cross-Zone Support (Priority 4)
             if self.enable_cross_zone_support:
+                logger.info(f"🤝 Checking Cross-Zone Support...")
                 cross_zone_result = self._check_cross_zone_support(zone_analyses, current_price)
                 if cross_zone_result['should_close']:
+                    logger.info(f"✅ Cross-Zone Support found!")
                     return cross_zone_result
+                else:
+                    logger.info(f"❌ No Cross-Zone Support opportunities")
             
             # 6. 🚀 Emergency Zone Recovery (Priority 5)
             if self.enable_auto_recovery:
@@ -856,9 +860,12 @@ class ZonePositionManager:
         """ตรวจสอบการช่วยเหลือข้าม Zones"""
         try:
             # หา Support Opportunities
+            logger.info(f"🔍 Analyzing support opportunities...")
             support_plans = self.zone_coordinator.analyze_support_opportunities(current_price)
             
+            logger.info(f"📊 Found {len(support_plans)} support plans")
             if not support_plans:
+                logger.info(f"❌ No support plans available")
                 return {'should_close': False}
             
             # เลือกแผนที่ดีที่สุด
