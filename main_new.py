@@ -141,7 +141,8 @@ class TradingSystem:
             self.zone_position_manager = create_zone_position_manager(
                 mt5_connection=self.mt5_connection,
                 order_manager=self.order_manager,
-                zone_size_pips=30.0  # 30 pips per zone
+                zone_size_pips=30.0,  # 30 pips per zone
+                symbol=self.actual_symbol  # ใช้ symbol ที่ auto-detect ได้
             )
             
             # เชื่อมต่อกับ Portfolio Manager
