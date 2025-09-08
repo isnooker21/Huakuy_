@@ -84,8 +84,16 @@ class IntelligentPositionManager:
             Dict: คำแนะนำการปิดตำแหน่ง
         """
         try:
+            # 🔍 Debug: เพิ่ม log เพื่อดูว่าระบบทำงานหรือไม่
+            logger.info(f"🧠 INTELLIGENT MANAGER: Analyzing {len(positions)} positions")
+            
             if not positions:
+                logger.info(f"🧠 SKIP: No positions to analyze")
                 return {'should_close': False, 'reason': 'No positions to analyze'}
+            
+            if len(positions) < 2:
+                logger.info(f"🧠 SKIP: Need at least 2 positions (has {len(positions)})")
+                return {'should_close': False, 'reason': 'Need at least 2 positions'}
             
             # 1. 📊 วิเคราะห์สุขภาพ Margin
             margin_health = self._analyze_margin_health(account_info)
@@ -550,13 +558,17 @@ class IntelligentPositionManager:
             # 🚫 ลบระบบเดิมออกทั้งหมด - ใช้เฉพาะ Intelligent Mass Closing
             
             # 💰 INTELLIGENT POSITIVE SUM CLOSING: ใช้ 4-dimensional scoring หาชุดที่ผลรวมบวกเสมอ
+            logger.info(f"🔍 Searching for intelligent positive combination...")
             intelligent_combination = self._find_intelligent_positive_combination(position_scores, margin_health)
             if intelligent_combination:
+                logger.info(f"✅ Found intelligent combination!")
                 positions_to_close.extend(intelligent_combination['positions'])
                 profit_count = intelligent_combination.get('profit_count', 0)
                 loss_count = intelligent_combination.get('loss_count', 0) 
                 net_pnl = intelligent_combination.get('net_pnl', 0)
                 closing_reasons.append(f'Intelligent positive combination: {profit_count}P+{loss_count}L = +${net_pnl:.2f}')
+            else:
+                logger.info(f"❌ No intelligent combination found")
             
             # 🚫 ป้องกันไม่ให้ทิ้งไม้แย่ไว้
             if positions_to_close:
@@ -1070,6 +1082,9 @@ class IntelligentPositionManager:
                     
                     # เลือกเฉพาะชุดที่ให้ผลรวมบวก และมีคะแนน 4D ดี
                     score_threshold = 60 if margin_health.risk_level == 'CRITICAL' else 70  # ลดเกณฑ์เมื่อ margin วิกฤต
+                    
+                    # Debug: แสดงผลการคำนวณ
+                    logger.debug(f"🧮 Combination {profit_count}P+{loss_count}L: Net=${net_pnl:.2f}, Score={avg_4d_score:.1f}, Threshold={score_threshold}")
                     
                     if net_pnl > 0 and avg_4d_score >= score_threshold and net_pnl > best_net_profit:
                         best_net_profit = net_pnl
