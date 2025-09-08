@@ -921,6 +921,28 @@ class MT5Connection:
         logger.warning(f"ไม่สามารถตรวจสอบ filling type สำหรับ {symbol} ใช้ FOK เป็นค่าเริ่มต้น")
         return mt5.ORDER_FILLING_FOK
     
+    def get_current_tick(self, symbol: str = None) -> Optional[Dict]:
+        """ดึงข้อมูล tick ปัจจุบัน รวม spread"""
+        try:
+            if symbol is None:
+                symbol = self.default_symbol
+            
+            tick = mt5.symbol_info_tick(symbol)
+            if tick:
+                spread_points = tick.ask - tick.bid
+                return {
+                    'symbol': symbol,
+                    'bid': tick.bid,
+                    'ask': tick.ask,
+                    'spread': spread_points,
+                    'time': tick.time
+                }
+            return None
+            
+        except Exception as e:
+            logger.error(f"❌ Error getting current tick for {symbol}: {e}")
+            return None
+    
     def close_positions_group(self, tickets: List[int]) -> Dict:
         """
         ปิด Position หลายตัวพร้อมกัน - ใช้ Threading สำหรับความเร็ว
