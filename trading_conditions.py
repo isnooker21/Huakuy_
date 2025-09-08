@@ -1076,8 +1076,11 @@ class TradingConditions:
         buy_percentage = (buy_count / total_positions) * 100 if total_positions > 0 else 0
         sell_percentage = (sell_count / total_positions) * 100 if total_positions > 0 else 0
         
+        # 📊 Debug Portfolio Balance
+        logger.info(f"📊 Portfolio Balance: BUY={buy_count} ({buy_percentage:.1f}%) | SELL={sell_count} ({sell_percentage:.1f}%) | Total={total_positions}")
+        
         # 🚀 SMART LOGIC: เมื่อเสียสมดุล → Force Counter-Trade (เข้มงวดขึ้น)
-        if sell_percentage > 65.0:  # ลดจาก 80% เป็น 65%
+        if sell_percentage > 55.0:  # ลดจาก 65% เป็น 55% เพื่อ Balance เร็วขึ้น
             # Portfolio เอียงไป SELL มาก → ต้อง BUY เพื่อแก้สมดุล
             if direction == "BUY":
                 result['force_trade'] = True
@@ -1089,7 +1092,7 @@ class TradingConditions:
                 result['reason'] = f'❌ BLOCK: Too many SELL already ({sell_percentage:.1f}%)'
                 return result
                 
-        elif buy_percentage > 65.0:  # ลดจาก 80% เป็น 65%
+        elif buy_percentage > 55.0:  # ลดจาก 65% เป็น 55% เพื่อ Balance เร็วขึ้น
             # Portfolio เอียงไป BUY มาก → บังคับ SELL เพื่อแก้สมดุล
             result['force_trade'] = True
             result['forced_direction'] = "SELL"  # บังคับ SELL ไม่ว่า signal จะเป็นอะไร
