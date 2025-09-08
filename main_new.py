@@ -157,6 +157,10 @@ class TradingSystem:
                 symbol=self.actual_symbol
             )
             
+            # 🔗 เชื่อมต่อ 7D Entry Intelligence กับ Trading Conditions
+            logger.info("🔗 Connecting 7D Entry Intelligence to Trading Conditions...")
+            self.trading_conditions.intelligent_position_manager = self.intelligent_manager
+            
             # เชื่อมต่อกับ Portfolio Manager
             if hasattr(self.portfolio_manager, 'position_manager'):
                 self.portfolio_manager.position_manager = self.zone_position_manager

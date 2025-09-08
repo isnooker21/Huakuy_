@@ -26,6 +26,27 @@ class Signal:
     stop_loss: float = 0.0
     take_profit: float = 0.0
     comment: str = ""
+    # 🧠 7D Intelligence Fields
+    entry_7d_score: float = 0.0      # คะแนน 7D สำหรับการเปิดไม้
+    portfolio_synergy: float = 0.0    # คะแนนการช่วยเหลือพอร์ต
+    recovery_support: float = 0.0     # คะแนนการช่วย recovery
+    timing_intelligence: float = 0.0  # คะแนนจังหวะเปิดไม้
+    margin_safety: float = 0.0        # คะแนนความปลอดภัย margin
+
+@dataclass
+class Smart7DEntryAnalysis:
+    """🧠 7D Intelligence Analysis สำหรับการเปิดไม้"""
+    portfolio_synergy: float         # 0-100: การช่วยสมดุลพอร์ต
+    recovery_support: float          # 0-100: การช่วย recovery positions เก่า
+    timing_intelligence: float       # 0-100: จังหวะเปิดไม้ที่เหมาะสม
+    margin_safety: float            # 0-100: ความปลอดภัยต่อ margin
+    correlation_score: float        # 0-100: ความสัมพันธ์กับ positions เดิม
+    market_condition_score: float   # 0-100: สภาพตลาดเหมาะสมหรือไม่
+    position_spacing_score: float   # 0-100: ระยะห่างจาก positions เดิม
+    total_7d_score: float          # คะแนนรวม 7 มิติ
+    recommended_lot_size: str       # MINIMAL, SMALL, NORMAL, LARGE
+    confidence_level: str           # LOW, FAIR, GOOD, HIGH
+    entry_reasoning: str            # เหตุผลการตัดสินใจ
 
 @dataclass
 class CandleData:
@@ -173,6 +194,10 @@ class TradingConditions:
         # เพิ่ม Market Analysis
         self.session_analyzer = MarketSessionAnalyzer()
         self.mtf_analyzer = None  # จะถูกตั้งค่าเมื่อใช้งาน
+        
+        # 🧠 7D Entry Intelligence System
+        self.enable_7d_entry_intelligence = True
+        self.intelligent_position_manager = None  # จะถูกตั้งค่าจาก main_new.py
         
     def check_entry_conditions(self, candle: CandleData, positions: List[Position], 
                              account_balance: float, volume_history: List[float] = None, 
@@ -353,6 +378,22 @@ class TradingConditions:
             logger.warning(f"⚠️ Dynamic Zone Warning: {dynamic_zone_check['reason']} - Let Zone System decide")
             # ไม่ return ให้ดำเนินการต่อ
 
+        # 🧠 7D ENTRY INTELLIGENCE ANALYSIS
+        entry_7d_analysis = None
+        if self.enable_7d_entry_intelligence and self.intelligent_position_manager:
+            try:
+                entry_7d_analysis = self._analyze_7d_entry_intelligence(
+                    strength_analysis['direction'], candle, positions, account_balance, entry_price
+                )
+                logger.info(f"🧠 7D Entry Analysis: Score={entry_7d_analysis.total_7d_score:.1f}, "
+                           f"Confidence={entry_7d_analysis.confidence_level}, "
+                           f"Lot={entry_7d_analysis.recommended_lot_size}")
+                logger.info(f"   📊 Synergy={entry_7d_analysis.portfolio_synergy:.1f}, "
+                           f"Recovery={entry_7d_analysis.recovery_support:.1f}, "
+                           f"Timing={entry_7d_analysis.timing_intelligence:.1f}")
+            except Exception as e:
+                logger.warning(f"⚠️ 7D Entry Analysis failed: {e} - Using traditional analysis")
+
         # สร้างสัญญาณการเทรด
         signal = Signal(
             direction=strength_analysis['direction'],
@@ -363,6 +404,18 @@ class TradingConditions:
             price=entry_price,
             comment=f"Validated signal: {strength_analysis['direction']} at {entry_price}"
         )
+        
+        # 🧠 เพิ่ม 7D Intelligence ลงใน Signal
+        if entry_7d_analysis:
+            signal.entry_7d_score = entry_7d_analysis.total_7d_score
+            signal.portfolio_synergy = entry_7d_analysis.portfolio_synergy
+            signal.recovery_support = entry_7d_analysis.recovery_support
+            signal.timing_intelligence = entry_7d_analysis.timing_intelligence
+            signal.margin_safety = entry_7d_analysis.margin_safety
+            
+            # ปรับ volume_suggestion ตาม 7D analysis
+            signal.volume_suggestion = self._calculate_smart_lot_size(entry_7d_analysis)
+            signal.comment += f" | 7D Score: {entry_7d_analysis.total_7d_score:.1f}"
         
         # ผ่านทุกเงื่อนไข
         logger.info(f"🎉 ผ่านทุกเงื่อนไขการเข้าเทรด!")
@@ -1184,3 +1237,451 @@ class TradingConditions:
         except Exception as e:
             logger.error(f"❌ Error calculating dynamic threshold: {e}")
             return 60.0  # Fallback to default
+    
+    # 🧠 ===== 7D ENTRY INTELLIGENCE SYSTEM =====
+    
+    def _analyze_7d_entry_intelligence(self, direction: str, candle: CandleData, 
+                                     positions: List[Position], account_balance: float,
+                                     entry_price: float) -> Smart7DEntryAnalysis:
+        """
+        🧠 7D Entry Intelligence Analysis
+        วิเคราะห์ 7 มิติสำหรับการเปิดไม้ที่ฉลาดและปลอดภัย
+        """
+        try:
+            logger.debug(f"🧠 Starting 7D Entry Analysis for {direction}")
+            
+            # 1. 📊 Portfolio Synergy Analysis
+            portfolio_synergy = self._calculate_portfolio_synergy(direction, positions)
+            
+            # 2. 🔄 Recovery Support Analysis  
+            recovery_support = self._calculate_recovery_support(direction, positions, entry_price)
+            
+            # 3. ⏰ Market Timing Intelligence
+            timing_intelligence = self._calculate_timing_intelligence(candle, positions)
+            
+            # 4. 💊 Margin Safety Analysis
+            margin_safety = self._calculate_margin_safety(account_balance, positions)
+            
+            # 5. 🔗 Position Correlation Analysis
+            correlation_score = self._calculate_position_correlation(direction, positions, entry_price)
+            
+            # 6. 🌊 Market Condition Analysis
+            market_condition_score = self._calculate_market_condition_score(candle)
+            
+            # 7. 📏 Position Spacing Analysis
+            position_spacing_score = self._calculate_position_spacing(direction, positions, entry_price)
+            
+            # 🧮 Calculate Total 7D Score (Weighted)
+            total_7d_score = (
+                (portfolio_synergy * 0.25) +      # 25% - สำคัญที่สุด
+                (recovery_support * 0.20) +       # 20% - ช่วย recovery
+                (timing_intelligence * 0.15) +    # 15% - จังหวะ
+                (margin_safety * 0.15) +          # 15% - ปลอดภัย
+                (correlation_score * 0.10) +      # 10% - ความสัมพันธ์
+                (market_condition_score * 0.10) + # 10% - สภาพตลาด
+                (position_spacing_score * 0.05)   # 5% - ระยะห่าง
+            )
+            
+            # 🎯 Determine Confidence Level & Lot Size
+            if total_7d_score >= 80:
+                confidence_level = "HIGH"
+                recommended_lot_size = "LARGE"
+                reasoning = "7D Score ดีเยี่ยม - เปิดไม้ใหญ่"
+            elif total_7d_score >= 65:
+                confidence_level = "GOOD"  
+                recommended_lot_size = "NORMAL"
+                reasoning = "7D Score ดี - เปิดไม้ปกติ"
+            elif total_7d_score >= 45:
+                confidence_level = "FAIR"
+                recommended_lot_size = "SMALL"
+                reasoning = "7D Score พอใช้ - เปิดไม้เล็ก"
+            else:
+                confidence_level = "LOW"
+                recommended_lot_size = "MINIMAL"
+                reasoning = "7D Score ต่ำ - เปิดไม้น้อย"
+            
+            logger.debug(f"🧠 7D Analysis Complete: Total Score = {total_7d_score:.1f}")
+            
+            return Smart7DEntryAnalysis(
+                portfolio_synergy=portfolio_synergy,
+                recovery_support=recovery_support,
+                timing_intelligence=timing_intelligence,
+                margin_safety=margin_safety,
+                correlation_score=correlation_score,
+                market_condition_score=market_condition_score,
+                position_spacing_score=position_spacing_score,
+                total_7d_score=total_7d_score,
+                recommended_lot_size=recommended_lot_size,
+                confidence_level=confidence_level,
+                entry_reasoning=reasoning
+            )
+            
+        except Exception as e:
+            logger.error(f"❌ Error in 7D Entry Analysis: {e}")
+            # Return safe defaults
+            return Smart7DEntryAnalysis(
+                portfolio_synergy=50.0,
+                recovery_support=50.0,
+                timing_intelligence=50.0,
+                margin_safety=50.0,
+                correlation_score=50.0,
+                market_condition_score=50.0,
+                position_spacing_score=50.0,
+                total_7d_score=50.0,
+                recommended_lot_size="SMALL",
+                confidence_level="FAIR",
+                entry_reasoning="7D Analysis failed - using safe defaults"
+            )
+    
+    def _calculate_portfolio_synergy(self, direction: str, positions: List[Position]) -> float:
+        """📊 Portfolio Synergy: การช่วยสมดุลพอร์ต"""
+        try:
+            if not positions:
+                return 85.0  # ไม่มี positions = เปิดได้เต็มที่
+            
+            buy_count = sum(1 for pos in positions if getattr(pos, 'type', 0) == 0)
+            sell_count = sum(1 for pos in positions if getattr(pos, 'type', 0) == 1)
+            total_positions = len(positions)
+            
+            if total_positions == 0:
+                return 85.0
+            
+            buy_ratio = buy_count / total_positions
+            sell_ratio = sell_count / total_positions
+            
+            # คำนวณ synergy score
+            if direction == "BUY":
+                if sell_ratio > 0.6:  # SELL เยอะ → BUY ช่วยสมดุล
+                    synergy_score = 95.0
+                elif sell_ratio > 0.5:  # SELL เล็กน้อย → BUY ช่วยได้
+                    synergy_score = 80.0
+                elif buy_ratio > 0.7:  # BUY เยอะแล้ว → BUY เพิ่มไม่ดี
+                    synergy_score = 30.0
+                else:
+                    synergy_score = 60.0  # สมดุลปกติ
+            else:  # SELL
+                if buy_ratio > 0.6:  # BUY เยอะ → SELL ช่วยสมดุล
+                    synergy_score = 95.0
+                elif buy_ratio > 0.5:  # BUY เล็กน้อย → SELL ช่วยได้
+                    synergy_score = 80.0
+                elif sell_ratio > 0.7:  # SELL เยอะแล้ว → SELL เพิ่มไม่ดี
+                    synergy_score = 30.0
+                else:
+                    synergy_score = 60.0  # สมดุลปกติ
+            
+            logger.debug(f"📊 Portfolio Synergy: {direction} = {synergy_score:.1f} "
+                        f"(BUY: {buy_count}, SELL: {sell_count})")
+            return synergy_score
+            
+        except Exception as e:
+            logger.error(f"❌ Error calculating portfolio synergy: {e}")
+            return 50.0
+    
+    def _calculate_recovery_support(self, direction: str, positions: List[Position], entry_price: float) -> float:
+        """🔄 Recovery Support: การช่วย recovery positions เก่า"""
+        try:
+            if not positions:
+                return 70.0  # ไม่มี positions = ไม่ต้องช่วย recovery
+            
+            losing_positions = [pos for pos in positions if getattr(pos, 'profit', 0) < -5.0]
+            if not losing_positions:
+                return 70.0  # ไม่มี losing positions
+            
+            # หา losing positions ที่ตรงข้ามกับ direction ใหม่
+            opposite_losing = []
+            for pos in losing_positions:
+                pos_type = getattr(pos, 'type', 0)
+                if (direction == "BUY" and pos_type == 1) or (direction == "SELL" and pos_type == 0):
+                    opposite_losing.append(pos)
+            
+            if not opposite_losing:
+                return 40.0  # ไม่ช่วย recovery
+            
+            # คำนวณ recovery potential
+            total_loss = sum(abs(getattr(pos, 'profit', 0)) for pos in opposite_losing)
+            avg_loss_per_position = total_loss / len(opposite_losing) if opposite_losing else 0
+            
+            # ยิ่ง loss เยอะ ยิ่งต้องการ recovery
+            if avg_loss_per_position > 20.0:
+                recovery_score = 90.0  # ต้องการ recovery มาก
+            elif avg_loss_per_position > 10.0:
+                recovery_score = 75.0  # ต้องการ recovery ปานกลาง
+            elif avg_loss_per_position > 5.0:
+                recovery_score = 60.0  # ต้องการ recovery เล็กน้อย
+            else:
+                recovery_score = 45.0  # loss น้อย
+            
+            logger.debug(f"🔄 Recovery Support: {direction} = {recovery_score:.1f} "
+                        f"(Opposite losing: {len(opposite_losing)}, Avg loss: ${avg_loss_per_position:.2f})")
+            return recovery_score
+            
+        except Exception as e:
+            logger.error(f"❌ Error calculating recovery support: {e}")
+            return 50.0
+    
+    def _calculate_timing_intelligence(self, candle: CandleData, positions: List[Position]) -> float:
+        """⏰ Market Timing Intelligence: จังหวะเปิดไม้"""
+        try:
+            timing_score = 60.0  # Base score
+            
+            # 1. Candle strength analysis
+            candle_range = abs(candle.high - candle.low)
+            candle_body = abs(candle.close - candle.open)
+            
+            if candle_range > 0:
+                body_ratio = candle_body / candle_range
+                if body_ratio > 0.7:  # Strong candle
+                    timing_score += 15.0
+                elif body_ratio > 0.5:  # Moderate candle  
+                    timing_score += 10.0
+                elif body_ratio < 0.3:  # Weak/doji candle
+                    timing_score -= 10.0
+            
+            # 2. Position age analysis
+            if positions:
+                current_time = datetime.now().timestamp()
+                avg_age_hours = 0
+                valid_positions = 0
+                
+                for pos in positions:
+                    pos_time = getattr(pos, 'time', 0)
+                    if pos_time > 0:
+                        age_hours = (current_time - pos_time) / 3600
+                        avg_age_hours += age_hours
+                        valid_positions += 1
+                
+                if valid_positions > 0:
+                    avg_age_hours /= valid_positions
+                    
+                    # ถ้า positions เก่ามาก = เวลาเปิดใหม่
+                    if avg_age_hours > 24:  # > 1 day
+                        timing_score += 10.0
+                    elif avg_age_hours > 12:  # > 12 hours
+                        timing_score += 5.0
+                    elif avg_age_hours < 1:  # < 1 hour (เพิ่งเปิด)
+                        timing_score -= 5.0
+            
+            # 3. Volume analysis
+            if hasattr(candle, 'volume') and candle.volume > 0:
+                # Assume average volume = 1000 (placeholder)
+                volume_ratio = candle.volume / 1000.0
+                if volume_ratio > 1.5:  # High volume
+                    timing_score += 10.0
+                elif volume_ratio < 0.5:  # Low volume
+                    timing_score -= 5.0
+            
+            timing_score = max(0, min(100, timing_score))
+            logger.debug(f"⏰ Timing Intelligence: {timing_score:.1f}")
+            return timing_score
+            
+        except Exception as e:
+            logger.error(f"❌ Error calculating timing intelligence: {e}")
+            return 50.0
+    
+    def _calculate_margin_safety(self, account_balance: float, positions: List[Position]) -> float:
+        """💊 Margin Safety: ความปลอดภัยต่อ margin"""
+        try:
+            if account_balance <= 0:
+                return 20.0  # Unsafe
+            
+            # Estimate margin usage (simplified)
+            total_volume = sum(getattr(pos, 'volume', 0.01) for pos in positions)
+            estimated_margin_per_lot = account_balance * 0.001  # Rough estimate
+            used_margin = total_volume * estimated_margin_per_lot
+            
+            if used_margin <= 0:
+                return 90.0  # No positions = very safe
+            
+            margin_ratio = used_margin / account_balance
+            
+            # Calculate safety score
+            if margin_ratio < 0.1:  # < 10% margin usage
+                safety_score = 95.0
+            elif margin_ratio < 0.2:  # < 20% margin usage
+                safety_score = 85.0
+            elif margin_ratio < 0.4:  # < 40% margin usage
+                safety_score = 70.0
+            elif margin_ratio < 0.6:  # < 60% margin usage
+                safety_score = 50.0
+            elif margin_ratio < 0.8:  # < 80% margin usage
+                safety_score = 30.0
+            else:  # > 80% margin usage
+                safety_score = 10.0
+            
+            logger.debug(f"💊 Margin Safety: {safety_score:.1f} "
+                        f"(Usage: {margin_ratio*100:.1f}%)")
+            return safety_score
+            
+        except Exception as e:
+            logger.error(f"❌ Error calculating margin safety: {e}")
+            return 50.0
+    
+    def _calculate_position_correlation(self, direction: str, positions: List[Position], entry_price: float) -> float:
+        """🔗 Position Correlation: ความสัมพันธ์กับ positions เดิม"""
+        try:
+            if not positions:
+                return 70.0  # No correlation issues
+            
+            correlation_score = 70.0  # Base score
+            same_direction_count = 0
+            opposite_direction_count = 0
+            
+            for pos in positions:
+                pos_type = getattr(pos, 'type', 0)
+                pos_price = getattr(pos, 'price_open', entry_price)
+                
+                # Count same/opposite direction
+                if (direction == "BUY" and pos_type == 0) or (direction == "SELL" and pos_type == 1):
+                    same_direction_count += 1
+                    # Check price correlation
+                    price_diff = abs(pos_price - entry_price)
+                    if price_diff < 10.0:  # Too close
+                        correlation_score -= 5.0
+                else:
+                    opposite_direction_count += 1
+                    # Opposite direction is good for hedging
+                    correlation_score += 2.0
+            
+            # Penalize too many same direction
+            total_positions = len(positions)
+            same_ratio = same_direction_count / total_positions if total_positions > 0 else 0
+            
+            if same_ratio > 0.8:  # Too many same direction
+                correlation_score -= 20.0
+            elif same_ratio < 0.3:  # Good diversity
+                correlation_score += 10.0
+            
+            correlation_score = max(0, min(100, correlation_score))
+            logger.debug(f"🔗 Position Correlation: {correlation_score:.1f} "
+                        f"(Same: {same_direction_count}, Opposite: {opposite_direction_count})")
+            return correlation_score
+            
+        except Exception as e:
+            logger.error(f"❌ Error calculating position correlation: {e}")
+            return 50.0
+    
+    def _calculate_market_condition_score(self, candle: CandleData) -> float:
+        """🌊 Market Condition: สภาพตลาดเหมาะสมหรือไม่"""
+        try:
+            condition_score = 60.0  # Base score
+            
+            # 1. Volatility analysis
+            candle_range = abs(candle.high - candle.low)
+            candle_body = abs(candle.close - candle.open)
+            
+            if candle_range > 0:
+                volatility_ratio = candle_range / candle.close if candle.close > 0 else 0
+                
+                # Optimal volatility range
+                if 0.001 < volatility_ratio < 0.005:  # 0.1% - 0.5%
+                    condition_score += 15.0
+                elif volatility_ratio > 0.01:  # > 1% (too volatile)
+                    condition_score -= 10.0
+                elif volatility_ratio < 0.0005:  # < 0.05% (too quiet)
+                    condition_score -= 5.0
+            
+            # 2. Candle pattern analysis
+            if candle.is_green:
+                if candle_body > candle_range * 0.6:  # Strong green
+                    condition_score += 10.0
+                else:  # Weak green
+                    condition_score += 5.0
+            elif candle.is_red:
+                if candle_body > candle_range * 0.6:  # Strong red
+                    condition_score += 10.0
+                else:  # Weak red
+                    condition_score += 5.0
+            else:  # Doji
+                condition_score -= 5.0
+            
+            # 3. Time-based analysis (simplified)
+            current_hour = datetime.now().hour
+            if 8 <= current_hour <= 17:  # Active trading hours
+                condition_score += 5.0
+            elif 22 <= current_hour or current_hour <= 2:  # Low activity
+                condition_score -= 5.0
+            
+            condition_score = max(0, min(100, condition_score))
+            logger.debug(f"🌊 Market Condition: {condition_score:.1f}")
+            return condition_score
+            
+        except Exception as e:
+            logger.error(f"❌ Error calculating market condition: {e}")
+            return 50.0
+    
+    def _calculate_position_spacing(self, direction: str, positions: List[Position], entry_price: float) -> float:
+        """📏 Position Spacing: ระยะห่างจาก positions เดิม"""
+        try:
+            if not positions:
+                return 80.0  # No spacing issues
+            
+            spacing_score = 80.0  # Base score
+            min_distance = float('inf')
+            same_direction_positions = []
+            
+            for pos in positions:
+                pos_type = getattr(pos, 'type', 0)
+                pos_price = getattr(pos, 'price_open', entry_price)
+                
+                # Check same direction positions
+                if (direction == "BUY" and pos_type == 0) or (direction == "SELL" and pos_type == 1):
+                    same_direction_positions.append(pos_price)
+                    distance = abs(pos_price - entry_price)
+                    min_distance = min(min_distance, distance)
+            
+            if same_direction_positions:
+                # Penalize too close positions
+                if min_distance < 5.0:  # < 5 pips
+                    spacing_score -= 30.0
+                elif min_distance < 10.0:  # < 10 pips
+                    spacing_score -= 15.0
+                elif min_distance < 20.0:  # < 20 pips
+                    spacing_score -= 5.0
+                else:  # Good spacing
+                    spacing_score += 5.0
+            
+            spacing_score = max(0, min(100, spacing_score))
+            logger.debug(f"📏 Position Spacing: {spacing_score:.1f} "
+                        f"(Min distance: {min_distance:.1f} pips)")
+            return spacing_score
+            
+        except Exception as e:
+            logger.error(f"❌ Error calculating position spacing: {e}")
+            return 50.0
+    
+    def _calculate_smart_lot_size(self, analysis: Smart7DEntryAnalysis) -> float:
+        """🎯 Smart Lot Sizing ตาม 7D Analysis"""
+        try:
+            base_lot = 0.02  # Base lot size
+            
+            # Adjust based on 7D score and confidence
+            if analysis.recommended_lot_size == "LARGE":
+                multiplier = 1.5  # 0.03
+            elif analysis.recommended_lot_size == "NORMAL":
+                multiplier = 1.0  # 0.02
+            elif analysis.recommended_lot_size == "SMALL":
+                multiplier = 0.5  # 0.01
+            else:  # MINIMAL
+                multiplier = 0.25  # 0.005
+            
+            # Additional adjustments
+            if analysis.margin_safety > 90:
+                multiplier *= 1.2  # Extra safe = bigger lot
+            elif analysis.margin_safety < 30:
+                multiplier *= 0.5  # Risky = smaller lot
+            
+            if analysis.portfolio_synergy > 90:
+                multiplier *= 1.1  # Great synergy = slightly bigger
+            elif analysis.portfolio_synergy < 40:
+                multiplier *= 0.8  # Poor synergy = smaller
+            
+            smart_lot = base_lot * multiplier
+            smart_lot = max(0.01, min(0.1, smart_lot))  # Limit 0.01 - 0.1
+            
+            logger.debug(f"🎯 Smart Lot Size: {smart_lot:.3f} "
+                        f"(Base: {base_lot}, Multiplier: {multiplier:.2f})")
+            return smart_lot
+            
+        except Exception as e:
+            logger.error(f"❌ Error calculating smart lot size: {e}")
+            return 0.02  # Safe default
