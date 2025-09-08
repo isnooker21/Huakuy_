@@ -304,13 +304,19 @@ class MT5Connection:
         Returns:
             List[Dict]: ข้อมูลราคา หรือ None
         """
+        logger.debug(f"🔍 get_market_data called: {symbol}, TF={timeframe}, count={count}")
+        
         if not self.check_connection_health():
+            logger.warning("❌ MT5 connection health check failed")
             return None
             
         try:
+            logger.debug(f"📡 Calling mt5.copy_rates_from_pos({symbol}, {timeframe}, 0, {count})")
             rates = mt5.copy_rates_from_pos(symbol, timeframe, 0, count)
+            logger.debug(f"📊 Raw MT5 response: {type(rates)}, length={len(rates) if rates is not None else 0}")
+            
             if rates is not None and len(rates) > 0:
-                return [
+                result = [
                     {
                         'time': rate[0],
                         'open': rate[1],
@@ -323,8 +329,16 @@ class MT5Connection:
                     }
                     for rate in rates
                 ]
+                logger.debug(f"✅ Successfully converted {len(result)} rates")
+                return result
+            else:
+                logger.warning(f"⚠️ mt5.copy_rates_from_pos returned no data for {symbol}")
+                # เพิ่ม error info จาก MT5
+                last_error = mt5.last_error()
+                logger.warning(f"MT5 last error: {last_error}")
+                
         except Exception as e:
-            logger.error(f"เกิดข้อผิดพลาดในการดึงข้อมูลราคา {symbol}: {e}")
+            logger.error(f"❌ เกิดข้อผิดพลาดในการดึงข้อมูลราคา {symbol}: {e}")
             
         return None
         
