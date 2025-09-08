@@ -497,7 +497,7 @@ class TradingSystem:
                 
                 # 2. 🗑️ Smart Recovery REMOVED - functionality moved to Smart Profit Taking System
                 
-                # 🧠 INTELLIGENT POSITION MANAGEMENT (ลำดับความสำคัญสูงสุด)
+                # 🧠 INTELLIGENT POSITION MANAGEMENT (ลำดับความสำคัญสูงสุด) + 🤝 Cross-Zone Integration
                 if hasattr(self, 'intelligent_manager') and self.intelligent_manager:
                     account_info = self.mt5_connection.get_account_info()
                     intelligent_decision = self.intelligent_manager.analyze_closing_decision(
@@ -529,11 +529,23 @@ class TradingSystem:
                         # Skip zone-based if intelligent made decision
                         return
                 
-                # 🎯 Zone-Based Position Management (Fallback)
+                # 🎯 Zone-Based Position Management with 7D Integration (Fallback)
                 if self.zone_position_manager:
-                    close_decision = self.zone_position_manager.should_close_positions(
-                        positions, current_price
-                    )
+                    # 🧠 ส่ง 7D scores ไปให้ Zone system ใช้งาน
+                    if hasattr(self, 'intelligent_manager') and self.intelligent_manager:
+                        logger.info(f"🔗 Integrating 7D scores with Cross-Zone system...")
+                        # Get 7D scores from intelligent manager
+                        account_info = self.mt5_connection.get_account_info()
+                        position_scores = self.intelligent_manager._score_all_positions(positions, account_info, 
+                                                                                      self.intelligent_manager._analyze_margin_health(account_info))
+                        # Pass to zone manager
+                        close_decision = self.zone_position_manager.should_close_positions_with_7d(
+                            positions, current_price, position_scores
+                        )
+                    else:
+                        close_decision = self.zone_position_manager.should_close_positions(
+                            positions, current_price
+                        )
                     
                     if close_decision.get('should_close', False):
                         positions_to_close = close_decision.get('positions_to_close', [])
