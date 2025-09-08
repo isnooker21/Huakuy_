@@ -23,6 +23,7 @@ from zone_position_manager import ZonePositionManager, create_zone_position_mana
 
 # 🧠 Intelligent Position Management System
 from intelligent_position_manager import IntelligentPositionManager, create_intelligent_position_manager
+from dynamic_7d_smart_closer import create_dynamic_7d_smart_closer
 
 # Configure logging - เฉพาะระบบเทรดและปิดกำไร
 logging.basicConfig(
@@ -155,6 +156,12 @@ class TradingSystem:
                 mt5_connection=self.mt5_connection,
                 order_manager=self.order_manager,
                 symbol=self.actual_symbol
+            )
+            
+            # 🚀 Dynamic 7D Smart Closer (Primary Closing System)
+            logger.info("🚀 Initializing Dynamic 7D Smart Closer...")
+            self.dynamic_7d_closer = create_dynamic_7d_smart_closer(
+                intelligent_manager=self.intelligent_manager
             )
             
             # 🔗 เชื่อมต่อ 7D Entry Intelligence กับ Trading Conditions
@@ -474,7 +481,8 @@ class TradingSystem:
         
         return reason
     
-    def _aggressive_balance_recovery(self, positions, current_price):
+    # 🗑️ REMOVED: _aggressive_balance_recovery - replaced by Dynamic 7D Smart Closer
+    def _aggressive_balance_recovery_REMOVED(self, positions, current_price):
         """🚀 เร่งหาคู่ปิดเมื่อ positions เยอะ - ไม่สนวิธีการแต่ต้องปิดบวกเสมอ"""
         try:
             logger.info(f"🚀 Aggressive Balance Recovery: {len(positions)} positions")
@@ -626,44 +634,46 @@ class TradingSystem:
     def _unified_closing_decision(self, positions: List[Any], current_price: float, 
                                  position_scores: List[Any], margin_health: Any, account_info: Dict) -> Dict[str, Any]:
         """
-        🤝 Unified Closing Decision System
-        รวมทุกระบบปิดไม้เป็นระบบเดียวที่ประสานงานกัน
+        🤝 Unified Closing Decision System - Enhanced with Dynamic 7D Smart Closer
+        ระบบปิดไม้อัจฉริยะที่ใช้ Dynamic 7D Analysis
         """
         try:
             logger.info(f"🤝 UNIFIED ANALYSIS: {len(positions)} positions, Margin: {margin_health.risk_level if margin_health else 'UNKNOWN'}")
             
-            # 🚀 Priority 1: Aggressive Recovery (30+ positions)
-            if len(positions) > 30:
-                logger.info(f"🚀 AGGRESSIVE MODE: {len(positions)} positions → เร่งหาคู่ปิด")
-                aggressive_result = self._aggressive_balance_recovery(positions, current_price)
-                if aggressive_result.get('should_close', False):
-                    aggressive_result['method'] = 'aggressive_recovery'
-                    logger.info(f"✅ AGGRESSIVE DECISION: {len(aggressive_result.get('positions_to_close', []))} positions selected")
-                    return aggressive_result
+            # 🚀 Priority 1: Dynamic 7D Smart Closer (Primary System)
+            if hasattr(self, 'dynamic_7d_closer') and self.dynamic_7d_closer:
+                logger.info(f"🚀 DYNAMIC 7D MODE: Using advanced smart closing system")
+                dynamic_result = self.dynamic_7d_closer.find_optimal_closing(positions, account_info)
+                
+                if dynamic_result and dynamic_result.should_close:
+                    # Convert to unified format
+                    return {
+                        'should_close': True,
+                        'positions_to_close': dynamic_result.positions_to_close,
+                        'method': f'dynamic_7d_{dynamic_result.method}',
+                        'expected_pnl': dynamic_result.expected_pnl,
+                        'positions_count': dynamic_result.position_count,
+                        'reason': dynamic_result.reason,
+                        'confidence_score': dynamic_result.confidence_score,
+                        'portfolio_improvement': dynamic_result.portfolio_improvement
+                    }
             
-            # 🧠 Priority 2: Intelligent Manager Decision
+            # 🧠 Priority 2: Intelligent Manager (Fallback)
             if hasattr(self, 'intelligent_manager') and self.intelligent_manager and position_scores:
-                logger.info(f"🧠 INTELLIGENT MODE: Using 7D scores for {len(position_scores)} positions")
+                logger.info(f"🧠 INTELLIGENT FALLBACK: Using 7D intelligent manager")
                 intelligent_decision = self.intelligent_manager.analyze_closing_decision(positions, account_info)
                 if intelligent_decision.get('should_close', False):
-                    intelligent_decision['method'] = 'intelligent_7d'
+                    intelligent_decision['method'] = 'intelligent_7d_fallback'
                     logger.info(f"✅ INTELLIGENT DECISION: {intelligent_decision.get('positions_count', 0)} positions selected")
                     return intelligent_decision
             
-            # 🎯 Priority 3: Zone-Based with 7D Integration
+            # 🎯 Priority 3: Zone-Based (Last Resort)
             if self.zone_position_manager:
-                logger.info(f"🎯 ZONE MODE: Using {'7D-enhanced' if position_scores else 'standard'} zone analysis")
-                if position_scores:
-                    close_decision = self.zone_position_manager.should_close_positions_with_7d(
-                        positions, current_price, position_scores
-                    )
-                else:
-                    close_decision = self.zone_position_manager.should_close_positions(
-                        positions, current_price
-                    )
+                logger.info(f"🎯 ZONE FALLBACK: Using zone-based analysis")
+                close_decision = self.zone_position_manager.should_close_positions(positions, current_price)
                 
                 if close_decision.get('should_close', False):
-                    close_decision['method'] = f"zone_{'7d' if position_scores else 'standard'}"
+                    close_decision['method'] = 'zone_fallback'
                     logger.info(f"✅ ZONE DECISION: {len(close_decision.get('positions_to_close', []))} positions selected")
                     return close_decision
             
