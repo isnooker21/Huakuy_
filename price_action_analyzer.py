@@ -55,7 +55,8 @@ class PriceActionSignal:
 class PriceActionAnalyzer:
     """🎯 Pure Price Action Analyzer - Real-time market structure analysis"""
     
-    def __init__(self, symbol: str = "XAUUSD"):
+    def __init__(self, mt5_connection=None, symbol: str = "XAUUSD"):
+        self.mt5_connection = mt5_connection
         self.symbol = symbol
         self.swing_detection_period = 5  # จำนวน candles สำหรับ confirm swing
         self.min_swing_distance = 2.0   # ระยะห่างขั้นต่ำระหว่าง swing (pips)
@@ -85,6 +86,7 @@ class PriceActionAnalyzer:
             # ดึงข้อมูลราคา
             rates = self._get_price_data(bars_count)
             if not rates or len(rates) < 20:
+                logger.warning(f"⚠️ Insufficient price data: {len(rates) if rates else 0}/{bars_count} bars - using default analysis")
                 return self._default_trend_analysis()
             
             # หา swing points
@@ -171,10 +173,17 @@ class PriceActionAnalyzer:
     def _get_price_data(self, bars_count: int):
         """ดึงข้อมูลราคาจาก MT5"""
         try:
-            rates = mt5.copy_rates_from_pos(self.symbol, mt5.TIMEFRAME_M15, 0, bars_count)
-            return rates
+            if self.mt5_connection and hasattr(self.mt5_connection, 'copy_rates_from_pos'):
+                rates = self.mt5_connection.copy_rates_from_pos(self.symbol, 60, 0, bars_count)  # M15 = 15 minutes
+                logger.debug(f"📊 Retrieved {len(rates) if rates else 0} price bars via MT5 connection")
+                return rates
+            else:
+                # Fallback to direct MT5 call
+                rates = mt5.copy_rates_from_pos(self.symbol, mt5.TIMEFRAME_M15, 0, bars_count)
+                logger.debug(f"📊 Retrieved {len(rates) if rates else 0} price bars via direct MT5")
+                return rates
         except Exception as e:
-            logger.error(f"Error getting price data: {e}")
+            logger.error(f"❌ Error getting price data: {e}")
             return None
     
     def _detect_swing_points(self, rates):
