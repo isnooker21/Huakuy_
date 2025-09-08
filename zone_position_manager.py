@@ -344,9 +344,9 @@ class ZonePositionManager:
             
             # ปรับเงื่อนไขให้ยืดหยุ่นกว่า
             if profitable_buys and losing_sells and total_profit_potential > 10.0:  # ลดจาก 20 เป็น 10
-                # เลือก BUY ที่กำไรดีที่สุด และ SELL ที่ขาดทุนน้อยที่สุด
+                # เลือก BUY ที่กำไรดีที่สุด และ SELL ที่ขาดทุนเยอะที่สุด (เพื่อตัดปัญหาที่ราก)
                 best_buy = max(profitable_buys, key=lambda x: x['profit'])
-                best_sell = max(losing_sells, key=lambda x: x['loss'])  # loss ที่น้อยที่สุด (ใกล้ 0)
+                best_sell = min(losing_sells, key=lambda x: x['loss'])  # loss ที่เยอะที่สุด (ติดลบมากสุด)
                 
                 positions_to_close = [best_buy['position'], best_sell['position']]
                 expected_pnl = best_buy['profit'] + best_sell['loss']
@@ -412,9 +412,9 @@ class ZonePositionManager:
             
             # ปรับเงื่อนไขให้ยืดหยุ่นกว่า
             if profitable_sells and losing_buys and total_profit_potential > 10.0:  # ลดจาก 20 เป็น 10
-                # เลือก SELL ที่กำไรดีที่สุด และ BUY ที่ขาดทุนน้อยที่สุด
+                # เลือก SELL ที่กำไรดีที่สุด และ BUY ที่ขาดทุนเยอะที่สุด (เพื่อตัดปัญหาที่ราก)
                 best_sell = max(profitable_sells, key=lambda x: x['profit'])
-                best_buy = max(losing_buys, key=lambda x: x['loss'])  # loss ที่น้อยที่สุด
+                best_buy = min(losing_buys, key=lambda x: x['loss'])  # loss ที่เยอะที่สุด (ติดลบมากสุด)
                 
                 positions_to_close = [best_sell['position'], best_buy['position']]
                 expected_pnl = best_sell['profit'] + best_buy['loss']
@@ -535,20 +535,29 @@ class ZonePositionManager:
             
             logger.info(f"📊 Zone Analysis: {len(profitable_positions)} profitable, {len(losing_positions)} heavy losses")
             
-            # ปิดกำไรก่อน (conservative approach ในตลาด sideways)
-            if profitable_positions:
+            # 🎯 ปิดกำไรแบบกลุ่ม (ไม่ปิดไม้เดี่ยว) - หา losing position จาก zones อื่นมาปิดด้วย
+            if profitable_positions and losing_positions:
                 best_profit = max(profitable_positions, key=lambda x: x['profit'])
-                logger.info(f"✅ Zone Logic: Taking profit on {best_profit['type']} (${best_profit['profit']:.2f})")
+                worst_loss = min(losing_positions, key=lambda x: x['loss'])  # ขาดทุนเยอะสุด
                 
-                return {
-                    'should_close': True,
-                    'reason': f'Zone-Based: Take profit {best_profit["type"]} ${best_profit["profit"]:.2f} (sideways market)',
-                    'positions_to_close': [best_profit['position']],
-                    'positions_count': 1,
-                    'expected_pnl': best_profit['profit'],
-                    'method': 'zone_based_profit',
-                    'zone_id': best_profit['zone_id']
-                }
+                expected_pnl = best_profit['profit'] + worst_loss['loss']
+                
+                # ปิดเฉพาะเมื่อ net positive หรือขาดทุนไม่เกิน $3
+                if expected_pnl > -3.0:
+                    logger.info(f"✅ Zone Logic: Smart pairing - Profit {best_profit['type']} ${best_profit['profit']:.2f} + Loss {worst_loss['type']} ${worst_loss['loss']:.2f}")
+                    
+                    return {
+                        'should_close': True,
+                        'reason': f'Zone-Based: Smart pair {best_profit["type"]} ${best_profit["profit"]:.2f} + {worst_loss["type"]} ${worst_loss["loss"]:.2f} = ${expected_pnl:.2f}',
+                        'positions_to_close': [best_profit['position'], worst_loss['position']],
+                        'positions_count': 2,
+                        'expected_pnl': expected_pnl,
+                        'method': 'zone_based_smart_pair',
+                        'profit_zone_id': best_profit['zone_id'],
+                        'loss_zone_id': worst_loss['zone_id']
+                    }
+                else:
+                    logger.info(f"⚠️ Zone Logic: Pair would lose too much (${expected_pnl:.2f}) - waiting for better opportunity")
             
             # 🚫 DISABLED: ไม่ cut loss - ให้ระบบ recovery จัดการเอง
             # if losing_positions:
@@ -565,10 +574,15 @@ class ZonePositionManager:
             #         'zone_id': worst_loss['zone_id']
             #     }
             
+            # 📊 Fallback: ถ้ามีแค่ profitable positions (ไม่มี losing positions)
+            elif profitable_positions:
+                logger.info(f"💰 Zone Logic: Found {len(profitable_positions)} profitable positions but no losing positions to pair")
+                logger.info("⏸️ Waiting for losing positions to create smart pairs")
+            
             if losing_positions:
                 logger.info(f"📊 Zone Logic: Found {len(losing_positions)} losing positions - keeping for recovery")
             
-            logger.info("⏸️ Zone Logic: No clear closing opportunities found")
+            logger.info("⏸️ Zone Logic: No smart pairing opportunities found")
             return {'should_close': False}
             
         except Exception as e:
