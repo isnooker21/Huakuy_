@@ -1520,158 +1520,60 @@ def should_close_positions_with_7d(self, positions: List[Any], current_price: fl
         return self.should_close_positions(positions, current_price)
 
 def _check_cross_zone_support_with_7d(self, position_scores: List[Any], current_price: float) -> Dict[str, Any]:
-    """🌟 Cross-Zone Support enhanced with 7D Intelligence"""
+    """🎯 ใช้ระบบ Cross-Zone เดิมใน zone_analyzer + zone_coordinator + 7D scores"""
     try:
-        logger.info(f"🌟 Cross-Zone + 7D Analysis...")
+        logger.info(f"🎯 Cross-Zone Analysis with 7D Intelligence: {len(position_scores)} positions")
         
-        # Group positions by zones with 7D scores
-        zones_with_7d = {}
-        for pos_score in position_scores:
-            position = pos_score.position
-            zone_id = getattr(position, 'zone_id', 'unknown')
+        # ใช้ zone_analyzer.find_cross_zone_balance_pairs_with_7d()
+        if hasattr(self, 'zone_analyzer') and self.zone_analyzer:
+            # ก่อนอื่น ต้องหา balance recovery opportunities
+            recovery_analyses = self.zone_analyzer.detect_balance_recovery_opportunities(current_price)
             
-            if zone_id not in zones_with_7d:
-                zones_with_7d[zone_id] = {
-                    'profitable': [],
-                    'losing': [],
-                    'total_pnl': 0,
-                    'total_7d_score': 0,
-                    'avg_7d_score': 0
-                }
-            
-            zone_data = zones_with_7d[zone_id]
-            zone_data['total_pnl'] += position.profit
-            zone_data['total_7d_score'] += pos_score.total_score
-            
-            pos_data = {
-                'position': position,
-                'profit': position.profit,
-                'score_7d': pos_score.total_score,
-                'priority': pos_score.priority
-            }
-            
-            if position.profit > 0:
-                zone_data['profitable'].append(pos_data)
+            if recovery_analyses:
+                logger.info(f"🔍 Found {len(recovery_analyses)} balance recovery opportunities")
+                
+                # เรียกใช้ระบบเดิม + 7D scores
+                balance_plans = self.zone_analyzer.find_cross_zone_balance_pairs_with_7d(recovery_analyses, position_scores)
+                
+                if balance_plans:
+                    best_plan = balance_plans[0]  # Top plan
+                    avg_7d_score = getattr(best_plan, 'avg_7d_score', 0)
+                    
+                    logger.info(f"🎯 Found 7D Cross-Zone plan: Zones {best_plan.primary_zone}-{best_plan.partner_zone}, "
+                               f"7D Score: {avg_7d_score:.1f}, Expected: ${best_plan.expected_profit:.2f}")
+                    
+                    # แปลง positions_to_close format
+                    positions_to_close = [pos for zone_id, pos in best_plan.positions_to_close]
+                    
+                    return {
+                        'should_close': True,
+                        'reason': f"7D Cross-Zone Balance: {best_plan.recovery_type}",
+                        'positions_to_close': positions_to_close,
+                        'positions_count': len(positions_to_close),
+                        'expected_pnl': best_plan.expected_profit,
+                        'method': '7d_cross_zone_balance',
+                        'zones_involved': [best_plan.primary_zone, best_plan.partner_zone],
+                        'avg_7d_score': avg_7d_score,
+                        'confidence_score': best_plan.confidence_score
+                    }
+                else:
+                    logger.info(f"❌ No profitable 7D Cross-Zone balance plans found")
             else:
-                zone_data['losing'].append(pos_data)
+                logger.info(f"❌ No balance recovery opportunities detected")
+        else:
+            logger.warning(f"⚠️ zone_analyzer not available")
         
-        # Calculate average 7D scores per zone
-        for zone_id, data in zones_with_7d.items():
-            total_positions = len(data['profitable']) + len(data['losing'])
-            if total_positions > 0:
-                data['avg_7d_score'] = data['total_7d_score'] / total_positions
-        
-        logger.info(f"📊 7D Zone Analysis: {len(zones_with_7d)} zones analyzed")
-        
-        # Find best Cross-Zone combination using 7D scores
-        best_combination = self._find_best_7d_cross_zone_combination(zones_with_7d)
-        
-        if best_combination:
-            logger.info(f"🌟 Found 7D Cross-Zone combination: {best_combination['description']}")
-            return {
-                'should_close': True,
-                'reason': f"7D Cross-Zone: {best_combination['description']}",
-                'positions_to_close': best_combination['positions'],
-                'positions_count': len(best_combination['positions']),
-                'expected_pnl': best_combination['net_pnl'],
-                'method': '7d_cross_zone',
-                'zones_involved': best_combination['zones_involved'],
-                'avg_7d_score': best_combination['avg_score']
-            }
-        
-        logger.info(f"❌ No 7D Cross-Zone opportunities found")
-        return {'should_close': False}
+        return {'should_close': False, 'reason': 'No 7D Cross-Zone opportunities'}
         
     except Exception as e:
-        logger.error(f"❌ Error in 7D Cross-Zone analysis: {e}")
+        logger.error(f"❌ Error in 7D Cross-Zone integration: {e}")
         return {'should_close': False}
 
-def _find_best_7d_cross_zone_combination(self, zones_with_7d: Dict) -> Optional[Dict]:
-    """🔄 Find Cross-Zone Flow: Good positions from any zone helping bad positions from other zones"""
-    try:
-        logger.info(f"🔄 Cross-Zone Flow Analysis: {len(zones_with_7d)} zones")
-        
-        # 🔍 Step 1: Collect ALL positions with 7D scores from ALL zones
-        all_positions_7d = []
-        for zone_id, data in zones_with_7d.items():
-            # เอาทั้ง profitable และ losing positions
-            for pos_data in data.get('profitable', []):
-                all_positions_7d.append({
-                    'position': pos_data['position'],
-                    'score_7d': pos_data['score_7d'],
-                    'zone_id': zone_id,
-                    'pnl': pos_data['position'].profit,
-                    'type': 'profitable'
-                })
-            for pos_data in data.get('losing', []):
-                all_positions_7d.append({
-                    'position': pos_data['position'],
-                    'score_7d': pos_data['score_7d'],
-                    'zone_id': zone_id,
-                    'pnl': pos_data['position'].profit,
-                    'type': 'losing'
-                })
-        
-        if len(all_positions_7d) < 2:
-            logger.info("❌ Need at least 2 positions for Cross-Zone Flow")
-            return None
-            
-        # 🎯 Step 2: Sort by 7D score (best first)
-        all_positions_7d.sort(key=lambda x: x['score_7d'], reverse=True)
-        logger.info(f"🎯 Sorted {len(all_positions_7d)} positions by 7D score (best: {all_positions_7d[0]['score_7d']:.1f})")
-        
-        # 🔄 Step 3: Find Cross-Zone combinations (good positions help bad positions)
-        best_combination = None
-        best_net_pnl = 0
-        
-        # Try different combination sizes (2-8 positions)
-        for combo_size in range(2, min(9, len(all_positions_7d) + 1)):
-            # Take top positions by 7D score
-            candidate_positions = all_positions_7d[:combo_size]
-            
-            # ✅ Check if it's truly Cross-Zone (positions from different zones)
-            zones_involved = list(set([p['zone_id'] for p in candidate_positions]))
-            if len(zones_involved) < 2:
-                continue  # ต้องมีอย่างน้อย 2 zones
-            
-            # 💰 Calculate total P&L
-            total_pnl = sum([p['pnl'] for p in candidate_positions])
-            avg_7d_score = sum([p['score_7d'] for p in candidate_positions]) / len(candidate_positions)
-            
-            # 🎯 Must be profitable after costs
-            if total_pnl > 2.0 and total_pnl > best_net_pnl:
-                best_net_pnl = total_pnl
-                profitable_count = len([p for p in candidate_positions if p['type'] == 'profitable'])
-                losing_count = len([p for p in candidate_positions if p['type'] == 'losing'])
-                
-                best_combination = {
-                    'positions': [p['position'] for p in candidate_positions],
-                    'net_pnl': total_pnl,
-                    'avg_score': avg_7d_score,
-                    'zones_involved': zones_involved,
-                    'description': f"Cross-Zone Flow {zones_involved} ({profitable_count}P+{losing_count}L, 7D:{avg_7d_score:.1f}) = ${total_pnl:.2f}",
-                    'combo_size': combo_size,
-                    'profitable_count': profitable_count,
-                    'losing_count': losing_count
-                }
-        
-        if best_combination:
-            logger.info(f"🌟 Found Cross-Zone Flow: {best_combination['profitable_count']}P + {best_combination['losing_count']}L "
-                       f"across zones {best_combination['zones_involved']} = ${best_combination['net_pnl']:.2f}")
-            return best_combination
-        else:
-            logger.info("❌ No profitable Cross-Zone Flow combinations found")
-        
-        return None
-        
-    except Exception as e:
-        logger.error(f"❌ Error in Cross-Zone Flow analysis: {e}")
-        return None
+# ลบ Cross-Zone Flow ออกแล้ว - ใช้ระบบเดิมใน zone_analyzer + zone_coordinator แทน
 
 # Add methods to ZonePositionManager class
 ZonePositionManager.should_close_positions_with_7d = should_close_positions_with_7d
-ZonePositionManager._check_cross_zone_support_with_7d = _check_cross_zone_support_with_7d  
-ZonePositionManager._find_best_7d_cross_zone_combination = _find_best_7d_cross_zone_combination
+ZonePositionManager._check_cross_zone_support_with_7d = _check_cross_zone_support_with_7d
 
 if __name__ == "__main__":
     # Demo Zone Position Management
