@@ -56,16 +56,17 @@ class Dynamic7DSmartCloser:
     
     def __init__(self, intelligent_manager=None):
         self.intelligent_manager = intelligent_manager
-        self.safety_buffer = 2.0  # กำไรขั้นต่ำ $2
-        self.max_group_size = 25  # สูงสุด 25 ไม้
-        self.min_group_size = 2   # ต่ำสุด 2 ไม้
+        # 🔄 Dynamic Parameters (ปรับตามสถานการณ์)
+        self.base_safety_buffer = 2.0  # Base กำไรขั้นต่ำ
+        self.base_max_group_size = 25  # Base สูงสุด
+        self.min_group_size = 2        # ต่ำสุดคงที่
         
         # Dynamic thresholds
         self.emergency_margin_threshold = 150.0  # Margin Level < 150%
         self.critical_margin_threshold = 120.0   # Margin Level < 120%
         self.imbalance_threshold = 70.0          # Imbalance > 70%
         
-        logger.info("🚀 Dynamic 7D Smart Closer initialized")
+        logger.info("🚀 Dynamic 7D Smart Closer initialized - Full Dynamic Mode")
     
     def find_optimal_closing(self, positions: List[Any], account_info: Dict, 
                            market_conditions: Optional[Dict] = None) -> Optional[ClosingResult]:
@@ -94,8 +95,13 @@ class Dynamic7DSmartCloser:
                 except Exception as e:
                     logger.warning(f"⚠️ 7D Analysis failed: {e}, using fallback")
             
-            # 3. 🎯 Dynamic Method Selection
-            selected_methods = self._select_dynamic_methods(portfolio_health, market_conditions)
+            # 3. 🔄 Calculate Dynamic Parameters
+            dynamic_params = self._calculate_dynamic_parameters(portfolio_health, market_conditions)
+            logger.info(f"🔄 Dynamic Params: Max Size {dynamic_params['max_size']}, "
+                       f"Safety Buffer ${dynamic_params['safety_buffer']:.1f}")
+            
+            # 4. 🎯 Dynamic Method Selection
+            selected_methods = self._select_dynamic_methods(portfolio_health, market_conditions, dynamic_params)
             logger.info(f"🎯 Selected {len(selected_methods)} dynamic methods")
             
             # 4. 🔄 Try methods by priority
@@ -103,16 +109,18 @@ class Dynamic7DSmartCloser:
             best_score = -999999
             
             for method_name, min_size, max_size, priority in selected_methods:
+                # ใช้ Dynamic Max Size
+                dynamic_max_size = min(max_size, dynamic_params['max_size'])
                 logger.debug(f"🔍 Trying {method_name} (sizes {min_size}-{max_size}, priority {priority:.1f})")
                 
-                for size in range(min_size, min(max_size + 1, len(positions) + 1)):
+                for size in range(min_size, min(dynamic_max_size + 1, len(positions) + 1)):
                     # ใช้ 7D Scores หรือ fallback
                     if position_scores:
                         result = self._try_7d_method(method_name, position_scores, size, portfolio_health)
                     else:
                         result = self._try_fallback_method(method_name, positions, size, portfolio_health)
                     
-                    if result and result['net_pnl'] > self.safety_buffer:  # Zero Loss Policy
+                    if result and result['net_pnl'] > dynamic_params['safety_buffer']:  # Dynamic Zero Loss Policy
                         # คำนวณ Total Impact Score
                         impact_score = self._calculate_total_impact_score(result, portfolio_health)
                         final_score = impact_score * priority  # Apply priority multiplier
@@ -193,61 +201,163 @@ class Dynamic7DSmartCloser:
             logger.error(f"❌ Error analyzing portfolio health: {e}")
             return PortfolioHealth(0, 0, 1, 0, 100, 0, 0, 0, 0, 1.0, 0)
     
+    def _calculate_dynamic_parameters(self, portfolio_health: PortfolioHealth, 
+                                    market_conditions: Optional[Dict] = None) -> Dict[str, Any]:
+        """🔄 คำนวณ Dynamic Parameters ตามสถานการณ์"""
+        try:
+            total_positions = portfolio_health.position_count
+            margin_level = portfolio_health.margin_level
+            imbalance = portfolio_health.imbalance_percentage
+            
+            # 🎯 Dynamic Max Group Size
+            if margin_level < self.critical_margin_threshold:
+                # 🚨 วิกฤตมาก - ปิดได้มากที่สุด
+                max_size = min(int(total_positions * 0.8), 100)  # ปิด 80% หรือ 100 ไม้
+                reason = "Critical Margin Emergency"
+            elif margin_level < self.emergency_margin_threshold:
+                # ⚠️ เสี่ยงสูง - ปิดได้เยอะ
+                max_size = min(int(total_positions * 0.6), 75)   # ปิด 60% หรือ 75 ไม้
+                reason = "Emergency Margin Relief"
+            elif imbalance > 80:
+                # ⚖️ ไม่สมดุลมาก - ปิดได้พอสมควร
+                max_size = min(int(total_positions * 0.5), 60)   # ปิด 50% หรือ 60 ไม้
+                reason = "Severe Imbalance"
+            elif total_positions > 100:
+                # 📊 ไม้เยอะมาก - ปิดได้เยอะ
+                max_size = min(int(total_positions * 0.4), 50)   # ปิด 40% หรือ 50 ไม้
+                reason = "High Position Count"
+            elif total_positions > 50:
+                # 📊 ไม้ปานกลาง - ปิดได้ปานกลาง
+                max_size = min(int(total_positions * 0.35), 35)  # ปิด 35% หรือ 35 ไม้
+                reason = "Medium Position Count"
+            elif total_positions > 20:
+                # 📊 ไม้น้อย - ปิดได้น้อย
+                max_size = min(int(total_positions * 0.3), 25)   # ปิด 30% หรือ 25 ไม้
+                reason = "Low Position Count"
+            else:
+                # 📊 ไม้น้อยมาก - ปิดได้น้อยมาก
+                max_size = min(int(total_positions * 0.25), 15)  # ปิด 25% หรือ 15 ไม้
+                reason = "Very Low Position Count"
+            
+            # ไม่ให้ต่ำกว่า minimum
+            max_size = max(max_size, 5)
+            
+            # 💰 Dynamic Safety Buffer
+            if margin_level < self.critical_margin_threshold:
+                safety_buffer = 0.5  # เร่งด่วน - ลดเกณฑ์
+            elif margin_level < self.emergency_margin_threshold:
+                safety_buffer = 1.0  # เสี่ยงสูง - ลดเกณฑ์
+            elif total_positions > 100:
+                safety_buffer = 1.5  # ไม้เยอะ - เกณฑ์ปานกลาง
+            else:
+                safety_buffer = self.base_safety_buffer  # ปกติ - เกณฑ์มาตรฐาน
+            
+            # 🎯 Dynamic Priority Multiplier
+            if margin_level < self.critical_margin_threshold:
+                priority_multiplier = 2.0  # เร่งด่วนมาก
+            elif margin_level < self.emergency_margin_threshold:
+                priority_multiplier = 1.5  # เร่งด่วน
+            elif imbalance > self.imbalance_threshold:
+                priority_multiplier = 1.3  # เน้น Balance
+            else:
+                priority_multiplier = 1.0  # ปกติ
+            
+            # 📊 Market Conditions Adjustment
+            if market_conditions:
+                volatility = market_conditions.get('volatility', 0.5)
+                if volatility > 0.8:  # ตลาดผันผวนมาก
+                    max_size = int(max_size * 0.8)  # ลดขนาด 20%
+                    safety_buffer *= 1.2  # เพิ่มเกณฑ์ 20%
+                elif volatility < 0.3:  # ตลาดเงียบ
+                    max_size = int(max_size * 1.2)  # เพิ่มขนาด 20%
+                    safety_buffer *= 0.9  # ลดเกณฑ์ 10%
+            
+            dynamic_params = {
+                'max_size': max_size,
+                'safety_buffer': safety_buffer,
+                'priority_multiplier': priority_multiplier,
+                'reason': reason,
+                'total_positions': total_positions,
+                'margin_level': margin_level,
+                'imbalance': imbalance
+            }
+            
+            logger.info(f"🔄 DYNAMIC PARAMS: Max Size {max_size} (Reason: {reason})")
+            logger.info(f"💰 Safety Buffer: ${safety_buffer:.1f}, Priority Multiplier: {priority_multiplier:.1f}")
+            
+            return dynamic_params
+            
+        except Exception as e:
+            logger.error(f"❌ Error calculating dynamic parameters: {e}")
+            # Fallback to safe defaults
+            return {
+                'max_size': self.base_max_group_size,
+                'safety_buffer': self.base_safety_buffer,
+                'priority_multiplier': 1.0,
+                'reason': 'Fallback Default',
+                'total_positions': portfolio_health.position_count,
+                'margin_level': portfolio_health.margin_level,
+                'imbalance': portfolio_health.imbalance_percentage
+            }
+    
     def _select_dynamic_methods(self, portfolio_health: PortfolioHealth, 
-                               market_conditions: Optional[Dict] = None) -> List[Tuple[str, int, int, float]]:
+                               market_conditions: Optional[Dict] = None,
+                               dynamic_params: Optional[Dict] = None) -> List[Tuple[str, int, int, float]]:
         """🎯 เลือกวิธีการปิดแบบ Dynamic"""
         methods = []
         
-        # 📊 Position count-based selection
+        # 📊 Dynamic method selection based on parameters
         total_positions = portfolio_health.position_count
+        max_size = dynamic_params.get('max_size', 25) if dynamic_params else 25
+        priority_multiplier = dynamic_params.get('priority_multiplier', 1.0) if dynamic_params else 1.0
         
         if total_positions > 40:
-            # เยอะมาก → เน้น Large Groups
+            # เยอะมาก → เน้น Large Groups (ใช้ Dynamic Max Size)
             methods.extend([
-                ('large_groups_7d', 15, 25, 1.0),
-                ('mixed_edge_7d', 12, 20, 0.9),
-                ('emergency_mass_closing', 20, 25, 0.8)
+                ('large_groups_7d', 15, min(max_size, 50), 1.0 * priority_multiplier),
+                ('mixed_edge_7d', 12, min(max_size, 40), 0.9 * priority_multiplier),
+                ('emergency_mass_closing', 20, min(max_size, 60), 0.8 * priority_multiplier)
             ])
         elif total_positions > 25:
-            # ปานกลาง → เน้น Medium Groups
+            # ปานกลาง → เน้น Medium Groups (ใช้ Dynamic Max Size)
             methods.extend([
-                ('medium_groups_7d', 8, 15, 1.0),
-                ('mixed_edge_7d', 8, 12, 0.9),
-                ('smart_7d_selection', 6, 12, 0.8)
+                ('medium_groups_7d', 8, min(max_size, 30), 1.0 * priority_multiplier),
+                ('mixed_edge_7d', 8, min(max_size, 25), 0.9 * priority_multiplier),
+                ('smart_7d_selection', 6, min(max_size, 20), 0.8 * priority_multiplier)
             ])
         elif total_positions > 10:
-            # น้อย → เน้น Small Groups
+            # น้อย → เน้น Small Groups (ใช้ Dynamic Max Size)
             methods.extend([
-                ('small_groups_7d', 4, 8, 1.0),
-                ('balanced_pairs_7d', 2, 6, 0.9),
-                ('smart_7d_selection', 3, 8, 0.8)
+                ('small_groups_7d', 4, min(max_size, 15), 1.0 * priority_multiplier),
+                ('balanced_pairs_7d', 2, min(max_size, 10), 0.9 * priority_multiplier),
+                ('smart_7d_selection', 3, min(max_size, 12), 0.8 * priority_multiplier)
             ])
         else:
-            # น้อยมาก → เน้น Pairs
+            # น้อยมาก → เน้น Pairs (ใช้ Dynamic Max Size)
             methods.extend([
-                ('balanced_pairs_7d', 2, 4, 1.0),
-                ('smart_7d_selection', 2, 6, 0.9)
+                ('balanced_pairs_7d', 2, min(max_size, 8), 1.0 * priority_multiplier),
+                ('smart_7d_selection', 2, min(max_size, 10), 0.9 * priority_multiplier)
             ])
         
-        # ⚖️ Imbalance-based selection
+        # ⚖️ Imbalance-based selection (ใช้ Dynamic Max Size)
         if portfolio_health.imbalance_percentage > self.imbalance_threshold:
             methods.extend([
-                ('force_balance_7d', 4, 16, 1.3),
-                ('cross_balance_groups_7d', 6, 18, 1.2)
+                ('force_balance_7d', 4, min(max_size, 30), 1.3 * priority_multiplier),
+                ('cross_balance_groups_7d', 6, min(max_size, 35), 1.2 * priority_multiplier)
             ])
         
-        # 🚨 Margin-based selection
+        # 🚨 Margin-based selection (ใช้ Dynamic Max Size)
         if portfolio_health.margin_level < self.emergency_margin_threshold:
             methods.extend([
-                ('emergency_margin_relief', 8, 25, 1.5),
-                ('high_margin_impact_7d', 6, 20, 1.4)
+                ('emergency_margin_relief', 8, min(max_size, 50), 1.5 * priority_multiplier),
+                ('high_margin_impact_7d', 6, min(max_size, 40), 1.4 * priority_multiplier)
             ])
         
-        # 🎯 Edge-based methods (always available)
+        # 🎯 Edge-based methods (always available, ใช้ Dynamic Max Size)
         methods.extend([
-            ('top_edge_7d', 3, 12, 0.7),
-            ('bottom_edge_7d', 3, 12, 0.7),
-            ('mixed_edge_7d', 4, 15, 0.8)
+            ('top_edge_7d', 3, min(max_size, 25), 0.7 * priority_multiplier),
+            ('bottom_edge_7d', 3, min(max_size, 25), 0.7 * priority_multiplier),
+            ('mixed_edge_7d', 4, min(max_size, 30), 0.8 * priority_multiplier)
         ])
         
         # Sort by priority (highest first)

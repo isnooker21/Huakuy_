@@ -1117,7 +1117,7 @@ class IntelligentPositionManager:
                             'avg_7d_score': avg_7d_score,
                             'heavy_loss_bonus': heavy_loss_bonus,
                             'final_score': final_score,
-                            'total_4d_score': total_4d_score
+                            'total_7d_score': total_7d_score
                         }
                         
                         logger.info(f"🧠 Better 7D combination: {profit_count}P+{loss_count}L, 7D:{avg_7d_score:.1f}+Bonus:{heavy_loss_bonus:.1f}={final_score:.1f}, Net:+${net_pnl:.2f}")
