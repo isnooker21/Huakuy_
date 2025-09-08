@@ -195,6 +195,9 @@ class TradingConditions:
             'reasons': []
         }
         
+        # 🚀 Initialize Force Balance Mode (ต้องอยู่ก่อนการใช้งาน)
+        force_balance_mode = False
+        
         logger.info(f"🔍 ตรวจสอบเงื่อนไขการเข้าเทรด - Symbol: {symbol}")
         logger.info(f"   Candle: O:{candle.open:.2f} H:{candle.high:.2f} L:{candle.low:.2f} C:{candle.close:.2f}")
         logger.info(f"   Volume: {candle.volume}, Balance: {account_balance:,.2f}")
@@ -319,9 +322,6 @@ class TradingConditions:
         
         # 🗑️ Portfolio Quality Check REMOVED - ให้ระบบเข้าไม้ได้เสมอ
         # เพื่อไม่ให้พอร์ตแย่ยิ่งแย่หนัก จากการไม่ออกไม้
-
-        # 🚀 Initialize Force Balance Mode
-        force_balance_mode = False
 
         # 🚀 Adaptive Entry Control - ENHANCED for Balance Enforcement
         adaptive_control = self._check_adaptive_entry_control(positions, candle.close, strength_analysis['direction'])
