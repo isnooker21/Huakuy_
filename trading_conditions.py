@@ -168,12 +168,23 @@ class TradingConditions:
         logger.info(f"   Candle: O:{candle.open:.2f} H:{candle.high:.2f} L:{candle.low:.2f} C:{candle.close:.2f}")
         logger.info(f"   Volume: {candle.volume}, Balance: {account_balance:,.2f}")
         
-        # 1. ตรวจสอบ One Order per Candle
+        # 🚀 HIGH-FREQUENCY ENTRY: Smart Entry Control แทน One Order per Candle
         candle_time_key = candle.timestamp.strftime("%Y%m%d%H%M")
-        if candle_time_key in self.orders_per_candle:
-            result['reasons'].append("มี Order ในแท่งเทียนนี้แล้ว")
-            logger.info(f"❌ เงื่อนไข 1: {result['reasons'][-1]}")
+        minute_key = candle.timestamp.strftime("%Y%m%d%H%M")
+        
+        # ตรวจสอบจำนวน orders ต่อนาที (แทน per candle)
+        orders_this_minute = self.orders_per_candle.get(minute_key, 0)
+        
+        # 🧠 Adaptive Entry Limits ตามสภาพตลาด
+        volatility_factor = self._calculate_market_volatility(candle)
+        max_entries_per_minute = self._get_adaptive_entry_limit(volatility_factor, len(positions))
+        
+        if orders_this_minute >= max_entries_per_minute:
+            result['reasons'].append(f"Entry limit reached: {orders_this_minute}/{max_entries_per_minute} per minute")
+            logger.info(f"⚠️ Entry limit: {orders_this_minute}/{max_entries_per_minute} entries this minute")
             return result
+        
+        logger.info(f"✅ High-Frequency OK: {orders_this_minute}/{max_entries_per_minute} entries this minute")
             
         # 2. Market Session Analysis
         session_params = self.session_analyzer.adjust_trading_parameters({
@@ -938,6 +949,56 @@ class TradingConditions:
                 
         for key in keys_to_remove:
             del self.orders_per_candle[key]
+    
+    def _calculate_market_volatility(self, candle: CandleData) -> float:
+        """🧠 คำนวณความผันผวนของตลาด"""
+        try:
+            # คำนวณ ATR-like volatility
+            candle_range = candle.high - candle.low
+            price_avg = (candle.high + candle.low) / 2
+            volatility_pct = (candle_range / price_avg) * 100 if price_avg > 0 else 0
+            
+            # ปรับค่าให้อยู่ในช่วง 0.1 - 3.0
+            volatility_factor = max(0.1, min(3.0, volatility_pct / 0.1))
+            
+            logger.debug(f"📊 Market Volatility: {volatility_pct:.3f}% → Factor: {volatility_factor:.2f}")
+            return volatility_factor
+            
+        except Exception as e:
+            logger.error(f"❌ Error calculating volatility: {e}")
+            return 1.0  # Default volatility
+    
+    def _get_adaptive_entry_limit(self, volatility_factor: float, position_count: int) -> int:
+        """🚀 คำนวณขด Entry Limit แบบ Adaptive"""
+        try:
+            # Base limit ตามความผันผวน
+            if volatility_factor > 2.0:
+                base_limit = 8  # ผันผวนสูง = เข้าได้บ่อย
+            elif volatility_factor > 1.5:
+                base_limit = 6  # ผันผวนปานกลาง
+            elif volatility_factor > 1.0:
+                base_limit = 4  # ผันผวนต่ำ
+            else:
+                base_limit = 2  # ผันผวนต่ำมาก
+            
+            # ปรับตามจำนวน positions
+            if position_count > 200:
+                adjustment = 0.5  # มีไม้เยอะ → ลดการเข้า
+            elif position_count > 100:
+                adjustment = 0.7
+            elif position_count > 50:
+                adjustment = 0.9
+            else:
+                adjustment = 1.2  # มีไม้น้อย → เพิ่มการเข้า
+            
+            final_limit = max(1, int(base_limit * adjustment))
+            
+            logger.debug(f"🚀 Entry Limit: Base:{base_limit} × Adj:{adjustment:.2f} = {final_limit} entries/min")
+            return final_limit
+            
+        except Exception as e:
+            logger.error(f"❌ Error calculating entry limit: {e}")
+            return 3  # Safe default
     
     def _check_adaptive_entry_control(self, positions: List[Position], current_price: float, direction: str) -> Dict[str, Any]:
         """
