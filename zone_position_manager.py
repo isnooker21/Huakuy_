@@ -1587,52 +1587,85 @@ def _check_cross_zone_support_with_7d(self, position_scores: List[Any], current_
         return {'should_close': False}
 
 def _find_best_7d_cross_zone_combination(self, zones_with_7d: Dict) -> Optional[Dict]:
-    """🎯 Find best Cross-Zone combination using 7D Intelligence"""
+    """🔄 Find Cross-Zone Flow: Good positions from any zone helping bad positions from other zones"""
     try:
-        # Strategy 1: Pure profit zones with high 7D scores
-        profitable_zones = []
+        logger.info(f"🔄 Cross-Zone Flow Analysis: {len(zones_with_7d)} zones")
+        
+        # 🔍 Step 1: Collect ALL positions with 7D scores from ALL zones
+        all_positions_7d = []
         for zone_id, data in zones_with_7d.items():
-            if data['total_pnl'] > 0 and data['avg_7d_score'] >= 50:  # Lower threshold for testing
-                profitable_zones.append({
+            # เอาทั้ง profitable และ losing positions
+            for pos_data in data.get('profitable', []):
+                all_positions_7d.append({
+                    'position': pos_data['position'],
+                    'score_7d': pos_data['score_7d'],
                     'zone_id': zone_id,
-                    'total_pnl': data['total_pnl'],
-                    'avg_7d_score': data['avg_7d_score'],
-                    'positions': [p['position'] for p in data['profitable'][:3]]  # Top 3
+                    'pnl': pos_data['position'].profit,
+                    'type': 'profitable'
+                })
+            for pos_data in data.get('losing', []):
+                all_positions_7d.append({
+                    'position': pos_data['position'],
+                    'score_7d': pos_data['score_7d'],
+                    'zone_id': zone_id,
+                    'pnl': pos_data['position'].profit,
+                    'type': 'losing'
                 })
         
-        # ปรับเงื่อนไข: ถ้ามี 1 zone ที่ดี ก็ปิดได้ (สำหรับกรณีที่มี zone เดียว)
-        if len(profitable_zones) >= 1:
-            # Sort by 7D score
-            profitable_zones.sort(key=lambda x: x['avg_7d_score'], reverse=True)
+        if len(all_positions_7d) < 2:
+            logger.info("❌ Need at least 2 positions for Cross-Zone Flow")
+            return None
             
-            # Take available zones (1 or more)
-            selected_zones = profitable_zones[:min(2, len(profitable_zones))]
-            all_positions = []
-            total_pnl = 0
-            total_score = 0
-            zones_involved = []
+        # 🎯 Step 2: Sort by 7D score (best first)
+        all_positions_7d.sort(key=lambda x: x['score_7d'], reverse=True)
+        logger.info(f"🎯 Sorted {len(all_positions_7d)} positions by 7D score (best: {all_positions_7d[0]['score_7d']:.1f})")
+        
+        # 🔄 Step 3: Find Cross-Zone combinations (good positions help bad positions)
+        best_combination = None
+        best_net_pnl = 0
+        
+        # Try different combination sizes (2-8 positions)
+        for combo_size in range(2, min(9, len(all_positions_7d) + 1)):
+            # Take top positions by 7D score
+            candidate_positions = all_positions_7d[:combo_size]
             
-            for zone in selected_zones:
-                all_positions.extend(zone['positions'])
-                total_pnl += zone['total_pnl']
-                total_score += zone['avg_7d_score']
-                zones_involved.append(zone['zone_id'])
+            # ✅ Check if it's truly Cross-Zone (positions from different zones)
+            zones_involved = list(set([p['zone_id'] for p in candidate_positions]))
+            if len(zones_involved) < 2:
+                continue  # ต้องมีอย่างน้อย 2 zones
             
-            avg_score = total_score / len(selected_zones)
+            # 💰 Calculate total P&L
+            total_pnl = sum([p['pnl'] for p in candidate_positions])
+            avg_7d_score = sum([p['score_7d'] for p in candidate_positions]) / len(candidate_positions)
             
-            if total_pnl > 2.0:  # Lower threshold for testing
-                return {
-                    'positions': all_positions,
+            # 🎯 Must be profitable after costs
+            if total_pnl > 2.0 and total_pnl > best_net_pnl:
+                best_net_pnl = total_pnl
+                profitable_count = len([p for p in candidate_positions if p['type'] == 'profitable'])
+                losing_count = len([p for p in candidate_positions if p['type'] == 'losing'])
+                
+                best_combination = {
+                    'positions': [p['position'] for p in candidate_positions],
                     'net_pnl': total_pnl,
-                    'avg_score': avg_score,
+                    'avg_score': avg_7d_score,
                     'zones_involved': zones_involved,
-                        'description': f"{'Cross-Zone' if len(zones_involved) > 1 else 'Single-Zone'} {zones_involved} (7D Score: {avg_score:.1f}) = ${total_pnl:.2f}"
+                    'description': f"Cross-Zone Flow {zones_involved} ({profitable_count}P+{losing_count}L, 7D:{avg_7d_score:.1f}) = ${total_pnl:.2f}",
+                    'combo_size': combo_size,
+                    'profitable_count': profitable_count,
+                    'losing_count': losing_count
                 }
+        
+        if best_combination:
+            logger.info(f"🌟 Found Cross-Zone Flow: {best_combination['profitable_count']}P + {best_combination['losing_count']}L "
+                       f"across zones {best_combination['zones_involved']} = ${best_combination['net_pnl']:.2f}")
+            return best_combination
+        else:
+            logger.info("❌ No profitable Cross-Zone Flow combinations found")
         
         return None
         
     except Exception as e:
-        logger.error(f"❌ Error finding 7D combination: {e}")
+        logger.error(f"❌ Error in Cross-Zone Flow analysis: {e}")
         return None
 
 # Add methods to ZonePositionManager class
