@@ -550,12 +550,23 @@ class TradingSystem:
                                 # 🎯 HEAVY LOSS BONUS - เหมือนระบบอื่น
                                 heavy_loss_bonus = 0
                                 # นับ losing positions ที่ขาดทุนหนัก
-                                losing_positions_selected = losing_buys[-buy_losing:] + losing_sells[-sell_losing:]
+                                losing_positions_selected = []
+                                if buy_losing > 0:
+                                    losing_positions_selected.extend(losing_buys[-buy_losing:])
+                                if sell_losing > 0:
+                                    losing_positions_selected.extend(losing_sells[-sell_losing:])
+                                
+                                logger.debug(f"🔍 Losing positions selected: {len(losing_positions_selected)} (BUY:{buy_losing}, SELL:{sell_losing})")
+                                
                                 for pos in losing_positions_selected:
                                     if pos.profit < -10:  # ขาดทุน > $10
                                         heavy_loss_bonus += abs(pos.profit) * 2  # Bonus = 2x ขาดทุน
+                                        logger.debug(f"💥 Heavy Loss >$10: {pos.profit:.2f} → Bonus +{abs(pos.profit)*2:.1f}")
                                     elif pos.profit < -5:  # ขาดทุน > $5
                                         heavy_loss_bonus += abs(pos.profit) * 1  # Bonus = 1x ขาดทุน
+                                        logger.debug(f"💥 Heavy Loss >$5: {pos.profit:.2f} → Bonus +{abs(pos.profit):.1f}")
+                                    elif pos.profit < 0:
+                                        logger.debug(f"📊 Small Loss: {pos.profit:.2f} → No bonus")
                                 
                                 losing_bonus = (buy_losing + sell_losing) * 1 + heavy_loss_bonus  # รวม bonus
                                 total_score = total_pnl + balance_score + losing_bonus
@@ -578,9 +589,25 @@ class TradingSystem:
                 best_combinations.sort(key=lambda x: x['total_score'], reverse=True)
                 best = best_combinations[0]
                 
+                # 🔍 DEBUG: แสดงรายละเอียด losing positions
+                losing_details = []
+                losing_positions_in_best = []
+                
+                # หา losing positions ใน best combination
+                for pos in best['positions']:
+                    if pos.profit < 0:
+                        losing_positions_in_best.append(pos)
+                        if pos.profit < -10:
+                            losing_details.append(f"{pos.profit:.2f}(>$10)")
+                        elif pos.profit < -5:
+                            losing_details.append(f"{pos.profit:.2f}(>$5)")
+                        else:
+                            losing_details.append(f"{pos.profit:.2f}(<$5)")
+                
                 logger.info(f"🎯 Found SMART aggressive combination: {best['profitable_count']}P+{best['losing_count']}L "
-                           f"({best['buy_count']}B+{best['sell_count']}S) = ${best['total_pnl']:.2f} "
-                           f"(Heavy Loss Bonus: +{best['heavy_loss_bonus']:.1f}, Total Bonus: +{best['losing_bonus']:.1f})")
+                           f"({best['buy_count']}B+{best['sell_count']}S) = ${best['total_pnl']:.2f}")
+                logger.info(f"💥 Heavy Loss Bonus: +{best['heavy_loss_bonus']:.1f}, Total Bonus: +{best['losing_bonus']:.1f}")
+                logger.info(f"📊 Losing Details: {', '.join(losing_details) if losing_details else 'No losing positions'}")
                 
                 return {
                     'should_close': True,
