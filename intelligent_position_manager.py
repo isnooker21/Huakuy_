@@ -476,8 +476,8 @@ class IntelligentPositionManager:
             # คะแนนความสมดุล (100 = สมดุลสมบูรณ์)
             balance_score = 100 - abs(buy_ratio - sell_ratio) * 200
             
-            # ต้องการ rebalance ไหม
-            needs_rebalance = abs(buy_ratio - sell_ratio) > 0.3  # เกิน 30%
+            # ต้องการ rebalance ไหม - เข้มงวดขึ้น
+            needs_rebalance = abs(buy_ratio - sell_ratio) > 0.2  # เกิน 20% (ลดจาก 30%)
             
             # กำไร/ขาดทุนแยกตามประเภท
             buy_profit = sum(getattr(pos, 'profit', 0) for pos in buy_positions)
@@ -990,6 +990,10 @@ class IntelligentPositionManager:
             best_combination = None
             best_net_profit = 0
             
+            # 🎯 เพิ่มการตรวจสอบ Balance ก่อนเลือกตำแหน่ง
+            all_positions = [score.position for score in position_scores]
+            balance_analysis = self._analyze_portfolio_balance(all_positions, {})
+            
             # ลองหาชุดการปิดที่ดีที่สุด (ยืดหยุ่นได้ 2-30 ไม้)
             max_positions = min(30, len(profitable_positions) + len(losing_positions))
             
@@ -1000,9 +1004,17 @@ class IntelligentPositionManager:
                     if loss_count > len(losing_positions):
                         continue
                     
-                    # เลือกตำแหน่งตาม 4D score
+                    # เลือกตำแหน่งตาม 4D score พร้อม Balance Check
                     selected_profits = profitable_positions[:profit_count]
                     selected_losses = losing_positions[:loss_count]
+                    
+                    # 🎯 BALANCE ENFORCEMENT: ตรวจสอบการปิดแบบ Balance
+                    all_selected_positions = [pos['position'] for pos in selected_profits + selected_losses]
+                    closing_balance = self._check_closing_balance(all_selected_positions, balance_analysis)
+                    
+                    # ปฏิเสธการปิดที่ทำให้ไม่ Balance มากขึ้น
+                    if not closing_balance['will_improve_balance']:
+                        continue
                     
                     # คำนวณผลรวม
                     total_profit = sum(pos['profit'] for pos in selected_profits)
@@ -1038,12 +1050,67 @@ class IntelligentPositionManager:
                         }
                         
                         logger.info(f"🧠 Better 7D combination: {profit_count}P+{loss_count}L, 7D:{avg_4d_score:.1f}, Net:+${net_pnl:.2f}")
+                        logger.info(f"⚖️ Balance: {closing_balance['reason']}")
             
             return best_combination
             
         except Exception as e:
             logger.error(f"❌ Error finding intelligent positive combination: {e}")
             return None
+    
+    def _check_closing_balance(self, positions_to_close: List[Any], current_balance: Dict) -> Dict[str, Any]:
+        """⚖️ ตรวจสอบว่าการปิดตำแหน่งจะทำให้ Balance ดีขึ้นไหม"""
+        try:
+            if not positions_to_close:
+                return {'will_improve_balance': False, 'reason': 'No positions to close'}
+            
+            # นับ BUY/SELL ที่จะปิด
+            buy_close_count = sum(1 for pos in positions_to_close if getattr(pos, 'type', 0) == 0)
+            sell_close_count = sum(1 for pos in positions_to_close if getattr(pos, 'type', 0) == 1)
+            
+            if buy_close_count == 0 and sell_close_count == 0:
+                return {'will_improve_balance': False, 'reason': 'No valid positions to close'}
+            
+            # คำนวณ Balance หลังปิด
+            remaining_buy = current_balance.get('buy_count', 0) - buy_close_count
+            remaining_sell = current_balance.get('sell_count', 0) - sell_close_count
+            total_remaining = remaining_buy + remaining_sell
+            
+            if total_remaining <= 0:
+                return {'will_improve_balance': True, 'reason': 'Closing all positions'}
+            
+            # คำนวณ Balance Ratio หลังปิด
+            new_buy_ratio = remaining_buy / total_remaining
+            new_sell_ratio = remaining_sell / total_remaining
+            new_balance_score = 100 - abs(new_buy_ratio - new_sell_ratio) * 200
+            
+            # เปรียบเทียบกับ Balance ปัจจุบัน
+            current_balance_score = current_balance.get('balance_score', 0)
+            improvement = new_balance_score - current_balance_score
+            
+            # อนุญาตการปิดที่:
+            # 1. ปรับปรุง Balance (improvement > 0)
+            # 2. ไม่ทำให้แย่ลงมาก (improvement > -10)
+            # 3. หรือ Balance อยู่ในเกณฑ์ดีอยู่แล้ว (new_balance_score > 80)
+            will_improve = (improvement > 0 or improvement > -10 or new_balance_score > 80)
+            
+            reason = f"Balance: {current_balance_score:.1f}→{new_balance_score:.1f} ({improvement:+.1f})"
+            
+            return {
+                'will_improve_balance': will_improve,
+                'reason': reason,
+                'current_balance_score': current_balance_score,
+                'new_balance_score': new_balance_score,
+                'improvement': improvement,
+                'buy_close': buy_close_count,
+                'sell_close': sell_close_count,
+                'remaining_buy': remaining_buy,
+                'remaining_sell': remaining_sell
+            }
+            
+        except Exception as e:
+            logger.error(f"❌ Error checking closing balance: {e}")
+            return {'will_improve_balance': True, 'reason': f'Error: {e}'}  # Default to allow
     
     def _log_7d_analysis(self, position_scores: List[PositionScore], top_n: int = 5):
         """📊 แสดงการวิเคราะห์ 7 มิติของตำแหน่งดีสุด"""
