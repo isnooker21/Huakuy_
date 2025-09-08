@@ -473,21 +473,25 @@ class ZonePositionManager:
                             'type': 'SELL'
                         })
             
+            # 🚫 DISABLED: ไม่ cut loss แม้ในกรณี emergency - ให้ระบบ recovery จัดการ
+            # if worst_positions:
+            #     # เลือกตัวที่ขาดทุนหนักที่สุด
+            #     worst_position = min(worst_positions, key=lambda x: x['loss'])
+            #     
+            #     logger.info(f"🚨 Emergency: {worst_position['type']} position losing ${abs(worst_position['loss']):.2f} against {trend_direction} trend")
+            #     
+            #     return {
+            #         'should_close': True,
+            #         'reason': f'Emergency {trend_direction} trend: Cut heavy loss {worst_position["type"]} (${worst_position["loss"]:.2f})',
+            #         'positions_to_close': [worst_position['position']],
+            #         'positions_count': 1,
+            #         'expected_pnl': worst_position['loss'],
+            #         'method': f'emergency_trend_{trend_direction.lower()}',
+            #         'zone_id': worst_position['zone_id']
+            #     }
+            
             if worst_positions:
-                # เลือกตัวที่ขาดทุนหนักที่สุด
-                worst_position = min(worst_positions, key=lambda x: x['loss'])
-                
-                logger.info(f"🚨 Emergency: {worst_position['type']} position losing ${abs(worst_position['loss']):.2f} against {trend_direction} trend")
-                
-                return {
-                    'should_close': True,
-                    'reason': f'Emergency {trend_direction} trend: Cut heavy loss {worst_position["type"]} (${worst_position["loss"]:.2f})',
-                    'positions_to_close': [worst_position['position']],
-                    'positions_count': 1,
-                    'expected_pnl': worst_position['loss'],
-                    'method': f'emergency_trend_{trend_direction.lower()}',
-                    'zone_id': worst_position['zone_id']
-                }
+                logger.info(f"📊 Emergency Trend: Found {len(worst_positions)} against-trend positions - keeping for recovery")
             
             return {'should_close': False}
             
@@ -546,20 +550,23 @@ class ZonePositionManager:
                     'zone_id': best_profit['zone_id']
                 }
             
-            # ถ้าไม่มีกำไร แต่มีขาดทุนหนัก ให้ cut loss
+            # 🚫 DISABLED: ไม่ cut loss - ให้ระบบ recovery จัดการเอง
+            # if losing_positions:
+            #     worst_loss = min(losing_positions, key=lambda x: x['loss'])
+            #     logger.info(f"⚠️ Zone Logic: Cutting heavy loss {worst_loss['type']} (${worst_loss['loss']:.2f})")
+            #     
+            #     return {
+            #         'should_close': True,
+            #         'reason': f'Zone-Based: Cut heavy loss {worst_loss["type"]} ${worst_loss["loss"]:.2f}',
+            #         'positions_to_close': [worst_loss['position']],
+            #         'positions_count': 1,
+            #         'expected_pnl': worst_loss['loss'],
+            #         'method': 'zone_based_cutloss',
+            #         'zone_id': worst_loss['zone_id']
+            #     }
+            
             if losing_positions:
-                worst_loss = min(losing_positions, key=lambda x: x['loss'])
-                logger.info(f"⚠️ Zone Logic: Cutting heavy loss {worst_loss['type']} (${worst_loss['loss']:.2f})")
-                
-                return {
-                    'should_close': True,
-                    'reason': f'Zone-Based: Cut heavy loss {worst_loss["type"]} ${worst_loss["loss"]:.2f}',
-                    'positions_to_close': [worst_loss['position']],
-                    'positions_count': 1,
-                    'expected_pnl': worst_loss['loss'],
-                    'method': 'zone_based_cutloss',
-                    'zone_id': worst_loss['zone_id']
-                }
+                logger.info(f"📊 Zone Logic: Found {len(losing_positions)} losing positions - keeping for recovery")
             
             logger.info("⏸️ Zone Logic: No clear closing opportunities found")
             return {'should_close': False}
