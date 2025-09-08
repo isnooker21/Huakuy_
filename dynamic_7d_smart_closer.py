@@ -54,8 +54,13 @@ class ClosingResult:
 class Dynamic7DSmartCloser:
     """🚀 Dynamic 7D Smart Closing System"""
     
-    def __init__(self, intelligent_manager=None):
+    def __init__(self, intelligent_manager=None, purpose_tracker=None, 
+                 market_analyzer=None, price_action_analyzer=None):
         self.intelligent_manager = intelligent_manager
+        self.purpose_tracker = purpose_tracker
+        self.market_analyzer = market_analyzer
+        self.price_action_analyzer = price_action_analyzer
+        
         # 🔄 Dynamic Parameters (ปรับตามสถานการณ์)
         self.base_safety_buffer = 2.0  # Base กำไรขั้นต่ำ
         self.base_max_group_size = 25  # Base สูงสุด
@@ -66,7 +71,19 @@ class Dynamic7DSmartCloser:
         self.critical_margin_threshold = 120.0   # Margin Level < 120%
         self.imbalance_threshold = 70.0          # Imbalance > 70%
         
-        logger.info("🚀 Dynamic 7D Smart Closer initialized - Full Dynamic Mode")
+        # 🧠 Purpose-Aware Configuration
+        self.purpose_priority_weights = {
+            'RECOVERY_HELPER': 0.8,      # ลดน้ำหนัก - ไม่ปิดง่าย
+            'PROBLEM_POSITION': 1.5,     # เพิ่มน้ำหนัก - ต้องจับคู่
+            'BALANCE_KEEPER': 0.9,       # ปานกลาง - ระวังสมดุล
+            'PROFIT_TAKER': 1.3,         # เพิ่มน้ำหนัก - ปิดได้
+            'TREND_FOLLOWER': 0.7,       # ลดน้ำหนัก - เก็บไว้
+            'HEDGE_POSITION': 1.0        # ปกติ
+        }
+        
+        logger.info("🚀 Dynamic 7D Smart Closer initialized - Purpose-Aware Mode")
+        logger.info(f"   🧠 Purpose Tracker: {'✅' if purpose_tracker else '❌'}")
+        logger.info(f"   📊 Market Analyzer: {'✅' if market_analyzer else '❌'}")
     
     def find_optimal_closing(self, positions: List[Any], account_info: Dict, 
                            market_conditions: Optional[Dict] = None) -> Optional[ClosingResult]:
@@ -85,7 +102,26 @@ class Dynamic7DSmartCloser:
             logger.info(f"💊 Portfolio Health: Margin {portfolio_health.margin_level:.1f}%, "
                        f"Imbalance {portfolio_health.imbalance_percentage:.1f}%")
             
-            # 2. 🧠 7D Analysis (if available)
+            # 2. 🧠 Purpose Analysis (if available)
+            position_purposes = {}
+            current_price = self._get_current_price()
+            
+            if self.purpose_tracker:
+                try:
+                    for position in positions:
+                        purpose_analysis = self.purpose_tracker.analyze_position_purpose(
+                            position, positions, account_info, current_price
+                        )
+                        position_ticket = str(getattr(position, 'ticket', id(position)))
+                        position_purposes[position_ticket] = purpose_analysis
+                    
+                    logger.info(f"🧠 Purpose Analysis completed for {len(position_purposes)} positions")
+                    purpose_summary = self.purpose_tracker.get_purpose_summary()
+                    logger.info(f"📊 Purpose Summary: {purpose_summary}")
+                except Exception as e:
+                    logger.warning(f"⚠️ Purpose Analysis failed: {e}")
+            
+            # 3. 🧠 7D Analysis (if available)
             position_scores = None
             if self.intelligent_manager:
                 try:
@@ -95,16 +131,16 @@ class Dynamic7DSmartCloser:
                 except Exception as e:
                     logger.warning(f"⚠️ 7D Analysis failed: {e}, using fallback")
             
-            # 3. 🔄 Calculate Dynamic Parameters
+            # 4. 🔄 Calculate Dynamic Parameters
             dynamic_params = self._calculate_dynamic_parameters(portfolio_health, market_conditions)
             logger.info(f"🔄 Dynamic Params: Max Size {dynamic_params['max_size']}, "
                        f"Safety Buffer ${dynamic_params['safety_buffer']:.1f}")
             
-            # 4. 🎯 Dynamic Method Selection
+            # 5. 🎯 Dynamic Method Selection
             selected_methods = self._select_dynamic_methods(portfolio_health, market_conditions, dynamic_params)
             logger.info(f"🎯 Selected {len(selected_methods)} dynamic methods")
             
-            # 4. 🔄 Try methods by priority
+            # 6. 🔄 Try methods by priority
             best_result = None
             best_score = -999999
             
@@ -114,8 +150,12 @@ class Dynamic7DSmartCloser:
                 logger.debug(f"🔍 Trying {method_name} (sizes {min_size}-{max_size}, priority {priority:.1f})")
                 
                 for size in range(min_size, min(dynamic_max_size + 1, len(positions) + 1)):
-                    # ใช้ 7D Scores หรือ fallback
-                    if position_scores:
+                    # ใช้ Purpose-Aware 7D หรือ 7D หรือ fallback
+                    if position_purposes and position_scores:
+                        result = self._try_purpose_aware_7d_method(
+                            method_name, position_scores, position_purposes, size, portfolio_health
+                        )
+                    elif position_scores:
                         result = self._try_7d_method(method_name, position_scores, size, portfolio_health)
                     else:
                         result = self._try_fallback_method(method_name, positions, size, portfolio_health)
@@ -449,6 +489,22 @@ class Dynamic7DSmartCloser:
         # Sort by priority (highest first)
         return sorted(methods, key=lambda x: x[3], reverse=True)
     
+    def _try_purpose_aware_7d_method(self, method_name: str, position_scores: List[Any],
+                                   position_purposes: Dict[str, Any], size: int, 
+                                   portfolio_health: PortfolioHealth) -> Optional[Dict]:
+        """🧠 ลองใช้วิธีการที่มี Purpose Intelligence + 7D Scores"""
+        try:
+            # 📊 Enhance position scores with Purpose Intelligence
+            enhanced_scores = self._enhance_scores_with_purpose(position_scores, position_purposes)
+            
+            # 🎯 Use enhanced scores in existing 7D methods
+            return self._try_7d_method_with_enhanced_scores(method_name, enhanced_scores, size, portfolio_health)
+            
+        except Exception as e:
+            logger.error(f"❌ Error in Purpose-Aware 7D method {method_name}: {e}")
+            # Fallback to regular 7D method
+            return self._try_7d_method(method_name, position_scores, size, portfolio_health)
+    
     def _try_7d_method(self, method_name: str, position_scores: List[Any], 
                       size: int, portfolio_health: PortfolioHealth) -> Optional[Dict]:
         """🧠 ลองใช้วิธีการที่มี 7D Scores"""
@@ -757,11 +813,253 @@ class Dynamic7DSmartCloser:
         except Exception as e:
             logger.error(f"❌ Error calculating total impact score: {e}")
             return 0.0
+    
+    def _enhance_scores_with_purpose(self, position_scores: List[Any], 
+                                   position_purposes: Dict[str, Any]) -> List[Any]:
+        """🧠 Enhance 7D Scores with Purpose Intelligence"""
+        try:
+            enhanced_scores = []
+            
+            for score_obj in position_scores:
+                position_ticket = str(getattr(score_obj.position, 'ticket', id(score_obj.position)))
+                purpose_analysis = position_purposes.get(position_ticket)
+                
+                if purpose_analysis:
+                    # 📊 Calculate Purpose-Enhanced Score
+                    purpose_weight = self.purpose_priority_weights.get(
+                        purpose_analysis.purpose.value, 1.0
+                    )
+                    
+                    # Base 7D Score
+                    base_7d_score = getattr(score_obj, 'total_score', 50.0)
+                    
+                    # Purpose adjustments
+                    purpose_score = purpose_analysis.purpose_score
+                    adaptability = purpose_analysis.adaptability
+                    problem_solving = purpose_analysis.problem_solving_potential
+                    
+                    # 🧠 Enhanced Score Calculation
+                    enhanced_score = (
+                        base_7d_score * 0.6 +           # 60% 7D Score
+                        purpose_score * 0.25 +          # 25% Purpose Score  
+                        adaptability * 0.1 +            # 10% Adaptability
+                        problem_solving * 0.05          # 5% Problem Solving
+                    ) * purpose_weight
+                    
+                    # 🎯 Special Purpose Logic
+                    if purpose_analysis.purpose.value == 'RECOVERY_HELPER':
+                        # Helper ที่ช่วยหลายไม้ = คะแนนต่ำ (ไม่ปิด)
+                        if len(purpose_analysis.helper_for) > 1:
+                            enhanced_score *= 0.6
+                    
+                    elif purpose_analysis.purpose.value == 'PROBLEM_POSITION':
+                        # Problem ที่มี helper = คะแนนสูง (ปิดได้)
+                        if len(purpose_analysis.needs_help_from) > 0:
+                            enhanced_score *= 1.4
+                    
+                    elif purpose_analysis.purpose.value == 'TREND_FOLLOWER':
+                        # Trend Follower ที่ตาม trend แรง = คะแนนต่ำ (เก็บไว้)
+                        if purpose_analysis.trend_compatibility > 80:
+                            enhanced_score *= 0.5
+                    
+                    # Create enhanced score object
+                    enhanced_obj = type('EnhancedScore', (), {
+                        'position': score_obj.position,
+                        'total_score': enhanced_score,
+                        'original_7d_score': base_7d_score,
+                        'purpose_analysis': purpose_analysis,
+                        'purpose_weight': purpose_weight,
+                        'profit_score': getattr(score_obj, 'profit_score', 0),
+                        'balance_score': getattr(score_obj, 'balance_score', 0),
+                        'margin_impact': getattr(score_obj, 'margin_impact', 0),
+                        'recovery_potential': getattr(score_obj, 'recovery_potential', 0),
+                        'time_score': getattr(score_obj, 'time_score', 0),
+                        'correlation_score': getattr(score_obj, 'correlation_score', 0),
+                        'volatility_score': getattr(score_obj, 'volatility_score', 0)
+                    })()
+                    
+                    enhanced_scores.append(enhanced_obj)
+                    
+                else:
+                    # No purpose analysis - use original score
+                    enhanced_scores.append(score_obj)
+            
+            logger.debug(f"🧠 Enhanced {len(enhanced_scores)} scores with Purpose Intelligence")
+            return enhanced_scores
+            
+        except Exception as e:
+            logger.error(f"❌ Error enhancing scores with purpose: {e}")
+            return position_scores
+    
+    def _try_7d_method_with_enhanced_scores(self, method_name: str, enhanced_scores: List[Any],
+                                          size: int, portfolio_health: PortfolioHealth) -> Optional[Dict]:
+        """🎯 Use enhanced scores in 7D methods"""
+        try:
+            # 🧠 Purpose-Aware Method Selection
+            if method_name == 'smart_purpose_pairing':
+                return self._smart_purpose_pairing(enhanced_scores, size, portfolio_health)
+            
+            elif method_name == 'recovery_helper_protection':
+                return self._recovery_helper_protection(enhanced_scores, size, portfolio_health)
+            
+            elif method_name == 'problem_position_clearing':
+                return self._problem_position_clearing(enhanced_scores, size, portfolio_health)
+            
+            else:
+                # Use existing 7D methods with enhanced scores
+                return self._try_7d_method(method_name, enhanced_scores, size, portfolio_health)
+                
+        except Exception as e:
+            logger.error(f"❌ Error in enhanced 7D method {method_name}: {e}")
+            return None
+    
+    def _smart_purpose_pairing(self, enhanced_scores: List[Any], size: int, 
+                             portfolio_health: PortfolioHealth) -> Optional[Dict]:
+        """🧠 Smart Purpose-Based Pairing"""
+        try:
+            # หา Problem Positions ที่ต้องการความช่วยเหลือ
+            problem_positions = [
+                s for s in enhanced_scores 
+                if hasattr(s, 'purpose_analysis') and 
+                s.purpose_analysis.purpose.value == 'PROBLEM_POSITION'
+            ]
+            
+            # หา Recovery Helpers ที่สามารถช่วยได้
+            helper_positions = [
+                s for s in enhanced_scores 
+                if hasattr(s, 'purpose_analysis') and 
+                s.purpose_analysis.purpose.value == 'RECOVERY_HELPER'
+            ]
+            
+            # หา Profit Takers ที่พร้อมปิด
+            profit_positions = [
+                s for s in enhanced_scores 
+                if hasattr(s, 'purpose_analysis') and 
+                s.purpose_analysis.purpose.value == 'PROFIT_TAKER'
+            ]
+            
+            if not problem_positions and not profit_positions:
+                return None
+            
+            selected = []
+            
+            # 🎯 Strategy 1: Problem + Helper Pairing
+            if problem_positions and helper_positions:
+                for problem in problem_positions[:size//2]:
+                    # หา Helper ที่เหมาะสมที่สุด
+                    best_helper = None
+                    best_compatibility = 0
+                    
+                    for helper in helper_positions:
+                        if helper in selected:
+                            continue
+                        
+                        # เช็คความเข้ากันได้
+                        problem_ticket = str(getattr(problem.position, 'ticket', ''))
+                        if problem_ticket in helper.purpose_analysis.helper_for:
+                            compatibility = 100  # Perfect match
+                        else:
+                            # คำนวณความเข้ากันได้จากราคาและประเภท
+                            compatibility = self._calculate_pairing_compatibility(
+                                problem.position, helper.position
+                            )
+                        
+                        if compatibility > best_compatibility:
+                            best_compatibility = compatibility
+                            best_helper = helper
+                    
+                    if best_helper and best_compatibility > 60:
+                        selected.extend([problem, best_helper])
+                        helper_positions.remove(best_helper)
+                        
+                        if len(selected) >= size:
+                            break
+            
+            # 🎯 Strategy 2: Fill remaining with Profit Takers
+            remaining_size = size - len(selected)
+            if remaining_size > 0 and profit_positions:
+                profit_sorted = sorted(profit_positions, 
+                                     key=lambda x: x.total_score, reverse=True)
+                selected.extend(profit_sorted[:remaining_size])
+            
+            # 🎯 Strategy 3: Fill remaining with highest scores
+            if len(selected) < size:
+                remaining = [s for s in enhanced_scores if s not in selected]
+                remaining_sorted = sorted(remaining, 
+                                        key=lambda x: x.total_score, reverse=True)
+                selected.extend(remaining_sorted[:size - len(selected)])
+            
+            if not selected:
+                return None
+            
+            positions = [s.position for s in selected[:size]]
+            return self._calculate_combination_result(positions, portfolio_health)
+            
+        except Exception as e:
+            logger.error(f"❌ Error in smart purpose pairing: {e}")
+            return None
+    
+    def _calculate_pairing_compatibility(self, problem_position: Any, helper_position: Any) -> float:
+        """🔗 คำนวณความเข้ากันได้ของการจับคู่"""
+        try:
+            # เช็คประเภทตรงข้าม
+            problem_type = getattr(problem_position, 'type', 0)
+            helper_type = getattr(helper_position, 'type', 0)
+            
+            if problem_type == helper_type:
+                return 0  # ประเภทเดียวกัน ไม่เหมาะ
+            
+            # เช็คระยะห่างราคา
+            problem_price = getattr(problem_position, 'open_price', 0)
+            helper_price = getattr(helper_position, 'open_price', 0)
+            distance = abs(problem_price - helper_price) * 10000  # pips
+            
+            # เช็คกำไร/ขาดทุน
+            problem_profit = getattr(problem_position, 'profit', 0)
+            helper_profit = getattr(helper_position, 'profit', 0)
+            
+            # คำนวณ compatibility
+            compatibility = 50  # Base
+            
+            # Distance factor
+            if distance < 20:
+                compatibility += 30
+            elif distance < 50:
+                compatibility += 20
+            elif distance < 100:
+                compatibility += 10
+            
+            # Profit balance factor
+            if helper_profit > abs(problem_profit) * 0.8:  # Helper กำไรพอปิด Problem
+                compatibility += 20
+            elif helper_profit > abs(problem_profit) * 0.5:
+                compatibility += 10
+            
+            return min(100, compatibility)
+            
+        except Exception as e:
+            logger.error(f"❌ Error calculating pairing compatibility: {e}")
+            return 0
+    
+    def _get_current_price(self) -> float:
+        """💰 ดึงราคาปัจจุบัน"""
+        try:
+            # Try to get current price from MT5
+            import MetaTrader5 as mt5
+            tick = mt5.symbol_info_tick("XAUUSD")
+            if tick:
+                return (tick.bid + tick.ask) / 2
+        except:
+            pass
+        
+        # Fallback price
+        return 2000.0
 
 
-def create_dynamic_7d_smart_closer(intelligent_manager=None):
+def create_dynamic_7d_smart_closer(intelligent_manager=None, purpose_tracker=None, 
+                                 market_analyzer=None, price_action_analyzer=None):
     """🏭 Factory function สำหรับสร้าง Dynamic 7D Smart Closer"""
-    return Dynamic7DSmartCloser(intelligent_manager)
+    return Dynamic7DSmartCloser(intelligent_manager, purpose_tracker, market_analyzer, price_action_analyzer)
 
 
 if __name__ == "__main__":
