@@ -289,17 +289,19 @@ class TradingConditions:
         # 🗑️ Portfolio Quality Check REMOVED - ให้ระบบเข้าไม้ได้เสมอ
         # เพื่อไม่ให้พอร์ตแย่ยิ่งแย่หนัก จากการไม่ออกไม้
 
-        # 🚀 Adaptive Entry Control - MODIFIED for Zone-Based System
-        # ลดการบล็อคเพื่อให้ Zone System ทำงานได้เต็มที่
+        # 🚀 Adaptive Entry Control - ENHANCED for Balance Enforcement
         adaptive_control = self._check_adaptive_entry_control(positions, candle.close, strength_analysis['direction'])
         if adaptive_control['force_trade']:
             # บังคับ Counter-Trade เพื่อแก้สมดุล Portfolio
             strength_analysis['direction'] = adaptive_control['forced_direction']
             logger.info(f"🚀 Adaptive Force Trade: {adaptive_control['reason']}")
         elif adaptive_control['should_block']:
-            # แทนที่จะบล็อค ให้แสดงคำเตือนแล้วให้ Zone System ตัดสินใจ
-            logger.warning(f"⚠️ Adaptive Warning: {adaptive_control['reason']} - Let Zone System decide")
-            # ไม่ return ให้ดำเนินการต่อ
+            # บล็อคการเข้าที่ทำให้ไม่ Balance มากขึ้น
+            result['can_enter'] = False
+            result['reasons'].append(adaptive_control['reason'])
+            result['signal'] = None
+            logger.warning(f"❌ BLOCKED: {adaptive_control['reason']}")
+            return result
 
         # 🛡️ Dynamic Zone Protection - DISABLED for Zone-Based System
         # เดิมจะบล็อคการเข้าไม้ ตอนนี้ให้ Zone System จัดการแทน
@@ -1034,8 +1036,8 @@ class TradingConditions:
         buy_percentage = (buy_count / total_positions) * 100 if total_positions > 0 else 0
         sell_percentage = (sell_count / total_positions) * 100 if total_positions > 0 else 0
         
-        # 🚀 SMART LOGIC: เมื่อเสียสมดุล → Force Counter-Trade
-        if sell_percentage > 80.0:
+        # 🚀 SMART LOGIC: เมื่อเสียสมดุล → Force Counter-Trade (เข้มงวดขึ้น)
+        if sell_percentage > 65.0:  # ลดจาก 80% เป็น 65%
             # Portfolio เอียงไป SELL มาก → ต้อง BUY เพื่อแก้สมดุล
             if direction == "BUY":
                 result['force_trade'] = True
@@ -1047,17 +1049,13 @@ class TradingConditions:
                 result['reason'] = f'❌ BLOCK: Too many SELL already ({sell_percentage:.1f}%)'
                 return result
                 
-        elif buy_percentage > 80.0:
-            # Portfolio เอียงไป BUY มาก → ต้อง SELL เพื่อแก้สมดุล
-            if direction == "SELL":
-                result['force_trade'] = True
-                result['reason'] = f'🚀 SMART: Force SELL to balance (BUY: {buy_percentage:.1f}%)'
-                logger.info(f"🚀 FORCE SELL: Portfolio เอียง BUY {buy_percentage:.1f}% → ขายแพงแก้สมดุล")
-                return result
-            else:  # direction == "BUY"
-                result['should_block'] = True
-                result['reason'] = f'❌ BLOCK: Too many BUY already ({buy_percentage:.1f}%)'
-                return result
+        elif buy_percentage > 65.0:  # ลดจาก 80% เป็น 65%
+            # Portfolio เอียงไป BUY มาก → บังคับ SELL เพื่อแก้สมดุล
+            result['force_trade'] = True
+            result['forced_direction'] = "SELL"  # บังคับ SELL ไม่ว่า signal จะเป็นอะไร
+            result['reason'] = f'🚀 FORCE SELL: Too many BUY ({buy_percentage:.1f}%) - Must balance!'
+            logger.info(f"🚀 FORCE SELL: Portfolio เอียง BUY {buy_percentage:.1f}% → บังคับขายเพื่อแก้สมดุล")
+            return result
         
         elif total_positions > 50:
             # 🟡 High Volume Mode: ระมัดระวังแต่ไม่บล็อค
