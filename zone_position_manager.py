@@ -136,13 +136,13 @@ class ZonePositionManager:
             
             # 5. 🤝 Cross-Zone Support (Priority 4)
             if self.enable_cross_zone_support:
-                logger.info(f"🤝 Checking Cross-Zone Support...")
+                logger.debug(f"🤝 Checking Cross-Zone Support...")
                 cross_zone_result = self._check_cross_zone_support(zone_analyses, current_price)
                 if cross_zone_result['should_close']:
                     logger.info(f"✅ Cross-Zone Support found!")
                     return cross_zone_result
                 else:
-                    logger.info(f"❌ No Cross-Zone Support opportunities")
+                    logger.debug(f"❌ No Cross-Zone Support opportunities")
             
             # 6. 🚀 Emergency Zone Recovery (Priority 5)
             if self.enable_auto_recovery:
@@ -873,12 +873,12 @@ class ZonePositionManager:
         """ตรวจสอบการช่วยเหลือข้าม Zones"""
         try:
             # หา Support Opportunities
-            logger.info(f"🔍 Analyzing support opportunities...")
+            logger.debug(f"🔍 Analyzing support opportunities...")
             support_plans = self.zone_coordinator.analyze_support_opportunities(current_price)
             
-            logger.info(f"📊 Found {len(support_plans)} support plans")
+            logger.debug(f"📊 Found {len(support_plans)} support plans")
             if not support_plans:
-                logger.info(f"❌ No support plans available")
+                logger.debug(f"❌ No support plans available")
                 return {'should_close': False}
             
             # เลือกแผนที่ดีที่สุด
@@ -1570,12 +1570,12 @@ def _check_cross_zone_support_with_7d(self, position_scores: List[Any], current_
                         'confidence_score': best_plan.confidence_score
                     }
                 else:
-                    logger.info(f"❌ No profitable 7D Cross-Zone balance plans found")
+                    logger.debug(f"❌ No profitable 7D Cross-Zone balance plans found")
             else:
-                logger.info(f"❌ No balance recovery opportunities detected")
+                logger.debug(f"❌ No balance recovery opportunities detected")
                 
                 # Fallback: ถ้าไม่มี Cross-Zone ให้ใช้ 7D เลือก positions ดีที่สุดใน zone เดียว
-                logger.info(f"🔄 Fallback: Single-Zone 7D analysis...")
+                logger.debug(f"🔄 Fallback: Single-Zone 7D analysis...")
                 return self._single_zone_7d_analysis(position_scores)
         else:
             logger.warning(f"⚠️ zone_analyzer not available")
@@ -1636,7 +1636,7 @@ def _single_zone_7d_analysis(self, position_scores: List[Any]) -> Dict[str, Any]
                 'avg_7d_score': best_combination['avg_score']
             }
         else:
-            logger.info(f"❌ No profitable Single-Zone 7D combinations found")
+            logger.debug(f"❌ No profitable Single-Zone 7D combinations found")
             return {'should_close': False, 'reason': 'No profitable 7D combinations'}
         
     except Exception as e:
