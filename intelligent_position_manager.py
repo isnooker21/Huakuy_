@@ -755,7 +755,7 @@ class IntelligentPositionManager:
                         # แปลง spread เป็น USD สำหรับ XAUUSD
                         spread_usd_per_lot = current_spread * 0.01  # 1 point = $0.01 for 0.01 lot XAUUSD
                         current_spread_cost = spread_usd_per_lot * (total_volume / 0.01)
-                        logger.debug(f"📊 Current spread: {current_spread} points = ${current_spread_cost:.2f} for {total_volume:.2f} lots")
+                        # logger.debug(f"📊 Current spread: {current_spread} points = ${current_spread_cost:.2f} for {total_volume:.2f} lots")
                 except Exception as e:
                     logger.warning(f"⚠️ Cannot get current spread: {e}")
             
@@ -779,8 +779,8 @@ class IntelligentPositionManager:
             
             total_cost = spread_cost + total_commission + total_slippage + total_buffer
             
-            # ลบ log ที่เยอะเกินไป - เหลือแค่ total cost
-            logger.debug(f"💰 Closing Cost: ${total_cost:.2f} for {total_volume:.2f} lots")
+            # ลบ log ที่เยอะเกินไป - ปิด DEBUG logs
+            # logger.debug(f"💰 Closing Cost: ${total_cost:.2f} for {total_volume:.2f} lots")
             
             return total_cost
             
@@ -1083,8 +1083,8 @@ class IntelligentPositionManager:
                     # เลือกเฉพาะชุดที่ให้ผลรวมบวก และมีคะแนน 4D ดี
                     score_threshold = 60 if margin_health.risk_level == 'CRITICAL' else 70  # ลดเกณฑ์เมื่อ margin วิกฤต
                     
-                    # Debug: แสดงผลการคำนวณ
-                    logger.debug(f"🧮 Combination {profit_count}P+{loss_count}L: Net=${net_pnl:.2f}, Score={avg_4d_score:.1f}, Threshold={score_threshold}")
+                    # Debug: แสดงผลการคำนวณ (ปิด DEBUG logs)
+                    # logger.debug(f"🧮 Combination {profit_count}P+{loss_count}L: Net=${net_pnl:.2f}, Score={avg_4d_score:.1f}, Threshold={score_threshold}")
                     
                     if net_pnl > 0 and avg_4d_score >= score_threshold and net_pnl > best_net_profit:
                         best_net_profit = net_pnl
