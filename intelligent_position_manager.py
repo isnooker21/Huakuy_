@@ -269,11 +269,14 @@ class IntelligentPositionManager:
             
             # 🚫 ลบระบบเดิมออกทั้งหมด - ใช้เฉพาะ Intelligent Mass Closing
             
-            # 💰 INTELLIGENT MASS CLOSING: เป็นระบบเดียวที่ใช้ (ไม่มีระบบอื่น)
-            intelligent_mass_positions = self._find_intelligent_mass_closing(position_scores, margin_health)
-            if intelligent_mass_positions:
-                positions_to_close.extend(intelligent_mass_positions)
-                closing_reasons.append(f'Intelligent mass closing: {len(intelligent_mass_positions)} positions')
+            # 💰 INTELLIGENT POSITIVE SUM CLOSING: ใช้ 4-dimensional scoring หาชุดที่ผลรวมบวกเสมอ
+            intelligent_combination = self._find_intelligent_positive_combination(position_scores, margin_health)
+            if intelligent_combination:
+                positions_to_close.extend(intelligent_combination['positions'])
+                profit_count = intelligent_combination.get('profit_count', 0)
+                loss_count = intelligent_combination.get('loss_count', 0) 
+                net_pnl = intelligent_combination.get('net_pnl', 0)
+                closing_reasons.append(f'Intelligent positive combination: {profit_count}P+{loss_count}L = +${net_pnl:.2f}')
             
             # 🚫 ป้องกันไม่ให้ทิ้งไม้แย่ไว้
             if positions_to_close:
@@ -701,6 +704,101 @@ class IntelligentPositionManager:
             
         except Exception as e:
             logger.error(f"❌ Error finding best closing combination: {e}")
+            return None
+    
+    def _find_intelligent_positive_combination(self, position_scores: List[PositionScore], 
+                                             margin_health: MarginHealth) -> Optional[Dict]:
+        """🧠 หาชุดการปิดที่ดีที่สุดโดยใช้ 4-dimensional scoring และผลรวมบวกเสมอ"""
+        try:
+            # แยกตำแหน่งตามกำไร/ขาดทุน พร้อม 4D scores
+            profitable_positions = []
+            losing_positions = []
+            
+            for score in position_scores:
+                pos = score.position
+                profit = getattr(pos, 'profit', 0)
+                
+                position_data = {
+                    'position': pos,
+                    'profit': profit,
+                    'volume': getattr(pos, 'volume', 0.01),
+                    'profit_score': score.profit_score,
+                    'balance_score': score.balance_score,
+                    'margin_impact': score.margin_impact,
+                    'recovery_potential': score.recovery_potential,
+                    'total_score': score.total_score,
+                    'priority': score.priority
+                }
+                
+                if profit > 1.0:  # กำไร
+                    profitable_positions.append(position_data)
+                elif profit < -5.0:  # ขาดทุน
+                    losing_positions.append(position_data)
+            
+            if not profitable_positions:
+                logger.info("🚫 No profitable positions for intelligent combination")
+                return None
+            
+            # เรียงตาม 4D total_score
+            profitable_positions.sort(key=lambda x: x['total_score'], reverse=True)
+            losing_positions.sort(key=lambda x: x['total_score'], reverse=True)  # ขาดทุนที่มีโอกาสฟื้นตัวสูงสุดก่อน
+            
+            best_combination = None
+            best_net_profit = 0
+            
+            # ลองหาชุดการปิดที่ดีที่สุด (ยืดหยุ่นได้ 2-30 ไม้)
+            max_positions = min(30, len(profitable_positions) + len(losing_positions))
+            
+            for total_count in range(2, max_positions + 1):
+                for profit_count in range(1, min(total_count, len(profitable_positions) + 1)):
+                    loss_count = total_count - profit_count
+                    
+                    if loss_count > len(losing_positions):
+                        continue
+                    
+                    # เลือกตำแหน่งตาม 4D score
+                    selected_profits = profitable_positions[:profit_count]
+                    selected_losses = losing_positions[:loss_count]
+                    
+                    # คำนวณผลรวม
+                    total_profit = sum(pos['profit'] for pos in selected_profits)
+                    total_loss = sum(pos['profit'] for pos in selected_losses)  # profit เป็นลบอยู่แล้ว
+                    gross_pnl = total_profit + total_loss
+                    
+                    # คำนวณ cost การปิด
+                    all_positions_data = selected_profits + selected_losses
+                    all_positions = [pos['position'] for pos in all_positions_data]
+                    total_volume = sum(pos['volume'] for pos in all_positions_data)
+                    closing_cost = self._calculate_closing_cost(total_volume, all_positions)
+                    
+                    net_pnl = gross_pnl - closing_cost
+                    
+                    # คำนวณคะแนนรวม 4D
+                    total_4d_score = sum(pos['total_score'] for pos in all_positions_data)
+                    avg_4d_score = total_4d_score / len(all_positions_data)
+                    
+                    # เลือกเฉพาะชุดที่ให้ผลรวมบวก และมีคะแนน 4D ดี
+                    score_threshold = 60 if margin_health.risk_level == 'CRITICAL' else 70  # ลดเกณฑ์เมื่อ margin วิกฤต
+                    
+                    if net_pnl > 0 and avg_4d_score >= score_threshold and net_pnl > best_net_profit:
+                        best_net_profit = net_pnl
+                        best_combination = {
+                            'positions': all_positions,
+                            'net_pnl': net_pnl,
+                            'gross_pnl': gross_pnl,
+                            'closing_cost': closing_cost,
+                            'profit_count': profit_count,
+                            'loss_count': loss_count,
+                            'avg_4d_score': avg_4d_score,
+                            'total_4d_score': total_4d_score
+                        }
+                        
+                        logger.info(f"🧠 Better 4D combination: {profit_count}P+{loss_count}L, 4D:{avg_4d_score:.1f}, Net:+${net_pnl:.2f}")
+            
+            return best_combination
+            
+        except Exception as e:
+            logger.error(f"❌ Error finding intelligent positive combination: {e}")
             return None
     
     def _avoid_leaving_bad_positions(self, positions_to_close: List[Any], 

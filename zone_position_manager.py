@@ -346,26 +346,22 @@ class ZonePositionManager:
             
             # ปรับเงื่อนไขให้ยืดหยุ่นกว่า
             if profitable_buys and losing_sells and total_profit_potential > 10.0:  # ลดจาก 20 เป็น 10
-                # เลือก BUY ที่กำไรดีที่สุด และ SELL ที่ขาดทุนเยอะที่สุด (เพื่อตัดปัญหาที่ราก)
-                best_buy = max(profitable_buys, key=lambda x: x['profit'])
-                best_sell = min(losing_sells, key=lambda x: x['loss'])  # loss ที่เยอะที่สุด (ติดลบมากสุด)
+                # หาชุดการปิดที่ให้ผลรวมบวก โดยใช้ 4-dimensional scoring
+                best_combination = self._find_positive_sum_combination(profitable_buys, losing_sells, 'bullish')
                 
-                positions_to_close = [best_buy['position'], best_sell['position']]
-                expected_pnl = best_buy['profit'] + best_sell['loss']
-                
-                logger.info(f"🎯 Best pair: BUY +${best_buy['profit']:.2f} + SELL ${best_sell['loss']:.2f} = ${expected_pnl:.2f}")
-                
-                # ยอมรับ Net loss เล็กน้อยถ้าเป็นการลด exposure
-                if expected_pnl > -5.0:  # ยอมรับขาดทุนไม่เกิน $5 เพื่อลด exposure
-                    logger.info(f"📈 Bullish Trend Closing: BUY ${best_buy['profit']:.2f} + SELL ${best_sell['loss']:.2f}")
+                if best_combination:
+                    positions_to_close = best_combination['positions']
+                    expected_pnl = best_combination['total_pnl']
+                    
+                    logger.info(f"📈 Bullish Combination: {len(positions_to_close)} positions, Net: +${expected_pnl:.2f}")
                     
                     return {
                         'should_close': True,
-                        'reason': f'Bullish trend: Close profitable BUY + losing SELL (Net: ${expected_pnl:.2f})',
+                        'reason': f'Bullish trend: Positive sum combination (Net: +${expected_pnl:.2f})',
                         'positions_to_close': positions_to_close,
                         'positions_count': len(positions_to_close),
                         'expected_pnl': expected_pnl,
-                        'method': 'trend_aware_bullish',
+                        'method': 'trend_aware_bullish_positive',
                         'trend_strength': trend_analysis.strength,
                         'trend_confidence': trend_analysis.confidence
                     }
@@ -375,6 +371,85 @@ class ZonePositionManager:
         except Exception as e:
             logger.error(f"❌ Error analyzing bullish trend closing: {e}")
             return {'should_close': False}
+    
+    def _find_positive_sum_combination(self, profitable_positions: List[Dict], 
+                                     losing_positions: List[Dict], trend_type: str) -> Optional[Dict]:
+        """🎯 หาชุดการปิดที่ให้ผลรวมบวกเสมอ โดยใช้ 4-dimensional scoring"""
+        try:
+            from itertools import combinations
+            
+            best_combination = None
+            best_net_profit = 0
+            
+            # เรียงตามคะแนน 4 มิติ (ถ้ามี) หรือกำไร/ขาดทุน
+            profitable_positions.sort(key=lambda x: x.get('score', x['profit']), reverse=True)
+            losing_positions.sort(key=lambda x: x.get('score', -abs(x['loss'])))
+            
+            # ลองหาชุดการปิดที่ดีที่สุด (เริ่มจากน้อยไปมาก)
+            max_positions = min(30, len(profitable_positions) + len(losing_positions))  # สูงสุด 30 ไม้
+            
+            for total_count in range(2, max_positions + 1):  # เริ่มจาก 2 ไม้
+                # ลองสัดส่วนต่างๆ ระหว่างกำไรและขาดทุน
+                for profit_count in range(1, min(total_count, len(profitable_positions) + 1)):
+                    loss_count = total_count - profit_count
+                    
+                    if loss_count > len(losing_positions):
+                        continue
+                    
+                    # เลือกตำแหน่งกำไรดีสุด
+                    selected_profits = profitable_positions[:profit_count]
+                    # เลือกตำแหน่งขาดทุนที่คะแนนดีสุด (น่าจะฟื้นตัวได้)
+                    selected_losses = losing_positions[:loss_count]
+                    
+                    # คำนวณผลรวม
+                    total_profit = sum(pos['profit'] for pos in selected_profits)
+                    total_loss = sum(pos['loss'] for pos in selected_losses)
+                    gross_pnl = total_profit + total_loss
+                    
+                    # คำนวณ cost การปิด (spread + slippage + commission)
+                    all_positions = selected_profits + selected_losses
+                    total_volume = sum(pos.get('volume', 0.01) for pos in all_positions)
+                    closing_cost = self._estimate_closing_cost(total_volume)
+                    
+                    net_pnl = gross_pnl - closing_cost
+                    
+                    # เลือกเฉพาะชุดที่ให้ผลรวมบวก และดีกว่าเดิม
+                    if net_pnl > 0 and net_pnl > best_net_profit:
+                        best_net_profit = net_pnl
+                        best_combination = {
+                            'positions': [pos['position'] for pos in all_positions],
+                            'total_pnl': net_pnl,
+                            'gross_pnl': gross_pnl,
+                            'closing_cost': closing_cost,
+                            'profit_count': profit_count,
+                            'loss_count': loss_count,
+                            'trend_type': trend_type
+                        }
+                        
+                        logger.info(f"🎯 Better {trend_type} combination: {profit_count}P+{loss_count}L = +${net_pnl:.2f}")
+            
+            return best_combination
+            
+        except Exception as e:
+            logger.error(f"❌ Error finding positive sum combination: {e}")
+            return None
+    
+    def _estimate_closing_cost(self, total_volume: float) -> float:
+        """💰 ประมาณการ cost การปิดตำแหน่ง"""
+        try:
+            # ค่าประมาณสำหรับ XAUUSD
+            spread_cost_per_lot = 1.50  # $1.50 per 0.01 lot
+            slippage_cost_per_lot = 2.00  # $2.00 per 0.01 lot  
+            commission_per_lot = 0.50  # $0.50 per 0.01 lot
+            
+            volume_in_standard_lots = total_volume / 0.01
+            total_cost = (spread_cost_per_lot + slippage_cost_per_lot + commission_per_lot) * volume_in_standard_lots
+            
+            return total_cost
+            
+        except Exception as e:
+            logger.error(f"❌ Error estimating closing cost: {e}")
+            return total_volume * 4.0  # Fallback: $4 per 0.01 lot
     
     def _analyze_bearish_trend_closing(self, zones_with_positions: Dict, 
                                      trend_analysis: TrendAnalysis, current_price: float) -> Dict[str, Any]:
@@ -414,26 +489,22 @@ class ZonePositionManager:
             
             # ปรับเงื่อนไขให้ยืดหยุ่นกว่า
             if profitable_sells and losing_buys and total_profit_potential > 10.0:  # ลดจาก 20 เป็น 10
-                # เลือก SELL ที่กำไรดีที่สุด และ BUY ที่ขาดทุนเยอะที่สุด (เพื่อตัดปัญหาที่ราก)
-                best_sell = max(profitable_sells, key=lambda x: x['profit'])
-                best_buy = min(losing_buys, key=lambda x: x['loss'])  # loss ที่เยอะที่สุด (ติดลบมากสุด)
+                # หาชุดการปิดที่ให้ผลรวมบวก โดยใช้ 4-dimensional scoring
+                best_combination = self._find_positive_sum_combination(profitable_sells, losing_buys, 'bearish')
                 
-                positions_to_close = [best_sell['position'], best_buy['position']]
-                expected_pnl = best_sell['profit'] + best_buy['loss']
-                
-                logger.info(f"🎯 Best pair: SELL +${best_sell['profit']:.2f} + BUY ${best_buy['loss']:.2f} = ${expected_pnl:.2f}")
-                
-                # ยอมรับ Net loss เล็กน้อยถ้าเป็นการลด exposure
-                if expected_pnl > -5.0:  # ยอมรับขาดทุนไม่เกิน $5 เพื่อลด exposure
-                    logger.info(f"📉 Bearish Trend Closing: SELL ${best_sell['profit']:.2f} + BUY ${best_buy['loss']:.2f}")
+                if best_combination:
+                    positions_to_close = best_combination['positions']
+                    expected_pnl = best_combination['total_pnl']
+                    
+                    logger.info(f"📉 Bearish Combination: {len(positions_to_close)} positions, Net: +${expected_pnl:.2f}")
                     
                     return {
                         'should_close': True,
-                        'reason': f'Bearish trend: Close profitable SELL + losing BUY (Net: ${expected_pnl:.2f})',
+                        'reason': f'Bearish trend: Positive sum combination (Net: +${expected_pnl:.2f})',
                         'positions_to_close': positions_to_close,
                         'positions_count': len(positions_to_close),
                         'expected_pnl': expected_pnl,
-                        'method': 'trend_aware_bearish',
+                        'method': 'trend_aware_bearish_positive',
                         'trend_strength': trend_analysis.strength,
                         'trend_confidence': trend_analysis.confidence
                     }
@@ -537,29 +608,31 @@ class ZonePositionManager:
             
             logger.info(f"📊 Zone Analysis: {len(profitable_positions)} profitable, {len(losing_positions)} heavy losses")
             
-            # 🎯 ปิดกำไรแบบกลุ่ม (ไม่ปิดไม้เดี่ยว) - หา losing position จาก zones อื่นมาปิดด้วย
+            # 🎯 ปิดกำไรแบบกลุ่ม (ไม่ปิดไม้เดี่ยว) - หาชุดที่ให้ผลรวมบวกเสมอ
             if profitable_positions and losing_positions:
-                best_profit = max(profitable_positions, key=lambda x: x['profit'])
-                worst_loss = min(losing_positions, key=lambda x: x['loss'])  # ขาดทุนเยอะสุด
+                # หาชุดการปิดที่ให้ผลรวมบวก โดยใช้ 4-dimensional scoring
+                best_combination = self._find_positive_sum_combination(profitable_positions, losing_positions, 'zone_based')
                 
-                expected_pnl = best_profit['profit'] + worst_loss['loss']
-                
-                # ปิดเฉพาะเมื่อ net positive หรือขาดทุนไม่เกิน $1 - เพิ่มความยืดหยุ่น
-                if expected_pnl > -1.0:
-                    logger.info(f"✅ Zone Logic: Smart pairing - Profit {best_profit['type']} ${best_profit['profit']:.2f} + Loss {worst_loss['type']} ${worst_loss['loss']:.2f}")
+                if best_combination:
+                    positions_to_close = best_combination['positions']
+                    expected_pnl = best_combination['total_pnl']
+                    profit_count = best_combination['profit_count']
+                    loss_count = best_combination['loss_count']
+                    
+                    logger.info(f"✅ Zone Logic: Positive combination - {profit_count}P+{loss_count}L = +${expected_pnl:.2f}")
                     
                     return {
                         'should_close': True,
-                        'reason': f'Zone-Based: Smart pair {best_profit["type"]} ${best_profit["profit"]:.2f} + {worst_loss["type"]} ${worst_loss["loss"]:.2f} = ${expected_pnl:.2f}',
-                        'positions_to_close': [best_profit['position'], worst_loss['position']],
-                        'positions_count': 2,
+                        'reason': f'Zone-Based: Positive sum combination {profit_count}P+{loss_count}L = +${expected_pnl:.2f}',
+                        'positions_to_close': positions_to_close,
+                        'positions_count': len(positions_to_close),
                         'expected_pnl': expected_pnl,
-                        'method': 'zone_based_smart_pair',
-                        'profit_zone_id': best_profit['zone_id'],
-                        'loss_zone_id': worst_loss['zone_id']
+                        'method': 'zone_based_positive_combination',
+                        'profit_count': profit_count,
+                        'loss_count': loss_count
                     }
                 else:
-                    logger.info(f"⚠️ Zone Logic: Pair would lose too much (${expected_pnl:.2f}) - waiting for better opportunity")
+                    logger.info(f"⚠️ Zone Logic: No positive sum combinations found - waiting for better opportunity")
             
             # 🚫 DISABLED: ไม่ cut loss - ให้ระบบ recovery จัดการเอง
             # if losing_positions:
