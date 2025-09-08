@@ -1116,9 +1116,19 @@ class MT5Connection:
     
     def close_position_direct(self, ticket: int) -> Optional[Dict]:
         """
-        ปิด Position โดยตรงโดยไม่เช็ค spread (ใช้สำหรับกลุ่ม)
+        ปิด Position โดยตรง - ⚠️ DEPRECATED: ควรใช้ close_position แทน
         """
         try:
+            # 🚫 เพิ่มการเช็ค spread เพื่อป้องกันปิดติดลบ
+            profit_info = self.calculate_position_profit_with_spread(ticket)
+            if not profit_info or not profit_info.get('should_close', False):
+                logger.warning(f"🚫 Position {ticket} ไม่ผ่านการเช็ค spread - ไม่ปิด")
+                return {
+                    'retcode': 10027,  # TRADE_RETCODE_REJECT
+                    'error_description': 'ไม่ผ่านการเช็ค spread',
+                    'profit_info': profit_info
+                }
+            
             # ดึงข้อมูล Position
             position = mt5.positions_get(ticket=ticket)
             if not position:

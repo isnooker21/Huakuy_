@@ -1208,9 +1208,12 @@ class TradingGUI:
             messagebox.showerror("Error", f"เกิดข้อผิดพลาด: {str(e)}")
             
     def close_all_positions(self):
-        """ปิด Position ทั้งหมด"""
+        """ปิด Position ทั้งหมด - ⚠️ อันตราย: อาจปิดติดลบ"""
         try:
-            if messagebox.askyesno("Confirm", "คุณต้องการปิด Position ทั้งหมดหรือไม่?"):
+            if messagebox.askyesno("⚠️ อันตราย!", 
+                                 "การปิดทั้งหมดอาจทำให้ขาดทุน!\n"
+                                 "แนะนำให้ใช้ Smart Profit Taking แทน\n\n"
+                                 "ยืนยันที่จะปิดทั้งหมด?"):
                 result = self.portfolio_manager.order_manager.emergency_close_all("Manual close all")
                 if result.success:
                     logger.info(f"ปิด Position ทั้งหมดสำเร็จ - จำนวน: {len(result.closed_tickets)}")

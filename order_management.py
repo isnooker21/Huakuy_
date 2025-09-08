@@ -197,9 +197,9 @@ class OrderManager:
             total_profit = 0.0
             errors = []
             
-            # ปิด Position แบบกลุ่ม (ไม่เช็ค spread - ให้ Simple Position Manager จัดการ)
+            # 🚫 เปลี่ยนเป็นปิดแบบเช็ค spread เพื่อป้องกันปิดติดลบ
             tickets = [pos.ticket for pos in positions]
-            group_result = self.mt5.close_positions_group(tickets)
+            group_result = self.mt5.close_positions_group_with_spread_check(tickets)
             
             # ประมวลผลลัพธ์
             closed_tickets = group_result['closed_tickets']
