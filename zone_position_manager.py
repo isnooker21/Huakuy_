@@ -45,7 +45,7 @@ class ZonePositionManager:
         self.zone_coordinator = create_zone_coordinator(self.zone_manager, self.zone_analyzer)
         
         # 🎯 Price Action Analyzer for Trend-Aware Closing
-        self.price_action_analyzer = PriceActionAnalyzer()
+        self.price_action_analyzer = PriceActionAnalyzer(mt5_connection, self.symbol)
         
         # Configuration
         self.min_profit_threshold = 5.0   # กำไรขั้นต่ำที่ยอมรับ
