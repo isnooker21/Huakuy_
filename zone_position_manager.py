@@ -520,14 +520,14 @@ class ZonePositionManager:
                     pos_profit = getattr(pos, 'profit', 0.0)
                     pos_type = getattr(pos, 'type', 0)
                     
-                    if pos_profit > 8.0:  # กำไรดี
+                    if pos_profit > 3.0:  # กำไรดี - ลดเกณฑ์จาก $8 เป็น $3
                         profitable_positions.append({
                             'position': pos,
                             'profit': pos_profit,
                             'zone_id': zone_id,
                             'type': 'BUY' if pos_type == 0 else 'SELL'
                         })
-                    elif pos_profit < -20.0:  # ขาดทุนหนัก
+                    elif pos_profit < -10.0:  # ขาดทุนหนัก - ลดเกณฑ์จาก -$20 เป็น -$10
                         losing_positions.append({
                             'position': pos,
                             'loss': pos_profit,
@@ -544,8 +544,8 @@ class ZonePositionManager:
                 
                 expected_pnl = best_profit['profit'] + worst_loss['loss']
                 
-                # ปิดเฉพาะเมื่อ net positive หรือขาดทุนไม่เกิน $3
-                if expected_pnl > -3.0:
+                # ปิดเฉพาะเมื่อ net positive หรือขาดทุนไม่เกิน $1 - เพิ่มความยืดหยุ่น
+                if expected_pnl > -1.0:
                     logger.info(f"✅ Zone Logic: Smart pairing - Profit {best_profit['type']} ${best_profit['profit']:.2f} + Loss {worst_loss['type']} ${worst_loss['loss']:.2f}")
                     
                     return {
@@ -578,8 +578,22 @@ class ZonePositionManager:
             
             # 📊 Fallback: ถ้ามีแค่ profitable positions (ไม่มี losing positions)
             elif profitable_positions:
-                logger.info(f"💰 Zone Logic: Found {len(profitable_positions)} profitable positions but no losing positions to pair")
-                logger.info("⏸️ Waiting for losing positions to create smart pairs")
+                # ✅ เพิ่ม: ปิดตำแหน่งเดี่ยวสำหรับกำไรที่ดีมาก (>$10)
+                best_profit = max(profitable_positions, key=lambda x: x['profit'])
+                if best_profit['profit'] > 10.0:  # กำไรดีมาก
+                    logger.info(f"💰 Zone Logic: Excellent profit {best_profit['type']} ${best_profit['profit']:.2f} - closing single position")
+                    return {
+                        'should_close': True,
+                        'reason': f'Zone-Based: Excellent single profit {best_profit["type"]} ${best_profit["profit"]:.2f}',
+                        'positions_to_close': [best_profit['position']],
+                        'positions_count': 1,
+                        'expected_pnl': best_profit['profit'],
+                        'method': 'zone_based_single_profit',
+                        'zone_id': best_profit['zone_id']
+                    }
+                else:
+                    logger.info(f"💰 Zone Logic: Found {len(profitable_positions)} profitable positions but no losing positions to pair")
+                    logger.info("⏸️ Waiting for losing positions to create smart pairs")
             
             if losing_positions:
                 logger.info(f"📊 Zone Logic: Found {len(losing_positions)} losing positions - keeping for recovery")
