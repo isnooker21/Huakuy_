@@ -12,6 +12,7 @@ Features:
 """
 
 import logging
+import time
 from typing import Dict, List, Optional, Any, Tuple
 from dataclasses import dataclass
 from datetime import datetime
@@ -31,13 +32,16 @@ class MarginHealth:
 
 @dataclass
 class PositionScore:
-    """คะแนนประเมินตำแหน่ง"""
+    """คะแนนประเมินตำแหน่ง - 7 มิติ"""
     position: Any
     profit_score: float      # คะแนนกำไร (-100 to +100)
     balance_score: float     # คะแนนความสมดุล (0 to 100)
     margin_impact: float     # ผลกระทบต่อ margin (0 to 100)
     recovery_potential: float # ศักยภาพฟื้นตัว (0 to 100)
-    total_score: float       # คะแนนรวม
+    time_score: float        # คะแนนเวลาถือ (0 to 100)
+    correlation_score: float # คะแนนความสัมพันธ์ (0 to 100)
+    volatility_score: float  # คะแนนความผันผวน (0 to 100)
+    total_score: float       # คะแนนรวม 7 มิติ
     priority: str           # MUST_CLOSE, SHOULD_CLOSE, CAN_HOLD, MUST_HOLD
 
 class IntelligentPositionManager:
@@ -85,8 +89,12 @@ class IntelligentPositionManager:
             margin_health = self._analyze_margin_health(account_info)
             logger.info(f"💊 Margin Health: {margin_health.risk_level} - {margin_health.recommendation}")
             
-            # 2. 🎯 ให้คะแนนทุกตำแหน่ง
+            # 2. 🎯 ให้คะแนนทุกตำแหน่ง (7 มิติ)
             position_scores = self._score_all_positions(positions, account_info, margin_health)
+            
+            # 📊 แสดงการวิเคราะห์ 7 มิติ (ทุก 10 รอบ)
+            if len(positions) > 0 and (len(positions) % 10 == 0):
+                self._log_7d_analysis(position_scores, top_n=3)
             
             # 3. 🧠 วิเคราะห์ Portfolio Balance
             balance_analysis = self._analyze_portfolio_balance(positions, account_info)
@@ -175,16 +183,68 @@ class IntelligentPositionManager:
                 else:
                     recovery_potential = 10  # ขาดทุนหนัก ศักยภาพต่ำ
                 
-                # 🧮 คะแนนรวม (ถ่วงน้ำหนักตาม margin health)
-                if margin_health.risk_level == 'CRITICAL':
-                    # วิกฤต: เน้น margin impact และ profit
-                    total_score = (profit_score * 0.4) + (margin_impact * 0.4) + (balance_score * 0.1) + (recovery_potential * 0.1)
-                elif margin_health.risk_level == 'HIGH':
-                    # เสี่ยงสูง: เน้น profit และ balance
-                    total_score = (profit_score * 0.4) + (balance_score * 0.3) + (margin_impact * 0.2) + (recovery_potential * 0.1)
+                # ⏰ คะแนนเวลาถือ (0 to 100)
+                pos_time = getattr(pos, 'time', 0)
+                current_time = int(time.time())
+                hold_hours = (current_time - pos_time) / 3600 if pos_time > 0 else 0
+                
+                if hold_hours < 1:
+                    time_score = 90  # ใหม่มาก คะแนนสูง
+                elif hold_hours < 6:
+                    time_score = 80  # ใหม่ คะแนนดี
+                elif hold_hours < 24:
+                    time_score = 60  # วันเดียว คะแนนปานกลาง
+                elif hold_hours < 72:
+                    time_score = 40  # 3 วัน คะแนนต่ำ
                 else:
-                    # ปกติ: เน้น balance และ recovery
-                    total_score = (profit_score * 0.3) + (balance_score * 0.3) + (recovery_potential * 0.3) + (margin_impact * 0.1)
+                    time_score = 20  # เก่ามาก คะแนนต่ำมาก
+                
+                # 🔗 คะแนนความสัมพันธ์ (0 to 100) - ตำแหน่งที่ช่วยกันได้
+                correlation_score = 50  # ค่าเริ่มต้น
+                if pos_type == 0:  # BUY
+                    if sell_count > buy_count:
+                        correlation_score = 80  # BUY ช่วย balance ได้
+                    elif sell_count == 0:
+                        correlation_score = 30  # BUY เดี่ยวๆ
+                else:  # SELL
+                    if buy_count > sell_count:
+                        correlation_score = 80  # SELL ช่วย balance ได้
+                    elif buy_count == 0:
+                        correlation_score = 30  # SELL เดี่ยวๆ
+                
+                # 📊 คะแนนความผันผวน (0 to 100) - ตำแหน่งที่มีความเสี่ยงต่ำ
+                volatility_score = 70  # ค่าเริ่มต้น
+                if abs(profit) < 2:
+                    volatility_score = 90  # ความผันผวนต่ำ
+                elif abs(profit) < 10:
+                    volatility_score = 70  # ความผันผวนปานกลาง
+                elif abs(profit) < 30:
+                    volatility_score = 50  # ความผันผวนสูง
+                else:
+                    volatility_score = 30  # ความผันผวนสูงมาก
+                
+                # 🧮 คะแนนรวม 7 มิติ (ถ่วงน้ำหนักตาม margin health)
+                if margin_health.risk_level == 'CRITICAL':
+                    # วิกฤต: เน้น margin impact, profit, time
+                    total_score = (
+                        (profit_score * 0.30) + (margin_impact * 0.25) + (time_score * 0.20) +
+                        (volatility_score * 0.10) + (balance_score * 0.08) + 
+                        (recovery_potential * 0.05) + (correlation_score * 0.02)
+                    )
+                elif margin_health.risk_level == 'HIGH':
+                    # เสี่ยงสูง: เน้น profit, balance, volatility
+                    total_score = (
+                        (profit_score * 0.25) + (balance_score * 0.20) + (volatility_score * 0.18) +
+                        (margin_impact * 0.15) + (time_score * 0.12) + 
+                        (recovery_potential * 0.07) + (correlation_score * 0.03)
+                    )
+                else:
+                    # ปกติ: เน้น balance, recovery, correlation
+                    total_score = (
+                        (balance_score * 0.22) + (recovery_potential * 0.20) + (correlation_score * 0.18) +
+                        (profit_score * 0.15) + (volatility_score * 0.12) + 
+                        (time_score * 0.08) + (margin_impact * 0.05)
+                    )
                 
                 # 🎯 กำหนด Priority
                 if total_score > 70:
@@ -202,6 +262,9 @@ class IntelligentPositionManager:
                     balance_score=balance_score,
                     margin_impact=margin_impact,
                     recovery_potential=recovery_potential,
+                    time_score=time_score,
+                    correlation_score=correlation_score,
+                    volatility_score=volatility_score,
                     total_score=total_score,
                     priority=priority
                 ))
@@ -726,6 +789,9 @@ class IntelligentPositionManager:
                     'balance_score': score.balance_score,
                     'margin_impact': score.margin_impact,
                     'recovery_potential': score.recovery_potential,
+                    'time_score': score.time_score,
+                    'correlation_score': score.correlation_score,
+                    'volatility_score': score.volatility_score,
                     'total_score': score.total_score,
                     'priority': score.priority
                 }
@@ -793,13 +859,36 @@ class IntelligentPositionManager:
                             'total_4d_score': total_4d_score
                         }
                         
-                        logger.info(f"🧠 Better 4D combination: {profit_count}P+{loss_count}L, 4D:{avg_4d_score:.1f}, Net:+${net_pnl:.2f}")
+                        logger.info(f"🧠 Better 7D combination: {profit_count}P+{loss_count}L, 7D:{avg_4d_score:.1f}, Net:+${net_pnl:.2f}")
             
             return best_combination
             
         except Exception as e:
             logger.error(f"❌ Error finding intelligent positive combination: {e}")
             return None
+    
+    def _log_7d_analysis(self, position_scores: List[PositionScore], top_n: int = 5):
+        """📊 แสดงการวิเคราะห์ 7 มิติของตำแหน่งดีสุด"""
+        try:
+            logger.info("📊 7-Dimensional Position Analysis (Top 5):")
+            logger.info("=" * 80)
+            
+            for i, score in enumerate(position_scores[:top_n]):
+                pos = score.position
+                ticket = getattr(pos, 'ticket', 'N/A')
+                pos_type = 'BUY' if getattr(pos, 'type', 0) == 0 else 'SELL'
+                profit = getattr(pos, 'profit', 0)
+                volume = getattr(pos, 'volume', 0.01)
+                
+                logger.info(f"#{i+1} {pos_type} {ticket} | Vol:{volume:.2f} | P&L:${profit:+.2f} | Total:{score.total_score:.1f}")
+                logger.info(f"    💰 Profit:{score.profit_score:.1f} | ⚖️ Balance:{score.balance_score:.1f} | 💊 Margin:{score.margin_impact:.1f}")
+                logger.info(f"    🔄 Recovery:{score.recovery_potential:.1f} | ⏰ Time:{score.time_score:.1f}")
+                logger.info(f"    🔗 Correlation:{score.correlation_score:.1f} | 📊 Volatility:{score.volatility_score:.1f}")
+                logger.info(f"    🎯 Priority: {score.priority}")
+                logger.info("-" * 60)
+                
+        except Exception as e:
+            logger.error(f"❌ Error logging 7D analysis: {e}")
     
     def _avoid_leaving_bad_positions(self, positions_to_close: List[Any], 
                                    position_scores: List[PositionScore]) -> List[Any]:
