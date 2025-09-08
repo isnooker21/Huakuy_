@@ -228,15 +228,15 @@ class TradingConditions:
             can_enter_analysis = True
             entry_reason = f"แรงตลาดเพียงพอ ({strength_analysis['total_strength']:.2f}% >= {session_params['entry_threshold']}%)"
         else:
-            # ยืดหยุ่นสุดท้าย - ให้เทรดได้แต่ลด lot
+            # 🚀 UNLIMITED ENTRY: ผ่อนปรนเงื่อนไขให้เทรดได้ต่อ
+            can_enter_analysis = True
             if session_params['current_session'] in ['OVERLAP_LONDON_NY', 'LONDON'] and strength_analysis['total_strength'] >= 10.0:
-                can_enter_analysis = True
                 entry_reason = f"Session สูง + แรงตลาดพอใช้ ({strength_analysis['total_strength']:.2f}%)"
                 strength_analysis['total_strength'] = 15.0  # ให้คะแนนขั้นต่ำ
             else:
-                result['reasons'].append(f"แรงตลาดไม่เพียงพอ ({strength_analysis['total_strength']:.2f}%) และไม่ผ่านเงื่อนไขอื่น")
-                logger.info(f"❌ เงื่อนไข 2: {result['reasons'][-1]}")
-                return result
+                entry_reason = f"🚀 UNLIMITED ENTRY: ยอมรับแรงตลาดต่ำ ({strength_analysis['total_strength']:.2f}%) เพื่อเทรดต่อเนื่อง"
+                strength_analysis['total_strength'] = 10.0  # ให้คะแนนขั้นต่ำ
+                logger.info(f"🚀 เงื่อนไข 2: {entry_reason}")
         
         logger.info(f"✅ เงื่อนไข 2: {entry_reason}")
             
