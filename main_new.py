@@ -547,8 +547,17 @@ class TradingSystem:
                                 sell_total = sell_profitable + sell_losing
                                 balance_score = abs(buy_total - sell_total) * -5  # ยิ่งสมดุลยิ่งดี
                                 
-                                # Bonus สำหรับการปิด losing positions
-                                losing_bonus = (buy_losing + sell_losing) * 2  # ยิ่งปิด losing เยอะยิ่งดี
+                                # 🎯 HEAVY LOSS BONUS - เหมือนระบบอื่น
+                                heavy_loss_bonus = 0
+                                # นับ losing positions ที่ขาดทุนหนัก
+                                losing_positions_selected = losing_buys[-buy_losing:] + losing_sells[-sell_losing:]
+                                for pos in losing_positions_selected:
+                                    if pos.profit < -10:  # ขาดทุน > $10
+                                        heavy_loss_bonus += abs(pos.profit) * 2  # Bonus = 2x ขาดทุน
+                                    elif pos.profit < -5:  # ขาดทุน > $5
+                                        heavy_loss_bonus += abs(pos.profit) * 1  # Bonus = 1x ขาดทุน
+                                
+                                losing_bonus = (buy_losing + sell_losing) * 1 + heavy_loss_bonus  # รวม bonus
                                 total_score = total_pnl + balance_score + losing_bonus
                                 
                                 best_combinations.append({
@@ -556,6 +565,7 @@ class TradingSystem:
                                     'total_pnl': total_pnl,
                                     'balance_score': balance_score,
                                     'losing_bonus': losing_bonus,
+                                    'heavy_loss_bonus': heavy_loss_bonus,
                                     'total_score': total_score,
                                     'profitable_count': profitable_count,
                                     'losing_count': losing_count,
@@ -570,7 +580,7 @@ class TradingSystem:
                 
                 logger.info(f"🎯 Found SMART aggressive combination: {best['profitable_count']}P+{best['losing_count']}L "
                            f"({best['buy_count']}B+{best['sell_count']}S) = ${best['total_pnl']:.2f} "
-                           f"(Losing Bonus: +{best['losing_bonus']:.1f})")
+                           f"(Heavy Loss Bonus: +{best['heavy_loss_bonus']:.1f}, Total Bonus: +{best['losing_bonus']:.1f})")
                 
                 return {
                     'should_close': True,
