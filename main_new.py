@@ -49,8 +49,8 @@ logging.getLogger('zone_rebalancer').setLevel(logging.WARNING)
 logging.getLogger('market_analysis').setLevel(logging.WARNING)
 
 # 🚀 PERFORMANCE-OPTIMIZED LOGGING
-logging.getLogger('zone_position_manager').setLevel(logging.WARNING)  # ปิด DEBUG logs
-logging.getLogger('zone_manager').setLevel(logging.WARNING)  # ปิด INFO logs
+logging.getLogger('zone_position_manager').setLevel(logging.INFO)  # เปิด Zone Analysis logs
+logging.getLogger('zone_manager').setLevel(logging.INFO)  # เปิด Zone Health calculation logs
 logging.getLogger('zone_analyzer').setLevel(logging.WARNING)  # ปิด INFO logs
 logging.getLogger('zone_coordinator').setLevel(logging.WARNING)  # ปิด INFO logs
 logging.getLogger('intelligent_position_manager').setLevel(logging.WARNING)  # ปิด DEBUG logs ที่เยอะมาก
