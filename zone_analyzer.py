@@ -915,7 +915,7 @@ class ZoneAnalyzer:
             for buy_analysis in buy_heavy_zones:
                 for sell_analysis in sell_heavy_zones:
                     plan = self._create_7d_enhanced_balance_plan(buy_analysis, sell_analysis, position_score_map)
-                    if plan.confidence_score > 0.3:  # Lower threshold เพราะใช้ 7D
+                    if plan.confidence_score > 0.1:  # Very low threshold for testing
                         balance_plans.append(plan)
             
             # เรียงตาม 7D Score, Expected Profit, และ Health Improvement
