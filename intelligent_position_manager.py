@@ -418,12 +418,18 @@ class IntelligentPositionManager:
                     loss_val = getattr(loss_score.position, 'profit', 0)
                     expected_pnl = profit_val + loss_val
                     
-                    # จับคู่ถ้าผลรวมไม่ขาดทุนเกิน $2
-                    if expected_pnl > -2.0:
+                    # จับคู่เฉพาะเมื่อกำไรสุทธิ หรือขาดทุนไม่เกิน $1
+                    if expected_pnl > 0.0:  # เข้มงวดขึ้น: ต้องกำไรสุทธิ
                         positions_to_close.extend([profit_score.position, loss_score.position])
                         used_profitable.append(profit_score)
                         used_losing.append(loss_score)
-                        logger.info(f"🎯 Smart Pair: Profit ${profit_val:.2f} + Loss ${loss_val:.2f} = ${expected_pnl:.2f}")
+                        logger.info(f"🎯 Smart Pair (Profit): ${profit_val:.2f} + ${loss_val:.2f} = +${expected_pnl:.2f}")
+                        break
+                    elif expected_pnl > -1.0 and profit_val > 8.0:  # ยกเว้น: กำไรดีมาก
+                        positions_to_close.extend([profit_score.position, loss_score.position])
+                        used_profitable.append(profit_score)
+                        used_losing.append(loss_score)
+                        logger.info(f"🎯 Smart Pair (Excellent): ${profit_val:.2f} + ${loss_val:.2f} = ${expected_pnl:.2f}")
                         break
             
             return positions_to_close
@@ -434,20 +440,20 @@ class IntelligentPositionManager:
     
     def _find_mass_profit_opportunities(self, position_scores: List[PositionScore], 
                                        margin_health: MarginHealth) -> List[Any]:
-        """💰 หาโอกาสปิดกำไรแบบกลุ่มไม่จำกัดจำนวน"""
+        """💰 หาโอกาสปิดกำไรแบบกลุ่ม - เพิ่ม Zone Balance Protection"""
         try:
             # เงื่อนไขการปิดกำไรแบบกลุ่ม
             if margin_health.risk_level in ['CRITICAL', 'HIGH']:
-                # ถ้า Margin เสี่ยง ปิดแค่กำไรดีมาก
-                min_profit = 8.0
+                min_profit = 10.0  # เพิ่มเกณฑ์ให้สูงขึ้น
+                min_total_profit = 25.0  # กำไรรวมขั้นต่ำ
                 reason = "High margin risk - only excellent profits"
             elif margin_health.risk_level == 'MEDIUM':
-                # ถ้า Margin ปานกลาง ปิดกำไรดี
-                min_profit = 5.0
+                min_profit = 8.0  # เพิ่มเกณฑ์
+                min_total_profit = 20.0
                 reason = "Medium margin risk - good profits"
             else:
-                # ถ้า Margin ปลอดภัย ปิดกำไรปานกลาง
-                min_profit = 3.0
+                min_profit = 6.0  # เพิ่มเกณฑ์
+                min_total_profit = 15.0
                 reason = "Safe margin - moderate profits"
             
             # หาตำแหน่งกำไรที่เข้าเกณฑ์
@@ -456,17 +462,91 @@ class IntelligentPositionManager:
                 if getattr(score.position, 'profit', 0) > min_profit
             ]
             
-            if profitable_positions:
-                total_profit = sum(getattr(pos, 'profit', 0) for pos in profitable_positions)
-                logger.info(f"💰 Mass Profit Opportunity: {len(profitable_positions)} positions, ${total_profit:.2f} total")
-                logger.info(f"   Reason: {reason}")
-                return profitable_positions
+            if not profitable_positions:
+                return []
+            
+            # 🎯 Zone Balance Protection: ตรวจสอบผลกระทบต่อ Zone
+            safe_positions = self._filter_zone_safe_positions(profitable_positions)
+            
+            if safe_positions:
+                total_profit = sum(getattr(pos, 'profit', 0) for pos in safe_positions)
+                
+                # ตรวจสอบกำไรรวมขั้นต่ำ
+                if total_profit >= min_total_profit:
+                    logger.info(f"💰 Zone-Safe Mass Profit: {len(safe_positions)} positions, ${total_profit:.2f} total")
+                    logger.info(f"   Reason: {reason} + Zone Balance Protected")
+                    return safe_positions
+                else:
+                    logger.info(f"⚠️ Mass Profit blocked: Total ${total_profit:.2f} < Required ${min_total_profit:.2f}")
+            else:
+                logger.info(f"🚫 Mass Profit blocked: Would damage Zone Balance")
             
             return []
             
         except Exception as e:
             logger.error(f"❌ Error finding mass profit opportunities: {e}")
             return []
+    
+    def _filter_zone_safe_positions(self, positions: List[Any]) -> List[Any]:
+        """🎯 กรองตำแหน่งที่ปิดได้โดยไม่ทำลาย Zone Balance"""
+        try:
+            # จัดกลุ่มตำแหน่งตาม Zone (ประมาณจากราคา)
+            zone_groups = {}
+            
+            for pos in positions:
+                price_open = getattr(pos, 'price_open', 0)
+                # คำนวณ Zone โดยประมาณ (30 pips = 3.0 points)
+                zone_id = int(price_open // 3.0)
+                
+                if zone_id not in zone_groups:
+                    zone_groups[zone_id] = {'BUY': [], 'SELL': []}
+                
+                pos_type = getattr(pos, 'type', 0)
+                if pos_type == 0:  # BUY
+                    zone_groups[zone_id]['BUY'].append(pos)
+                else:  # SELL
+                    zone_groups[zone_id]['SELL'].append(pos)
+            
+            safe_positions = []
+            
+            # ตรวจสอบแต่ละ Zone
+            for zone_id, zone_positions in zone_groups.items():
+                buy_count = len(zone_positions['BUY'])
+                sell_count = len(zone_positions['SELL'])
+                total_in_zone = buy_count + sell_count
+                
+                logger.info(f"🔍 Zone {zone_id}: {buy_count} BUY, {sell_count} SELL")
+                
+                # ถ้า Zone มีตำแหน่งเดียว → ปิดได้ (ไม่กระทบสมดุล)
+                if total_in_zone == 1:
+                    safe_positions.extend(zone_positions['BUY'] + zone_positions['SELL'])
+                    logger.info(f"✅ Zone {zone_id}: Single position - safe to close")
+                
+                # ถ้า Zone สมดุลดี (ต่างกันไม่เกิน 1 ตัว) → ปิดได้ทั้งหมด
+                elif abs(buy_count - sell_count) <= 1:
+                    safe_positions.extend(zone_positions['BUY'] + zone_positions['SELL'])
+                    logger.info(f"✅ Zone {zone_id}: Balanced - safe to close all")
+                
+                # ถ้า Zone ไม่สมดุล → ปิดแค่ส่วนเกิน
+                else:
+                    if buy_count > sell_count:
+                        # BUY เกิน → ปิด BUY ส่วนเกิน + SELL ทั้งหมด
+                        excess_buys = buy_count - sell_count - 1  # เหลือ BUY เกิน SELL แค่ 1 ตัว
+                        safe_positions.extend(zone_positions['BUY'][:excess_buys])
+                        safe_positions.extend(zone_positions['SELL'])
+                        logger.info(f"⚖️ Zone {zone_id}: BUY-heavy - closing {excess_buys} excess BUYs + all SELLs")
+                    else:
+                        # SELL เกิน → ปิด SELL ส่วนเกิน + BUY ทั้งหมด
+                        excess_sells = sell_count - buy_count - 1
+                        safe_positions.extend(zone_positions['SELL'][:excess_sells])
+                        safe_positions.extend(zone_positions['BUY'])
+                        logger.info(f"⚖️ Zone {zone_id}: SELL-heavy - closing {excess_sells} excess SELLs + all BUYs")
+            
+            return safe_positions
+            
+        except Exception as e:
+            logger.error(f"❌ Error filtering zone-safe positions: {e}")
+            return positions  # Fallback: คืนค่าเดิม
     
     def _avoid_leaving_bad_positions(self, positions_to_close: List[Any], 
                                    position_scores: List[PositionScore]) -> List[Any]:
