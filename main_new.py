@@ -595,6 +595,58 @@ class TradingSystem:
         except Exception as e:
             logger.error(f"❌ Error in aggressive balance recovery: {e}")
             return {'should_close': False}
+    
+    def _unified_closing_decision(self, positions: List[Any], current_price: float, 
+                                 position_scores: List[Any], margin_health: Any, account_info: Dict) -> Dict[str, Any]:
+        """
+        🤝 Unified Closing Decision System
+        รวมทุกระบบปิดไม้เป็นระบบเดียวที่ประสานงานกัน
+        """
+        try:
+            logger.info(f"🤝 UNIFIED ANALYSIS: {len(positions)} positions, Margin: {margin_health.risk_level if margin_health else 'UNKNOWN'}")
+            
+            # 🚀 Priority 1: Aggressive Recovery (30+ positions)
+            if len(positions) > 30:
+                logger.info(f"🚀 AGGRESSIVE MODE: {len(positions)} positions → เร่งหาคู่ปิด")
+                aggressive_result = self._aggressive_balance_recovery(positions, current_price)
+                if aggressive_result.get('should_close', False):
+                    aggressive_result['method'] = 'aggressive_recovery'
+                    logger.info(f"✅ AGGRESSIVE DECISION: {len(aggressive_result.get('positions_to_close', []))} positions selected")
+                    return aggressive_result
+            
+            # 🧠 Priority 2: Intelligent Manager Decision
+            if hasattr(self, 'intelligent_manager') and self.intelligent_manager and position_scores:
+                logger.info(f"🧠 INTELLIGENT MODE: Using 7D scores for {len(position_scores)} positions")
+                intelligent_decision = self.intelligent_manager.analyze_closing_decision(positions, account_info)
+                if intelligent_decision.get('should_close', False):
+                    intelligent_decision['method'] = 'intelligent_7d'
+                    logger.info(f"✅ INTELLIGENT DECISION: {intelligent_decision.get('positions_count', 0)} positions selected")
+                    return intelligent_decision
+            
+            # 🎯 Priority 3: Zone-Based with 7D Integration
+            if self.zone_position_manager:
+                logger.info(f"🎯 ZONE MODE: Using {'7D-enhanced' if position_scores else 'standard'} zone analysis")
+                if position_scores:
+                    close_decision = self.zone_position_manager.should_close_positions_with_7d(
+                        positions, current_price, position_scores
+                    )
+                else:
+                    close_decision = self.zone_position_manager.should_close_positions(
+                        positions, current_price
+                    )
+                
+                if close_decision.get('should_close', False):
+                    close_decision['method'] = f"zone_{'7d' if position_scores else 'standard'}"
+                    logger.info(f"✅ ZONE DECISION: {len(close_decision.get('positions_to_close', []))} positions selected")
+                    return close_decision
+            
+            # 📊 No closing decision made
+            logger.info(f"⏸️ NO CLOSING: No system found suitable positions to close")
+            return {'should_close': False, 'reason': 'No suitable closing opportunities found', 'method': 'none'}
+            
+        except Exception as e:
+            logger.error(f"❌ Error in unified closing decision: {e}")
+            return {'should_close': False, 'reason': f'Unified system error: {str(e)}', 'method': 'error'}
             
     def check_exit_conditions(self, portfolio_state):
         """ตรวจสอบเงื่อนไขการปิด Position"""
@@ -623,88 +675,46 @@ class TradingSystem:
                 
                 # 2. 🗑️ Smart Recovery REMOVED - functionality moved to Smart Profit Taking System
                 
-                # 🚀 AGGRESSIVE BALANCE RECOVERY (เมื่อ positions > 30)
-                if len(positions) > 30:
-                    logger.info(f"🚀 AGGRESSIVE BALANCE RECOVERY: {len(positions)} positions → เร่งหาคู่ปิด")
-                    aggressive_result = self._aggressive_balance_recovery(positions, current_price)
-                    if aggressive_result.get('should_close', False):
-                        positions_to_close = aggressive_result.get('positions_to_close', [])
+                # 🤝 UNIFIED CLOSING SYSTEM - ระบบปิดไม้แบบประสานงาน
+                logger.info(f"🤝 UNIFIED CLOSING: Analyzing {len(positions)} positions...")
+                
+                # 1. 🧠 Get 7D Analysis (คำนวณครั้งเดียว)
+                account_info = self.mt5_connection.get_account_info()
+                margin_health = None
+                position_scores = None
+                
+                if hasattr(self, 'intelligent_manager') and self.intelligent_manager:
+                    margin_health = self.intelligent_manager._analyze_margin_health(account_info)
+                    position_scores = self.intelligent_manager._score_all_positions(positions, account_info, margin_health)
+                    logger.info(f"🧠 7D Analysis Complete: {len(position_scores)} positions scored")
+                    logger.info(f"💊 Margin Health: {margin_health.risk_level} - {margin_health.recommendation}")
+                
+                # 2. 🎯 Unified Decision Making
+                closing_result = self._unified_closing_decision(positions, current_price, position_scores, margin_health, account_info)
+                
+                if closing_result.get('should_close', False):
+                    positions_to_close = closing_result.get('positions_to_close', [])
+                    if positions_to_close:
+                        # 📊 Log unified decision
+                        method = closing_result.get('method', 'unified')
+                        count = len(positions_to_close)
+                        expected_pnl = closing_result.get('expected_pnl', 0.0)
+                        reason = closing_result.get('reason', '')
+                        
+                        logger.info(f"🤝 UNIFIED DECISION ({method.upper()}): {count} positions")
+                        logger.info(f"💰 Expected P&L: ${expected_pnl:.2f} - {reason}")
+                        
+                        # 3. 🎯 Execute closing
                         close_result = self.zone_position_manager.close_positions(positions_to_close)
                         if close_result.get('success', False):
-                            logger.info(f"✅ AGGRESSIVE SUCCESS: {close_result.get('closed_count', 0)} positions closed")
+                            closed_count = close_result.get('closed_count', 0)
+                            total_profit = close_result.get('total_profit', 0.0)
+                            logger.info(f"✅ UNIFIED SUCCESS: {closed_count} positions closed, ${total_profit:.2f} profit")
+                        else:
+                            logger.warning(f"❌ UNIFIED FAILED: {close_result.get('message', 'Unknown error')}")
                         return
                 
-                # 🧠 INTELLIGENT POSITION MANAGEMENT (ลำดับความสำคัญสูงสุด) + 🤝 Cross-Zone Integration
-                if hasattr(self, 'intelligent_manager') and self.intelligent_manager:
-                    account_info = self.mt5_connection.get_account_info()
-                    intelligent_decision = self.intelligent_manager.analyze_closing_decision(
-                        positions, account_info
-                    )
-                    
-                    if intelligent_decision.get('should_close', False):
-                        positions_to_close = intelligent_decision.get('positions_to_close', [])
-                        if positions_to_close:
-                            count = intelligent_decision.get('positions_count', 0)
-                            expected_pnl = intelligent_decision.get('expected_pnl', 0.0)
-                            reasons = intelligent_decision.get('reasons', [])
-                            margin_health = intelligent_decision.get('margin_health', 'UNKNOWN')
-                            reduction_pct = intelligent_decision.get('reduction_percentage', 0)
-                            
-                            logger.info(f"🧠 INTELLIGENT CLOSING: {count} positions ({reduction_pct:.1f}% reduction)")
-                            logger.info(f"💊 Margin Health: {margin_health} | Expected P&L: ${expected_pnl:.2f}")
-                            for reason in reasons:
-                                logger.info(f"   📋 {reason}")
-                            
-                            # ใช้ zone_position_manager เป็น executor
-                            close_result = self.zone_position_manager.close_positions(positions_to_close)
-                            if close_result.get('success', False):
-                                closed_count = close_result.get('closed_count', 0)
-                                total_profit = close_result.get('total_profit', 0.0)
-                                logger.info(f"✅ INTELLIGENT SUCCESS: {closed_count} positions closed, ${total_profit:.2f} profit")
-                            else:
-                                logger.warning(f"❌ INTELLIGENT FAILED: {close_result.get('message', 'Unknown error')}")
-                        # Skip zone-based if intelligent made decision
-                        return
-                
-                # 🎯 Zone-Based Position Management with 7D Integration (Fallback)
-                if self.zone_position_manager:
-                    # 🧠 ส่ง 7D scores ไปให้ Zone system ใช้งาน
-                    if hasattr(self, 'intelligent_manager') and self.intelligent_manager:
-                        logger.info(f"🔗 Integrating 7D scores with Cross-Zone system...")
-                        # Get 7D scores from intelligent manager
-                        account_info = self.mt5_connection.get_account_info()
-                        position_scores = self.intelligent_manager._score_all_positions(positions, account_info, 
-                                                                                      self.intelligent_manager._analyze_margin_health(account_info))
-                        # Pass to zone manager
-                        close_decision = self.zone_position_manager.should_close_positions_with_7d(
-                            positions, current_price, position_scores
-                        )
-                    else:
-                        close_decision = self.zone_position_manager.should_close_positions(
-                            positions, current_price
-                        )
-                    
-                    if close_decision.get('should_close', False):
-                        positions_to_close = close_decision.get('positions_to_close', [])
-                        if positions_to_close:
-                            # 🎯 ZONE-BASED POSITION CLOSING
-                            count = close_decision.get('positions_count', 0)
-                            expected_pnl = close_decision.get('expected_pnl', 0.0)
-                            reason = close_decision.get('reason', '')
-                            method = close_decision.get('method', 'zone_based')
-                            zone_info = close_decision.get('zone_id', 'multiple')
-                            
-                            logger.info(f"🎯 ZONE CLOSING ({method.upper()}): {count} positions, ${expected_pnl:.2f} expected")
-                            logger.info(f"📊 Zone: {zone_info} - {reason}")
-                            
-                            close_result = self.zone_position_manager.close_positions(positions_to_close)
-                            if close_result.get('success', False):
-                                closed_count = close_result.get('closed_count', 0)
-                                total_profit = close_result.get('total_profit', 0.0)
-                                logger.info(f"✅ CLOSE SUCCESS: {closed_count} positions closed, ${total_profit:.2f} profit")
-                            else:
-                                logger.warning(f"❌ CLOSE FAILED: {close_result.get('message', 'Unknown error')}")
-                    # No suitable positions to close - no logging to reduce noise
+                # 🧠 OLD SYSTEMS REMOVED - ใช้ Unified System แทน
                 
                 # 3. Zone Analysis & Rebalancing (silent)
                 zone_result = self.portfolio_manager.check_and_execute_zone_rebalance(current_price)
