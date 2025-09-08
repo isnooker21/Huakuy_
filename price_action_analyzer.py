@@ -173,10 +173,22 @@ class PriceActionAnalyzer:
     def _get_price_data(self, bars_count: int):
         """ดึงข้อมูลราคาจาก MT5"""
         try:
-            if self.mt5_connection and hasattr(self.mt5_connection, 'copy_rates_from_pos'):
-                rates = self.mt5_connection.copy_rates_from_pos(self.symbol, 60, 0, bars_count)  # M15 = 15 minutes
-                logger.debug(f"📊 Retrieved {len(rates) if rates else 0} price bars via MT5 connection")
-                return rates
+            if self.mt5_connection and hasattr(self.mt5_connection, 'get_market_data'):
+                # ใช้ MT5 connection method ที่ถูกต้อง
+                rates_data = self.mt5_connection.get_market_data(self.symbol, mt5.TIMEFRAME_M15, bars_count)
+                logger.debug(f"📊 Retrieved {len(rates_data) if rates_data else 0} price bars via MT5 connection")
+                
+                if rates_data:
+                    # แปลง dict format เป็น array format ที่ price action analyzer ต้องการ
+                    import numpy as np
+                    rates = np.array([
+                        (item['time'], item['open'], item['high'], item['low'], item['close'], item['tick_volume'])
+                        for item in rates_data
+                    ], dtype=[('time', 'u4'), ('open', 'f8'), ('high', 'f8'), ('low', 'f8'), ('close', 'f8'), ('tick_volume', 'u8')])
+                    return rates
+                else:
+                    logger.warning(f"⚠️ No market data returned for {self.symbol}")
+                    return None
             else:
                 # Fallback to direct MT5 call
                 rates = mt5.copy_rates_from_pos(self.symbol, mt5.TIMEFRAME_M15, 0, bars_count)
