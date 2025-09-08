@@ -27,7 +27,7 @@ logger = logging.getLogger(__name__)
 class ZonePositionManager:
     """🎯 Zone Position Manager - ระบบจัดการ Positions แบบ Zone-Based"""
     
-    def __init__(self, mt5_connection, order_manager, zone_size_pips: float = 30.0):
+    def __init__(self, mt5_connection, order_manager, zone_size_pips: float = 30.0, symbol: str = "XAUUSD"):
         """
         เริ่มต้น Zone Position Manager
         
@@ -35,12 +35,14 @@ class ZonePositionManager:
             mt5_connection: MT5 Connection instance
             order_manager: Order Manager instance
             zone_size_pips: ขนาด Zone ในหน่วย pips
+            symbol: Trading symbol
         """
         self.mt5 = mt5_connection
         self.order_manager = order_manager
+        self.symbol = symbol
         
-        # Zone System Components
-        self.zone_manager = create_zone_manager(zone_size_pips=zone_size_pips, max_zones=15)
+        # Zone System Components - ใช้ unlimited zones
+        self.zone_manager = create_zone_manager(zone_size_pips=zone_size_pips, max_zones=100)
         self.zone_analyzer = create_zone_analyzer(self.zone_manager)
         self.zone_coordinator = create_zone_coordinator(self.zone_manager, self.zone_analyzer)
         
@@ -1272,7 +1274,7 @@ class ZonePositionManager:
 # 🎯 HELPER FUNCTIONS
 # ==========================================
 
-def create_zone_position_manager(mt5_connection, order_manager, zone_size_pips: float = 30.0) -> ZonePositionManager:
+def create_zone_position_manager(mt5_connection, order_manager, zone_size_pips: float = 30.0, symbol: str = "XAUUSD") -> ZonePositionManager:
     """
     สร้าง Zone Position Manager instance
     
@@ -1280,11 +1282,12 @@ def create_zone_position_manager(mt5_connection, order_manager, zone_size_pips: 
         mt5_connection: MT5 Connection instance
         order_manager: Order Manager instance
         zone_size_pips: ขนาด Zone ในหน่วย pips
+        symbol: Trading symbol
         
     Returns:
         ZonePositionManager: Zone Position Manager instance
     """
-    return ZonePositionManager(mt5_connection, order_manager, zone_size_pips)
+    return ZonePositionManager(mt5_connection, order_manager, zone_size_pips, symbol)
 
 if __name__ == "__main__":
     # Demo Zone Position Management
