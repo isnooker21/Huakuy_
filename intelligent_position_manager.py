@@ -418,18 +418,31 @@ class IntelligentPositionManager:
                     loss_val = getattr(loss_score.position, 'profit', 0)
                     expected_pnl = profit_val + loss_val
                     
-                    # จับคู่เฉพาะเมื่อกำไรสุทธิ หรือขาดทุนไม่เกิน $1
-                    if expected_pnl > 0.0:  # เข้มงวดขึ้น: ต้องกำไรสุทธิ
+                    # คำนวณ Slippage + Commission ตาม lot size
+                    profit_volume = getattr(profit_score.position, 'volume', 0.01)
+                    loss_volume = getattr(loss_score.position, 'volume', 0.01)
+                    total_volume = profit_volume + loss_volume
+                    
+                    # คำนวณ cost การปิด (slippage + commission)
+                    slippage_cost = self._calculate_closing_cost(total_volume)
+                    min_profit_required = slippage_cost + (total_volume * 5.0)  # 5$ per 0.01 lot buffer
+                    
+                    # จับคู่เฉพาะเมื่อกำไรสุทธิหลัง cost
+                    net_profit_after_cost = expected_pnl - slippage_cost
+                    
+                    if net_profit_after_cost > 0.0:  # กำไรสุทธิหลัง cost
                         positions_to_close.extend([profit_score.position, loss_score.position])
                         used_profitable.append(profit_score)
                         used_losing.append(loss_score)
-                        logger.info(f"🎯 Smart Pair (Profit): ${profit_val:.2f} + ${loss_val:.2f} = +${expected_pnl:.2f}")
+                        logger.info(f"🎯 Smart Pair (Net Profit): ${profit_val:.2f} + ${loss_val:.2f} = ${expected_pnl:.2f}")
+                        logger.info(f"   📊 Volume: {total_volume:.2f} lots, Cost: ${slippage_cost:.2f}, Net: +${net_profit_after_cost:.2f}")
                         break
-                    elif expected_pnl > -1.0 and profit_val > 8.0:  # ยกเว้น: กำไรดีมาก
+                    elif expected_pnl > min_profit_required and profit_val > (total_volume * 80):  # กำไรดีมาก relative to volume
                         positions_to_close.extend([profit_score.position, loss_score.position])
                         used_profitable.append(profit_score)
                         used_losing.append(loss_score)
-                        logger.info(f"🎯 Smart Pair (Excellent): ${profit_val:.2f} + ${loss_val:.2f} = ${expected_pnl:.2f}")
+                        logger.info(f"🎯 Smart Pair (High Volume Profit): ${profit_val:.2f} + ${loss_val:.2f} = ${expected_pnl:.2f}")
+                        logger.info(f"   📊 Volume: {total_volume:.2f} lots, Cost: ${slippage_cost:.2f}, Net: ${net_profit_after_cost:.2f}")
                         break
             
             return positions_to_close
@@ -442,27 +455,40 @@ class IntelligentPositionManager:
                                        margin_health: MarginHealth) -> List[Any]:
         """💰 หาโอกาสปิดกำไรแบบกลุ่ม - เพิ่ม Zone Balance Protection"""
         try:
-            # เงื่อนไขการปิดกำไรแบบกลุ่ม
+            # คำนวณเงื่อนไขตาม lot size และ margin health
+            total_volume = sum(getattr(pos, 'volume', 0.01) for pos in 
+                             [score.position for score in position_scores])
+            avg_volume_per_position = total_volume / len(position_scores) if position_scores else 0.01
+            
+            # คำนวณ cost base ตาม volume
+            volume_cost_factor = avg_volume_per_position * 100  # 100$ per 0.01 lot base cost
+            
             if margin_health.risk_level in ['CRITICAL', 'HIGH']:
-                min_profit = 10.0  # เพิ่มเกณฑ์ให้สูงขึ้น
-                min_total_profit = 25.0  # กำไรรวมขั้นต่ำ
+                min_profit_per_lot = 120.0  # $120 per 0.01 lot
+                min_total_profit_factor = 3.0  # 3x cost factor
                 reason = "High margin risk - only excellent profits"
             elif margin_health.risk_level == 'MEDIUM':
-                min_profit = 8.0  # เพิ่มเกณฑ์
-                min_total_profit = 20.0
+                min_profit_per_lot = 100.0  # $100 per 0.01 lot
+                min_total_profit_factor = 2.5  # 2.5x cost factor
                 reason = "Medium margin risk - good profits"
             else:
-                min_profit = 6.0  # เพิ่มเกณฑ์
-                min_total_profit = 15.0
+                min_profit_per_lot = 80.0   # $80 per 0.01 lot
+                min_total_profit_factor = 2.0  # 2x cost factor
                 reason = "Safe margin - moderate profits"
             
-            # หาตำแหน่งกำไรที่เข้าเกณฑ์
-            profitable_positions = [
-                score.position for score in position_scores 
-                if getattr(score.position, 'profit', 0) > min_profit
-            ]
+            # หาตำแหน่งกำไรที่เข้าเกณฑ์ (คำนวณตาม lot size)
+            profitable_positions = []
+            for score in position_scores:
+                pos = score.position
+                profit = getattr(pos, 'profit', 0)
+                volume = getattr(pos, 'volume', 0.01)
+                profit_per_lot = profit / volume if volume > 0 else 0
+                
+                if profit_per_lot > min_profit_per_lot:
+                    profitable_positions.append(pos)
             
             if not profitable_positions:
+                logger.info(f"⚠️ No positions meet profit per lot criteria (${min_profit_per_lot:.0f}/0.01lot)")
                 return []
             
             # 🎯 Zone Balance Protection: ตรวจสอบผลกระทบต่อ Zone
@@ -470,14 +496,19 @@ class IntelligentPositionManager:
             
             if safe_positions:
                 total_profit = sum(getattr(pos, 'profit', 0) for pos in safe_positions)
+                total_volume_safe = sum(getattr(pos, 'volume', 0.01) for pos in safe_positions)
+                total_closing_cost = self._calculate_closing_cost(total_volume_safe)
+                min_total_profit = total_closing_cost * min_total_profit_factor
+                net_profit_after_cost = total_profit - total_closing_cost
                 
-                # ตรวจสอบกำไรรวมขั้นต่ำ
-                if total_profit >= min_total_profit:
+                # ตรวจสอบกำไรสุทธิหลัง cost
+                if net_profit_after_cost > 0 and total_profit >= min_total_profit:
                     logger.info(f"💰 Zone-Safe Mass Profit: {len(safe_positions)} positions, ${total_profit:.2f} total")
+                    logger.info(f"   📊 Volume: {total_volume_safe:.2f} lots, Cost: ${total_closing_cost:.2f}, Net: +${net_profit_after_cost:.2f}")
                     logger.info(f"   Reason: {reason} + Zone Balance Protected")
                     return safe_positions
                 else:
-                    logger.info(f"⚠️ Mass Profit blocked: Total ${total_profit:.2f} < Required ${min_total_profit:.2f}")
+                    logger.info(f"⚠️ Mass Profit blocked: Net ${net_profit_after_cost:.2f} or Total ${total_profit:.2f} < Required ${min_total_profit:.2f}")
             else:
                 logger.info(f"🚫 Mass Profit blocked: Would damage Zone Balance")
             
@@ -547,6 +578,36 @@ class IntelligentPositionManager:
         except Exception as e:
             logger.error(f"❌ Error filtering zone-safe positions: {e}")
             return positions  # Fallback: คืนค่าเดิม
+    
+    def _calculate_closing_cost(self, total_volume: float) -> float:
+        """💰 คำนวณ cost การปิดตำแหน่ง (slippage + commission + buffer)"""
+        try:
+            # Base costs สำหรับ XAUUSD
+            commission_per_lot = 0.50  # $0.50 per 0.01 lot
+            slippage_cost_per_lot = 2.00  # $2.00 per 0.01 lot (average slippage)
+            buffer_per_lot = 1.50  # $1.50 per 0.01 lot (safety buffer)
+            
+            # คำนวณตาม volume
+            volume_in_standard_lots = total_volume / 0.01  # แปลงเป็น standard lots
+            
+            total_commission = commission_per_lot * volume_in_standard_lots
+            total_slippage = slippage_cost_per_lot * volume_in_standard_lots  
+            total_buffer = buffer_per_lot * volume_in_standard_lots
+            
+            total_cost = total_commission + total_slippage + total_buffer
+            
+            logger.debug(f"💰 Closing Cost Breakdown for {total_volume:.2f} lots:")
+            logger.debug(f"   Commission: ${total_commission:.2f}")
+            logger.debug(f"   Slippage: ${total_slippage:.2f}")
+            logger.debug(f"   Buffer: ${total_buffer:.2f}")
+            logger.debug(f"   Total: ${total_cost:.2f}")
+            
+            return total_cost
+            
+        except Exception as e:
+            logger.error(f"❌ Error calculating closing cost: {e}")
+            # Fallback: ประมาณ $4 per 0.01 lot
+            return (total_volume / 0.01) * 4.0
     
     def _avoid_leaving_bad_positions(self, positions_to_close: List[Any], 
                                    position_scores: List[PositionScore]) -> List[Any]:
