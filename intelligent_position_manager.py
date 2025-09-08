@@ -357,16 +357,20 @@ class IntelligentPositionManager:
                 
                 for pos in chunk:
                     try:
-                        # 📊 คะแนนกำไร (-100 to +100) - ENHANCED FOR PROFIT
+                        # 📊 คะแนนกำไร (-100 to +100) - ENHANCED FOR HEAVY LOSS PAIRING
                         profit = getattr(pos, 'profit', 0)
-                        if profit > 5:
-                            profit_score = min(100, 50 + (profit * 5))  # กำไร >$5 ได้คะแนนสูงมาก
+                        if profit > 10:
+                            profit_score = min(100, 70 + (profit * 3))  # กำไร >$10 ได้คะแนนสูงมาก
+                        elif profit > 3:
+                            profit_score = min(80, 40 + (profit * 8))   # กำไร $3-10 ได้คะแนนดี
                         elif profit > 0:
-                            profit_score = profit * 20  # กำไรเล็กๆ ได้คะแนนดี $1 = 20 points
-                        elif profit > -10:
+                            profit_score = profit * 15  # กำไรเล็กๆ ลดคะแนน $1 = 15 points (ลดจาก 20)
+                        elif profit > -5:
                             profit_score = profit * 8   # ขาดทุนน้อย ลดคะแนนปานกลาง
+                        elif profit > -15:
+                            profit_score = max(-90, profit * 6)  # ขาดทุนปานกลาง ลดคะแนนมาก
                         else:
-                            profit_score = max(-100, -80 + (profit + 10) * 2)  # ขาดทุนมาก ลดคะแนนหนัก
+                            profit_score = max(-100, -95 + (profit + 15) * 1)  # ขาดทุนหนัก ลดคะแนนหนักมาก
                         
                         # ⚖️ คะแนนความสมดุล (0 to 100)
                         pos_type = getattr(pos, 'type', 0)
@@ -381,15 +385,19 @@ class IntelligentPositionManager:
                         volume_ratio = pos_volume / max(0.01, total_volume)
                         margin_impact = volume_ratio * 100
                         
-                        # 🔄 ศักยภาพฟื้นตัว (0 to 100)
-                        if profit > 0:
-                            recovery_potential = 20
-                        elif profit > -5:
-                            recovery_potential = 80
+                        # 🔄 ศักยภาพฟื้นตัว (0 to 100) - HEAVY LOSS PAIRING FOCUSED
+                        if profit > 5:
+                            recovery_potential = 15  # กำไรสูง ไม่จำเป็นต้องปิดเร่งด่วน
+                        elif profit > 0:
+                            recovery_potential = 25  # กำไรเล็ก ศักยภาพต่ำ
+                        elif profit > -3:
+                            recovery_potential = 60  # ขาดทุนน้อย ศักยภาพปานกลาง
+                        elif profit > -10:
+                            recovery_potential = 85  # ขาดทุนปานกลาง ศักยภาพสูง
                         elif profit > -20:
-                            recovery_potential = 40
+                            recovery_potential = 95  # ขาดทุนมาก ศักยภาพสูงมาก
                         else:
-                            recovery_potential = 10
+                            recovery_potential = 100  # ขาดทุนหนักมาก ต้องปิดด่วน!
                         
                         # ⏰ คะแนนเวลาถือ (0 to 100)
                         pos_time = getattr(pos, 'time', 0)
@@ -444,11 +452,11 @@ class IntelligentPositionManager:
                                 (correlation_score * 0.10) + (margin_impact * 0.08) + 
                                 (time_score * 0.05) + (volatility_score * 0.02)
                             )
-                        else:  # NORMAL/LOW risk
+                        else:  # NORMAL/LOW risk - HEAVY LOSS PAIRING FOCUSED
                             total_score = (
-                                (profit_score * 0.30) + (balance_score * 0.25) + (recovery_potential * 0.20) +
-                                (correlation_score * 0.12) + (margin_impact * 0.08) + 
-                                (time_score * 0.03) + (volatility_score * 0.02)
+                                (recovery_potential * 0.35) + (profit_score * 0.25) + (balance_score * 0.20) +
+                                (correlation_score * 0.10) + (margin_impact * 0.06) + 
+                                (time_score * 0.02) + (volatility_score * 0.02)
                             )
                         
                         # 🎯 กำหนด Priority
@@ -1076,17 +1084,28 @@ class IntelligentPositionManager:
                     
                     net_pnl = gross_pnl - closing_cost
                     
-                    # คำนวณคะแนนรวม 4D
-                    total_4d_score = sum(pos['total_score'] for pos in all_positions_data)
-                    avg_4d_score = total_4d_score / len(all_positions_data)
+                    # คำนวณคะแนนรวม 7D + Heavy Loss Bonus
+                    total_7d_score = sum(pos['total_score'] for pos in all_positions_data)
+                    avg_7d_score = total_7d_score / len(all_positions_data)
                     
-                    # เลือกเฉพาะชุดที่ให้ผลรวมบวก และมีคะแนน 4D ดี
-                    score_threshold = 60 if margin_health.risk_level == 'CRITICAL' else 70  # ลดเกณฑ์เมื่อ margin วิกฤต
+                    # 🎯 HEAVY LOSS BONUS - ให้คะแนนพิเศษเมื่อปิดขาดทุนหนัก
+                    heavy_loss_bonus = 0
+                    for pos in selected_losses:
+                        if pos['profit'] < -10:  # ขาดทุน > $10
+                            heavy_loss_bonus += abs(pos['profit']) * 2  # Bonus = 2x ขาดทุน
+                        elif pos['profit'] < -5:  # ขาดทุน > $5
+                            heavy_loss_bonus += abs(pos['profit']) * 1  # Bonus = 1x ขาดทุน
+                    
+                    # รวมคะแนน + bonus
+                    final_score = avg_7d_score + heavy_loss_bonus
+                    
+                    # เลือกเฉพาะชุดที่ให้ผลรวมบวก และมีคะแนน 7D ดี (รวม Heavy Loss Bonus)
+                    score_threshold = 50 if margin_health.risk_level == 'CRITICAL' else 60  # ลดเกณฑ์เพื่อให้ปิดขาดทุนหนักได้
                     
                     # Debug: แสดงผลการคำนวณ (ปิด DEBUG logs)
                     # logger.debug(f"🧮 Combination {profit_count}P+{loss_count}L: Net=${net_pnl:.2f}, Score={avg_4d_score:.1f}, Threshold={score_threshold}")
                     
-                    if net_pnl > 0 and avg_4d_score >= score_threshold and net_pnl > best_net_profit:
+                    if net_pnl > 0 and final_score >= score_threshold and net_pnl > best_net_profit:
                         best_net_profit = net_pnl
                         best_combination = {
                             'positions': all_positions,
@@ -1095,11 +1114,13 @@ class IntelligentPositionManager:
                             'closing_cost': closing_cost,
                             'profit_count': profit_count,
                             'loss_count': loss_count,
-                            'avg_4d_score': avg_4d_score,
+                            'avg_7d_score': avg_7d_score,
+                            'heavy_loss_bonus': heavy_loss_bonus,
+                            'final_score': final_score,
                             'total_4d_score': total_4d_score
                         }
                         
-                        logger.info(f"🧠 Better 7D combination: {profit_count}P+{loss_count}L, 7D:{avg_4d_score:.1f}, Net:+${net_pnl:.2f}")
+                        logger.info(f"🧠 Better 7D combination: {profit_count}P+{loss_count}L, 7D:{avg_7d_score:.1f}+Bonus:{heavy_loss_bonus:.1f}={final_score:.1f}, Net:+${net_pnl:.2f}")
                         logger.info(f"⚖️ Balance: {closing_balance['reason']}")
             
             return best_combination
