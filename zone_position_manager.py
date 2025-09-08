@@ -41,8 +41,17 @@ class ZonePositionManager:
         self.order_manager = order_manager
         self.symbol = symbol
         
-        # Zone System Components - ใช้ unlimited zones
+        # 🔬 Multi-Scale Zone System - รองรับ Micro & Standard Zones
+        self.zone_size_pips = zone_size_pips
         self.zone_manager = create_zone_manager(zone_size_pips=zone_size_pips, max_zones=100)
+        
+        # 🚀 Micro-Zone System สำหรับ High-Frequency Trading
+        self.micro_zone_size = max(2.0, zone_size_pips / 6)  # 1/6 ของ zone หลัก (5 pips สำหรับ 30 pips)
+        self.nano_zone_size = max(1.0, zone_size_pips / 15)  # 1/15 ของ zone หลัก (2 pips สำหรับ 30 pips)
+        
+        # 🧠 Adaptive Zone Selection
+        self.use_micro_zones = True  # เปิดใช้ micro zones
+        self.scalping_mode = False   # จะถูกเปิดเมื่อตรวจพบ scalping pattern
         self.zone_analyzer = create_zone_analyzer(self.zone_manager)
         self.zone_coordinator = create_zone_coordinator(self.zone_manager, self.zone_analyzer)
         
@@ -60,7 +69,10 @@ class ZonePositionManager:
         self.last_coordination_time = None
         self.active_support_plans = {}
         
-        logger.info(f"🎯 Zone Position Manager initialized: {zone_size_pips} pips/zone")
+        logger.info(f"🎯 Zone Position Manager initialized:")
+        logger.info(f"   📏 Standard Zones: {zone_size_pips} pips")
+        logger.info(f"   🔬 Micro Zones: {self.micro_zone_size} pips") 
+        logger.info(f"   ⚛️ Nano Zones: {self.nano_zone_size} pips")
     
     def should_close_positions(self, positions: List[Any], current_price: float, 
                               balance_analysis: Optional[Dict] = None) -> Dict[str, Any]:
@@ -450,6 +462,96 @@ class ZonePositionManager:
         except Exception as e:
             logger.error(f"❌ Error estimating closing cost: {e}")
             return total_volume * 4.0  # Fallback: $4 per 0.01 lot
+    
+    def _detect_scalping_opportunity(self, positions: List[Any], current_price: float) -> Dict[str, Any]:
+        """🚀 ตรวจจับโอกาส Scalping และเปิด Micro-Zone Mode"""
+        try:
+            # ตรวจสอบ pattern สำหรับ scalping
+            recent_positions = [pos for pos in positions if getattr(pos, 'profit', 0) > -2.0 and getattr(pos, 'profit', 0) < 5.0]
+            
+            scalping_indicators = {
+                'small_profits': len([pos for pos in positions if 0 < getattr(pos, 'profit', 0) < 3.0]),
+                'quick_positions': len([pos for pos in recent_positions]),
+                'tight_range': self._is_price_in_tight_range(positions, current_price),
+                'high_frequency': len(positions) > 20  # มี positions เยอะ = trading บ่อย
+            }
+            
+            # คำนวณ Scalping Score
+            scalping_score = 0
+            if scalping_indicators['small_profits'] > 5:
+                scalping_score += 30
+            if scalping_indicators['quick_positions'] > 10:
+                scalping_score += 25
+            if scalping_indicators['tight_range']:
+                scalping_score += 25
+            if scalping_indicators['high_frequency']:
+                scalping_score += 20
+                
+            # เปิด Scalping Mode ถ้าคะแนนสูง
+            should_activate_scalping = scalping_score >= 60
+            
+            if should_activate_scalping and not self.scalping_mode:
+                self.scalping_mode = True
+                logger.info(f"🚀 SCALPING MODE ACTIVATED! Score: {scalping_score}/100")
+                logger.info(f"   🔬 Switching to Micro-Zones: {self.micro_zone_size} pips")
+            elif not should_activate_scalping and self.scalping_mode:
+                self.scalping_mode = False
+                logger.info(f"📏 Standard Mode Restored. Score: {scalping_score}/100")
+            
+            return {
+                'scalping_mode': self.scalping_mode,
+                'scalping_score': scalping_score,
+                'indicators': scalping_indicators,
+                'recommended_zone_size': self.micro_zone_size if self.scalping_mode else self.zone_size_pips
+            }
+            
+        except Exception as e:
+            logger.error(f"❌ Error detecting scalping opportunity: {e}")
+            return {'scalping_mode': False, 'scalping_score': 0}
+    
+    def _is_price_in_tight_range(self, positions: List[Any], current_price: float) -> bool:
+        """🔍 ตรวจสอบว่าราคาอยู่ในช่วงแคบ (เหมาะกับ scalping)"""
+        try:
+            if not positions:
+                return False
+                
+            prices = [getattr(pos, 'price_open', current_price) for pos in positions]
+            prices.append(current_price)
+            
+            price_range = max(prices) - min(prices)
+            avg_price = sum(prices) / len(prices)
+            range_percentage = (price_range / avg_price) * 100 if avg_price > 0 else 0
+            
+            # ถือว่าเป็น tight range ถ้าราคาผันผวนน้อยกว่า 0.5%
+            is_tight = range_percentage < 0.5
+            
+            if is_tight:
+                logger.debug(f"🎯 Tight Range Detected: {range_percentage:.3f}% range")
+                
+            return is_tight
+            
+        except Exception as e:
+            logger.error(f"❌ Error checking tight range: {e}")
+            return False
+    
+    def _get_optimal_zone_size(self, positions: List[Any], current_price: float) -> float:
+        """🧠 เลือกขนาด Zone ที่เหมาะสมตามสถานการณ์"""
+        try:
+            scalping_analysis = self._detect_scalping_opportunity(positions, current_price)
+            
+            if scalping_analysis['scalping_mode']:
+                # ใช้ Micro-Zone สำหรับ Scalping
+                if scalping_analysis['scalping_score'] > 80:
+                    return self.nano_zone_size  # ใช้ nano-zone สำหรับ ultra-scalping
+                else:
+                    return self.micro_zone_size  # ใช้ micro-zone ปกติ
+            else:
+                # ใช้ Standard Zone สำหรับ Normal Trading
+                return self.zone_size_pips
+                
+        except Exception as e:
+            logger.error(f"❌ Error getting optimal zone size: {e}")
+            return self.zone_size_pips  # Fallback to standard
     
     def _analyze_bearish_trend_closing(self, zones_with_positions: Dict, 
                                      trend_analysis: TrendAnalysis, current_price: float) -> Dict[str, Any]:

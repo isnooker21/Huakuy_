@@ -268,10 +268,79 @@ class LotSizeCalculator:
         
         return final_lot
     
+    def calculate_smart_scalping_lot(self, positions_count: int, market_volatility: float, 
+                                   scalping_mode: bool = False, frequency_factor: float = 1.0) -> float:
+        """
+        🚀 Smart Volume Scaling สำหรับ High-Frequency Trading
+        
+        Args:
+            positions_count: จำนวน positions ปัจจุบัน
+            market_volatility: ความผันผวนตลาดเป็นเปอร์เซ็นต์ (ATR/Price * 100)
+            scalping_mode: โหมด scalping (ใช้ lot เล็กกว่า)
+            frequency_factor: ปัจจัยความถี่การเทรด (>1.0 = เทรดบ่อย)
+            
+        Returns:
+            float: ขนาด Lot ที่เหมาะสม (0.01 step)
+        """
+        try:
+            # 🧠 Base Lot Calculation ตามจำนวน Positions
+            if positions_count == 0:
+                base_lot = 0.05  # เริ่มต้นด้วย lot ใหญ่เมื่อไม่มีไม้
+            elif positions_count <= 10:
+                base_lot = 0.03  # มีไม้น้อย = lot ปานกลาง
+            elif positions_count <= 50:
+                base_lot = 0.02  # มีไม้ปานกลาง = lot เล็ก
+            elif positions_count <= 100:
+                base_lot = 0.015 # มีไม้เยอะ = lot เล็กมาก
+            else:
+                base_lot = 0.01  # มีไม้เยอะมาก = lot ขั้นต่ำ
+            
+            # 🚀 Scalping Mode Adjustment
+            if scalping_mode:
+                base_lot *= 0.6  # ลด lot ใน scalping mode เพื่อลดความเสี่ยง
+                logger.debug(f"🔬 Scalping mode: Lot reduced to {base_lot:.3f}")
+            
+            # 📊 Volatility Adjustment
+            volatility_multiplier = 1.0
+            if market_volatility > 2.0:
+                volatility_multiplier = 0.7  # ผันผวนสูง = lot เล็กลง
+            elif market_volatility > 1.5:
+                volatility_multiplier = 0.85
+            elif market_volatility < 0.5:
+                volatility_multiplier = 1.3  # ผันผวนต่ำ = lot ใหญ่ขึ้น
+            
+            # ⚡ Frequency Adjustment
+            frequency_multiplier = 1.0
+            if frequency_factor > 3.0:
+                frequency_multiplier = 0.5  # เทรดบ่อยมาก = lot เล็กมาก
+            elif frequency_factor > 2.0:
+                frequency_multiplier = 0.7  # เทรดบ่อย = lot เล็กลง
+            elif frequency_factor > 1.5:
+                frequency_multiplier = 0.85
+            
+            # 🎯 Final Calculation
+            smart_lot = base_lot * volatility_multiplier * frequency_multiplier
+            
+            # 📏 Round to valid step
+            final_lot = max(0.01, self.round_to_volume_step(smart_lot, 0.01))
+            
+            logger.info(f"🚀 Smart Lot Calculation:")
+            logger.info(f"   Positions: {positions_count} → Base: {base_lot:.3f}")
+            logger.info(f"   Volatility: {market_volatility:.2f} → ×{volatility_multiplier:.2f}")
+            logger.info(f"   Frequency: {frequency_factor:.2f} → ×{frequency_multiplier:.2f}")
+            logger.info(f"   Scalping: {scalping_mode}")
+            logger.info(f"   Final Lot: {final_lot:.2f}")
+            
+            return final_lot
+            
+        except Exception as e:
+            logger.error(f"❌ Error in smart lot calculation: {e}")
+            return 0.01  # Safe fallback
+    
     def calculate_portfolio_risk_lot(self, positions_count: int, market_volatility: float, 
                                    account_balance: float = None) -> float:
         """
-        คำนวณ Lot Size จากขนาด Portfolio และความผันผวนตลาด
+        คำนวณ Lot Size จากขนาด Portfolio และความผันผวนตลาด (เดิม)
         
         Args:
             positions_count: จำนวน positions ปัจจุบัน
@@ -279,10 +348,6 @@ class LotSizeCalculator:
             account_balance: ยอดเงินในบัญชี (optional)
             
         Returns:
-            float: ขนาด Lot ที่เหมาะสม (0.01 step)
-        """
-        try:
-            balance = account_balance or self.account_balance
             
             # 🎯 Capital-Appropriate Lot Sizing (เหมาะกับทุน $2000)
             # แทนที่จะใช้ Risk % ที่ซับซ้อน ใช้ Fixed Base Lot ตามทุน
