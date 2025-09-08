@@ -48,11 +48,12 @@ logging.getLogger('price_zone_analysis').setLevel(logging.WARNING)
 logging.getLogger('zone_rebalancer').setLevel(logging.WARNING)
 logging.getLogger('market_analysis').setLevel(logging.WARNING)
 
-# เปิดเฉพาะ Zone-Based System และ Main Trading
-logging.getLogger('zone_position_manager').setLevel(logging.DEBUG)
-logging.getLogger('zone_manager').setLevel(logging.INFO)
-logging.getLogger('zone_analyzer').setLevel(logging.INFO)
-logging.getLogger('zone_coordinator').setLevel(logging.INFO)
+# 🚀 PERFORMANCE-OPTIMIZED LOGGING
+logging.getLogger('zone_position_manager').setLevel(logging.INFO)  # ลดจาก DEBUG
+logging.getLogger('zone_manager').setLevel(logging.WARNING)  # ลดจาก INFO
+logging.getLogger('zone_analyzer').setLevel(logging.WARNING)  # ลดจาก INFO
+logging.getLogger('zone_coordinator').setLevel(logging.WARNING)  # ลดจาก INFO
+logging.getLogger('intelligent_position_manager').setLevel(logging.INFO)  # เพิ่ม
 logging.getLogger('__main__').setLevel(logging.INFO)
 
 logger = logging.getLogger(__name__)
@@ -256,28 +257,39 @@ class TradingSystem:
                     self.portfolio_manager.reset_daily_metrics()
                     last_daily_reset = current_hour
                 
-                # ดึงข้อมูลบัญชี (ทุก 10 รอบ)
-                if loop_count % 10 == 0:
-                    account_info = self.mt5_connection.get_account_info()
-                    if not account_info:
-                        logger.warning("ไม่สามารถดึงข้อมูลบัญชีได้")
-                        time.sleep(10)
-                        continue
-                        
-                    portfolio_state = self.portfolio_manager.analyze_portfolio_state(account_info)
+                # 🚀 HIGH-PERFORMANCE TRADING LOOP - Optimized Intervals
+                account_info = self.mt5_connection.get_account_info()
+                if not account_info:
+                    logger.warning("ไม่สามารถดึงข้อมูลบัญชีได้")
+                    time.sleep(5)  # ลดจาก 10 เป็น 5 วินาที
+                    continue
                     
-                    # ตรวจสอบเงื่อนไขการปิด Position
-                    self.check_exit_conditions(portfolio_state)
-                    
-                    # ตรวจสอบเงื่อนไขการเข้าเทรดใหม่
+                portfolio_state = self.portfolio_manager.analyze_portfolio_state(account_info)
+                
+                # ✅ ตรวจสอบเงื่อนไขการปิด Position (ทุกรอบ - 1 วินาที)
+                self.check_exit_conditions(portfolio_state)
+                
+                # 🎯 ตรวจสอบเงื่อนไขการเข้าเทรดใหม่ (ทุก 3 รอบ - 3 วินาที)
+                if loop_count % 3 == 0:
                     self.check_entry_conditions(portfolio_state)
                 
-                # รอ 1 วินาที (ลดจาก 3 วินาทีเพื่อความเร็ว)
+                # ⚡ รอ 1 วินาที (เร็วขึ้นแต่เสถียร)
                 time.sleep(1)
                 
             except Exception as e:
                 logger.error(f"เกิดข้อผิดพลาดใน Trading Loop: {str(e)}")
-                time.sleep(10)  # รอนานขึ้นเมื่อ error
+                
+                # 🛡️ SMART ERROR RECOVERY
+                if "connection" in str(e).lower() or "timeout" in str(e).lower():
+                    logger.warning("🔄 ตรวจพบปัญหาการเชื่อมต่อ - กำลังพยายามเชื่อมต่อใหม่...")
+                    if self.mt5_connection.attempt_reconnection():
+                        logger.info("✅ เชื่อมต่อใหม่สำเร็จ")
+                        time.sleep(2)  # รอสั้นๆ หลังเชื่อมต่อใหม่
+                    else:
+                        logger.error("❌ เชื่อมต่อใหม่ไม่สำเร็จ - รอ 30 วินาที")
+                        time.sleep(30)
+                else:
+                    time.sleep(10)  # รอปกติเมื่อ error อื่นๆ
                 
         logger.info("จบ Trading Loop")
         

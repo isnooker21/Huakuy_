@@ -156,11 +156,11 @@ class IntelligentPositionManager:
                 return []
             
             # 🚀 เลือกใช้ Parallel หรือ Sequential ตามจำนวน positions
-            # เน้น Sequential เพื่อความเร็วและความเสถียร (Parallel ใช้เมื่อจำเป็นจริงๆ)
-            if len(positions) > 100:  # เพิ่มจาก 50 เป็น 100
-                return self._score_positions_parallel(positions, account_info, margin_health)
-            else:
-                return self._score_positions_sequential(positions, account_info, margin_health)
+        # 🚀 OPTIMIZED PERFORMANCE - ลด threshold สำหรับ parallel processing
+        if len(positions) > 30:  # ลดจาก 100 เป็น 30 สำหรับ performance ที่ดีขึ้น
+            return self._score_positions_parallel(positions, account_info, margin_health)
+        else:
+            return self._score_positions_sequential(positions, account_info, margin_health)
                 
         except Exception as e:
             logger.error(f"❌ Error scoring positions: {e}")
@@ -176,16 +176,36 @@ class IntelligentPositionManager:
             sell_count = len(positions) - buy_count
             
             for pos in positions:
-                # 📊 คะแนนกำไร (-100 to +100) - ENHANCED FOR PROFIT
+                # 📊 คะแนนกำไร (-100 to +100) - DYNAMIC PROFIT SCORING
                 profit = getattr(pos, 'profit', 0)
-                if profit > 5:
-                    profit_score = min(100, 50 + (profit * 5))  # กำไร >$5 ได้คะแนนสูงมาก
-                elif profit > 0:
-                    profit_score = profit * 20  # กำไรเล็กๆ ได้คะแนนดี $1 = 20 points
-                elif profit > -10:
-                    profit_score = profit * 8   # ขาดทุนน้อย ลดคะแนนปานกลาง
+                
+                # 🎯 DYNAMIC THRESHOLDS based on margin health
+                if margin_health.risk_level == 'CRITICAL':
+                    # เร่งด่วน - กำไรเล็กก็ปิด
+                    if profit > 1:
+                        profit_score = min(100, 60 + (profit * 8))
+                    elif profit > 0:
+                        profit_score = profit * 30  # $1 = 30 points
+                    else:
+                        profit_score = profit * 10
+                elif margin_health.risk_level == 'HIGH':
+                    # ปานกลาง - กำไรพอสมควรถึงปิด
+                    if profit > 3:
+                        profit_score = min(100, 55 + (profit * 6))
+                    elif profit > 0:
+                        profit_score = profit * 25  # $1 = 25 points
+                    else:
+                        profit_score = profit * 8
                 else:
-                    profit_score = max(-100, -80 + (profit + 10) * 2)  # ขาดทุนมาก ลดคะแนนหนัก
+                    # ปกติ - รอกำไรดีๆ ก่อนปิด
+                    if profit > 5:
+                        profit_score = min(100, 50 + (profit * 5))
+                    elif profit > 0:
+                        profit_score = profit * 20  # $1 = 20 points
+                    elif profit > -10:
+                        profit_score = profit * 8
+                    else:
+                        profit_score = max(-100, -80 + (profit + 10) * 2)
                 
                 # ⚖️ คะแนนความสมดุล (0 to 100)
                 pos_type = getattr(pos, 'type', 0)

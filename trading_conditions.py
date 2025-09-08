@@ -104,8 +104,39 @@ class CandleAnalyzer:
             'range_strength': range_strength,
             'total_strength': total_strength,
             'is_strong': total_strength >= self.min_strength_percentage,
-            'direction': 'SELL' if candle.is_green else 'BUY'  # Counter-trend
+            'direction': self._determine_smart_direction(candle, total_strength)  # HYBRID: Trend + Counter-trend
         }
+    
+    def _determine_smart_direction(self, candle: CandleData, strength: float) -> str:
+        """🎯 HYBRID SIGNAL: Trend + Counter-trend Smart Direction"""
+        try:
+            # 📊 ตัวชี้วัด Trend
+            is_green = candle.is_green
+            body_size = candle.body_size_percentage
+            range_size = candle.range_percentage
+            
+            # 🚀 HYBRID LOGIC
+            if strength > 70:  # แรงมาก
+                if body_size > 60 and range_size > 5:
+                    # Trend Following สำหรับสัญญาณแรงมาก
+                    return 'BUY' if is_green else 'SELL'
+                else:
+                    # Counter-trend สำหรับแรงมากแต่ไม่มี momentum
+                    return 'SELL' if is_green else 'BUY'
+            elif strength > 40:  # แรงปานกลาง
+                # Counter-trend เป็นหลัก (กลยุทธ์เดิม)
+                return 'SELL' if is_green else 'BUY'
+            else:  # แรงน้อย
+                if body_size > 40:
+                    # Trend Following สำหรับ momentum เล็กๆ
+                    return 'BUY' if is_green else 'SELL'
+                else:
+                    # Counter-trend ปกติ
+                    return 'SELL' if is_green else 'BUY'
+                    
+        except Exception as e:
+            logger.error(f"Error determining direction: {e}")
+            return 'SELL' if candle.is_green else 'BUY'  # Fallback to counter-trend
         
     def check_volume_filter(self, current_volume: float, volume_history: List[float], 
                            min_volume_percentage: float = 120.0) -> bool:
