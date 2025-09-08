@@ -293,12 +293,12 @@ class IntelligentPositionManager:
                     positions_to_close.extend(smart_pairs)
                     closing_reasons.append(f'Smart profit-loss pairing: {len(smart_pairs)} positions')
             
-            # 5. 💰 MASS PROFIT TAKING: ปิดกำไรแบบกลุ่มไม่จำกัด (ถ้ามีโอกาส)
+            # 5. 💰 INTELLIGENT MASS CLOSING: ปิดแบบกลุ่มฉลาดไม่จำกัดจำนวน
             if not positions_to_close:  # ถ้ายังไม่มีอะไรให้ปิด
-                mass_profit_positions = self._find_mass_profit_opportunities(position_scores, margin_health)
-                if mass_profit_positions:
-                    positions_to_close.extend(mass_profit_positions)
-                    closing_reasons.append(f'Mass profit taking: {len(mass_profit_positions)} positions')
+                intelligent_mass_positions = self._find_intelligent_mass_closing(position_scores, margin_health)
+                if intelligent_mass_positions:
+                    positions_to_close.extend(intelligent_mass_positions)
+                    closing_reasons.append(f'Intelligent mass closing: {len(intelligent_mass_positions)} positions')
             
             # 🚫 ป้องกันไม่ให้ทิ้งไม้แย่ไว้
             if positions_to_close:
@@ -699,13 +699,13 @@ class IntelligentPositionManager:
                     closing_cost = self._calculate_closing_cost(total_volume, [single['position'], losing['position']])
                     net_profit = expected_pnl - closing_cost
                     
-                    # เลือกคู่ที่ net profit ดีที่สุด (หรือขาดทุนน้อยสุด)
-                    if net_profit > best_net_profit and net_profit > -10.0:  # ขาดทุนไม่เกิน $10
+                    # เลือกเฉพาะคู่ที่กำไรสุทธิ (ไม่ยอมรับขาดทุน)
+                    if net_profit > best_net_profit and net_profit >= 2.0:  # ต้องกำไรสุทธิอย่างน้อย $2
                         best_net_profit = net_profit
                         best_pair = losing
                 
-                # เพิ่มคู่ที่ดีที่สุด
-                if best_pair and best_net_profit > -10.0:
+                # เพิ่มเฉพาะคู่ที่กำไรสุทธิ
+                if best_pair and best_net_profit >= 2.0:
                     cross_zone_pairs.extend([single['position'], best_pair['position']])
                     logger.info(f"🔄 Cross-Zone Pair: Zone {single['zone_id']} {single['type']} ${single['profit']:.2f} + Zone {best_pair['zone_id']} {best_pair['type']} ${best_pair['profit']:.2f}")
                     logger.info(f"   💰 Net Profit: ${best_net_profit:.2f}")
@@ -720,6 +720,126 @@ class IntelligentPositionManager:
         except Exception as e:
             logger.error(f"❌ Error finding cross-zone pairs: {e}")
             return []
+    
+    def _find_intelligent_mass_closing(self, position_scores: List[PositionScore], 
+                                     margin_health: MarginHealth) -> List[Any]:
+        """🧠 ระบบปิดแบบกลุ่มฉลาด - ไม่ขาดทุนเลย, ไม่จำกัดจำนวน"""
+        try:
+            # แยกตำแหน่งตามประเภท
+            profitable_positions = []
+            losing_positions = []
+            
+            for score in position_scores:
+                pos = score.position
+                profit = getattr(pos, 'profit', 0)
+                
+                if profit > 1.0:  # กำไร
+                    profitable_positions.append({
+                        'position': pos,
+                        'profit': profit,
+                        'volume': getattr(pos, 'volume', 0.01),
+                        'score': score.total_score
+                    })
+                elif profit < -5.0:  # ขาดทุน
+                    losing_positions.append({
+                        'position': pos,
+                        'profit': profit,
+                        'volume': getattr(pos, 'volume', 0.01),
+                        'score': score.total_score
+                    })
+            
+            if not profitable_positions:
+                logger.info("🚫 No profitable positions for intelligent mass closing")
+                return []
+            
+            # เรียงลำดับ
+            profitable_positions.sort(key=lambda x: x['profit'], reverse=True)  # กำไรมากสุดก่อน
+            losing_positions.sort(key=lambda x: x['profit'])  # ขาดทุนมากสุดก่อน
+            
+            # 🧠 หาชุดการปิดที่ดีที่สุด
+            best_combination = self._find_best_closing_combination(profitable_positions, losing_positions, margin_health)
+            
+            if best_combination:
+                positions_to_close = [item['position'] for item in best_combination['positions']]
+                logger.info(f"🧠 Intelligent Mass Closing: {len(positions_to_close)} positions")
+                logger.info(f"   💰 Total Profit: ${best_combination['total_profit']:.2f}")
+                logger.info(f"   💸 Total Cost: ${best_combination['total_cost']:.2f}")
+                logger.info(f"   ✅ Net Profit: +${best_combination['net_profit']:.2f}")
+                return positions_to_close
+            
+            return []
+            
+        except Exception as e:
+            logger.error(f"❌ Error in intelligent mass closing: {e}")
+            return []
+    
+    def _find_best_closing_combination(self, profitable_positions: List[Dict], 
+                                     losing_positions: List[Dict], margin_health: MarginHealth) -> Optional[Dict]:
+        """🎯 หาชุดการปิดที่ดีที่สุด - กำไรสุทธิสูงสุด"""
+        try:
+            best_combination = None
+            best_net_profit = 0
+            
+            # เริ่มจากการปิดกำไรทั้งหมด
+            all_profitable = profitable_positions.copy()
+            
+            # ลองเพิ่มตำแหน่งขาดทุนทีละตัว เพื่อเพิ่มประสิทธิภาพ
+            for num_losing in range(len(losing_positions) + 1):
+                if num_losing == 0:
+                    # ปิดเฉพาะกำไร
+                    combination = all_profitable
+                else:
+                    # ปิดกำไร + ขาดทุนที่เลือก
+                    selected_losing = losing_positions[:num_losing]
+                    combination = all_profitable + selected_losing
+                
+                if not combination:
+                    continue
+                
+                # คำนวณผลลัพธ์
+                total_profit = sum(item['profit'] for item in combination)
+                total_volume = sum(item['volume'] for item in combination)
+                positions_list = [item['position'] for item in combination]
+                total_cost = self._calculate_closing_cost(total_volume, positions_list)
+                net_profit = total_profit - total_cost
+                
+                # เลือกเฉพาะที่กำไรสุทธิ และดีกว่าเดิม
+                if net_profit >= 5.0 and net_profit > best_net_profit:
+                    best_net_profit = net_profit
+                    best_combination = {
+                        'positions': combination,
+                        'total_profit': total_profit,
+                        'total_cost': total_cost,
+                        'net_profit': net_profit,
+                        'count': len(combination)
+                    }
+                    logger.info(f"🎯 Better combination found: {len(combination)} positions, Net: +${net_profit:.2f}")
+            
+            # ถ้าไม่มีชุดที่ดี ลองปิดเฉพาะกำไรดีมาก
+            if not best_combination:
+                excellent_profits = [pos for pos in profitable_positions if pos['profit'] > 15.0]
+                if excellent_profits:
+                    total_profit = sum(item['profit'] for item in excellent_profits)
+                    total_volume = sum(item['volume'] for item in excellent_profits)
+                    positions_list = [item['position'] for item in excellent_profits]
+                    total_cost = self._calculate_closing_cost(total_volume, positions_list)
+                    net_profit = total_profit - total_cost
+                    
+                    if net_profit >= 10.0:  # เกณฑ์สูงสำหรับกำไรดีมาก
+                        best_combination = {
+                            'positions': excellent_profits,
+                            'total_profit': total_profit,
+                            'total_cost': total_cost,
+                            'net_profit': net_profit,
+                            'count': len(excellent_profits)
+                        }
+                        logger.info(f"💎 Excellent profits only: {len(excellent_profits)} positions, Net: +${net_profit:.2f}")
+            
+            return best_combination
+            
+        except Exception as e:
+            logger.error(f"❌ Error finding best closing combination: {e}")
+            return None
     
     def _avoid_leaving_bad_positions(self, positions_to_close: List[Any], 
                                    position_scores: List[PositionScore]) -> List[Any]:
