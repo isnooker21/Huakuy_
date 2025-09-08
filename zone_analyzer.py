@@ -730,6 +730,24 @@ class ZoneAnalyzer:
             logger.error(f"❌ Error calculating cooperation readiness: {e}")
             return 0.0
     
+    def find_cross_zone_balance_pairs_with_7d(self, recovery_analyses: List[BalanceRecoveryAnalysis], position_scores: List[Any] = None) -> List[CrossZoneBalancePlan]:
+        """
+        🎯 หาคู่ Zone ที่สามารถทำ Balance Recovery ร่วมกันได้ + 7D Intelligence
+        
+        Args:
+            recovery_analyses: รายการ Balance Recovery Analysis
+            position_scores: 7D scores from IntelligentPositionManager
+            
+        Returns:
+            List[CrossZoneBalancePlan]: แผน Balance Recovery ระหว่าง Zones (enhanced with 7D)
+        """
+        if position_scores:
+            logger.info(f"🎯 Cross-Zone Balance Recovery with 7D Intelligence: {len(position_scores)} scored positions")
+            return self._find_cross_zone_pairs_with_7d_scoring(recovery_analyses, position_scores)
+        else:
+            logger.info(f"⚠️ No 7D scores available, using standard Cross-Zone analysis")
+            return self.find_cross_zone_balance_pairs(recovery_analyses)
+    
     def find_cross_zone_balance_pairs(self, recovery_analyses: List[BalanceRecoveryAnalysis]) -> List[CrossZoneBalancePlan]:
         """
         🤝 หาคู่ Zone ที่สามารถทำ Balance Recovery ร่วมกันได้
@@ -866,6 +884,164 @@ class ZoneAnalyzer:
                 execution_priority='LOW',
                 confidence_score=0.0
             )
+    
+    def _find_cross_zone_pairs_with_7d_scoring(self, recovery_analyses: List[BalanceRecoveryAnalysis], position_scores: List[Any]) -> List[CrossZoneBalancePlan]:
+        """
+        🎯 หาคู่ Cross-Zone ด้วย 7D Intelligence
+        
+        Args:
+            recovery_analyses: รายการ Balance Recovery Analysis
+            position_scores: 7D scores from IntelligentPositionManager
+            
+        Returns:
+            List[CrossZoneBalancePlan]: แผน Balance Recovery ที่ใช้ 7D scoring
+        """
+        try:
+            logger.info(f"🎯 7D Cross-Zone Analysis: {len(recovery_analyses)} zones, {len(position_scores)} scored positions")
+            
+            # สร้าง position_scores mapping
+            position_score_map = {}
+            for pos_score in position_scores:
+                ticket = pos_score.position.ticket
+                position_score_map[ticket] = pos_score.total_score
+            
+            balance_plans = []
+            
+            # แยก Zones ตาม Imbalance Type
+            buy_heavy_zones = [a for a in recovery_analyses if a.imbalance_type == 'BUY_HEAVY']
+            sell_heavy_zones = [a for a in recovery_analyses if a.imbalance_type == 'SELL_HEAVY']
+            
+            # จับคู่ BUY_HEAVY กับ SELL_HEAVY ด้วย 7D intelligence
+            for buy_analysis in buy_heavy_zones:
+                for sell_analysis in sell_heavy_zones:
+                    plan = self._create_7d_enhanced_balance_plan(buy_analysis, sell_analysis, position_score_map)
+                    if plan.confidence_score > 0.3:  # Lower threshold เพราะใช้ 7D
+                        balance_plans.append(plan)
+            
+            # เรียงตาม 7D Score, Expected Profit, และ Health Improvement
+            balance_plans.sort(key=lambda x: (
+                getattr(x, 'avg_7d_score', 0),  # 7D Score เป็นอันดับแรก
+                x.expected_profit,
+                sum(x.health_improvement.values()),
+                x.confidence_score
+            ), reverse=True)
+            
+            logger.info(f"🎯 Found {len(balance_plans)} 7D-enhanced cross-zone balance plans")
+            return balance_plans[:10]  # Top 10 plans
+            
+        except Exception as e:
+            logger.error(f"❌ Error in 7D cross-zone analysis: {e}")
+            return []
+    
+    def _create_7d_enhanced_balance_plan(self, buy_analysis: BalanceRecoveryAnalysis, sell_analysis: BalanceRecoveryAnalysis, position_score_map: dict) -> CrossZoneBalancePlan:
+        """
+        สร้างแผน Balance Recovery ด้วย 7D Intelligence
+        
+        Args:
+            buy_analysis: Zone ที่ BUY เกิน
+            sell_analysis: Zone ที่ SELL เกิน
+            position_score_map: mapping ticket -> 7D score
+            
+        Returns:
+            CrossZoneBalancePlan: แผน Balance Recovery enhanced ด้วย 7D
+        """
+        try:
+            # เลือก positions ตาม 7D score
+            buy_candidates_with_7d = []
+            for pos in buy_analysis.recovery_candidates:
+                ticket = pos.ticket
+                score_7d = position_score_map.get(ticket, 0)
+                buy_candidates_with_7d.append({'position': pos, 'score_7d': score_7d, 'pnl': pos.profit})
+            
+            sell_candidates_with_7d = []
+            for pos in sell_analysis.recovery_candidates:
+                ticket = pos.ticket
+                score_7d = position_score_map.get(ticket, 0)
+                sell_candidates_with_7d.append({'position': pos, 'score_7d': score_7d, 'pnl': pos.profit})
+            
+            # เรียงตาม 7D score (ดีที่สุดก่อน)
+            buy_candidates_with_7d.sort(key=lambda x: x['score_7d'], reverse=True)
+            sell_candidates_with_7d.sort(key=lambda x: x['score_7d'], reverse=True)
+            
+            # เลือกจำนวนที่เหมาะสม
+            positions_to_close_count = min(
+                len(buy_candidates_with_7d),
+                len(sell_candidates_with_7d),
+                3  # จำกัดไม่เกิน 3 คู่
+            )
+            
+            if positions_to_close_count <= 0:
+                return self._create_empty_balance_plan(buy_analysis.zone_id, sell_analysis.zone_id)
+            
+            # เลือก top positions ตาม 7D score
+            selected_buys = buy_candidates_with_7d[:positions_to_close_count]
+            selected_sells = sell_candidates_with_7d[:positions_to_close_count]
+            
+            positions_to_close = []
+            expected_profit = 0
+            total_7d_score = 0
+            
+            # เพิ่ม BUY positions
+            for candidate in selected_buys:
+                pos = candidate['position']
+                positions_to_close.append((buy_analysis.zone_id, pos))
+                expected_profit += pos.profit
+                total_7d_score += candidate['score_7d']
+            
+            # เพิ่ม SELL positions
+            for candidate in selected_sells:
+                pos = candidate['position']
+                positions_to_close.append((sell_analysis.zone_id, pos))
+                expected_profit += pos.profit
+                total_7d_score += candidate['score_7d']
+            
+            avg_7d_score = total_7d_score / (len(selected_buys) + len(selected_sells)) if positions_to_close else 0
+            
+            # คำนวณ Health Improvement
+            health_improvement = {
+                buy_analysis.zone_id: min(positions_to_close_count * 0.1, 0.3),
+                sell_analysis.zone_id: min(positions_to_close_count * 0.1, 0.3)
+            }
+            
+            # คำนวณ Confidence Score ด้วย 7D
+            confidence_score = min(0.5 + (avg_7d_score / 100.0), 0.95)
+            
+            plan = CrossZoneBalancePlan(
+                primary_zone=buy_analysis.zone_id,
+                partner_zone=sell_analysis.zone_id,
+                recovery_type='7D_BALANCE_RECOVERY',
+                positions_to_close=positions_to_close,
+                expected_profit=expected_profit,
+                health_improvement=health_improvement,
+                execution_priority='HIGH' if avg_7d_score > 60 else 'MEDIUM',
+                confidence_score=confidence_score
+            )
+            
+            # เพิ่ม 7D metadata
+            setattr(plan, 'avg_7d_score', avg_7d_score)
+            setattr(plan, 'position_count', len(positions_to_close))
+            
+            logger.debug(f"🎯 7D Balance Plan: Zones {buy_analysis.zone_id}-{sell_analysis.zone_id}, "
+                        f"7D Score: {avg_7d_score:.1f}, Expected: ${expected_profit:.2f}")
+            
+            return plan
+            
+        except Exception as e:
+            logger.error(f"❌ Error creating 7D balance plan: {e}")
+            return self._create_empty_balance_plan(buy_analysis.zone_id, sell_analysis.zone_id)
+    
+    def _create_empty_balance_plan(self, primary_zone: int, partner_zone: int) -> CrossZoneBalancePlan:
+        """สร้าง empty balance plan"""
+        return CrossZoneBalancePlan(
+            primary_zone=primary_zone,
+            partner_zone=partner_zone,
+            recovery_type='BALANCE_RECOVERY',
+            positions_to_close=[],
+            expected_profit=0.0,
+            health_improvement={},
+            execution_priority='LOW',
+            confidence_score=0.0
+        )
     
     def log_zone_analysis(self, current_price: float, detailed: bool = False):
         """
