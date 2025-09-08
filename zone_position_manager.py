@@ -1600,12 +1600,13 @@ def _find_best_7d_cross_zone_combination(self, zones_with_7d: Dict) -> Optional[
                     'positions': [p['position'] for p in data['profitable'][:3]]  # Top 3
                 })
         
-        if len(profitable_zones) >= 2:
+        # ปรับเงื่อนไข: ถ้ามี 1 zone ที่ดี ก็ปิดได้ (สำหรับกรณีที่มี zone เดียว)
+        if len(profitable_zones) >= 1:
             # Sort by 7D score
             profitable_zones.sort(key=lambda x: x['avg_7d_score'], reverse=True)
             
-            # Take top 2 zones
-            selected_zones = profitable_zones[:2]
+            # Take available zones (1 or more)
+            selected_zones = profitable_zones[:min(2, len(profitable_zones))]
             all_positions = []
             total_pnl = 0
             total_score = 0
@@ -1625,7 +1626,7 @@ def _find_best_7d_cross_zone_combination(self, zones_with_7d: Dict) -> Optional[
                     'net_pnl': total_pnl,
                     'avg_score': avg_score,
                     'zones_involved': zones_involved,
-                    'description': f"Zones {zones_involved} (7D Score: {avg_score:.1f}) = ${total_pnl:.2f}"
+                        'description': f"{'Cross-Zone' if len(zones_involved) > 1 else 'Single-Zone'} {zones_involved} (7D Score: {avg_score:.1f}) = ${total_pnl:.2f}"
                 }
         
         return None
