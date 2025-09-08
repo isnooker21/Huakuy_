@@ -25,6 +25,13 @@ from zone_position_manager import ZonePositionManager, create_zone_position_mana
 from intelligent_position_manager import IntelligentPositionManager, create_intelligent_position_manager
 from dynamic_7d_smart_closer import create_dynamic_7d_smart_closer
 
+# 🎯 Position Purpose Tracking System
+from position_purpose_tracker import create_position_purpose_tracker
+
+# 📊 Market Analysis Systems
+from market_analysis import MultiTimeframeAnalyzer, MarketSessionAnalyzer
+from price_action_analyzer import PriceActionAnalyzer
+
 # Configure logging - เฉพาะระบบเทรดและปิดกำไร
 logging.basicConfig(
     level=logging.INFO,  # ลดเป็น INFO เพื่อลด noise
@@ -82,6 +89,17 @@ class TradingSystem:
         
         # 🎯 Zone-Based Position Management System (จะถูก initialize หลังจาก MT5 connect)
         self.zone_position_manager = None
+        
+        # 🧠 Intelligent Systems (จะถูก initialize หลังจาก MT5 connect)
+        self.intelligent_position_manager = None
+        self.dynamic_7d_smart_closer = None
+        
+        # 🎯 Purpose Tracking System
+        self.position_purpose_tracker = None
+        
+        # 📊 Market Analysis Systems
+        self.market_analyzer = None
+        self.price_action_analyzer = None
         
         # สถานะการทำงาน
         self.is_running = False
@@ -141,6 +159,38 @@ class TradingSystem:
             # โหลดข้อมูลราคาเริ่มต้น
             self.load_initial_market_data()
             
+            # 📊 Initialize Market Analysis Systems
+            logger.info("📊 Initializing Market Analysis Systems...")
+            self.market_analyzer = MultiTimeframeAnalyzer(symbol=self.actual_symbol)
+            self.price_action_analyzer = PriceActionAnalyzer(
+                mt5_connection=self.mt5_connection,
+                symbol=self.actual_symbol
+            )
+            
+            # 🎯 Initialize Position Purpose Tracking System
+            logger.info("🎯 Initializing Position Purpose Tracking System...")
+            self.position_purpose_tracker = create_position_purpose_tracker(
+                market_analyzer=self.market_analyzer,
+                price_action_analyzer=self.price_action_analyzer
+            )
+            
+            # 🧠 Initialize Intelligent Position Management System
+            logger.info("🧠 Initializing Intelligent Position Management System...")
+            self.intelligent_position_manager = create_intelligent_position_manager(
+                mt5_connection=self.mt5_connection,
+                order_manager=self.order_manager,
+                symbol=self.actual_symbol
+            )
+            
+            # 🚀 Initialize Dynamic 7D Smart Closer with Purpose Intelligence
+            logger.info("🚀 Initializing Dynamic 7D Smart Closer...")
+            self.dynamic_7d_smart_closer = create_dynamic_7d_smart_closer(
+                intelligent_manager=self.intelligent_position_manager,
+                purpose_tracker=self.position_purpose_tracker,
+                market_analyzer=self.market_analyzer,
+                price_action_analyzer=self.price_action_analyzer
+            )
+            
             # 🎯 Initialize Zone-Based Position Management System
             logger.info("🎯 Initializing Zone-Based Position Management System...")
             self.zone_position_manager = create_zone_position_manager(
@@ -150,23 +200,10 @@ class TradingSystem:
                 symbol=self.actual_symbol  # ใช้ symbol ที่ auto-detect ได้
             )
             
-            # 🧠 Initialize Intelligent Position Management System
-            logger.info("🧠 Initializing Intelligent Position Management System...")
-            self.intelligent_manager = create_intelligent_position_manager(
-                mt5_connection=self.mt5_connection,
-                order_manager=self.order_manager,
-                symbol=self.actual_symbol
-            )
-            
-            # 🚀 Dynamic 7D Smart Closer (Primary Closing System)
-            logger.info("🚀 Initializing Dynamic 7D Smart Closer...")
-            self.dynamic_7d_closer = create_dynamic_7d_smart_closer(
-                intelligent_manager=self.intelligent_manager
-            )
-            
-            # 🔗 เชื่อมต่อ 7D Entry Intelligence กับ Trading Conditions
-            logger.info("🔗 Connecting 7D Entry Intelligence to Trading Conditions...")
-            self.trading_conditions.intelligent_position_manager = self.intelligent_manager
+            # 🔗 เชื่อมต่อ Purpose-Aware Systems กับ Trading Conditions
+            logger.info("🔗 Connecting Purpose-Aware Intelligence to Trading Conditions...")
+            self.trading_conditions.intelligent_position_manager = self.intelligent_position_manager
+            self.trading_conditions.position_purpose_tracker = self.position_purpose_tracker
             
             # เชื่อมต่อกับ Portfolio Manager
             if hasattr(self.portfolio_manager, 'position_manager'):
@@ -640,17 +677,17 @@ class TradingSystem:
         try:
             logger.info(f"🤝 UNIFIED ANALYSIS: {len(positions)} positions, Margin: {margin_health.risk_level if margin_health else 'UNKNOWN'}")
             
-            # 🚀 Priority 1: Dynamic 7D Smart Closer (Primary System)
-            if hasattr(self, 'dynamic_7d_closer') and self.dynamic_7d_closer:
-                logger.info(f"🚀 DYNAMIC 7D MODE: Using advanced smart closing system")
-                dynamic_result = self.dynamic_7d_closer.find_optimal_closing(positions, account_info)
+            # 🚀 Priority 1: Purpose-Aware Dynamic 7D Smart Closer (Primary System)
+            if hasattr(self, 'dynamic_7d_smart_closer') and self.dynamic_7d_smart_closer:
+                logger.info(f"🧠 PURPOSE-AWARE 7D MODE: Using intelligent purpose-based closing system")
+                dynamic_result = self.dynamic_7d_smart_closer.find_optimal_closing(positions, account_info)
                 
                 if dynamic_result and dynamic_result.should_close:
                     # Convert to unified format
                     return {
                         'should_close': True,
                         'positions_to_close': dynamic_result.positions_to_close,
-                        'method': f'dynamic_7d_{dynamic_result.method}',
+                        'method': f'purpose_aware_{dynamic_result.method}',
                         'expected_pnl': dynamic_result.expected_pnl,
                         'positions_count': dynamic_result.position_count,
                         'reason': dynamic_result.reason,
@@ -659,9 +696,9 @@ class TradingSystem:
                     }
             
             # 🧠 Priority 2: Intelligent Manager (Fallback)
-            if hasattr(self, 'intelligent_manager') and self.intelligent_manager and position_scores:
+            if hasattr(self, 'intelligent_position_manager') and self.intelligent_position_manager and position_scores:
                 logger.info(f"🧠 INTELLIGENT FALLBACK: Using 7D intelligent manager")
-                intelligent_decision = self.intelligent_manager.analyze_closing_decision(positions, account_info)
+                intelligent_decision = self.intelligent_position_manager.analyze_closing_decision(positions, account_info)
                 if intelligent_decision.get('should_close', False):
                     intelligent_decision['method'] = 'intelligent_7d_fallback'
                     logger.info(f"✅ INTELLIGENT DECISION: {intelligent_decision.get('positions_count', 0)} positions selected")
