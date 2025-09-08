@@ -469,6 +469,73 @@ class TradingSystem:
             return reason[:47] + "..."
         
         return reason
+    
+    def _aggressive_balance_recovery(self, positions, current_price):
+        """🚀 เร่งหาคู่ปิดเมื่อ positions เยอะ - ไม่สนวิธีการแต่ต้องปิดบวกเสมอ"""
+        try:
+            logger.info(f"🚀 Aggressive Balance Recovery: {len(positions)} positions")
+            
+            # แยก BUY และ SELL
+            buy_positions = [pos for pos in positions if pos.type == 0]  # BUY
+            sell_positions = [pos for pos in positions if pos.type == 1]  # SELL
+            
+            # เรียงตาม P&L
+            buy_positions.sort(key=lambda x: x.profit, reverse=True)  # BUY ดีที่สุดก่อน
+            sell_positions.sort(key=lambda x: x.profit, reverse=True)  # SELL ดีที่สุดก่อน
+            
+            # หาคู่ที่ดีที่สุด (BUY + SELL = กำไรรวม)
+            best_combinations = []
+            
+            # ลอง combination ขนาดต่างๆ (2-8 positions)
+            for combo_size in range(2, min(9, len(positions) + 1)):
+                for buy_count in range(1, combo_size):
+                    sell_count = combo_size - buy_count
+                    
+                    if buy_count > len(buy_positions) or sell_count > len(sell_positions):
+                        continue
+                    
+                    # เลือก positions
+                    selected_buys = buy_positions[:buy_count]
+                    selected_sells = sell_positions[:sell_count]
+                    all_selected = selected_buys + selected_sells
+                    
+                    # คำนวณ P&L รวม
+                    total_pnl = sum([pos.profit for pos in all_selected])
+                    
+                    # ต้องเป็นบวกเสมอ (ไม่ปิดติดลบ)
+                    if total_pnl > 5.0:  # กำไรขั้นต่ำ $5
+                        balance_score = abs(buy_count - sell_count) * -10  # ยิ่งสมดุลยิ่งดี
+                        total_score = total_pnl + balance_score
+                        
+                        best_combinations.append({
+                            'positions': all_selected,
+                            'total_pnl': total_pnl,
+                            'balance_score': balance_score,
+                            'total_score': total_score,
+                            'buy_count': buy_count,
+                            'sell_count': sell_count
+                        })
+            
+            if best_combinations:
+                # เลือกชุดที่ดีที่สุด
+                best_combinations.sort(key=lambda x: x['total_score'], reverse=True)
+                best = best_combinations[0]
+                
+                logger.info(f"🎯 Found aggressive combination: {best['buy_count']}B+{best['sell_count']}S = ${best['total_pnl']:.2f}")
+                
+                return {
+                    'should_close': True,
+                    'positions_to_close': best['positions'],
+                    'expected_pnl': best['total_pnl'],
+                    'reason': f"Aggressive Balance: {best['buy_count']}B+{best['sell_count']}S"
+                }
+            else:
+                logger.info(f"❌ No profitable aggressive combinations found")
+                return {'should_close': False}
+                
+        except Exception as e:
+            logger.error(f"❌ Error in aggressive balance recovery: {e}")
+            return {'should_close': False}
             
     def check_exit_conditions(self, portfolio_state):
         """ตรวจสอบเงื่อนไขการปิด Position"""
@@ -496,6 +563,17 @@ class TradingSystem:
                             logger.info(f"✅ RECOVERY SUCCESS: ${result['net_profit']:.2f} profit")
                 
                 # 2. 🗑️ Smart Recovery REMOVED - functionality moved to Smart Profit Taking System
+                
+                # 🚀 AGGRESSIVE BALANCE RECOVERY (เมื่อ positions > 30)
+                if len(positions) > 30:
+                    logger.info(f"🚀 AGGRESSIVE BALANCE RECOVERY: {len(positions)} positions → เร่งหาคู่ปิด")
+                    aggressive_result = self._aggressive_balance_recovery(positions, current_price)
+                    if aggressive_result.get('should_close', False):
+                        positions_to_close = aggressive_result.get('positions_to_close', [])
+                        close_result = self.zone_position_manager.close_positions(positions_to_close)
+                        if close_result.get('success', False):
+                            logger.info(f"✅ AGGRESSIVE SUCCESS: {close_result.get('closed_count', 0)} positions closed")
+                        return
                 
                 # 🧠 INTELLIGENT POSITION MANAGEMENT (ลำดับความสำคัญสูงสุด) + 🤝 Cross-Zone Integration
                 if hasattr(self, 'intelligent_manager') and self.intelligent_manager:

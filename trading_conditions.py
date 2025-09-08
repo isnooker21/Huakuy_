@@ -1101,11 +1101,16 @@ class TradingConditions:
             logger.info(f"🚀 FORCE SELL: Portfolio เอียง BUY {buy_percentage:.1f}% → บังคับขายเพื่อแก้สมดุล")
             return result
         
-        elif total_positions > 30:
+        elif total_positions > 50:
             # 🔴 High Volume Block: บล็อคเมื่อมี positions มากเกินไป
             result['should_block'] = True
-            result['reason'] = f'❌ BLOCK: Too many positions ({total_positions} > 30)'
+            result['reason'] = f'❌ BLOCK: Too many positions ({total_positions} > 50)'
             logger.warning(f"🔴 HIGH VOLUME BLOCK: {total_positions} positions เกินขีดจำกัด → หยุดเปิดออเดอร์")
+            return result
+        elif total_positions > 30:
+            # 🚀 Aggressive Balance Mode: เร่งหาคู่ปิดเมื่อ positions เยอะ
+            logger.info(f"🚀 AGGRESSIVE BALANCE MODE: {total_positions} positions → เร่งหาคู่ปิด")
+            result['reason'] = f'Aggressive Balance Mode: Speed up closing ({total_positions} positions)'
             return result
         
         # 🟢 Normal Mode: อนุญาตทุกการเข้า (Unlimited Entry)
