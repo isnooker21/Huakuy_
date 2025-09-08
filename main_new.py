@@ -37,10 +37,10 @@ logging.basicConfig(
 # ปิด debug logs จากระบบอื่นๆ
 logging.getLogger('mt5_connection').setLevel(logging.WARNING)
 logging.getLogger('order_management').setLevel(logging.WARNING)
-logging.getLogger('trading_conditions').setLevel(logging.WARNING)
+logging.getLogger('trading_conditions').setLevel(logging.INFO)
 logging.getLogger('portfolio_manager').setLevel(logging.WARNING)
 logging.getLogger('calculations').setLevel(logging.WARNING)
-logging.getLogger('signal_manager').setLevel(logging.WARNING)
+logging.getLogger('signal_manager').setLevel(logging.INFO)
 logging.getLogger('smart_gap_filler').setLevel(logging.WARNING)
 logging.getLogger('force_trading_mode').setLevel(logging.WARNING)
 logging.getLogger('advanced_breakout_recovery').setLevel(logging.WARNING)
