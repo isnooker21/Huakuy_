@@ -390,9 +390,9 @@ class ZonePositionManager:
             best_combination = None
             best_net_profit = 0
             
-            # เรียงตามคะแนน 4 มิติ (ถ้ามี) หรือกำไร/ขาดทุน
+            # 🎯 HEAVY LOSS PAIRING - เรียงตามขาดทุนหนักสุดก่อน
             profitable_positions.sort(key=lambda x: x.get('score', x['profit']), reverse=True)
-            losing_positions.sort(key=lambda x: x.get('score', -abs(x['loss'])))
+            losing_positions.sort(key=lambda x: x['loss'])  # ขาดทุนหนักสุดก่อน (เลขลบมากสุด)
             
             # ลองหาชุดการปิดที่ดีที่สุด (เริ่มจากน้อยไปมาก)
             max_positions = min(30, len(profitable_positions) + len(losing_positions))  # สูงสุด 30 ไม้
@@ -422,11 +422,22 @@ class ZonePositionManager:
                     
                     net_pnl = gross_pnl - closing_cost
                     
-                    # LOG การคำนวณ เพื่อ debug
-                    logger.debug(f"💰 Combination: {profit_count}P + {loss_count}L = Gross ${gross_pnl:.2f} - Cost ${closing_cost:.2f} = Net ${net_pnl:.2f}")
+                    # 🎯 HEAVY LOSS BONUS - เหมือน Intelligent Manager
+                    heavy_loss_bonus = 0
+                    for pos in selected_losses:
+                        if pos['loss'] < -10:  # ขาดทุน > $10
+                            heavy_loss_bonus += abs(pos['loss']) * 2  # Bonus = 2x ขาดทุน
+                        elif pos['loss'] < -5:  # ขาดทุน > $5
+                            heavy_loss_bonus += abs(pos['loss']) * 1  # Bonus = 1x ขาดทุน
                     
-                    # เลือกเฉพาะชุดที่ให้ผลรวมบวก และดีกว่าเดิม - STRICT CHECK
-                    if net_pnl > 2.0 and net_pnl > best_net_profit:  # ต้องกำไรอย่างน้อย $2
+                    # รวมคะแนน priority = net_pnl + heavy_loss_bonus
+                    combination_priority = net_pnl + heavy_loss_bonus
+                    
+                    # LOG การคำนวณ เพื่อ debug
+                    logger.debug(f"💰 Combination: {profit_count}P + {loss_count}L = Net ${net_pnl:.2f} + Bonus {heavy_loss_bonus:.1f} = Priority {combination_priority:.1f}")
+                    
+                    # เลือกเฉพาะชุดที่ให้ผลรวมบวก และมี priority สูงสุด
+                    if net_pnl > 1.0 and combination_priority > (best_net_profit + (best_combination.get('heavy_loss_bonus', 0) if best_combination else 0)):
                         best_net_profit = net_pnl
                         best_combination = {
                             'positions': [pos['position'] for pos in all_positions],
@@ -435,6 +446,8 @@ class ZonePositionManager:
                             'closing_cost': closing_cost,
                             'profit_count': profit_count,
                             'loss_count': loss_count,
+                            'heavy_loss_bonus': heavy_loss_bonus,
+                            'combination_priority': combination_priority,
                             'trend_type': trend_type
                         }
                         
