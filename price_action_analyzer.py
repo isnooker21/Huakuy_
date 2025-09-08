@@ -173,27 +173,49 @@ class PriceActionAnalyzer:
     def _get_price_data(self, bars_count: int):
         """ดึงข้อมูลราคาจาก MT5"""
         try:
+            logger.debug(f"🔍 Attempting to get {bars_count} bars for {self.symbol}")
+            
+            # Method 1: ใช้ MT5 connection
             if self.mt5_connection and hasattr(self.mt5_connection, 'get_market_data'):
-                # ใช้ MT5 connection method ที่ถูกต้อง
+                logger.debug("📡 Trying MT5 connection method...")
                 rates_data = self.mt5_connection.get_market_data(self.symbol, mt5.TIMEFRAME_M15, bars_count)
-                logger.debug(f"📊 Retrieved {len(rates_data) if rates_data else 0} price bars via MT5 connection")
+                logger.debug(f"📊 MT5 connection returned: {len(rates_data) if rates_data else 0} bars")
                 
-                if rates_data:
-                    # แปลง dict format เป็น array format ที่ price action analyzer ต้องการ
+                if rates_data and len(rates_data) > 0:
+                    # แปลง dict format เป็น array format
                     import numpy as np
                     rates = np.array([
                         (item['time'], item['open'], item['high'], item['low'], item['close'], item['tick_volume'])
                         for item in rates_data
                     ], dtype=[('time', 'u4'), ('open', 'f8'), ('high', 'f8'), ('low', 'f8'), ('close', 'f8'), ('tick_volume', 'u8')])
+                    logger.debug(f"✅ Successfully converted {len(rates)} bars")
                     return rates
                 else:
-                    logger.warning(f"⚠️ No market data returned for {self.symbol}")
-                    return None
-            else:
-                # Fallback to direct MT5 call
-                rates = mt5.copy_rates_from_pos(self.symbol, mt5.TIMEFRAME_M15, 0, bars_count)
-                logger.debug(f"📊 Retrieved {len(rates) if rates else 0} price bars via direct MT5")
+                    logger.warning(f"⚠️ No market data returned for {self.symbol} via MT5 connection")
+            
+            # Method 2: Direct MT5 call (fallback)
+            logger.debug("📡 Trying direct MT5 call...")
+            rates = mt5.copy_rates_from_pos(self.symbol, mt5.TIMEFRAME_M15, 0, bars_count)
+            if rates is not None and len(rates) > 0:
+                logger.debug(f"✅ Direct MT5 returned {len(rates)} bars")
                 return rates
+            else:
+                logger.warning(f"⚠️ Direct MT5 call failed for {self.symbol}")
+            
+            # Method 3: Try different timeframes
+            logger.debug("📡 Trying different timeframes...")
+            for tf_name, tf_value in [("M5", mt5.TIMEFRAME_M5), ("M1", mt5.TIMEFRAME_M1), ("H1", mt5.TIMEFRAME_H1)]:
+                try:
+                    rates = mt5.copy_rates_from_pos(self.symbol, tf_value, 0, min(bars_count, 50))
+                    if rates is not None and len(rates) > 0:
+                        logger.info(f"✅ Got {len(rates)} bars using {tf_name} timeframe")
+                        return rates
+                except:
+                    continue
+                    
+            logger.error(f"❌ All methods failed to get price data for {self.symbol}")
+            return None
+            
         except Exception as e:
             logger.error(f"❌ Error getting price data: {e}")
             return None
