@@ -320,9 +320,11 @@ class TradingConditions:
         # 🗑️ Portfolio Quality Check REMOVED - ให้ระบบเข้าไม้ได้เสมอ
         # เพื่อไม่ให้พอร์ตแย่ยิ่งแย่หนัก จากการไม่ออกไม้
 
+        # 🚀 Initialize Force Balance Mode
+        force_balance_mode = False
+
         # 🚀 Adaptive Entry Control - ENHANCED for Balance Enforcement
         adaptive_control = self._check_adaptive_entry_control(positions, candle.close, strength_analysis['direction'])
-        force_balance_mode = False
         
         if adaptive_control['force_trade']:
             # บังคับ Counter-Trade เพื่อแก้สมดุล Portfolio
