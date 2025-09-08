@@ -675,7 +675,7 @@ class MT5Connection:
                 'profit_percentage': profit_percentage,
                 'spread_points': spread_points,
                 'spread_percentage': spread_pct,
-                'should_close': profit_percentage > spread_pct  # ปิดเมื่อกำไร > spread
+                'should_close': profit_percentage > (spread_pct * 0.3)  # ปิดเมื่อกำไร > 30% ของ spread
             }
             
         except Exception as e:
@@ -711,13 +711,13 @@ class MT5Connection:
             logger.info(f"   Profit: ${profit_info['calculated_profit']:.2f} ({profit_info['profit_percentage']:.2f}%)")
             logger.info(f"   Should Close: {profit_info['should_close']}")
             
-            # บังคับไม่ให้ปิดติดลบ
-            if not profit_info['should_close']:
-                logger.warning(f"🚫 Position {ticket} กำไร {profit_info['profit_percentage']:.2f}% < Spread {profit_info['spread_percentage']:.3f}% - ห้ามปิด!")
-                logger.info(f"💡 รอให้กำไรมากกว่า {profit_info['spread_percentage']:.3f}% ก่อนปิด")
+            # บังคับไม่ให้ปิดติดลบ - RELAXED CHECK
+            if profit_info['profit_percentage'] < -1.0:  # ปิดเฉพาะขาดทุนมากกว่า 1%
+                logger.warning(f"🚫 Position {ticket} ขาดทุนมาก {profit_info['profit_percentage']:.2f}% - ห้ามปิด!")
+                logger.info(f"💡 รอให้ขาดทุนน้อยกว่า -1.0% ก่อนปิด")
                 return {
                     'retcode': 10027,  # TRADE_RETCODE_REJECT (custom)
-                    'error_description': f'กำไรไม่เพียงพอ: {profit_info["profit_percentage"]:.2f}% < Spread {profit_info["spread_percentage"]:.3f}%',
+                    'error_description': f'ขาดทุนมาก: {profit_info["profit_percentage"]:.2f}% < -1.0%',
                     'profit_info': profit_info
                 }
             
@@ -1066,14 +1066,14 @@ class MT5Connection:
                           f"Profit {profit_info['profit_percentage']:.2f}% vs "
                           f"Spread {profit_info['spread_percentage']:.3f}%")
                 
-                # เช็คว่าควรปิดหรือไม่
-                if not profit_info['should_close']:
+                # เช็คว่าควรปิดหรือไม่ - RELAXED CHECK
+                if not profit_info['should_close'] and profit_info['profit_percentage'] < -0.5:  # ปิดเฉพาะขาดทุนมากกว่า 0.5%
                     rejected_tickets.append({
                         'ticket': ticket,
-                        'reason': f"กำไร {profit_info['profit_percentage']:.2f}% < Spread {profit_info['spread_percentage']:.3f}%",
+                        'reason': f"ขาดทุนมาก: {profit_info['profit_percentage']:.2f}%",
                         'profit_info': profit_info
                     })
-                    logger.warning(f"⏳ Position {ticket} รอกำไรเพิ่มก่อนปิด")
+                    logger.warning(f"⏳ Position {ticket} ขาดทุนมาก รอสักหน่อย")
                     continue
                 
                 # ปิด Position โดยตรง
@@ -1119,15 +1119,15 @@ class MT5Connection:
         ปิด Position โดยตรง - ⚠️ DEPRECATED: ควรใช้ close_position แทน
         """
         try:
-            # 🚫 เพิ่มการเช็ค spread เพื่อป้องกันปิดติดลบ
-            profit_info = self.calculate_position_profit_with_spread(ticket)
-            if not profit_info or not profit_info.get('should_close', False):
-                logger.warning(f"🚫 Position {ticket} ไม่ผ่านการเช็ค spread - ไม่ปิด")
-                return {
-                    'retcode': 10027,  # TRADE_RETCODE_REJECT
-                    'error_description': 'ไม่ผ่านการเช็ค spread',
-                    'profit_info': profit_info
-                }
+            # 🚫 เพิ่มการเช็ค spread เพื่อป้องกันปิดติดลบ - DISABLED FOR EASIER CLOSING
+            # profit_info = self.calculate_position_profit_with_spread(ticket)
+            # if not profit_info or not profit_info.get('should_close', False):
+            #     logger.warning(f"🚫 Position {ticket} ไม่ผ่านการเช็ค spread - ไม่ปิด")
+            #     return {
+            #         'retcode': 10027,  # TRADE_RETCODE_REJECT
+            #         'error_description': 'ไม่ผ่านการเช็ค spread',
+            #         'profit_info': profit_info
+            #     }
             
             # ดึงข้อมูล Position
             position = mt5.positions_get(ticket=ticket)
