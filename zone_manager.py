@@ -73,13 +73,13 @@ class Zone:
 class ZoneManager:
     """🎯 Zone Manager - หลักระบบจัดการ Zones"""
     
-    def __init__(self, zone_size_pips: float = 30.0, max_zones: int = 20):
+    def __init__(self, zone_size_pips: float = 30.0, max_zones: int = 50):
         """
         เริ่มต้น Zone Manager
         
         Args:
             zone_size_pips: ขนาด Zone ในหน่วย pips (default: 30 pips)
-            max_zones: จำนวน Zone สูงสุดที่ติดตาม (default: 20)
+            max_zones: จำนวน Zone สูงสุดที่ติดตาม (default: 50)
         """
         self.zone_size_pips = zone_size_pips
         self.zone_size_points = zone_size_pips / 10  # สำหรับ XAUUSD (30 pips = 3.0 points)
@@ -486,13 +486,15 @@ class ZoneManager:
                 self.active_zones.remove(zone_id)
                 
         # จำกัดจำนวน Active Zones
-        if len(self.active_zones) > self.max_zones:
-            # เก็บ Zones ที่มี Positions เยอะที่สุด
-            zone_scores = [(zone_id, self.zones[zone_id].total_positions) 
-                          for zone_id in self.active_zones]
-            zone_scores.sort(key=lambda x: x[1], reverse=True)
-            
-            self.active_zones = [zone_id for zone_id, _ in zone_scores[:self.max_zones]]
+        # 🚀 UNLIMITED ZONES: ยกเลิกการจำกัดจำนวน Zone เพื่อรองรับราคาที่วิ่งไกล
+        # if len(self.active_zones) > self.max_zones:
+        #     # เก็บ Zones ที่มี Positions เยอะที่สุด
+        #     zone_scores = [(zone_id, self.zones[zone_id].total_positions) 
+        #                   for zone_id in self.active_zones]
+        #     zone_scores.sort(key=lambda x: x[1], reverse=True)
+        #     
+        #     self.active_zones = [zone_id for zone_id, _ in zone_scores[:self.max_zones]]
+        logger.debug(f"🚀 UNLIMITED ZONES: Active zones: {len(self.active_zones)} (no limit)")
     
     def get_zone_summary(self) -> Dict[str, Any]:
         """
@@ -576,7 +578,7 @@ class ZoneManager:
 # 🎯 HELPER FUNCTIONS
 # ==========================================
 
-def create_zone_manager(zone_size_pips: float = 30.0, max_zones: int = 20) -> ZoneManager:
+def create_zone_manager(zone_size_pips: float = 30.0, max_zones: int = 100) -> ZoneManager:
     """
     สร้าง Zone Manager instance
     
