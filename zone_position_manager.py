@@ -249,10 +249,13 @@ class ZonePositionManager:
             logger.info(f"   Confidence: {trend_analysis.confidence:.1f}%")
             logger.info(f"   Momentum: {trend_analysis.momentum}")
             
-            # ปรับเงื่อนไขให้ยืดหยุ่นกว่า (ลดจาก 50 เป็น 30)
+            # 🚀 UNLIMITED TRADING: ไม่หยุดเทรดแม้ trend อ่อน - ใช้ Zone Logic ต่อ
+            use_zone_logic = False
             if trend_analysis.direction == 'SIDEWAYS' or trend_analysis.strength < 30:
-                logger.info(f"⏸️ Trend too weak ({trend_analysis.strength:.1f}%) or sideways - using Zone Logic")
-                return {'should_close': False}
+                logger.info(f"🎯 Trend weak ({trend_analysis.strength:.1f}%) or sideways - switching to Zone Logic")
+                use_zone_logic = True
+            else:
+                logger.info(f"🎯 Strong trend ({trend_analysis.strength:.1f}%) - using Trend-Aware Logic")
             
             # หา Zones ที่มี positions
             zones_with_positions = {
@@ -266,8 +269,15 @@ class ZonePositionManager:
                 logger.info("⏸️ No zones with positions - skipping trend analysis")
                 return {'should_close': False}
             
-            # วิเคราะห์การปิดแบบ Trend-Aware
-            logger.info(f"🎯 Analyzing {trend_analysis.direction} trend closing...")
+            # เลือกใช้ Logic ตาม Trend Strength
+            if use_zone_logic:
+                # 🎯 Zone Logic: ใช้เมื่อ trend อ่อนหรือ sideways
+                logger.info(f"🎯 Using Zone-Based Logic (trend too weak)")
+                result = self._analyze_zone_based_closing(zones_with_positions, current_price)
+                return result
+            else:
+                # 🎯 Trend-Aware Logic: ใช้เมื่อ trend แข็งแกร่ง
+                logger.info(f"🎯 Analyzing {trend_analysis.direction} trend closing...")
             
             if trend_analysis.direction == 'BULLISH':
                 result = self._analyze_bullish_trend_closing(zones_with_positions, trend_analysis, current_price)
@@ -483,6 +493,79 @@ class ZonePositionManager:
             
         except Exception as e:
             logger.error(f"❌ Error in emergency trend closing: {e}")
+            return {'should_close': False}
+    
+    def _analyze_zone_based_closing(self, zones_with_positions: Dict, current_price: float) -> Dict[str, Any]:
+        """
+        🎯 Zone-Based Closing Logic - ใช้เมื่อ trend อ่อนหรือ sideways
+        จะใช้ Zone Health และ P&L เป็นหลักในการตัดสินใจ
+        """
+        try:
+            logger.info("🎯 Zone-Based Analysis: Looking for closing opportunities...")
+            
+            profitable_positions = []
+            losing_positions = []
+            
+            # วิเคราะห์ positions ในแต่ละ zone
+            for zone_id, analysis in zones_with_positions.items():
+                zone = self.zone_manager.zones[zone_id]
+                
+                for pos in zone.positions:
+                    pos_profit = getattr(pos, 'profit', 0.0)
+                    pos_type = getattr(pos, 'type', 0)
+                    
+                    if pos_profit > 8.0:  # กำไรดี
+                        profitable_positions.append({
+                            'position': pos,
+                            'profit': pos_profit,
+                            'zone_id': zone_id,
+                            'type': 'BUY' if pos_type == 0 else 'SELL'
+                        })
+                    elif pos_profit < -20.0:  # ขาดทุนหนัก
+                        losing_positions.append({
+                            'position': pos,
+                            'loss': pos_profit,
+                            'zone_id': zone_id,
+                            'type': 'BUY' if pos_type == 0 else 'SELL'
+                        })
+            
+            logger.info(f"📊 Zone Analysis: {len(profitable_positions)} profitable, {len(losing_positions)} heavy losses")
+            
+            # ปิดกำไรก่อน (conservative approach ในตลาด sideways)
+            if profitable_positions:
+                best_profit = max(profitable_positions, key=lambda x: x['profit'])
+                logger.info(f"✅ Zone Logic: Taking profit on {best_profit['type']} (${best_profit['profit']:.2f})")
+                
+                return {
+                    'should_close': True,
+                    'reason': f'Zone-Based: Take profit {best_profit["type"]} ${best_profit["profit"]:.2f} (sideways market)',
+                    'positions_to_close': [best_profit['position']],
+                    'positions_count': 1,
+                    'expected_pnl': best_profit['profit'],
+                    'method': 'zone_based_profit',
+                    'zone_id': best_profit['zone_id']
+                }
+            
+            # ถ้าไม่มีกำไร แต่มีขาดทุนหนัก ให้ cut loss
+            if losing_positions:
+                worst_loss = min(losing_positions, key=lambda x: x['loss'])
+                logger.info(f"⚠️ Zone Logic: Cutting heavy loss {worst_loss['type']} (${worst_loss['loss']:.2f})")
+                
+                return {
+                    'should_close': True,
+                    'reason': f'Zone-Based: Cut heavy loss {worst_loss["type"]} ${worst_loss["loss"]:.2f}',
+                    'positions_to_close': [worst_loss['position']],
+                    'positions_count': 1,
+                    'expected_pnl': worst_loss['loss'],
+                    'method': 'zone_based_cutloss',
+                    'zone_id': worst_loss['zone_id']
+                }
+            
+            logger.info("⏸️ Zone Logic: No clear closing opportunities found")
+            return {'should_close': False}
+            
+        except Exception as e:
+            logger.error(f"❌ Error in zone-based closing: {e}")
             return {'should_close': False}
     
     def _check_balance_recovery(self, zone_analyses: Dict[int, ZoneAnalysis], 
