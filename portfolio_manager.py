@@ -1013,20 +1013,25 @@ class PortfolioManager:
                         balance_impact = 'POSITIVE'
                         reason = f"BUY helps balance SELL-heavy Zone {target_zone_id}"
                     
-                    # ถ้า Zone นี้ BUY-heavy อยู่แล้ว → BUY จะทำให้เสียสมดุลมากขึ้น
+                    # ถ้า Zone นี้ BUY-heavy อยู่แล้ว → ใช้ Smart Zone-Aware Reversal สำหรับ SELL
                     elif current_balance >= 0.7:  # BUY-heavy
-                        health_improvement = -10.0
-                        confidence = 0.4
-                        lot_multiplier = 0.7
-                        balance_impact = 'NEGATIVE'
+                        # 🧠 SMART ZONE-AWARE REVERSAL LOGIC สำหรับ SELL ที่มี BUY เยอะ
+                        smart_decision = self._smart_zone_aware_reversal_for_sell(
+                            direction, target_zone_id, current_price, zone_analysis
+                        )
                         
-                        # เช็คว่ามี SELL-heavy zones อื่นไหม ถ้าไม่มีก็ยังให้เข้าได้
-                        if zone_analysis['sell_heavy_zones'] == 0:
-                            should_enter = True
-                            reason = f"BUY in BUY-heavy Zone {target_zone_id} - but no SELL-heavy zones to balance"
-                        else:
-                            should_enter = False
-                            reason = f"Block BUY in BUY-heavy Zone {target_zone_id} - prefer SELL-heavy zones"
+                        should_enter = smart_decision['should_enter']
+                        health_improvement = smart_decision['health_improvement']
+                        confidence = smart_decision['confidence']
+                        lot_multiplier = smart_decision['lot_multiplier']
+                        balance_impact = smart_decision['balance_impact']
+                        reason = smart_decision['reason']
+                        
+                        # ถ้ามี Signal Reversal
+                        if smart_decision.get('reverse_signal'):
+                            direction = smart_decision['new_direction']  # เปลี่ยน direction
+                            logger.info(f"🔄 SMART REVERSAL (BUY-heavy): {smart_decision['original_direction']} → {direction}")
+                            logger.info(f"   Reason: {reason}")
                 
                 else:  # SELL
                     # ถ้า Zone นี้ BUY-heavy อยู่ → SELL จะช่วยสมดุล
@@ -1037,20 +1042,25 @@ class PortfolioManager:
                         balance_impact = 'POSITIVE'
                         reason = f"SELL helps balance BUY-heavy Zone {target_zone_id}"
                     
-                    # ถ้า Zone นี้ SELL-heavy อยู่แล้ว → SELL จะทำให้เสียสมดุลมากขึ้น
+                    # ถ้า Zone นี้ SELL-heavy อยู่แล้ว → ใช้ Smart Zone-Aware Reversal
                     elif current_balance <= 0.3:  # SELL-heavy
-                        health_improvement = -10.0
-                        confidence = 0.4
-                        lot_multiplier = 0.7
-                        balance_impact = 'NEGATIVE'
+                        # 🧠 SMART ZONE-AWARE REVERSAL LOGIC
+                        smart_decision = self._smart_zone_aware_reversal(
+                            direction, target_zone_id, current_price, zone_analysis
+                        )
                         
-                        # เช็คว่ามี BUY-heavy zones อื่นไหม
-                        if zone_analysis['buy_heavy_zones'] == 0:
-                            should_enter = True
-                            reason = f"SELL in SELL-heavy Zone {target_zone_id} - but no BUY-heavy zones to balance"
-                        else:
-                            should_enter = False
-                            reason = f"Block SELL in SELL-heavy Zone {target_zone_id} - prefer BUY-heavy zones"
+                        should_enter = smart_decision['should_enter']
+                        health_improvement = smart_decision['health_improvement']
+                        confidence = smart_decision['confidence']
+                        lot_multiplier = smart_decision['lot_multiplier']
+                        balance_impact = smart_decision['balance_impact']
+                        reason = smart_decision['reason']
+                        
+                        # ถ้ามี Signal Reversal
+                        if smart_decision.get('reverse_signal'):
+                            direction = smart_decision['new_direction']  # เปลี่ยน direction
+                            logger.info(f"🔄 SMART REVERSAL: {smart_decision['original_direction']} → {direction}")
+                            logger.info(f"   Reason: {reason}")
             
             # ถ้าเป็น Zone ใหม่ → อนุญาตเสมอ
             else:
@@ -1078,6 +1088,420 @@ class PortfolioManager:
                 'health_improvement': 0.0,
                 'balance_impact': 'UNKNOWN',
                 'reason': f'Error in analysis: {str(e)}'
+            }
+    
+    def _smart_zone_aware_reversal(self, direction: str, target_zone_id: int, 
+                                  current_price: float, zone_analysis: Dict) -> Dict[str, Any]:
+        """🧠 Smart Zone-Aware Reversal Logic - ปรับสมดุลใน zone ที่ราคาอยู่"""
+        try:
+            logger.info(f"🧠 SMART ZONE REVERSAL: Analyzing {direction} in Zone {target_zone_id}")
+            
+            # 1. 📊 วิเคราะห์ positions ใน current zone
+            current_zone_positions = self._get_zone_positions(target_zone_id, current_price)
+            buy_positions = current_zone_positions.get('BUY', [])
+            sell_positions = current_zone_positions.get('SELL', [])
+            
+            # 2. 💔 เช็ค BUY positions ที่ขาดทุน
+            losing_buys = [pos for pos in buy_positions if getattr(pos, 'profit', 0) < -5.0]
+            losing_buy_count = len(losing_buys)
+            total_buy_loss = sum(abs(getattr(pos, 'profit', 0)) for pos in losing_buys)
+            
+            logger.info(f"📊 Current Zone {target_zone_id}: BUY={len(buy_positions)} (Losing: {losing_buy_count}), "
+                       f"SELL={len(sell_positions)}, Total BUY Loss: ${total_buy_loss:.1f}")
+            
+            # 3. 🎯 Smart Decision Logic
+            if direction == "SELL" and losing_buy_count > 0:
+                # Case 1: Signal SELL แต่มี BUY ขาดทุน → พิจารณา Reverse เป็น BUY
+                
+                # 📏 คำนวณระยะห่างของ BUY positions จาก current price
+                avg_buy_distance = self._calculate_avg_position_distance(buy_positions, current_price)
+                
+                # 🎯 Recovery Score Calculation
+                recovery_score = 0
+                
+                # Distance Factor (40%)
+                if avg_buy_distance > 50:      recovery_score += 40  # Very far
+                elif avg_buy_distance > 30:    recovery_score += 30  # Far  
+                elif avg_buy_distance > 15:    recovery_score += 20  # Medium
+                else:                          recovery_score += 10  # Near
+                
+                # Loss Factor (30%)
+                if total_buy_loss > 200:       recovery_score += 30  # Heavy loss
+                elif total_buy_loss > 100:     recovery_score += 20  # Medium loss
+                elif total_buy_loss > 50:      recovery_score += 15  # Light loss
+                else:                          recovery_score += 5   # Minimal loss
+                
+                # Position Count Factor (20%)
+                if losing_buy_count > 10:      recovery_score += 20  # Many positions
+                elif losing_buy_count > 5:     recovery_score += 15  # Several positions
+                elif losing_buy_count > 2:     recovery_score += 10  # Few positions
+                else:                          recovery_score += 5   # Very few
+                
+                # Zone Balance Factor (10%)
+                sell_ratio = len(sell_positions) / max(1, len(buy_positions) + len(sell_positions))
+                if sell_ratio > 0.8:           recovery_score += 10  # Very SELL-heavy
+                elif sell_ratio > 0.6:         recovery_score += 7   # SELL-heavy
+                else:                          recovery_score += 3   # Balanced
+                
+                logger.info(f"🔄 Recovery Analysis: Distance={avg_buy_distance:.1f} pips, "
+                           f"Loss=${total_buy_loss:.1f}, Count={losing_buy_count}, Score={recovery_score}")
+                
+                # 🎯 Decision based on Recovery Score
+                if recovery_score >= 70:
+                    # High recovery potential → REVERSE to BUY
+                    return {
+                        'should_enter': True,
+                        'reverse_signal': True,
+                        'original_direction': 'SELL',
+                        'new_direction': 'BUY',
+                        'health_improvement': 25.0,
+                        'confidence': 0.9,
+                        'lot_multiplier': 1.2,
+                        'balance_impact': 'POSITIVE',
+                        'reason': f'Smart Reversal: BUY to help {losing_buy_count} losing positions (Recovery Score: {recovery_score})'
+                    }
+                elif recovery_score >= 40:
+                    # Medium recovery potential → Allow original SELL
+                    return {
+                        'should_enter': True,
+                        'reverse_signal': False,
+                        'health_improvement': 5.0,
+                        'confidence': 0.6,
+                        'lot_multiplier': 0.8,
+                        'balance_impact': 'NEUTRAL',
+                        'reason': f'Allow SELL: Medium recovery potential (Score: {recovery_score})'
+                    }
+                else:
+                    # Low recovery potential → Block
+                    return {
+                        'should_enter': False,
+                        'reverse_signal': False,
+                        'health_improvement': -5.0,
+                        'confidence': 0.3,
+                        'lot_multiplier': 0.5,
+                        'balance_impact': 'NEGATIVE',
+                        'reason': f'Block SELL: Low recovery potential (Score: {recovery_score})'
+                    }
+            
+            elif direction == "BUY":
+                # Case 2: Signal BUY ใน SELL-heavy zone → เช็คว่าควร reverse ช่วย SELL ขาดทุนไหม
+                losing_sells = [pos for pos in sell_positions if getattr(pos, 'profit', 0) < -5.0]
+                losing_sell_count = len(losing_sells)
+                total_sell_loss = sum(abs(getattr(pos, 'profit', 0)) for pos in losing_sells)
+                
+                if losing_sell_count > 0:
+                    # มี SELL ขาดทุน → พิจารณา reverse เป็น SELL
+                    avg_sell_distance = self._calculate_avg_position_distance(sell_positions, current_price)
+                    
+                    # คำนวณ Recovery Score สำหรับ SELL
+                    recovery_score = 0
+                    if avg_sell_distance > 50:      recovery_score += 40
+                    elif avg_sell_distance > 30:    recovery_score += 30
+                    elif avg_sell_distance > 15:    recovery_score += 20
+                    else:                           recovery_score += 10
+                    
+                    if total_sell_loss > 200:       recovery_score += 30
+                    elif total_sell_loss > 100:     recovery_score += 20
+                    elif total_sell_loss > 50:      recovery_score += 15
+                    else:                           recovery_score += 5
+                    
+                    if losing_sell_count > 10:      recovery_score += 20
+                    elif losing_sell_count > 5:     recovery_score += 15
+                    elif losing_sell_count > 2:     recovery_score += 10
+                    else:                           recovery_score += 5
+                    
+                    logger.info(f"🔄 BUY→SELL Recovery Check: SELL Distance={avg_sell_distance:.1f}, "
+                               f"Loss=${total_sell_loss:.1f}, Count={losing_sell_count}, Score={recovery_score}")
+                    
+                    if recovery_score >= 70:
+                        # High recovery → Reverse เป็น SELL
+                        return {
+                            'should_enter': True,
+                            'reverse_signal': True,
+                            'original_direction': 'BUY',
+                            'new_direction': 'SELL',
+                            'health_improvement': 25.0,
+                            'confidence': 0.9,
+                            'lot_multiplier': 1.2,
+                            'balance_impact': 'POSITIVE',
+                            'reason': f'Smart Reversal: SELL to help {losing_sell_count} losing SELL positions (Score: {recovery_score})'
+                        }
+                
+                # ไม่ reverse → BUY ปกติ (ดีสำหรับ balance)
+                return {
+                    'should_enter': True,
+                    'reverse_signal': False,
+                    'health_improvement': 20.0,
+                    'confidence': 0.8,
+                    'lot_multiplier': 1.1,
+                    'balance_impact': 'POSITIVE',
+                    'reason': f'BUY in SELL-heavy zone: Good for balance'
+                }
+            
+            else:
+                # Case 3: Signal SELL แต่ไม่มี BUY ขาดทุน → ใช้ logic เดิม
+                if zone_analysis.get('buy_heavy_zones', 0) == 0:
+                    return {
+                        'should_enter': True,
+                        'reverse_signal': False,
+                        'health_improvement': 0.0,
+                        'confidence': 0.5,
+                        'lot_multiplier': 0.7,
+                        'balance_impact': 'NEUTRAL',
+                        'reason': f'Allow SELL: No BUY-heavy zones available'
+                    }
+                else:
+                    return {
+                        'should_enter': False,
+                        'reverse_signal': False,
+                        'health_improvement': -10.0,
+                        'confidence': 0.4,
+                        'lot_multiplier': 0.5,
+                        'balance_impact': 'NEGATIVE',
+                        'reason': f'Block SELL: Prefer BUY-heavy zones for balance'
+                    }
+                    
+        except Exception as e:
+            logger.error(f"❌ Error in smart zone reversal: {e}")
+            # Fallback to conservative approach
+            return {
+                'should_enter': False,
+                'reverse_signal': False,
+                'health_improvement': 0.0,
+                'confidence': 0.3,
+                'lot_multiplier': 0.5,
+                'balance_impact': 'UNKNOWN',
+                'reason': f'Error in smart reversal: {e}'
+            }
+    
+    def _get_zone_positions(self, zone_id: int, current_price: float) -> Dict[str, List]:
+        """📊 ดึง positions ใน zone ที่กำหนด"""
+        try:
+            positions = self.order_manager.active_positions or []
+            if not positions:
+                return {'BUY': [], 'SELL': []}
+            
+            zone_positions = {'BUY': [], 'SELL': []}
+            zone_size_pips = 30.0  # Default zone size
+            
+            for pos in positions:
+                pos_price = getattr(pos, 'price_open', current_price)
+                pos_zone_id = int((pos_price - current_price) / zone_size_pips)
+                
+                if pos_zone_id == zone_id:
+                    pos_type = getattr(pos, 'type', 0)
+                    if pos_type == 0:  # BUY
+                        zone_positions['BUY'].append(pos)
+                    else:  # SELL
+                        zone_positions['SELL'].append(pos)
+            
+            return zone_positions
+            
+        except Exception as e:
+            logger.error(f"❌ Error getting zone positions: {e}")
+            return {'BUY': [], 'SELL': []}
+    
+    def _calculate_avg_position_distance(self, positions: List, current_price: float) -> float:
+        """📏 คำนวณระยะห่างเฉลี่ยของ positions จากราคาปัจจุบัน"""
+        try:
+            if not positions:
+                return 0.0
+            
+            total_distance = 0.0
+            for pos in positions:
+                pos_price = getattr(pos, 'price_open', current_price)
+                distance = abs(pos_price - current_price)
+                total_distance += distance
+            
+            avg_distance = total_distance / len(positions)
+            return avg_distance
+            
+        except Exception as e:
+            logger.error(f"❌ Error calculating average distance: {e}")
+            return 0.0
+    
+    def _smart_zone_aware_reversal_for_sell(self, direction: str, target_zone_id: int, 
+                                           current_price: float, zone_analysis: Dict) -> Dict[str, Any]:
+        """🧠 Smart Zone-Aware Reversal Logic สำหรับ SELL positions ที่มี BUY เยอะ"""
+        try:
+            logger.info(f"🧠 SMART ZONE REVERSAL (SELL): Analyzing {direction} in BUY-heavy Zone {target_zone_id}")
+            
+            # 1. 📊 วิเคราะห์ positions ใน current zone
+            current_zone_positions = self._get_zone_positions(target_zone_id, current_price)
+            buy_positions = current_zone_positions.get('BUY', [])
+            sell_positions = current_zone_positions.get('SELL', [])
+            
+            # 2. 💔 เช็ค SELL positions ที่ขาดทุน
+            losing_sells = [pos for pos in sell_positions if getattr(pos, 'profit', 0) < -5.0]
+            losing_sell_count = len(losing_sells)
+            total_sell_loss = sum(abs(getattr(pos, 'profit', 0)) for pos in losing_sells)
+            
+            logger.info(f"📊 BUY-heavy Zone {target_zone_id}: BUY={len(buy_positions)}, "
+                       f"SELL={len(sell_positions)} (Losing: {losing_sell_count}), Total SELL Loss: ${total_sell_loss:.1f}")
+            
+            # 3. 🎯 Smart Decision Logic
+            if direction == "BUY" and losing_sell_count > 0:
+                # Case 1: Signal BUY แต่มี SELL ขาดทุน → พิจารณา Reverse เป็น SELL
+                
+                # 📏 คำนวณระยะห่างของ SELL positions จาก current price
+                avg_sell_distance = self._calculate_avg_position_distance(sell_positions, current_price)
+                
+                # 🎯 Recovery Score Calculation
+                recovery_score = 0
+                
+                # Distance Factor (40%)
+                if avg_sell_distance > 50:      recovery_score += 40  # Very far
+                elif avg_sell_distance > 30:    recovery_score += 30  # Far  
+                elif avg_sell_distance > 15:    recovery_score += 20  # Medium
+                else:                           recovery_score += 10  # Near
+                
+                # Loss Factor (30%)
+                if total_sell_loss > 200:       recovery_score += 30  # Heavy loss
+                elif total_sell_loss > 100:     recovery_score += 20  # Medium loss
+                elif total_sell_loss > 50:      recovery_score += 15  # Light loss
+                else:                           recovery_score += 5   # Minimal loss
+                
+                # Position Count Factor (20%)
+                if losing_sell_count > 10:      recovery_score += 20  # Many positions
+                elif losing_sell_count > 5:     recovery_score += 15  # Several positions
+                elif losing_sell_count > 2:     recovery_score += 10  # Few positions
+                else:                           recovery_score += 5   # Very few
+                
+                # Zone Balance Factor (10%)
+                buy_ratio = len(buy_positions) / max(1, len(buy_positions) + len(sell_positions))
+                if buy_ratio > 0.8:             recovery_score += 10  # Very BUY-heavy
+                elif buy_ratio > 0.6:           recovery_score += 7   # BUY-heavy
+                else:                           recovery_score += 3   # Balanced
+                
+                logger.info(f"🔄 SELL Recovery Analysis: Distance={avg_sell_distance:.1f} pips, "
+                           f"Loss=${total_sell_loss:.1f}, Count={losing_sell_count}, Score={recovery_score}")
+                
+                # 🎯 Decision based on Recovery Score
+                if recovery_score >= 70:
+                    # High recovery potential → REVERSE to SELL
+                    return {
+                        'should_enter': True,
+                        'reverse_signal': True,
+                        'original_direction': 'BUY',
+                        'new_direction': 'SELL',
+                        'health_improvement': 25.0,
+                        'confidence': 0.9,
+                        'lot_multiplier': 1.2,
+                        'balance_impact': 'POSITIVE',
+                        'reason': f'Smart Reversal: SELL to help {losing_sell_count} losing SELL positions (Recovery Score: {recovery_score})'
+                    }
+                elif recovery_score >= 40:
+                    # Medium recovery potential → Allow original BUY
+                    return {
+                        'should_enter': True,
+                        'reverse_signal': False,
+                        'health_improvement': 5.0,
+                        'confidence': 0.6,
+                        'lot_multiplier': 0.8,
+                        'balance_impact': 'NEUTRAL',
+                        'reason': f'Allow BUY: Medium SELL recovery potential (Score: {recovery_score})'
+                    }
+                else:
+                    # Low recovery potential → Block
+                    return {
+                        'should_enter': False,
+                        'reverse_signal': False,
+                        'health_improvement': -5.0,
+                        'confidence': 0.3,
+                        'lot_multiplier': 0.5,
+                        'balance_impact': 'NEGATIVE',
+                        'reason': f'Block BUY: Low SELL recovery potential (Score: {recovery_score})'
+                    }
+            
+            elif direction == "SELL":
+                # Case 2: Signal SELL ใน BUY-heavy zone → เช็คว่าควร reverse ช่วย BUY ขาดทุนไหม
+                losing_buys = [pos for pos in buy_positions if getattr(pos, 'profit', 0) < -5.0]
+                losing_buy_count = len(losing_buys)
+                total_buy_loss = sum(abs(getattr(pos, 'profit', 0)) for pos in losing_buys)
+                
+                if losing_buy_count > 0:
+                    # มี BUY ขาดทุน → พิจารณา reverse เป็น BUY
+                    avg_buy_distance = self._calculate_avg_position_distance(buy_positions, current_price)
+                    
+                    # คำนวณ Recovery Score สำหรับ BUY
+                    recovery_score = 0
+                    if avg_buy_distance > 50:       recovery_score += 40
+                    elif avg_buy_distance > 30:     recovery_score += 30
+                    elif avg_buy_distance > 15:     recovery_score += 20
+                    else:                           recovery_score += 10
+                    
+                    if total_buy_loss > 200:        recovery_score += 30
+                    elif total_buy_loss > 100:      recovery_score += 20
+                    elif total_buy_loss > 50:       recovery_score += 15
+                    else:                           recovery_score += 5
+                    
+                    if losing_buy_count > 10:       recovery_score += 20
+                    elif losing_buy_count > 5:      recovery_score += 15
+                    elif losing_buy_count > 2:      recovery_score += 10
+                    else:                           recovery_score += 5
+                    
+                    logger.info(f"🔄 SELL→BUY Recovery Check: BUY Distance={avg_buy_distance:.1f}, "
+                               f"Loss=${total_buy_loss:.1f}, Count={losing_buy_count}, Score={recovery_score}")
+                    
+                    if recovery_score >= 70:
+                        # High recovery → Reverse เป็น BUY
+                        return {
+                            'should_enter': True,
+                            'reverse_signal': True,
+                            'original_direction': 'SELL',
+                            'new_direction': 'BUY',
+                            'health_improvement': 25.0,
+                            'confidence': 0.9,
+                            'lot_multiplier': 1.2,
+                            'balance_impact': 'POSITIVE',
+                            'reason': f'Smart Reversal: BUY to help {losing_buy_count} losing BUY positions (Score: {recovery_score})'
+                        }
+                
+                # ไม่ reverse → SELL ปกติ (ดีสำหรับ balance)
+                return {
+                    'should_enter': True,
+                    'reverse_signal': False,
+                    'health_improvement': 20.0,
+                    'confidence': 0.8,
+                    'lot_multiplier': 1.1,
+                    'balance_impact': 'POSITIVE',
+                    'reason': f'SELL in BUY-heavy zone: Good for balance'
+                }
+            
+            else:
+                # Case 3: Signal BUY แต่ไม่มี SELL ขาดทุน → ใช้ logic เดิม
+                if zone_analysis.get('sell_heavy_zones', 0) == 0:
+                    return {
+                        'should_enter': True,
+                        'reverse_signal': False,
+                        'health_improvement': 0.0,
+                        'confidence': 0.5,
+                        'lot_multiplier': 0.7,
+                        'balance_impact': 'NEUTRAL',
+                        'reason': f'Allow BUY: No SELL-heavy zones available'
+                    }
+                else:
+                    return {
+                        'should_enter': False,
+                        'reverse_signal': False,
+                        'health_improvement': -10.0,
+                        'confidence': 0.4,
+                        'lot_multiplier': 0.5,
+                        'balance_impact': 'NEGATIVE',
+                        'reason': f'Block BUY: Prefer SELL-heavy zones for balance'
+                    }
+                    
+        except Exception as e:
+            logger.error(f"❌ Error in smart zone reversal for SELL: {e}")
+            # Fallback to conservative approach
+            return {
+                'should_enter': False,
+                'reverse_signal': False,
+                'health_improvement': 0.0,
+                'confidence': 0.3,
+                'lot_multiplier': 0.5,
+                'balance_impact': 'UNKNOWN',
+                'reason': f'Error in smart SELL reversal: {e}'
             }
     
     def _analyze_zone_needs(self, current_price: float) -> Dict[str, Any]:
