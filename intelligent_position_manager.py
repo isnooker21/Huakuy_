@@ -557,18 +557,33 @@ class IntelligentPositionManager:
             
             # 🚫 ลบระบบเดิมออกทั้งหมด - ใช้เฉพาะ Intelligent Mass Closing
             
-            # 💰 INTELLIGENT POSITIVE SUM CLOSING: ใช้ 4-dimensional scoring หาชุดที่ผลรวมบวกเสมอ
-            logger.info(f"🔍 Searching for intelligent positive combination...")
-            intelligent_combination = self._find_intelligent_positive_combination(position_scores, margin_health)
-            if intelligent_combination:
-                logger.info(f"✅ Found intelligent combination!")
-                positions_to_close.extend(intelligent_combination['positions'])
-                profit_count = intelligent_combination.get('profit_count', 0)
-                loss_count = intelligent_combination.get('loss_count', 0) 
-                net_pnl = intelligent_combination.get('net_pnl', 0)
-                closing_reasons.append(f'Intelligent positive combination: {profit_count}P+{loss_count}L = +${net_pnl:.2f}')
-            else:
-                logger.info(f"❌ No intelligent combination found")
+            # 🌐 GLOBAL CROSS-ZONE ANALYSIS: วิเคราะห์ positions จากทุก zones รวมกัน
+            logger.info(f"🌐 GLOBAL ANALYSIS: Searching across all zones...")
+            
+            # 🎯 Strategy 1: Cross-Zone Intelligent Combination (Priority 1)
+            cross_zone_combination = self._find_cross_zone_combination(position_scores, margin_health)
+            if cross_zone_combination:
+                logger.info(f"✅ Found cross-zone combination!")
+                positions_to_close.extend(cross_zone_combination['positions'])
+                profit_count = cross_zone_combination.get('profit_count', 0)
+                loss_count = cross_zone_combination.get('loss_count', 0) 
+                net_pnl = cross_zone_combination.get('net_pnl', 0)
+                zones_involved = cross_zone_combination.get('zones_involved', [])
+                closing_reasons.append(f'Cross-Zone combination: {profit_count}P+{loss_count}L = +${net_pnl:.2f} (Zones: {zones_involved})')
+            
+            # 🎯 Strategy 2: Single-Zone Fallback (Priority 2)
+            if not positions_to_close:
+                logger.info(f"🔍 Fallback: Single-zone analysis...")
+                single_zone_combination = self._find_intelligent_positive_combination(position_scores, margin_health)
+                if single_zone_combination:
+                    logger.info(f"✅ Found single-zone combination!")
+                    positions_to_close.extend(single_zone_combination['positions'])
+                    profit_count = single_zone_combination.get('profit_count', 0)
+                    loss_count = single_zone_combination.get('loss_count', 0) 
+                    net_pnl = single_zone_combination.get('net_pnl', 0)
+                    closing_reasons.append(f'Single-Zone combination: {profit_count}P+{loss_count}L = +${net_pnl:.2f}')
+                else:
+                    logger.info(f"❌ No profitable combination found")
             
             # 🚫 ป้องกันไม่ให้ทิ้งไม้แย่ไว้
             if positions_to_close:
@@ -1106,6 +1121,176 @@ class IntelligentPositionManager:
             
         except Exception as e:
             logger.error(f"❌ Error finding intelligent positive combination: {e}")
+            return None
+    
+    def _find_cross_zone_combination(self, position_scores: List[PositionScore], 
+                                   margin_health: MarginHealth) -> Optional[Dict]:
+        """🌐 หาชุดกำไรข้าม Zones - Global Cross-Zone Analysis"""
+        try:
+            logger.info(f"🌐 Cross-Zone Analysis: {len(position_scores)} positions across all zones")
+            
+            # แยก positions ตาม zone และ profit/loss
+            profitable_positions = []
+            losing_positions = []
+            zones_data = {}
+            
+            for pos_score in position_scores:
+                position = pos_score.position
+                zone_id = getattr(position, 'zone_id', 'unknown')
+                
+                # เก็บข้อมูล zone
+                if zone_id not in zones_data:
+                    zones_data[zone_id] = {'profitable': [], 'losing': [], 'total_pnl': 0}
+                
+                pos_data = {
+                    'position': position,
+                    'ticket': position.ticket,
+                    'profit': position.profit,
+                    'total_score': pos_score.total_score,
+                    'zone_id': zone_id,
+                    'type': 'BUY' if position.type == 0 else 'SELL'
+                }
+                
+                if position.profit > 0:
+                    profitable_positions.append(pos_data)
+                    zones_data[zone_id]['profitable'].append(pos_data)
+                else:
+                    losing_positions.append(pos_data)
+                    zones_data[zone_id]['losing'].append(pos_data)
+                
+                zones_data[zone_id]['total_pnl'] += position.profit
+            
+            logger.info(f"📊 Zone Distribution: {len(zones_data)} zones, {len(profitable_positions)} profitable, {len(losing_positions)} losing")
+            
+            # 🎯 Strategy 1: Cross-Zone Pure Profit (ง่ายที่สุด)
+            cross_zone_profit = self._find_cross_zone_pure_profit(zones_data, margin_health)
+            if cross_zone_profit:
+                return cross_zone_profit
+            
+            # 🎯 Strategy 2: Cross-Zone Balanced (กำไร + ขาดทุนข้าม zones)
+            cross_zone_balanced = self._find_cross_zone_balanced(profitable_positions, losing_positions, zones_data, margin_health)
+            if cross_zone_balanced:
+                return cross_zone_balanced
+            
+            logger.info(f"❌ No cross-zone combination found")
+            return None
+            
+        except Exception as e:
+            logger.error(f"❌ Error in cross-zone analysis: {e}")
+            return None
+    
+    def _find_cross_zone_pure_profit(self, zones_data: Dict, margin_health: MarginHealth) -> Optional[Dict]:
+        """🌟 หาชุดกำไรล้วนข้าม zones"""
+        try:
+            profitable_zones = []
+            
+            # หา zones ที่มีกำไรสุทธิ
+            for zone_id, data in zones_data.items():
+                if data['total_pnl'] > 0 and len(data['profitable']) > 0:
+                    profitable_zones.append({
+                        'zone_id': zone_id,
+                        'positions': data['profitable'],
+                        'total_pnl': data['total_pnl'],
+                        'count': len(data['profitable'])
+                    })
+            
+            if len(profitable_zones) >= 2:  # อย่างน้อย 2 zones ที่กำไร
+                # เรียงตาม total_pnl
+                profitable_zones.sort(key=lambda x: x['total_pnl'], reverse=True)
+                
+                # เลือก 2-3 zones ที่ดีที่สุด
+                selected_zones = profitable_zones[:3]
+                all_positions = []
+                total_net_pnl = 0
+                zones_involved = []
+                
+                for zone in selected_zones:
+                    all_positions.extend([p['position'] for p in zone['positions']])
+                    total_net_pnl += zone['total_pnl']
+                    zones_involved.append(zone['zone_id'])
+                
+                # คำนวณ closing cost
+                closing_cost = self._calculate_closing_cost(all_positions)
+                net_pnl = total_net_pnl - closing_cost
+                
+                if net_pnl > 2.0:  # กำไรสุทธิอย่างน้อย $2
+                    logger.info(f"🌟 Cross-Zone Pure Profit: ${net_pnl:.2f} from zones {zones_involved}")
+                    return {
+                        'positions': all_positions,
+                        'net_pnl': net_pnl,
+                        'gross_pnl': total_net_pnl,
+                        'closing_cost': closing_cost,
+                        'profit_count': len(all_positions),
+                        'loss_count': 0,
+                        'zones_involved': zones_involved,
+                        'strategy': 'cross_zone_pure_profit'
+                    }
+            
+            return None
+            
+        except Exception as e:
+            logger.error(f"❌ Error in cross-zone pure profit: {e}")
+            return None
+    
+    def _find_cross_zone_balanced(self, profitable_positions: List[Dict], losing_positions: List[Dict], 
+                                zones_data: Dict, margin_health: MarginHealth) -> Optional[Dict]:
+        """⚖️ หาชุดสมดุลข้าม zones (กำไร + ขาดทุน)"""
+        try:
+            if len(profitable_positions) < 1 or len(losing_positions) < 1:
+                return None
+            
+            # เรียง positions ตามคะแนน 7D
+            profitable_positions.sort(key=lambda x: x['total_score'], reverse=True)
+            losing_positions.sort(key=lambda x: x['total_score'], reverse=True)
+            
+            best_combination = None
+            best_net_profit = 0
+            
+            # ลองชุดต่างๆ (เริ่มจากน้อยไปมาก)
+            for profit_count in range(1, min(len(profitable_positions), 8) + 1):
+                for loss_count in range(1, min(len(losing_positions), 5) + 1):
+                    
+                    selected_profitable = profitable_positions[:profit_count]
+                    selected_losing = losing_positions[:loss_count]
+                    
+                    # ตรวจสอบว่ามาจากหลาย zones
+                    all_zones = set()
+                    for pos in selected_profitable + selected_losing:
+                        all_zones.add(pos['zone_id'])
+                    
+                    if len(all_zones) < 2:  # ต้องมาจากอย่างน้อย 2 zones
+                        continue
+                    
+                    all_positions = [p['position'] for p in selected_profitable + selected_losing]
+                    gross_pnl = sum(pos.profit for pos in all_positions)
+                    closing_cost = self._calculate_closing_cost(all_positions)
+                    net_pnl = gross_pnl - closing_cost
+                    
+                    # เช็คว่า balance ดีขึ้นไหม
+                    balance_check = self._check_closing_balance(all_positions, {
+                        'buy_percentage': 50,  # mock data
+                        'sell_percentage': 50
+                    })
+                    
+                    if net_pnl > 2.0 and balance_check['improves_balance'] and net_pnl > best_net_profit:
+                        best_net_profit = net_pnl
+                        best_combination = {
+                            'positions': all_positions,
+                            'net_pnl': net_pnl,
+                            'gross_pnl': gross_pnl,
+                            'closing_cost': closing_cost,
+                            'profit_count': profit_count,
+                            'loss_count': loss_count,
+                            'zones_involved': list(all_zones),
+                            'strategy': 'cross_zone_balanced'
+                        }
+                        
+                        logger.info(f"⚖️ Cross-Zone Balanced: {profit_count}P+{loss_count}L = ${net_pnl:.2f} (Zones: {list(all_zones)})")
+            
+            return best_combination
+            
+        except Exception as e:
+            logger.error(f"❌ Error in cross-zone balanced: {e}")
             return None
     
     def _check_closing_balance(self, positions_to_close: List[Any], current_balance: Dict) -> Dict[str, Any]:
