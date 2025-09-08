@@ -438,7 +438,7 @@ class ZonePositionManager:
                             'trend_type': trend_type
                         }
                         
-                        logger.info(f"🎯 Better {trend_type} combination: {profit_count}P+{loss_count}L = +${net_pnl:.2f}")
+                        logger.debug(f"🎯 Better {trend_type} combination: {profit_count}P+{loss_count}L = +${net_pnl:.2f}")
             
             return best_combination
             
@@ -449,10 +449,10 @@ class ZonePositionManager:
     def _estimate_closing_cost(self, total_volume: float) -> float:
         """💰 ประมาณการ cost การปิดตำแหน่ง"""
         try:
-            # ค่าประมาณสำหรับ XAUUSD
-            spread_cost_per_lot = 1.50  # $1.50 per 0.01 lot
-            slippage_cost_per_lot = 2.00  # $2.00 per 0.01 lot  
-            commission_per_lot = 0.50  # $0.50 per 0.01 lot
+            # ค่าประมาณสำหรับ XAUUSD - ลดลงเพื่อให้ปิดกำไรง่ายขึ้น
+            spread_cost_per_lot = 0.80  # $0.80 per 0.01 lot (ลดจาก $1.50)
+            slippage_cost_per_lot = 1.00  # $1.00 per 0.01 lot (ลดจาก $2.00)
+            commission_per_lot = 0.30  # $0.30 per 0.01 lot (ลดจาก $0.50)
             
             volume_in_standard_lots = total_volume / 0.01
             total_cost = (spread_cost_per_lot + slippage_cost_per_lot + commission_per_lot) * volume_in_standard_lots
@@ -461,7 +461,7 @@ class ZonePositionManager:
             
         except Exception as e:
             logger.error(f"❌ Error estimating closing cost: {e}")
-            return total_volume * 4.0  # Fallback: $4 per 0.01 lot
+            return total_volume * 2.5  # Fallback: $2.5 per 0.01 lot (ลดจาก $4)
     
     def _detect_scalping_opportunity(self, positions: List[Any], current_price: float) -> Dict[str, Any]:
         """🚀 ตรวจจับโอกาส Scalping และเปิด Micro-Zone Mode"""

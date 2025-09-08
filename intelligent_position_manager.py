@@ -712,10 +712,10 @@ class IntelligentPositionManager:
                 except Exception as e:
                     logger.warning(f"⚠️ Cannot get current spread: {e}")
             
-            # Base costs สำหรับ XAUUSD
-            commission_per_lot = 0.50  # $0.50 per 0.01 lot
-            slippage_cost_per_lot = 3.00  # เพิ่มเป็น $3.00 per 0.01 lot (conservative)
-            buffer_per_lot = 2.00  # เพิ่มเป็น $2.00 per 0.01 lot (extra safety)
+            # Base costs สำหรับ XAUUSD - ลดลงเพื่อให้ปิดกำไรง่ายขึ้น
+            commission_per_lot = 0.30  # $0.30 per 0.01 lot (ลดจาก $0.50)
+            slippage_cost_per_lot = 1.50  # $1.50 per 0.01 lot (ลดจาก $3.00)
+            buffer_per_lot = 1.00  # $1.00 per 0.01 lot (ลดจาก $2.00)
             
             # ใช้ spread จริงหรือ estimate
             if current_spread_cost > 0:
@@ -732,19 +732,15 @@ class IntelligentPositionManager:
             
             total_cost = spread_cost + total_commission + total_slippage + total_buffer
             
-            logger.info(f"💰 Closing Cost Breakdown for {total_volume:.2f} lots:")
-            logger.info(f"   Spread: ${spread_cost:.2f}")
-            logger.info(f"   Commission: ${total_commission:.2f}")
-            logger.info(f"   Slippage: ${total_slippage:.2f}")
-            logger.info(f"   Buffer: ${total_buffer:.2f}")
-            logger.info(f"   Total Cost: ${total_cost:.2f}")
+            # ลบ log ที่เยอะเกินไป - เหลือแค่ total cost
+            logger.debug(f"💰 Closing Cost: ${total_cost:.2f} for {total_volume:.2f} lots")
             
             return total_cost
             
         except Exception as e:
             logger.error(f"❌ Error calculating closing cost: {e}")
-            # Conservative fallback: $7 per 0.01 lot (เพิ่มจาก $4)
-            fallback_cost = (total_volume / 0.01) * 7.0
+            # Realistic fallback: $3 per 0.01 lot (ลดจาก $7)
+            fallback_cost = (total_volume / 0.01) * 3.0
             logger.warning(f"⚠️ Using fallback cost: ${fallback_cost:.2f}")
             return fallback_cost
     
