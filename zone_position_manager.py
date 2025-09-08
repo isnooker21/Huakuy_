@@ -218,27 +218,20 @@ class ZonePositionManager:
                     else:
                         logger.warning(f"⚠️ Skip closing Zone {zone_id}: {portfolio_impact['reason']}")
                 
-                # เงื่อนไข 2: Zone เสี่ยงสูง หรือขาดทุนหนักมาก - ปิดเพื่อลดความเสี่ยง
-                elif (analysis.risk_level in ['HIGH', 'CRITICAL'] and 
-                      (analysis.total_pnl > self.max_loss_threshold or analysis.total_pnl < -50) and  # ขาดทุนเกิน $50
-                      analysis.health_score < 40):  # ลดจาก 30 เป็น 40
+                # เงื่อนไข 2: Zone เสี่ยงสูง หรือขาดทุนหนักมาก - ปิดเพื่อลดความเสี่ยง (DISABLED - NO LOSS CLOSING)
+                elif False:  # DISABLED: ไม่ปิดติดลบแล้ว
+                    # เดิม: (analysis.risk_level in ['HIGH', 'CRITICAL'] and 
+                    #       (analysis.total_pnl > self.max_loss_threshold or analysis.total_pnl < -50) and
+                    #       analysis.health_score < 40)
                     
                     zone_range = f"{zone.price_min:.2f}-{zone.price_max:.2f}"
-                    logger.info(f"🚨 Critical Zone Closing: Zone {zone_id} [{zone_range}]")
+                    logger.info(f"🚨 Critical Zone Closing DISABLED: Zone {zone_id} [{zone_range}]")
                     logger.info(f"   Positions: B{zone.buy_count}:S{zone.sell_count} | "
                                f"P&L: ${analysis.total_pnl:.2f} | Risk: {analysis.risk_level}")
+                    logger.info(f"   💡 Recovery Mode: ปิดเฉพาะกำไรเท่านั้น")
                     
-                    return {
-                        'should_close': True,
-                        'reason': f'Critical Zone {zone_id} [{zone_range}]: {analysis.risk_level} risk',
-                        'positions_to_close': zone.positions,
-                        'positions_count': zone.total_positions,
-                        'expected_pnl': analysis.total_pnl,
-                        'method': 'single_zone_risk',
-                        'zone_id': zone_id,
-                        'zone_range': zone_range,
-                        'risk_level': analysis.risk_level
-                    }
+                    # ไม่ return การปิด - ให้ระบบอื่นจัดการ
+                    pass
             
             return {'should_close': False}
             
@@ -425,8 +418,11 @@ class ZonePositionManager:
                     
                     net_pnl = gross_pnl - closing_cost
                     
-                    # เลือกเฉพาะชุดที่ให้ผลรวมบวก และดีกว่าเดิม
-                    if net_pnl > 0 and net_pnl > best_net_profit:
+                    # LOG การคำนวณ เพื่อ debug
+                    logger.debug(f"💰 Combination: {profit_count}P + {loss_count}L = Gross ${gross_pnl:.2f} - Cost ${closing_cost:.2f} = Net ${net_pnl:.2f}")
+                    
+                    # เลือกเฉพาะชุดที่ให้ผลรวมบวก และดีกว่าเดิม - STRICT CHECK
+                    if net_pnl > 2.0 and net_pnl > best_net_profit:  # ต้องกำไรอย่างน้อย $2
                         best_net_profit = net_pnl
                         best_combination = {
                             'positions': [pos['position'] for pos in all_positions],

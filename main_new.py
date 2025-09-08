@@ -49,7 +49,7 @@ logging.getLogger('zone_rebalancer').setLevel(logging.WARNING)
 logging.getLogger('market_analysis').setLevel(logging.WARNING)
 
 # เปิดเฉพาะ Zone-Based System และ Main Trading
-logging.getLogger('zone_position_manager').setLevel(logging.INFO)
+logging.getLogger('zone_position_manager').setLevel(logging.DEBUG)
 logging.getLogger('zone_manager').setLevel(logging.INFO)
 logging.getLogger('zone_analyzer').setLevel(logging.INFO)
 logging.getLogger('zone_coordinator').setLevel(logging.INFO)
