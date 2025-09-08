@@ -53,7 +53,7 @@ logging.getLogger('zone_position_manager').setLevel(logging.INFO)  # ลดจ�
 logging.getLogger('zone_manager').setLevel(logging.WARNING)  # ลดจาก INFO
 logging.getLogger('zone_analyzer').setLevel(logging.WARNING)  # ลดจาก INFO
 logging.getLogger('zone_coordinator').setLevel(logging.WARNING)  # ลดจาก INFO
-logging.getLogger('intelligent_position_manager').setLevel(logging.INFO)  # เพิ่ม
+logging.getLogger('intelligent_position_manager').setLevel(logging.DEBUG)  # เปิด debug เพื่อ debug ระบบปิดไม้
 logging.getLogger('__main__').setLevel(logging.INFO)
 
 logger = logging.getLogger(__name__)
