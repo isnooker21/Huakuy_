@@ -272,33 +272,13 @@ class IntelligentPositionManager:
                 positions_to_close.extend([score.position for score in high_impact])
                 closing_reasons.append(f'CRITICAL margin level: {margin_health.margin_level:.1f}%')
             
-            # 2. 🎯 MUST_CLOSE: ปิดตำแหน่งที่ได้คะแนนสูง (ไม่จำกัดจำนวน)
-            must_close = [score for score in position_scores if score.priority == 'MUST_CLOSE']
-            if must_close:
-                # ปิดทั้งหมดที่ได้คะแนนสูง - ไม่จำกัดจำนวน
-                positions_to_close.extend([score.position for score in must_close])
-                closing_reasons.append(f'{len(must_close)} high-priority positions (unlimited)')
+            # 🚫 ลบระบบเดิมออกทั้งหมด - ใช้เฉพาะ Intelligent Mass Closing
             
-            # 3. ⚖️ BALANCE: ปิดเพื่อปรับสมดุล
-            if balance_analysis.get('needs_rebalance', False):
-                balance_closes = self._select_balance_positions(position_scores, balance_analysis)
-                positions_to_close.extend(balance_closes)
-                if balance_closes:
-                    closing_reasons.append(f'Portfolio rebalancing: {len(balance_closes)} positions')
-            
-            # 4. 🎯 SMART PAIRING: จับคู่กำไร-ขาดทุน (หลายคู่)
-            if not positions_to_close:  # ถ้ายังไม่มีอะไรให้ปิด
-                smart_pairs = self._find_multiple_smart_pairs(position_scores)
-                if smart_pairs:
-                    positions_to_close.extend(smart_pairs)
-                    closing_reasons.append(f'Smart profit-loss pairing: {len(smart_pairs)} positions')
-            
-            # 5. 💰 INTELLIGENT MASS CLOSING: ปิดแบบกลุ่มฉลาดไม่จำกัดจำนวน
-            if not positions_to_close:  # ถ้ายังไม่มีอะไรให้ปิด
-                intelligent_mass_positions = self._find_intelligent_mass_closing(position_scores, margin_health)
-                if intelligent_mass_positions:
-                    positions_to_close.extend(intelligent_mass_positions)
-                    closing_reasons.append(f'Intelligent mass closing: {len(intelligent_mass_positions)} positions')
+            # 💰 INTELLIGENT MASS CLOSING: เป็นระบบเดียวที่ใช้ (ไม่มีระบบอื่น)
+            intelligent_mass_positions = self._find_intelligent_mass_closing(position_scores, margin_health)
+            if intelligent_mass_positions:
+                positions_to_close.extend(intelligent_mass_positions)
+                closing_reasons.append(f'Intelligent mass closing: {len(intelligent_mass_positions)} positions')
             
             # 🚫 ป้องกันไม่ให้ทิ้งไม้แย่ไว้
             if positions_to_close:
@@ -332,129 +312,12 @@ class IntelligentPositionManager:
             logger.error(f"❌ Error in intelligent decision making: {e}")
             return {'should_close': False, 'reason': f'Decision error: {e}'}
     
-    def _select_balance_positions(self, position_scores: List[PositionScore], 
-                                balance_analysis: Dict) -> List[Any]:
-        """⚖️ เลือกตำแหน่งสำหรับปรับสมดุล"""
-        try:
-            positions_to_close = []
-            
-            # ถ้า BUY มากเกินไป → ปิด BUY ที่แย่ทั้งหมด
-            if balance_analysis['buy_ratio'] > 0.65:
-                buy_positions = [score for score in position_scores 
-                               if getattr(score.position, 'type', 0) == 0]
-                # เรียงจากแย่สุดไปดีสุด และปิดที่แย่กว่าค่าเฉลี่ย
-                buy_positions.sort(key=lambda x: x.total_score)
-                avg_score = sum(score.total_score for score in buy_positions) / len(buy_positions) if buy_positions else 0
-                bad_buys = [score for score in buy_positions if score.total_score < avg_score]
-                positions_to_close.extend([score.position for score in bad_buys])
-            
-            # ถ้า SELL มากเกินไป → ปิด SELL ที่แย่ทั้งหมด
-            elif balance_analysis['sell_ratio'] > 0.65:
-                sell_positions = [score for score in position_scores 
-                                if getattr(score.position, 'type', 0) == 1]
-                sell_positions.sort(key=lambda x: x.total_score)
-                avg_score = sum(score.total_score for score in sell_positions) / len(sell_positions) if sell_positions else 0
-                bad_sells = [score for score in sell_positions if score.total_score < avg_score]
-                positions_to_close.extend([score.position for score in bad_sells])
-            
-            return positions_to_close
-            
-        except Exception as e:
-            logger.error(f"❌ Error selecting balance positions: {e}")
-            return []
+    # 🚫 ลบ _select_balance_positions - ไม่ใช้แล้ว
     
-    def _find_smart_pairs(self, position_scores: List[PositionScore]) -> List[Any]:
-        """🎯 หาคู่ profit-loss ที่ดี (เดิม - สำหรับ backward compatibility)"""
-        try:
-            profitable = [score for score in position_scores if getattr(score.position, 'profit', 0) > 3.0]
-            losing = [score for score in position_scores if getattr(score.position, 'profit', 0) < -8.0]
-            
-            if not profitable or not losing:
-                return []
-            
-            # จับคู่กำไรดีสุดกับขาดทุนแย่สุด
-            best_profit = max(profitable, key=lambda x: getattr(x.position, 'profit', 0))
-            worst_loss = min(losing, key=lambda x: getattr(x.position, 'profit', 0))
-            
-            expected_pnl = getattr(best_profit.position, 'profit', 0) + getattr(worst_loss.position, 'profit', 0)
-            
-            # ปิดถ้าผลรวมไม่ขาดทุนเกิน $2
-            if expected_pnl > -2.0:
-                return [best_profit.position, worst_loss.position]
-            
-            return []
-            
-        except Exception as e:
-            logger.error(f"❌ Error finding smart pairs: {e}")
-            return []
+    # 🚫 ลบ _find_smart_pairs และ _find_multiple_smart_pairs - ไม่ใช้แล้ว
     
-    def _find_multiple_smart_pairs(self, position_scores: List[PositionScore]) -> List[Any]:
-        """🎯 หาคู่ profit-loss หลายคู่ (ไม่จำกัดจำนวน)"""
-        try:
-            profitable = [score for score in position_scores if getattr(score.position, 'profit', 0) > 3.0]
-            losing = [score for score in position_scores if getattr(score.position, 'profit', 0) < -8.0]
-            
-            if not profitable or not losing:
-                return []
-            
-            # เรียงตามกำไร/ขาดทุน
-            profitable.sort(key=lambda x: getattr(x.position, 'profit', 0), reverse=True)  # กำไรมากสุดก่อน
-            losing.sort(key=lambda x: getattr(x.position, 'profit', 0))  # ขาดทุนมากสุดก่อน
-            
-            positions_to_close = []
-            used_profitable = []
-            used_losing = []
-            
-            # จับคู่ทีละคู่จนหมด
-            for profit_score in profitable:
-                if profit_score in used_profitable:
-                    continue
-                    
-                for loss_score in losing:
-                    if loss_score in used_losing:
-                        continue
-                    
-                    profit_val = getattr(profit_score.position, 'profit', 0)
-                    loss_val = getattr(loss_score.position, 'profit', 0)
-                    expected_pnl = profit_val + loss_val
-                    
-                    # คำนวณ Slippage + Commission ตาม lot size
-                    profit_volume = getattr(profit_score.position, 'volume', 0.01)
-                    loss_volume = getattr(loss_score.position, 'volume', 0.01)
-                    total_volume = profit_volume + loss_volume
-                    
-                    # คำนวณ cost การปิด (spread + slippage + commission + buffer)
-                    closing_cost = self._calculate_closing_cost(total_volume, [profit_score.position, loss_score.position])
-                    min_profit_required = closing_cost * 1.2  # เพิ่ม 20% safety margin
-                    
-                    # จับคู่เฉพาะเมื่อกำไรสุทธิหลัง cost
-                    net_profit_after_cost = expected_pnl - closing_cost
-                    
-                    # เงื่อนไขเข้มงวด: ต้องกำไรสุทธิหลัง cost อย่างน้อย $2
-                    if net_profit_after_cost >= 2.0:  # กำไรสุทธิอย่างน้อย $2
-                        positions_to_close.extend([profit_score.position, loss_score.position])
-                        used_profitable.append(profit_score)
-                        used_losing.append(loss_score)
-                        logger.info(f"🎯 Smart Pair (Net Profit): ${profit_val:.2f} + ${loss_val:.2f} = ${expected_pnl:.2f}")
-                        logger.info(f"   📊 Volume: {total_volume:.2f} lots, Cost: ${closing_cost:.2f}, Net: +${net_profit_after_cost:.2f}")
-                        break
-                    elif profit_val > (total_volume * 150) and net_profit_after_cost > -5.0:  # กำไรดีมากมาก (150$/0.01lot)
-                        positions_to_close.extend([profit_score.position, loss_score.position])
-                        used_profitable.append(profit_score)
-                        used_losing.append(loss_score)
-                        logger.info(f"🎯 Smart Pair (Excellent Profit): ${profit_val:.2f} + ${loss_val:.2f} = ${expected_pnl:.2f}")
-                        logger.info(f"   📊 Volume: {total_volume:.2f} lots, Cost: ${closing_cost:.2f}, Net: ${net_profit_after_cost:.2f}")
-                        break
-                    else:
-                        logger.debug(f"❌ Pair rejected: ${profit_val:.2f} + ${loss_val:.2f} = ${expected_pnl:.2f}, Net: ${net_profit_after_cost:.2f} < $2.00")
-            
-            return positions_to_close
-            
-        except Exception as e:
-            logger.error(f"❌ Error finding multiple smart pairs: {e}")
-            return []
-    
-    def _find_mass_profit_opportunities(self, position_scores: List[PositionScore], 
+    # 🚫 ลบ _find_mass_profit_opportunities - ไม่ใช้แล้ว
+    def _old_find_mass_profit_opportunities(self, position_scores: List[PositionScore], 
                                        margin_health: MarginHealth) -> List[Any]:
         """💰 หาโอกาสปิดกำไรแบบกลุ่ม - เพิ่ม Zone Balance Protection"""
         try:
