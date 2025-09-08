@@ -322,10 +322,14 @@ class TradingConditions:
 
         # 🚀 Adaptive Entry Control - ENHANCED for Balance Enforcement
         adaptive_control = self._check_adaptive_entry_control(positions, candle.close, strength_analysis['direction'])
+        force_balance_mode = False
+        
         if adaptive_control['force_trade']:
             # บังคับ Counter-Trade เพื่อแก้สมดุล Portfolio
             strength_analysis['direction'] = adaptive_control['forced_direction']
+            force_balance_mode = True  # เปิดโหมดบังคับ Balance
             logger.info(f"🚀 Adaptive Force Trade: {adaptive_control['reason']}")
+            logger.info(f"🛡️ FORCE BALANCE MODE: ข้ามเงื่อนไขบางข้อเพื่อแก้สมดุล")
         elif adaptive_control['should_block']:
             # บล็อคการเข้าที่ทำให้ไม่ Balance มากขึ้น
             result['can_enter'] = False
@@ -465,11 +469,14 @@ class TradingConditions:
                     result['can_enter'] = False
                     result['reasons'].append(f"Zone {current_zone} SELL heavy: {zone_imbalance} zones imbalance")
                     
-        # ตรวจสอบ Price Hierarchy Rule (ซื้อถูกขายแพง)
-        hierarchy_check = self._check_price_hierarchy(positions, direction)
-        if not hierarchy_check['valid']:
-            result['can_enter'] = False
-            result['reasons'].append(hierarchy_check['reason'])
+        # ตรวจสอบ Price Hierarchy Rule (ซื้อถูกขายแพง) - ข้ามเมื่อ Force Balance
+        if not force_balance_mode:  # เช็คเฉพาะเมื่อไม่ใช่โหมดบังคับ Balance
+            hierarchy_check = self._check_price_hierarchy(positions, direction)
+            if not hierarchy_check['valid']:
+                result['can_enter'] = False
+                result['reasons'].append(hierarchy_check['reason'])
+        else:
+            logger.info(f"🛡️ FORCE BALANCE: ข้าม Price Hierarchy check เพื่อแก้สมดุล")
             
         return result
     
