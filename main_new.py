@@ -479,55 +479,100 @@ class TradingSystem:
             buy_positions = [pos for pos in positions if pos.type == 0]  # BUY
             sell_positions = [pos for pos in positions if pos.type == 1]  # SELL
             
+            # แยกเป็น กำไร และ ขาดทุน
+            profitable_buys = [pos for pos in buy_positions if pos.profit > 0]
+            losing_buys = [pos for pos in buy_positions if pos.profit <= 0]
+            profitable_sells = [pos for pos in sell_positions if pos.profit > 0]
+            losing_sells = [pos for pos in sell_positions if pos.profit <= 0]
+            
             # เรียงตาม P&L
-            buy_positions.sort(key=lambda x: x.profit, reverse=True)  # BUY ดีที่สุดก่อน
-            sell_positions.sort(key=lambda x: x.profit, reverse=True)  # SELL ดีที่สุดก่อน
+            profitable_buys.sort(key=lambda x: x.profit, reverse=True)  # กำไรมากก่อน
+            losing_buys.sort(key=lambda x: x.profit)  # ขาดทุนน้อยก่อน (แย่ที่สุดท้าย)
+            profitable_sells.sort(key=lambda x: x.profit, reverse=True)  # กำไรมากก่อน
+            losing_sells.sort(key=lambda x: x.profit)  # ขาดทุนน้อยก่อน (แย่ที่สุดท้าย)
             
             # หาคู่ที่ดีที่สุด (BUY + SELL = กำไรรวม)
             best_combinations = []
             
-            # ลอง combination ขนาดต่างๆ (2-8 positions)
-            for combo_size in range(2, min(9, len(positions) + 1)):
-                for buy_count in range(1, combo_size):
-                    sell_count = combo_size - buy_count
+            # 🎯 SMART PAIRING: จับคู่ positions ดี กับ positions แย่
+            logger.info(f"🎯 Smart Pairing: Profitable BUY={len(profitable_buys)}, Losing BUY={len(losing_buys)}")
+            logger.info(f"🎯 Smart Pairing: Profitable SELL={len(profitable_sells)}, Losing SELL={len(losing_sells)}")
+            
+            # ลอง combination ขนาดต่างๆ (2-12 positions) - เพิ่มขึ้นเพื่อปิดได้มากขึ้น
+            for combo_size in range(2, min(13, len(positions) + 1)):
+                # ลอง ratio ต่างๆ ระหว่าง profitable และ losing
+                for profitable_ratio in [0.3, 0.4, 0.5, 0.6, 0.7]:  # 30%-70% เป็น profitable
+                    profitable_count = max(1, int(combo_size * profitable_ratio))
+                    losing_count = combo_size - profitable_count
                     
-                    if buy_count > len(buy_positions) or sell_count > len(sell_positions):
+                    if losing_count < 1:  # ต้องมี losing positions ด้วย
                         continue
                     
-                    # เลือก positions
-                    selected_buys = buy_positions[:buy_count]
-                    selected_sells = sell_positions[:sell_count]
-                    all_selected = selected_buys + selected_sells
-                    
-                    # คำนวณ P&L รวม
-                    total_pnl = sum([pos.profit for pos in all_selected])
-                    
-                    # ต้องเป็นบวกเสมอ (ไม่ปิดติดลบ)
-                    if total_pnl > 5.0:  # กำไรขั้นต่ำ $5
-                        balance_score = abs(buy_count - sell_count) * -10  # ยิ่งสมดุลยิ่งดี
-                        total_score = total_pnl + balance_score
+                    # แบ่ง profitable และ losing ระหว่าง BUY/SELL
+                    for buy_profitable in range(max(0, profitable_count - len(profitable_sells)), 
+                                              min(profitable_count + 1, len(profitable_buys) + 1)):
+                        sell_profitable = profitable_count - buy_profitable
                         
-                        best_combinations.append({
-                            'positions': all_selected,
-                            'total_pnl': total_pnl,
-                            'balance_score': balance_score,
-                            'total_score': total_score,
-                            'buy_count': buy_count,
-                            'sell_count': sell_count
-                        })
+                        for buy_losing in range(max(0, losing_count - len(losing_sells)), 
+                                              min(losing_count + 1, len(losing_buys) + 1)):
+                            sell_losing = losing_count - buy_losing
+                            
+                            # เช็คว่ามี positions เพียงพอไหม
+                            if (buy_profitable > len(profitable_buys) or 
+                                sell_profitable > len(profitable_sells) or
+                                buy_losing > len(losing_buys) or 
+                                sell_losing > len(losing_sells)):
+                                continue
+                            
+                            # เลือก positions
+                            selected_positions = []
+                            selected_positions.extend(profitable_buys[:buy_profitable])
+                            selected_positions.extend(profitable_sells[:sell_profitable])
+                            selected_positions.extend(losing_buys[-buy_losing:] if buy_losing > 0 else [])  # แย่ที่สุด
+                            selected_positions.extend(losing_sells[-sell_losing:] if sell_losing > 0 else [])  # แย่ที่สุด
+                            
+                            if len(selected_positions) != combo_size:
+                                continue
+                            
+                            # คำนวณ P&L รวม
+                            total_pnl = sum([pos.profit for pos in selected_positions])
+                            
+                            # ต้องเป็นบวกเสมอ (ไม่ปิดติดลบ)
+                            if total_pnl > 3.0:  # กำไรขั้นต่ำ $3
+                                buy_total = buy_profitable + buy_losing
+                                sell_total = sell_profitable + sell_losing
+                                balance_score = abs(buy_total - sell_total) * -5  # ยิ่งสมดุลยิ่งดี
+                                
+                                # Bonus สำหรับการปิด losing positions
+                                losing_bonus = (buy_losing + sell_losing) * 2  # ยิ่งปิด losing เยอะยิ่งดี
+                                total_score = total_pnl + balance_score + losing_bonus
+                                
+                                best_combinations.append({
+                                    'positions': selected_positions,
+                                    'total_pnl': total_pnl,
+                                    'balance_score': balance_score,
+                                    'losing_bonus': losing_bonus,
+                                    'total_score': total_score,
+                                    'profitable_count': profitable_count,
+                                    'losing_count': losing_count,
+                                    'buy_count': buy_total,
+                                    'sell_count': sell_total
+                                })
             
             if best_combinations:
                 # เลือกชุดที่ดีที่สุด
                 best_combinations.sort(key=lambda x: x['total_score'], reverse=True)
                 best = best_combinations[0]
                 
-                logger.info(f"🎯 Found aggressive combination: {best['buy_count']}B+{best['sell_count']}S = ${best['total_pnl']:.2f}")
+                logger.info(f"🎯 Found SMART aggressive combination: {best['profitable_count']}P+{best['losing_count']}L "
+                           f"({best['buy_count']}B+{best['sell_count']}S) = ${best['total_pnl']:.2f} "
+                           f"(Losing Bonus: +{best['losing_bonus']:.1f})")
                 
                 return {
                     'should_close': True,
                     'positions_to_close': best['positions'],
                     'expected_pnl': best['total_pnl'],
-                    'reason': f"Aggressive Balance: {best['buy_count']}B+{best['sell_count']}S"
+                    'reason': f"Smart Aggressive: {best['profitable_count']}P+{best['losing_count']}L pairs"
                 }
             else:
                 logger.info(f"❌ No profitable aggressive combinations found")
