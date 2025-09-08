@@ -325,7 +325,7 @@ class TradingConditions:
         # เพื่อไม่ให้พอร์ตแย่ยิ่งแย่หนัก จากการไม่ออกไม้
 
         # 🚀 Adaptive Entry Control - ENHANCED for Balance Enforcement
-        adaptive_control = self._check_adaptive_entry_control(positions, candle.close, strength_analysis['direction'])
+        adaptive_control = self._check_adaptive_entry_control(positions, candle.close, strength_analysis['direction'], strength_analysis)
         
         if adaptive_control['force_trade']:
             # บังคับ Counter-Trade เพื่อแก้สมดุล Portfolio
@@ -1043,7 +1043,7 @@ class TradingConditions:
             logger.error(f"❌ Error calculating entry limit: {e}")
             return 3  # Safe default
     
-    def _check_adaptive_entry_control(self, positions: List[Position], current_price: float, direction: str) -> Dict[str, Any]:
+    def _check_adaptive_entry_control(self, positions: List[Position], current_price: float, direction: str, strength_analysis: Dict) -> Dict[str, Any]:
         """
         🚀 Adaptive Entry Control - รองรับ Unlimited Entry + Smart Management
         
@@ -1051,6 +1051,7 @@ class TradingConditions:
             positions: รายการ positions
             current_price: ราคาปัจจุบัน
             direction: ทิศทางที่จะเข้า
+            strength_analysis: ข้อมูลแรงตลาด
             
         Returns:
             Dict: ผลการตรวจสอบ
