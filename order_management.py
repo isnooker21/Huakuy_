@@ -253,9 +253,56 @@ class OrderManager:
             
             logger.info(f"✅ ZERO LOSS POLICY: Safe to close - profit margin OK")
             
-            # 🚫 เปลี่ยนเป็นปิดแบบเช็ค spread เพื่อป้องกันปิดติดลบ
-            tickets = [pos.ticket for pos in valid_positions]  # Use validated positions
-            group_result = self.mt5.close_positions_group_with_spread_check(tickets)
+            # 🎯 BUSINESS LOGIC: Spread check และ group analysis ที่นี่
+            tickets = [pos.ticket for pos in valid_positions]
+            
+            # 📊 STEP 1: Analyze positions with spread check
+            position_analysis = []
+            total_group_profit = 0.0
+            
+            for pos in valid_positions:
+                try:
+                    # คำนวณกำไรและ spread
+                    profit_info = self.mt5.calculate_position_profit_with_spread(pos.ticket)
+                    if profit_info:
+                        position_analysis.append({
+                            'ticket': pos.ticket,
+                            'position': pos,
+                            'profit_info': profit_info,
+                            'should_close': profit_info['should_close'] or profit_info['profit_percentage'] >= -0.5
+                        })
+                        total_group_profit += profit_info['current_profit']
+                    else:
+                        logger.error(f"❌ Cannot analyze Position {pos.ticket}")
+                except Exception as e:
+                    logger.error(f"❌ Analysis error for Position {pos.ticket}: {e}")
+            
+            if not position_analysis:
+                return CloseResult(
+                    success=False,
+                    closed_tickets=[],
+                    error_message="No positions could be analyzed for spread check"
+                )
+            
+            # 📊 STEP 2: Group decision based on analysis
+            group_profit_percentage = (total_group_profit / len(position_analysis)) if position_analysis else 0
+            
+            logger.info(f"💰 GROUP SPREAD ANALYSIS:")
+            logger.info(f"   Total Positions: {len(position_analysis)}")
+            logger.info(f"   Group Profit: ${total_group_profit:.2f} ({group_profit_percentage:.2f}%)")
+            
+            # 🚫 GROUP REJECTION: If group is losing too much (additional safety)
+            if group_profit_percentage < -1.0:
+                logger.warning(f"🚫 SPREAD CHECK REJECTED: Group losing {group_profit_percentage:.2f}%")
+                return CloseResult(
+                    success=False,
+                    closed_tickets=[],
+                    error_message=f"Spread check rejected - group losing {group_profit_percentage:.2f}%"
+                )
+            
+            # ✅ STEP 3: Execute raw group closing via MT5Connection
+            logger.info(f"✅ SPREAD CHECK PASSED: Executing raw group close")
+            group_result = self.mt5.close_positions_group_raw(tickets)
             
             # ประมวลผลลัพธ์
             closed_tickets = group_result['closed_tickets']
