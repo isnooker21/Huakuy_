@@ -220,6 +220,9 @@ class Dynamic7DSmartCloser:
                         logger.info(f"🔍 DEBUG: {method_name}_{size} - Net P&L: ${result['net_pnl']:.2f}")
                         logger.info(f"🔍 DEBUG: min_net_profit: ${self.min_net_profit:.2f}")
                         
+                        # กำหนดค่า default สำหรับ final_score
+                        final_score = 0
+                        
                         # ตรวจสอบเกณฑ์พื้นฐานก่อน
                         if result['net_pnl'] >= self.min_net_profit:
                             logger.info(f"✅ BASIC CHECK PASSED: Net P&L ${result['net_pnl']:.2f} >= min_net_profit ${self.min_net_profit:.2f}")
