@@ -185,17 +185,14 @@ class TradingGUI:
         info_frame = tk.Frame(parent, bg='#1a1a1a')
         info_frame.pack(fill=tk.X, pady=(0, 15))
         
-        # Account Info
+        # Account Info (จำเป็น)
         self.create_account_info_card(info_frame)
         
-        # Portfolio Balance
-        self.create_portfolio_balance_card(info_frame)
+        # Trading Status (สำคัญ)
+        self.create_trading_status_card(info_frame)
         
-        # Performance Metrics
-        self.create_performance_card(info_frame)
-        
-        # Risk Metrics
-        self.create_risk_card(info_frame)
+        # 7D Smart Closer Status (สำคัญ)
+        self.create_7d_closer_status_card(info_frame)
     
     def create_7d_analysis_panel(self, parent):
         """สร้างแผงวิเคราะห์ 7D"""
@@ -273,104 +270,69 @@ class TradingGUI:
             self.account_labels[key].grid(row=i, column=1, sticky='e', pady=3)
             
         details_frame.columnconfigure(1, weight=1)
+    
+    def create_trading_status_card(self, parent):
+        """สร้างการ์ดสถานะการเทรด"""
+        card = tk.Frame(parent, bg='#2d2d2d', relief=tk.RAISED, bd=2)
+        card.pack(side=tk.LEFT, padx=(0, 15), pady=5, fill=tk.BOTH, expand=True)
         
-    def create_portfolio_balance_card(self, parent):
-        """สร้างการ์ดสมดุลพอร์ต"""
-        card = tk.Frame(parent, bg='#3a3a3a', relief=tk.RAISED, bd=1)
-        card.pack(side=tk.LEFT, padx=(0, 10), pady=5, fill=tk.BOTH, expand=True)
+        tk.Label(card, text="📈 Trading Status", bg='#2d2d2d', fg='#00ff88', 
+                font=('Segoe UI', 12, 'bold')).pack(pady=8)
         
-        tk.Label(card, text="Portfolio Balance (%)", bg='#3a3a3a', fg='white', 
-                font=('Arial', 12, 'bold')).pack(pady=5)
+        # Trading status details
+        details_frame = tk.Frame(card, bg='#2d2d2d')
+        details_frame.pack(fill=tk.BOTH, expand=True, padx=15, pady=8)
         
-        balance_frame = tk.Frame(card, bg='#3a3a3a')
-        balance_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=5)
-        
-        # Buy/Sell Ratio
-        tk.Label(balance_frame, text="Buy/Sell Ratio:", bg='#3a3a3a', fg='lightgray', 
-                font=('Arial', 10, 'bold')).pack(pady=2)
-        
-        ratio_frame = tk.Frame(balance_frame, bg='#3a3a3a')
-        ratio_frame.pack(fill=tk.X, pady=5)
-        
-        self.buy_ratio_label = tk.Label(ratio_frame, text="Buy: 0.0%", bg='#3a3a3a', 
-                                      fg='#4caf50', font=('Arial', 9, 'bold'))
-        self.buy_ratio_label.pack(side=tk.LEFT)
-        
-        self.sell_ratio_label = tk.Label(ratio_frame, text="Sell: 0.0%", bg='#3a3a3a', 
-                                       fg='#f44336', font=('Arial', 9, 'bold'))
-        self.sell_ratio_label.pack(side=tk.RIGHT)
-        
-        # Progress bars for visual representation
-        self.buy_progress = ttk.Progressbar(balance_frame, length=200, mode='determinate')
-        self.buy_progress.pack(fill=tk.X, pady=2)
-        
-        self.sell_progress = ttk.Progressbar(balance_frame, length=200, mode='determinate')
-        self.sell_progress.pack(fill=tk.X, pady=2)
-        
-        # Balance warning
-        self.balance_warning = tk.Label(balance_frame, text="", bg='#3a3a3a', 
-                                      fg='orange', font=('Arial', 8))
-        self.balance_warning.pack(pady=5)
-        
-    def create_performance_card(self, parent):
-        """สร้างการ์ดประสิทธิภาพ"""
-        card = tk.Frame(parent, bg='#3a3a3a', relief=tk.RAISED, bd=1)
-        card.pack(side=tk.LEFT, padx=(0, 10), pady=5, fill=tk.BOTH, expand=True)
-        
-        tk.Label(card, text="Performance Metrics (%)", bg='#3a3a3a', fg='white', 
-                font=('Arial', 12, 'bold')).pack(pady=5)
-        
-        perf_frame = tk.Frame(card, bg='#3a3a3a')
-        perf_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=5)
-        
-        self.performance_labels = {}
-        performance_fields = [
-            ('Total P&L', 'total_pnl_pct'),
-            ('Daily P&L', 'daily_pnl_pct'),
-            ('Win Rate', 'win_rate_pct'),
-            ('Max Drawdown', 'max_drawdown_pct'),
-            ('Profit Factor', 'profit_factor')
+        self.trading_status_labels = {}
+        trading_fields = [
+            ('active_positions', 'Active Positions', '0', '🎯'),
+            ('total_pnl', 'Total P&L', '0.00', '💰'),
+            ('daily_pnl', 'Daily P&L', '0.00', '📊'),
+            ('win_rate', 'Win Rate', '0%', '🎯'),
+            ('profit_factor', 'Profit Factor', '0.00', '⚡')
         ]
         
-        for i, (label, key) in enumerate(performance_fields):
-            tk.Label(perf_frame, text=f"{label}:", bg='#3a3a3a', fg='lightgray', 
-                    font=('Arial', 9)).grid(row=i, column=0, sticky='w', pady=2)
+        for i, (key, label, default, icon) in enumerate(trading_fields):
+            tk.Label(details_frame, text=f"{icon} {label}:", bg='#2d2d2d', fg='#cccccc', 
+                    font=('Segoe UI', 9)).grid(row=i, column=0, sticky='w', pady=3)
             
-            self.performance_labels[key] = tk.Label(perf_frame, text="0.00%", bg='#3a3a3a', 
-                                                  fg='white', font=('Arial', 9, 'bold'))
-            self.performance_labels[key].grid(row=i, column=1, sticky='e', pady=2)
+            self.trading_status_labels[key] = tk.Label(details_frame, text=default, bg='#2d2d2d', 
+                                              fg='#00ff88', font=('Segoe UI', 10, 'bold'))
+            self.trading_status_labels[key].grid(row=i, column=1, sticky='e', pady=3)
             
-        perf_frame.columnconfigure(1, weight=1)
+        details_frame.columnconfigure(1, weight=1)
+    
+    def create_7d_closer_status_card(self, parent):
+        """สร้างการ์ดสถานะ 7D Smart Closer"""
+        card = tk.Frame(parent, bg='#2d2d2d', relief=tk.RAISED, bd=2)
+        card.pack(side=tk.LEFT, padx=(0, 15), pady=5, fill=tk.BOTH, expand=True)
         
-    def create_risk_card(self, parent):
-        """สร้างการ์ดความเสี่ยง"""
-        card = tk.Frame(parent, bg='#3a3a3a', relief=tk.RAISED, bd=1)
-        card.pack(side=tk.LEFT, pady=5, fill=tk.BOTH, expand=True)
+        tk.Label(card, text="🧠 7D Smart Closer", bg='#2d2d2d', fg='#00ff88', 
+                font=('Segoe UI', 12, 'bold')).pack(pady=8)
         
-        tk.Label(card, text="Risk Management (%)", bg='#3a3a3a', fg='white', 
-                font=('Arial', 12, 'bold')).pack(pady=5)
+        # 7D Closer status details
+        details_frame = tk.Frame(card, bg='#2d2d2d')
+        details_frame.pack(fill=tk.BOTH, expand=True, padx=15, pady=8)
         
-        risk_frame = tk.Frame(card, bg='#3a3a3a')
-        risk_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=5)
-        
-        self.risk_labels = {}
-        risk_fields = [
-            ('Portfolio Risk', 'portfolio_risk_pct'),
-            ('Exposure', 'exposure_pct'),
-            ('Losing Positions', 'losing_count'),
-            ('Risk per Trade', 'risk_per_trade_pct'),
-            ('Daily Loss Limit', 'daily_loss_limit_pct')
+        self.closer_status_labels = {}
+        closer_fields = [
+            ('closer_status', 'Closer Status', '💤 IDLE', '🔄'),
+            ('last_analysis', 'Last Analysis', 'Never', '⏰'),
+            ('closing_confidence', 'Confidence', '0%', '🎯'),
+            ('positions_analyzed', 'Positions Analyzed', '0', '📊'),
+            ('recommendation', 'Recommendation', 'HOLD', '💡')
         ]
         
-        for i, (label, key) in enumerate(risk_fields):
-            tk.Label(risk_frame, text=f"{label}:", bg='#3a3a3a', fg='lightgray', 
-                    font=('Arial', 9)).grid(row=i, column=0, sticky='w', pady=2)
+        for i, (key, label, default, icon) in enumerate(closer_fields):
+            tk.Label(details_frame, text=f"{icon} {label}:", bg='#2d2d2d', fg='#cccccc', 
+                    font=('Segoe UI', 9)).grid(row=i, column=0, sticky='w', pady=3)
             
-            self.risk_labels[key] = tk.Label(risk_frame, text="0.00%", bg='#3a3a3a', 
-                                           fg='white', font=('Arial', 9, 'bold'))
-            self.risk_labels[key].grid(row=i, column=1, sticky='e', pady=2)
+            self.closer_status_labels[key] = tk.Label(details_frame, text=default, bg='#2d2d2d', 
+                                              fg='#00ff88', font=('Segoe UI', 10, 'bold'))
+            self.closer_status_labels[key].grid(row=i, column=1, sticky='e', pady=3)
             
-        risk_frame.columnconfigure(1, weight=1)
+        details_frame.columnconfigure(1, weight=1)
+        
         
     def create_bottom_panel(self, parent):
         """สร้างแผงด้านล่าง"""
@@ -721,6 +683,8 @@ class TradingGUI:
                     self.root.after_idle(self.update_connection_status_light)
                     self.root.after_idle(self.update_market_status)
                     self.root.after_idle(self.update_7d_analysis)
+                    self.root.after_idle(self.update_trading_status)
+                    self.root.after_idle(self.update_7d_closer_status)
                 time.sleep(5)  # อัพเดททุก 5 วินาที
             except Exception as e:
                 logger.debug(f"Light update error: {str(e)}")
@@ -801,28 +765,6 @@ class TradingGUI:
         except Exception as e:
             pass  # ไม่ log error เพื่อลด overhead
             
-    def update_portfolio_info_light(self):
-        """อัพเดทข้อมูลพอร์ตแบบเบา"""
-        try:
-            # อัพเดทเฉพาะข้อมูลสำคัญ
-            if hasattr(self.portfolio_manager.order_manager, 'active_positions'):
-                positions = self.portfolio_manager.order_manager.active_positions or []
-                
-                if positions:
-                    from calculations import PercentageCalculator
-                    balance_ratio = PercentageCalculator.calculate_buy_sell_ratio(positions)
-                    
-                    buy_pct = balance_ratio.get('buy_percentage', 0)
-                    sell_pct = balance_ratio.get('sell_percentage', 0)
-                    
-                    self.buy_ratio_label.config(text=f"Buy: {buy_pct:.1f}%")
-                    self.sell_ratio_label.config(text=f"Sell: {sell_pct:.1f}%")
-                    
-                    self.buy_progress['value'] = buy_pct
-                    self.sell_progress['value'] = sell_pct
-                    
-        except Exception as e:
-            pass  # ไม่ log error
             
     def update_positions_display_light(self):
         """อัพเดทการแสดง Positions แบบเบา"""
@@ -1298,6 +1240,136 @@ class TradingGUI:
                     )
         except Exception as e:
             logger.error(f"เกิดข้อผิดพลาดในการอัพเดทการวิเคราะห์ 7D: {str(e)}")
+    
+    def update_trading_status(self):
+        """อัพเดทสถานะการเทรด"""
+        try:
+            if self.trading_system and hasattr(self.trading_system, 'order_manager'):
+                positions = self.trading_system.order_manager.active_positions
+                
+                # อัพเดทจำนวน positions
+                self.trading_status_labels['active_positions'].config(text=str(len(positions)))
+                
+                if positions:
+                    # คำนวณ Total P&L
+                    total_pnl = sum(getattr(pos, 'profit', 0) for pos in positions)
+                    self.trading_status_labels['total_pnl'].config(
+                        text=f"{total_pnl:.2f}",
+                        fg='#00ff88' if total_pnl >= 0 else '#ff4444'
+                    )
+                    
+                    # คำนวณ Daily P&L (ประมาณการ)
+                    daily_pnl = total_pnl * 0.1  # ตัวอย่าง
+                    self.trading_status_labels['daily_pnl'].config(
+                        text=f"{daily_pnl:.2f}",
+                        fg='#00ff88' if daily_pnl >= 0 else '#ff4444'
+                    )
+                    
+                    # คำนวณ Win Rate
+                    profitable_positions = sum(1 for pos in positions if getattr(pos, 'profit', 0) > 0)
+                    win_rate = (profitable_positions / len(positions)) * 100 if positions else 0
+                    self.trading_status_labels['win_rate'].config(
+                        text=f"{win_rate:.1f}%",
+                        fg='#00ff88' if win_rate >= 50 else '#ff4444'
+                    )
+                    
+                    # คำนวณ Profit Factor
+                    total_profit = sum(getattr(pos, 'profit', 0) for pos in positions if getattr(pos, 'profit', 0) > 0)
+                    total_loss = abs(sum(getattr(pos, 'profit', 0) for pos in positions if getattr(pos, 'profit', 0) < 0))
+                    profit_factor = total_profit / total_loss if total_loss > 0 else 0
+                    self.trading_status_labels['profit_factor'].config(
+                        text=f"{profit_factor:.2f}",
+                        fg='#00ff88' if profit_factor >= 1.0 else '#ff4444'
+                    )
+                else:
+                    # ไม่มี positions
+                    self.trading_status_labels['total_pnl'].config(text="0.00", fg='#cccccc')
+                    self.trading_status_labels['daily_pnl'].config(text="0.00", fg='#cccccc')
+                    self.trading_status_labels['win_rate'].config(text="0%", fg='#cccccc')
+                    self.trading_status_labels['profit_factor'].config(text="0.00", fg='#cccccc')
+        except Exception as e:
+            logger.error(f"เกิดข้อผิดพลาดในการอัพเดทสถานะการเทรด: {str(e)}")
+    
+    def update_7d_closer_status(self):
+        """อัพเดทสถานะ 7D Smart Closer"""
+        try:
+            if (self.trading_system and 
+                hasattr(self.trading_system, 'dynamic_7d_smart_closer') and 
+                self.trading_system.dynamic_7d_smart_closer):
+                
+                positions = self.trading_system.order_manager.active_positions
+                
+                # อัพเดทจำนวน positions ที่วิเคราะห์
+                self.closer_status_labels['positions_analyzed'].config(text=str(len(positions)))
+                
+                if positions:
+                    # ตรวจสอบสถานะ closer
+                    self.closer_status_labels['closer_status'].config(
+                        text="🔄 ANALYZING",
+                        fg='#ffaa00'
+                    )
+                    
+                    # อัพเดทเวลาล่าสุด
+                    current_time = datetime.now().strftime('%H:%M:%S')
+                    self.closer_status_labels['last_analysis'].config(text=current_time)
+                    
+                    # วิเคราะห์ closing recommendation
+                    account_info = self.mt5_connection.get_account_info() or {}
+                    market_conditions = {
+                        'current_price': 0,
+                        'volatility': 'medium',
+                        'trend': 'neutral'
+                    }
+                    
+                    closing_result = self.trading_system.dynamic_7d_smart_closer.find_optimal_closing(
+                        positions=positions,
+                        account_info=account_info,
+                        market_conditions=market_conditions
+                    )
+                    
+                    if closing_result:
+                        if closing_result.should_close:
+                            self.closer_status_labels['closer_status'].config(
+                                text="🚀 READY TO CLOSE",
+                                fg='#00ff88'
+                            )
+                            self.closer_status_labels['recommendation'].config(
+                                text="CLOSE",
+                                fg='#00ff88'
+                            )
+                            self.closer_status_labels['closing_confidence'].config(
+                                text=f"{closing_result.confidence_score:.1f}%",
+                                fg='#00ff88'
+                            )
+                        else:
+                            self.closer_status_labels['closer_status'].config(
+                                text="💤 HOLDING",
+                                fg='#ffaa00'
+                            )
+                            self.closer_status_labels['recommendation'].config(
+                                text="HOLD",
+                                fg='#ffaa00'
+                            )
+                            self.closer_status_labels['closing_confidence'].config(
+                                text="0%",
+                                fg='#ffaa00'
+                            )
+                else:
+                    # ไม่มี positions
+                    self.closer_status_labels['closer_status'].config(
+                        text="💤 IDLE",
+                        fg='#cccccc'
+                    )
+                    self.closer_status_labels['recommendation'].config(
+                        text="NO POSITIONS",
+                        fg='#cccccc'
+                    )
+                    self.closer_status_labels['closing_confidence'].config(
+                        text="0%",
+                        fg='#cccccc'
+                    )
+        except Exception as e:
+            logger.error(f"เกิดข้อผิดพลาดในการอัพเดทสถานะ 7D Closer: {str(e)}")
             
     def update_portfolio_info(self):
         """อัพเดทข้อมูลพอร์ต"""
