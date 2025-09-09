@@ -281,14 +281,25 @@ class SimpleBreakoutTradingSystemGUI:
                 # Process Simple Breakout for all timeframes
                 self._process_simple_breakout(current_candle)
                 
-                # Position Management (Keep original logic)
-                self._handle_position_management(current_candle)
+                # Position Management (Keep original logic) - Throttle to every 5 seconds
+                if not hasattr(self, '_last_position_management_time'):
+                    self._last_position_management_time = 0
                 
-                # Dynamic Closing (Keep original logic)
-                self._handle_dynamic_closing(current_candle)
+                current_time = time.time()
+                if current_time - self._last_position_management_time >= 5:  # Every 5 seconds
+                    self._handle_position_management(current_candle)
+                    self._last_position_management_time = current_time
+                
+                # Dynamic Closing (Keep original logic) - Throttle to every 3 seconds
+                if not hasattr(self, '_last_dynamic_closing_time'):
+                    self._last_dynamic_closing_time = 0
+                
+                if current_time - self._last_dynamic_closing_time >= 3:  # Every 3 seconds
+                    self._handle_dynamic_closing(current_candle)
+                    self._last_dynamic_closing_time = current_time
                 
                 # Sleep
-                time.sleep(1)
+                time.sleep(2)  # Increase sleep time
                 
             except Exception as e:
                 logger.error(f"❌ เกิดข้อผิดพลาดในลูปเทรด: {e}")
