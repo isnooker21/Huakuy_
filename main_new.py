@@ -812,12 +812,9 @@ class TradingSystem:
             logger.error(f"เกิดข้อผิดพลาดในการตรวจสอบเงื่อนไขการปิด: {str(e)}")
             
     def start_gui(self):
-        """เริ่ม GUI"""
-        try:
-            self.gui = TradingGUI(self)
-            self.gui.run()
-        except Exception as e:
-            logger.error(f"เกิดข้อผิดพลาดใน GUI: {str(e)}")
+        """🚫 GUI DISABLED - Use Simple Breakout System instead"""
+        logger.warning("🚫 GUI is disabled in the new Simple Breakout System")
+        logger.info("🚀 Use main_simple_breakout.py for the new trading system")
             
     def shutdown(self):
         """ปิดระบบ"""
