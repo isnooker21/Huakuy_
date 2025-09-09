@@ -100,6 +100,11 @@ class Dynamic7DSmartCloser:
         logger.info(f"   📊 Market Analyzer: {'✅' if market_analyzer else '❌'}")
         logger.info("   🚫 Intelligent Manager: ❌ (Replaced by internal 7D analysis)")
     
+    def find_optimal_closing(self, positions: List[Any], account_info: Dict, 
+                           market_conditions: Optional[Dict] = None) -> Optional[ClosingResult]:
+        """🧠 หาการปิดไม้ที่ดีที่สุดแบบอัจฉริยะ - Enhanced Intelligence (เรียกใช้ มั)"""
+        return self.มั(positions, account_info, market_conditions)
+    
     def มั(self, positions: List[Any], account_info: Dict, 
                            market_conditions: Optional[Dict] = None) -> Optional[ClosingResult]:
         """
