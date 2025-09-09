@@ -536,36 +536,100 @@ class Dynamic7DSmartCloser:
         """🧠 ลองใช้วิธีการที่มี 7D Scores"""
         try:
             if method_name == 'smart_7d_selection':
-                # เรียงตาม 7D Score
-                sorted_positions = sorted(position_scores, 
-                                        key=lambda x: x.total_score, reverse=True)
-                selected = sorted_positions[:size]
+                # เรียงตาม 7D Score + BALANCED
+                logger.debug(f"🧠 Smart 7D Selection: size={size}")
+                
+                # 🎯 CRITICAL FIX: ใช้ balanced selection
+                buy_scores = [s for s in position_scores if getattr(s.position, 'type', 0) == 0]
+                sell_scores = [s for s in position_scores if getattr(s.position, 'type', 0) == 1]
+                
+                if not buy_scores or not sell_scores:
+                    logger.warning(f"❌ Smart 7D: Missing BUY or SELL positions")
+                    selected = []
+                else:
+                    # เรียงตาม score
+                    buy_scores.sort(key=lambda x: x.total_score, reverse=True)
+                    sell_scores.sort(key=lambda x: x.total_score, reverse=True)
+                    
+                    # เลือกแบบ balanced
+                    buy_count = max(1, size // 2)
+                    sell_count = size - buy_count
+                    
+                    selected_buys = buy_scores[:buy_count] if len(buy_scores) >= buy_count else buy_scores
+                    selected_sells = sell_scores[:sell_count] if len(sell_scores) >= sell_count else sell_scores
+                    
+                    if len(selected_buys) == 0 or len(selected_sells) == 0:
+                        logger.warning(f"❌ Smart 7D: Cannot create balanced selection")
+                        selected = []
+                    else:
+                        selected = selected_buys + selected_sells
+                        logger.info(f"🧠 Smart 7D Balance: {len(selected_buys)}B+{len(selected_sells)}S = {len(selected)} total")
                 
             elif method_name == 'top_edge_7d':
-                # ขอบบน + 7D Score
-                top_positions = self._get_top_edge_positions(position_scores)
-                selected = sorted(top_positions, 
-                                key=lambda x: x.total_score, reverse=True)[:size]
+                # ขอบบน + 7D Score + BALANCED
+                logger.debug(f"🔝 Top Edge 7D: size={size}")
+                
+                # 🎯 CRITICAL FIX: ใช้ balanced method แทน
+                all_positions = [score.position for score in position_scores]
+                selected_positions = self._select_top_edge_balanced(all_positions, size)
+                
+                if selected_positions:
+                    # แปลงกลับเป็น position scores
+                    selected_tickets = [getattr(pos, 'ticket', None) for pos in selected_positions]
+                    selected = [score for score in position_scores 
+                              if getattr(score.position, 'ticket', None) in selected_tickets]
+                    
+                    # ตรวจสอบ balance
+                    buys = len([s for s in selected if getattr(s.position, 'type', 0) == 0])
+                    sells = len([s for s in selected if getattr(s.position, 'type', 0) == 1])
+                    logger.info(f"🔝 Top Edge Balance: {buys}B+{sells}S = {len(selected)} total")
+                else:
+                    logger.warning(f"❌ Top Edge: Cannot create balanced selection")
+                    selected = []
                 
             elif method_name == 'bottom_edge_7d':
-                # ขอบล่าง + 7D Score
-                bottom_positions = self._get_bottom_edge_positions(position_scores)
-                selected = sorted(bottom_positions,
-                                key=lambda x: x.total_score, reverse=True)[:size]
+                # ขอบล่าง + 7D Score + BALANCED
+                logger.debug(f"🔻 Bottom Edge 7D: size={size}")
+                
+                # 🎯 CRITICAL FIX: ใช้ balanced method แทน
+                all_positions = [score.position for score in position_scores]
+                selected_positions = self._select_bottom_edge_balanced(all_positions, size)
+                
+                if selected_positions:
+                    # แปลงกลับเป็น position scores
+                    selected_tickets = [getattr(pos, 'ticket', None) for pos in selected_positions]
+                    selected = [score for score in position_scores 
+                              if getattr(score.position, 'ticket', None) in selected_tickets]
+                    
+                    # ตรวจสอบ balance
+                    buys = len([s for s in selected if getattr(s.position, 'type', 0) == 0])
+                    sells = len([s for s in selected if getattr(s.position, 'type', 0) == 1])
+                    logger.info(f"🔻 Bottom Edge Balance: {buys}B+{sells}S = {len(selected)} total")
+                else:
+                    logger.warning(f"❌ Bottom Edge: Cannot create balanced selection")
+                    selected = []
                 
             elif method_name == 'mixed_edge_7d':
-                # ขอบผสม + 7D Score
-                top_half = self._get_top_edge_positions(position_scores)[:size//2]
-                bottom_half = self._get_bottom_edge_positions(position_scores)[:size//2]
-                remaining = size - len(top_half) - len(bottom_half)
-                if remaining > 0:
-                    middle_positions = [p for p in position_scores 
-                                      if p not in top_half and p not in bottom_half]
-                    middle_best = sorted(middle_positions, 
-                                       key=lambda x: x.total_score, reverse=True)[:remaining]
-                    selected = top_half + bottom_half + middle_best
+                # ขอบผสม + 7D Score + BALANCED
+                logger.debug(f"🔀 Mixed Edge 7D: size={size}")
+                
+                # 🎯 CRITICAL FIX: ใช้ balanced methods แทน
+                all_positions = [score.position for score in position_scores]
+                selected_positions = self._select_mixed_edge_balanced(all_positions, size)
+                
+                if selected_positions:
+                    # แปลงกลับเป็น position scores
+                    selected_tickets = [getattr(pos, 'ticket', None) for pos in selected_positions]
+                    selected = [score for score in position_scores 
+                              if getattr(score.position, 'ticket', None) in selected_tickets]
+                    
+                    # ตรวจสอบ balance
+                    buys = len([s for s in selected if getattr(s.position, 'type', 0) == 0])
+                    sells = len([s for s in selected if getattr(s.position, 'type', 0) == 1])
+                    logger.info(f"🔀 Mixed Edge Balance: {buys}B+{sells}S = {len(selected)} total")
                 else:
-                    selected = top_half + bottom_half
+                    logger.warning(f"❌ Mixed Edge: Cannot create balanced selection")
+                    selected = []
                     
             elif method_name == 'force_balance_7d':
                 # บังคับ Balance + 7D Score
@@ -580,10 +644,34 @@ class Dynamic7DSmartCloser:
                 selected = self._find_7d_margin_relief(position_scores, size, portfolio_health)
                 
             else:
-                # Fallback to smart selection
-                sorted_positions = sorted(position_scores, 
-                                        key=lambda x: x.total_score, reverse=True)
-                selected = sorted_positions[:size]
+                # Fallback to smart selection + BALANCED
+                logger.debug(f"🔄 Fallback Smart Selection: size={size}")
+                
+                # 🎯 CRITICAL FIX: ใช้ balanced fallback
+                buy_scores = [s for s in position_scores if getattr(s.position, 'type', 0) == 0]
+                sell_scores = [s for s in position_scores if getattr(s.position, 'type', 0) == 1]
+                
+                if not buy_scores or not sell_scores:
+                    logger.warning(f"❌ Fallback: Missing BUY or SELL positions")
+                    selected = []
+                else:
+                    # เรียงตาม score
+                    buy_scores.sort(key=lambda x: x.total_score, reverse=True)
+                    sell_scores.sort(key=lambda x: x.total_score, reverse=True)
+                    
+                    # เลือกแบบ balanced
+                    buy_count = max(1, size // 2)
+                    sell_count = size - buy_count
+                    
+                    selected_buys = buy_scores[:buy_count] if len(buy_scores) >= buy_count else buy_scores
+                    selected_sells = sell_scores[:sell_count] if len(sell_scores) >= sell_count else sell_scores
+                    
+                    if len(selected_buys) == 0 or len(selected_sells) == 0:
+                        logger.warning(f"❌ Fallback: Cannot create balanced selection")
+                        selected = []
+                    else:
+                        selected = selected_buys + selected_sells
+                        logger.info(f"🔄 Fallback Balance: {len(selected_buys)}B+{len(selected_sells)}S = {len(selected)} total")
             
             if not selected:
                 return None
