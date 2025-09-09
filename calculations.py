@@ -927,26 +927,24 @@ class ProfitTargetCalculator:
         positions_to_close = []
         
         if scaling_type == "1:1":
-            # ปิด 1 กำไร : 1 ขาดทุน
-            min_count = min(len(profit_positions), len(loss_positions))
-            positions_to_close = profit_positions[:min_count] + loss_positions[:min_count]
+            # ปิด 1 กำไร : 1 ขาดทุน - 🎯 WITH BUY+SELL BALANCE
+            positions_to_close = ProfitTargetCalculator._select_balanced_scaling(
+                profit_positions, loss_positions, 1, 1)
             
         elif scaling_type == "1:2":
-            # ปิด 1 กำไร : 2 ขาดทุน
-            profit_count = len(profit_positions)
-            loss_count = min(profit_count * 2, len(loss_positions))
-            positions_to_close = profit_positions + loss_positions[:loss_count]
+            # ปิด 1 กำไร : 2 ขาดทุน - 🎯 WITH BUY+SELL BALANCE
+            positions_to_close = ProfitTargetCalculator._select_balanced_scaling(
+                profit_positions, loss_positions, 1, 2)
             
         elif scaling_type == "1:3":
-            # ปิด 1 กำไร : 3 ขาดทุน
-            profit_count = len(profit_positions)
-            loss_count = min(profit_count * 3, len(loss_positions))
-            positions_to_close = profit_positions + loss_positions[:loss_count]
+            # ปิด 1 กำไร : 3 ขาดทุน - 🎯 WITH BUY+SELL BALANCE
+            positions_to_close = ProfitTargetCalculator._select_balanced_scaling(
+                profit_positions, loss_positions, 1, 3)
             
         elif scaling_type == "2:3":
-            # ปิด 2 กำไร : 3 ขาดทุน
-            max_sets = min(len(profit_positions) // 2, len(loss_positions) // 3)
-            positions_to_close = profit_positions[:max_sets * 2] + loss_positions[:max_sets * 3]
+            # ปิด 2 กำไร : 3 ขาดทุน - 🎯 WITH BUY+SELL BALANCE
+            positions_to_close = ProfitTargetCalculator._select_balanced_scaling(
+                profit_positions, loss_positions, 2, 3)
             
         remaining_positions = [pos for pos in positions if pos not in positions_to_close]
         
@@ -956,3 +954,56 @@ class ProfitTargetCalculator:
             'close_count': len(positions_to_close),
             'remaining_count': len(remaining_positions)
         }
+    
+    @staticmethod
+    def _select_balanced_scaling(profit_positions: List[Position], loss_positions: List[Position], 
+                               profit_ratio: int, loss_ratio: int) -> List[Position]:
+        """🎯 เลือก positions สำหรับ scaling แบบบังคับ BUY+SELL Balance"""
+        try:
+            # แยก BUY/SELL ใน profit positions
+            profit_buys = [pos for pos in profit_positions if getattr(pos, 'type', 0) == 0]
+            profit_sells = [pos for pos in profit_positions if getattr(pos, 'type', 0) == 1]
+            
+            # แยก BUY/SELL ใน loss positions  
+            loss_buys = [pos for pos in loss_positions if getattr(pos, 'type', 0) == 0]
+            loss_sells = [pos for pos in loss_positions if getattr(pos, 'type', 0) == 1]
+            
+            # คำนวณจำนวนที่ต้องการ
+            max_sets = min(
+                (len(profit_buys) + len(profit_sells)) // profit_ratio,
+                (len(loss_buys) + len(loss_sells)) // loss_ratio
+            )
+            
+            if max_sets == 0:
+                return []
+            
+            total_profit_needed = max_sets * profit_ratio
+            total_loss_needed = max_sets * loss_ratio
+            
+            # เลือกแบบ Balance ใน profit positions
+            profit_buy_needed = max(1, total_profit_needed // 2)
+            profit_sell_needed = total_profit_needed - profit_buy_needed
+            
+            # เลือกแบบ Balance ใน loss positions
+            loss_buy_needed = max(1, total_loss_needed // 2) 
+            loss_sell_needed = total_loss_needed - loss_buy_needed
+            
+            selected = []
+            selected.extend(profit_buys[:profit_buy_needed])
+            selected.extend(profit_sells[:profit_sell_needed])
+            selected.extend(loss_buys[:loss_buy_needed])
+            selected.extend(loss_sells[:loss_sell_needed])
+            
+            # ตรวจสอบ Balance ผลลัพธ์
+            final_buys = len([p for p in selected if getattr(p, 'type', 0) == 0])
+            final_sells = len([p for p in selected if getattr(p, 'type', 0) == 1])
+            
+            if final_buys == 0 or final_sells == 0:
+                # ไม่สามารถสร้าง Balance ได้ → ไม่ปิด
+                return []
+            
+            return selected
+            
+        except Exception as e:
+            # Error → ไม่ปิด
+            return []
