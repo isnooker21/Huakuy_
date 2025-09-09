@@ -441,17 +441,27 @@ class TradingSystem:
             
             current_price = candle.close
             
-            # 🎯 Generate basic signal for Smart Entry Timing analysis
-            # Create a basic signal from price action
-            signal_direction = "BUY" if candle.close > candle.open else "SELL"
+            # 🎯 Generate SMART signal with Position-Aware Logic
+            # Create a smart signal that considers existing positions
+            raw_signal_direction = "BUY" if candle.close > candle.open else "SELL"
+            
+            # 🧠 Smart Signal Reversal: ดูตำแหน่งที่มีอยู่และปรับ Signal
+            smart_signal_direction = self._get_smart_signal_direction(
+                raw_signal_direction, current_price, self.order_manager.active_positions
+            )
+            
             basic_signal = Signal(
-                direction=signal_direction,
+                direction=smart_signal_direction,
                 symbol=self.actual_symbol,
                 strength=abs(candle.close - candle.open) / (candle.high - candle.low) * 100 if candle.high != candle.low else 50,
                 confidence=70.0,  # Default confidence
                 timestamp=datetime.now(),
                 price=current_price
             )
+            
+            # แสดงการปรับ signal
+            if raw_signal_direction != smart_signal_direction:
+                logger.info(f"🔄 SIGNAL REVERSAL: {raw_signal_direction} → {smart_signal_direction} (Price Hierarchy)")
             
             # ✅ Smart Entry Timing will analyze and approve/reject this signal
             decision = self.portfolio_manager.should_enter_trade(
@@ -488,6 +498,51 @@ class TradingSystem:
             
         except Exception as e:
             logger.error(f"เกิดข้อผิดพลาดในการตรวจสอบเงื่อนไขการเข้าเทรด: {str(e)}")
+    
+    def _get_smart_signal_direction(self, raw_direction: str, current_price: float, positions: List) -> str:
+        """
+        🧠 Smart Signal Direction: ปรับ Signal ให้เหมาะกับ Price Hierarchy
+        
+        Logic:
+        - ถ้า BUY แต่มี SELL ต่ำกว่าราคาปัจจุบัน → กลับเป็น SELL (ช่วย SELL)
+        - ถ้า SELL แต่มี BUY สูงกว่าราคาปัจจุบัน → กลับเป็น BUY (ช่วย BUY)
+        - ถ้าไม่มีปัญหา → ใช้ signal เดิม
+        """
+        try:
+            if not positions:
+                return raw_direction
+            
+            # แยกประเภท positions
+            buy_positions = [p for p in positions if getattr(p, 'type', 0) == 0]
+            sell_positions = [p for p in positions if getattr(p, 'type', 1) == 1]
+            
+            # ตรวจสอบ BUY สูง (losing BUYs)
+            losing_buys = [p for p in buy_positions if getattr(p, 'price_open', 0) > current_price + 10]
+            
+            # ตรวจสอบ SELL ต่ำ (losing SELLs)  
+            losing_sells = [p for p in sell_positions if getattr(p, 'price_open', 0) < current_price - 10]
+            
+            # 🎯 Smart Logic: ช่วย positions ที่กำลังขาดทุน
+            if raw_direction == "BUY" and losing_buys and len(losing_buys) > len(losing_sells):
+                # มี BUY สูงๆ เยอะ → BUY ต่ำกว่าเพื่อ average down
+                if current_price < min(getattr(p, 'price_open', current_price) for p in buy_positions) - 5:
+                    return "BUY"  # BUY ต่ำกว่า existing BUYs = ดี
+                else:
+                    return "SELL"  # BUY ใกล้ๆ = ไม่ดี, กลับเป็น SELL
+                    
+            elif raw_direction == "SELL" and losing_sells and len(losing_sells) > len(losing_buys):
+                # มี SELL ต่ำๆ เยอะ → SELL สูงกว่าเพื่อ average down
+                if current_price > max(getattr(p, 'price_open', current_price) for p in sell_positions) + 5:
+                    return "SELL"  # SELL สูงกว่า existing SELLs = ดี
+                else:
+                    return "BUY"   # SELL ใกล้ๆ = ไม่ดี, กลับเป็น BUY
+            
+            # ไม่มีปัญหา → ใช้ signal เดิม
+            return raw_direction
+            
+        except Exception as e:
+            logger.error(f"❌ Error in smart signal direction: {e}")
+            return raw_direction
     
     def _simplify_reason(self, reason: str) -> str:
         """ทำให้เหตุผลสั้นลงเพื่อ log ที่อ่านง่าย"""
