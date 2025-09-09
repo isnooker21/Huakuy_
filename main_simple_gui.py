@@ -104,11 +104,11 @@ class SimpleBreakoutTradingSystemGUI:
         # GUI
         self.gui = None
         
-        # 🛡️ RANGE-BOUND MARKET PROTECTION (ปรับให้ยืดหยุ่นขึ้น)
+        # 🛡️ RANGE-BOUND MARKET PROTECTION (DISABLED - FIGHT MODE!)
         self.price_range_history = []  # เก็บราคา high/low ล่าสุด
-        self.range_check_period = 30   # ลดเป็น 30 candles (เร็วขึ้น)
-        self.max_range_points = 200    # ลดเป็น 200 จุด (เข้มงวดขึ้น)
-        self.min_positions_for_range_check = 10  # เพิ่มเป็น 10 positions (เริ่มทำงานเมื่อมี positions เยอะมาก)
+        self.range_check_period = 10   # ลดเป็น 10 candles (เร็วสุด)
+        self.max_range_points = 50     # ลดเป็น 50 จุด (ต้องติดมากจริงๆ)
+        self.min_positions_for_range_check = 20  # เพิ่มเป็น 20 positions (ปิดแทบจะปิด)
         
         logger.info(f"🛡️ Range-bound Protection: Max Range: {self.max_range_points} points, Min Positions: {self.min_positions_for_range_check}")
         
@@ -347,13 +347,13 @@ class SimpleBreakoutTradingSystemGUI:
                     reason = f"Breakout SELL: {current_candle.close:.2f} < {previous_candle.low:.2f}"
                 
                 if breakout_signal:
-                    # 🛡️ Check for range-bound market before executing trade
-                    if self._is_range_bound_market():
-                        logger.warning(f"⏸️ BREAKOUT SKIPPED: Range-bound market detected for {timeframe}")
-                        logger.warning(f"   Current positions: {len(self.order_manager.active_positions)}")
-                        continue
-                    else:
-                        logger.debug(f"✅ Market OK for trading: {timeframe}")
+                    # 🛡️ Range-bound protection (DISABLED - FIGHT MODE!)
+                    # if self._is_range_bound_market():
+                    #     logger.warning(f"⏸️ BREAKOUT SKIPPED: Range-bound market detected for {timeframe}")
+                    #     logger.warning(f"   Current positions: {len(self.order_manager.active_positions)}")
+                    #     continue
+                    # else:
+                    logger.debug(f"✅ Market OK for trading: {timeframe} - FIGHT MODE ACTIVE!")
                     
                     # 🚀 Execute breakout trade
                     self._execute_simple_breakout_trade(
