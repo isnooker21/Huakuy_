@@ -54,6 +54,7 @@ class DynamicClosingAnalysis:
     alternative_strategies: List[ClosingStrategy]
     dynamic_adjustments: Dict[str, Any]
     closing_reasons: List[str]
+    closing_groups: List[List[Any]] = None  # groups of positions to close
 
 @dataclass
 class ClosingGroup:
@@ -158,6 +159,12 @@ class DynamicAdaptiveCloser:
                 confidence, urgency, expected_profit, risk_reduction, account_info
             )
             
+            # 12. 🎯 Create Closing Groups
+            closing_groups = []
+            if should_close and positions_to_close:
+                # สร้าง closing group จาก positions ที่จะปิด
+                closing_groups = [positions_to_close]
+            
             analysis = DynamicClosingAnalysis(
                 should_close=should_close,
                 closing_strategy=closing_strategy,
@@ -169,7 +176,8 @@ class DynamicAdaptiveCloser:
                 confidence=confidence,
                 alternative_strategies=alternative_strategies,
                 dynamic_adjustments=dynamic_adjustments,
-                closing_reasons=closing_reasons
+                closing_reasons=closing_reasons,
+                closing_groups=closing_groups
             )
             
             self._log_closing_analysis(analysis)
@@ -361,7 +369,21 @@ class DynamicAdaptiveCloser:
         
         # Sort by intelligent score (ไม่ใช่แค่กำไร)
         all_positions.sort(key=lambda pos: self._calculate_intelligent_score(pos, current_price), reverse=True)
-        return all_positions[:10]  # เพิ่มเป็น 10 ไม้
+        
+        # 🎯 ENSURE MINIMUM 2 POSITIONS: MT5 ต้องการอย่างน้อย 2 ไม้
+        if len(all_positions) >= 2:
+            return all_positions[:10]  # ส่งได้ถึง 10 ไม้
+        elif len(all_positions) == 1:
+            # ถ้ามีแค่ 1 ไม้ ให้เพิ่มไม้ที่ขาดทุนน้อยที่สุด
+            loss_positions = [pos for pos in positions if getattr(pos, 'profit', 0) < 0]
+            if loss_positions:
+                # หาไม้ที่ขาดทุนน้อยที่สุด
+                best_loss = min(loss_positions, key=lambda pos: getattr(pos, 'profit', 0))
+                return [all_positions[0], best_loss]  # ส่ง 2 ไม้
+            else:
+                return []  # ไม่มีไม้ขาดทุน ไม่ส่ง
+        else:
+            return []  # ไม่มีไม้กำไร
     
     def _select_balance_positions(self, positions: List[Any], current_price: float) -> List[Any]:
         """⚖️ เลือกตำแหน่งเพื่อสมดุล"""

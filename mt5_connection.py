@@ -884,7 +884,7 @@ class MT5Connection:
         results_lock = threading.Lock()
         # All positions must be closed as groups only to maintain portfolio balance
         
-        # 🚫 NO SINGLE POSITION CLOSING: ปฏิเสธการปิดแค่ตัวเดียว
+        # 🚫 NO SINGLE POSITION CLOSING: ปฏิเสธการปิดแค่ตัวเดียว (ยกเว้นกรณีพิเศษ)
         if len(tickets) < 2:
             logger.warning(f"🚫 REJECTED: Cannot close single position - minimum 2 positions required")
             logger.warning(f"🚫 USER POLICY: No individual position closing allowed")
