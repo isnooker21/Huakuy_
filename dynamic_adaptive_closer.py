@@ -357,33 +357,51 @@ class DynamicAdaptiveCloser:
     
     def _select_profitable_positions(self, positions: List[Any], current_price: float) -> List[Any]:
         """🧠 เลือกตำแหน่งที่มีกำไร - ระบบตรวจจับและตัดสินใจเอง"""
-        # 🎯 INTELLIGENT DETECTION: ไม่ใช้เกณฑ์คงที่ - ให้ระบบวิเคราะห์เอง
-        all_positions = []
+        logger.info(f"🔍 SELECTING PROFITABLE POSITIONS: {len(positions)} total positions")
+        
+        # 🎯 SIMPLIFIED SELECTION: เลือกไม้ที่มีกำไรหรือใกล้กำไร
+        profitable_positions = []
+        break_even_positions = []
         
         for pos in positions:
             profit = getattr(pos, 'profit', 0)
-            # วิเคราะห์แต่ละไม้แบบอัจฉริยะ
-            should_close = self._intelligent_position_analysis(pos, current_price)
-            if should_close:
-                all_positions.append(pos)
+            ticket = getattr(pos, 'ticket', 'N/A')
+            
+            if profit > 0:
+                profitable_positions.append(pos)
+                logger.debug(f"   ✅ Profitable: Ticket {ticket} = ${profit:.2f}")
+            elif profit >= -1.0:  # ไม้ที่ขาดทุนน้อย (ใกล้ break-even)
+                break_even_positions.append(pos)
+                logger.debug(f"   ⚖️ Break-even: Ticket {ticket} = ${profit:.2f}")
         
-        # Sort by intelligent score (ไม่ใช่แค่กำไร)
-        all_positions.sort(key=lambda pos: self._calculate_intelligent_score(pos, current_price), reverse=True)
+        # รวม positions ที่จะปิด
+        all_positions = profitable_positions + break_even_positions
+        
+        # Sort by profit (กำไรมากก่อน)
+        all_positions.sort(key=lambda pos: getattr(pos, 'profit', 0), reverse=True)
+        
+        logger.info(f"📊 SELECTION RESULT: {len(profitable_positions)} profitable + {len(break_even_positions)} break-even = {len(all_positions)} total")
         
         # 🎯 ENSURE MINIMUM 2 POSITIONS: MT5 ต้องการอย่างน้อย 2 ไม้
         if len(all_positions) >= 2:
-            return all_positions[:10]  # ส่งได้ถึง 10 ไม้
+            selected = all_positions[:10]  # ส่งได้ถึง 10 ไม้
+            logger.info(f"✅ SELECTED {len(selected)} positions for closing")
+            return selected
         elif len(all_positions) == 1:
             # ถ้ามีแค่ 1 ไม้ ให้เพิ่มไม้ที่ขาดทุนน้อยที่สุด
-            loss_positions = [pos for pos in positions if getattr(pos, 'profit', 0) < 0]
+            loss_positions = [pos for pos in positions if getattr(pos, 'profit', 0) < -1.0]
             if loss_positions:
                 # หาไม้ที่ขาดทุนน้อยที่สุด
                 best_loss = min(loss_positions, key=lambda pos: getattr(pos, 'profit', 0))
-                return [all_positions[0], best_loss]  # ส่ง 2 ไม้
+                selected = [all_positions[0], best_loss]  # ส่ง 2 ไม้
+                logger.info(f"✅ SELECTED 2 positions (1 profitable + 1 best loss)")
+                return selected
             else:
-                return []  # ไม่มีไม้ขาดทุน ไม่ส่ง
+                logger.warning(f"⚠️ Only 1 position but no suitable loss position to pair")
+                return []
         else:
-            return []  # ไม่มีไม้กำไรกลุ่ม
+            logger.warning(f"⚠️ No suitable positions found for closing")
+            return []
     
     def _select_balance_positions(self, positions: List[Any], current_price: float) -> List[Any]:
         """⚖️ เลือกตำแหน่งเพื่อสมดุล"""
@@ -484,7 +502,19 @@ class DynamicAdaptiveCloser:
     
     # Placeholder methods for remaining functionality
     def _calculate_expected_profit(self, positions: List[Any], current_price: float) -> float:
-        return sum(getattr(pos, 'profit', 0) for pos in positions)
+        """💰 คำนวณกำไรที่คาดหวังจากการปิด positions"""
+        if not positions:
+            logger.warning(f"⚠️ No positions to calculate profit for")
+            return 0.0
+        
+        total_profit = 0.0
+        for pos in positions:
+            profit = getattr(pos, 'profit', 0)
+            total_profit += profit
+            logger.debug(f"   Position {getattr(pos, 'ticket', 'N/A')}: ${profit:.2f}")
+        
+        logger.info(f"💰 EXPECTED PROFIT: ${total_profit:.2f} from {len(positions)} positions")
+        return total_profit
     
     def _calculate_risk_reduction(self, positions: List[Any], account_info: Dict) -> float:
         return 0.1  # 10% risk reduction placeholder
@@ -543,9 +573,9 @@ class DynamicAdaptiveCloser:
             
             # 🎯 BASE THRESHOLDS (ปรับตามสถานการณ์) - ลดเกณฑ์ให้ปิดได้ง่ายขึ้น
             base_confidence = 40.0  # ลดจาก 50 เป็น 40
-            base_profit = 0.1       # ลดจาก 0.5 เป็น 0.1
+            base_profit = 0.0       # ลดจาก 0.1 เป็น 0.0 - อนุญาตปิดแม้กำไร 0
             base_opportunity_confidence = 30.0  # ลดจาก 40 เป็น 30
-            base_opportunity_profit = 0.05      # ลดจาก 0.2 เป็น 0.05
+            base_opportunity_profit = 0.0       # ลดจาก 0.05 เป็น 0.0 - อนุญาตปิดแม้กำไร 0
             
             # 📈 MARKET VOLATILITY ADJUSTMENT
             if market_volatility == 'HIGH':
@@ -610,9 +640,9 @@ class DynamicAdaptiveCloser:
             
             # 🎯 CALCULATE FINAL THRESHOLDS
             final_confidence = max(20.0, min(80.0, base_confidence + confidence_adjustment))
-            final_profit = max(0.1, min(5.0, base_profit + profit_adjustment))
+            final_profit = max(0.0, min(5.0, base_profit + profit_adjustment))  # อนุญาตกำไร 0
             final_opportunity_confidence = max(15.0, min(70.0, base_opportunity_confidence + confidence_adjustment * 0.8))
-            final_opportunity_profit = max(0.05, min(2.0, base_opportunity_profit + profit_adjustment * 0.5))
+            final_opportunity_profit = max(0.0, min(2.0, base_opportunity_profit + profit_adjustment * 0.5))  # อนุญาตกำไร 0
             
             thresholds = {
                 'confidence_threshold': final_confidence,
