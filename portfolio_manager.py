@@ -1991,32 +1991,8 @@ class PortfolioManager:
             logger.error(f"Error deciding recovery block: {e}")
             return False
     
-    def get_unified_signal(self, candle: CandleData, current_price: float,
-                          account_balance: float, volume_history: List[float] = None) -> Optional[RankedSignal]:
-        """ดึงสัญญาณแบบรวมจาก Signal Manager (Single Entry Point)"""
-        try:
-            positions = self.order_manager.active_positions
-            
-            # ใช้ SignalManager เพื่อหาสัญญาณที่ดีที่สุด
-            best_signal = self.signal_manager.get_best_signal(
-                candle=candle,
-                positions=positions,
-                account_balance=account_balance,
-                volume_history=volume_history,
-                current_price=current_price,
-                last_trade_time=self.last_trade_time
-            )
-            
-            if best_signal:
-                logger.info(f"🎯 Unified Signal: {best_signal.source} - {best_signal.signal.direction}")
-                logger.info(f"   Priority: {best_signal.priority.name}, Score: {best_signal.confidence_score:.1f}")
-                logger.info(f"   Reason: {best_signal.reason}")
-            
-            return best_signal
-            
-        except Exception as e:
-            logger.error(f"Error getting unified signal: {e}")
-            return None
+    # 🚫 REMOVED: get_unified_signal - Signal generation moved to Smart Entry Timing System
+    # ✅ All signal logic now handled by Smart Entry Timing in should_enter_trade
     
     
     def update_trade_timing(self, trade_executed: bool = False, signal_generated: bool = False):
