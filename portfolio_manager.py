@@ -340,8 +340,6 @@ class PortfolioManager:
                 'signal': None,
                 'lot_size': 0.0
             }
-            
-    # 🗑️ EMERGENCY EXIT SYSTEM REMOVED
     # All exit logic handled by Smart Profit Taking System only
     
     def should_exit_positions(self, current_state: PortfolioState, 
@@ -829,13 +827,6 @@ class PortfolioManager:
                 
         except Exception as e:
             logger.error(f"เกิดข้อผิดพลาดในการรีเซ็ตเมตริกรายวัน: {str(e)}")
-    
-    # 🗑️ SMART RECOVERY SYSTEM REMOVED - Replaced by Smart Profit Taking System
-    def check_and_execute_smart_recovery(self, current_price: float, 
-                                         block_recovery: bool = False) -> Dict[str, Any]:
-        """🗑️ REMOVED - Smart Recovery replaced by Smart Profit Taking System"""
-        logger.debug("🗑️ Smart Recovery removed - functionality moved to Smart Profit Taking System")
-        return {'executed': False, 'reason': 'Smart Recovery removed - using Smart Profit Taking System instead'}
     
     def _get_zone_smart_entry(self, signal: Signal, current_price: float) -> Optional[Dict[str, Any]]:
         """ดึงคำแนะนำการเข้าจาก Zone Analysis"""
@@ -2332,8 +2323,6 @@ class PortfolioManager:
         except Exception as e:
             logger.error(f"Error analyzing portfolio balance: {e}")
             return {'imbalance_percentage': 0, 'imbalance_side': 'ERROR'}
-    
-    # 🗑️ Portfolio Health Check and Entry Quality Validation REMOVED
     # 
     # Reasoning: Let the Lightning Portfolio Cleanup System handle all risk management
     # - It's designed to close positions fast and safely
