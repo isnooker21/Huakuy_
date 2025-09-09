@@ -502,12 +502,15 @@ class DynamicPositionModifier:
     
     def _estimate_position_improvement(self, position: Any, action: ModifierAction,
                                      current_price: float, account_info: Dict) -> float:
-        """📈 ประเมินการปรับปรุงตำแหน่ง"""
+        """📈 ประเมินการปรับปรุงตำแหน่งแบบ Dynamic"""
         try:
             current_profit = getattr(position, 'profit', 0)
+            open_price = getattr(position, 'price_open', current_price)
+            volume = getattr(position, 'volume', 0.01)
+            position_type = getattr(position, 'type', 0)
             
-            # Improvement estimates based on action type
-            improvement_factors = {
+            # 🎯 DYNAMIC IMPROVEMENT FACTORS (ปรับตามสถานการณ์)
+            base_factors = {
                 ModifierAction.ADD_SUPPORT: 0.6,
                 ModifierAction.ADD_COUNTER: 0.4,
                 ModifierAction.PARTIAL_CLOSE: 0.3,
@@ -519,15 +522,58 @@ class DynamicPositionModifier:
                 ModifierAction.EMERGENCY_CLOSE: 0.0
             }
             
-            factor = improvement_factors.get(action, 0.2)
+            base_factor = base_factors.get(action, 0.2)
             
-            # Calculate expected improvement
-            if current_profit < 0:
-                expected_improvement = abs(current_profit) * factor
+            # 📊 MARKET CONDITIONS ADJUSTMENT
+            price_distance = abs(current_price - open_price)
+            price_distance_pct = (price_distance / open_price) * 100
+            
+            # ปรับ factor ตามระยะห่างราคา
+            if price_distance_pct > 2.0:  # ห่างมาก
+                distance_multiplier = 1.5
+            elif price_distance_pct > 1.0:  # ห่างปานกลาง
+                distance_multiplier = 1.2
+            else:  # ห่างน้อย
+                distance_multiplier = 0.8
+            
+            # 💰 VOLUME ADJUSTMENT
+            if volume > 0.05:  # Volume ใหญ่
+                volume_multiplier = 1.3
+            elif volume < 0.02:  # Volume เล็ก
+                volume_multiplier = 0.7
             else:
-                expected_improvement = current_profit * factor * 0.5
-                
-            return expected_improvement
+                volume_multiplier = 1.0
+            
+            # 🎯 ACCOUNT CONDITIONS
+            margin_level = account_info.get('margin_level', 1000)
+            if margin_level < 300:  # Margin ต่ำ
+                urgency_multiplier = 1.4
+            elif margin_level > 800:  # Margin สูง
+                urgency_multiplier = 0.9
+            else:
+                urgency_multiplier = 1.0
+            
+            # คำนวณ final factor
+            final_factor = base_factor * distance_multiplier * volume_multiplier * urgency_multiplier
+            
+            # คำนวณ expected improvement
+            if current_profit < 0:
+                # ขาดทุน → คำนวณจากขนาดขาดทุน
+                expected_improvement = abs(current_profit) * final_factor
+            else:
+                # กำไร → คำนวณจากโอกาสเพิ่มกำไร
+                expected_improvement = current_profit * final_factor * 0.3
+            
+            # จำกัดค่าสูงสุด (ไม่เกิน 50% ของ balance)
+            balance = account_info.get('balance', 10000)
+            max_improvement = balance * 0.5
+            expected_improvement = min(expected_improvement, max_improvement)
+            
+            logger.debug(f"📈 POSITION IMPROVEMENT: Ticket {getattr(position, 'ticket', 'N/A')}, "
+                        f"Action={action.value}, Base={base_factor:.2f}, "
+                        f"Final={final_factor:.2f}, Expected=${expected_improvement:.2f}")
+            
+            return max(0.0, expected_improvement)
             
         except Exception as e:
             logger.error(f"❌ Error estimating position improvement: {e}")
@@ -592,7 +638,49 @@ class DynamicPositionModifier:
         return "immediate"  # Placeholder
     
     def _calculate_portfolio_improvement(self, individual: List, group: List, positions: List, account_info: Dict) -> float:
-        return 100.0  # Placeholder
+        """💰 คำนวณกำไรที่คาดหวังแบบ Dynamic จาก Portfolio"""
+        try:
+            if not individual:
+                return 0.0
+            
+            total_improvement = 0.0
+            current_portfolio_profit = sum(getattr(pos, 'profit', 0) for pos in positions)
+            
+            for modification in individual:
+                # คำนวณการปรับปรุงจากแต่ละ position
+                position_profit = getattr(modification, 'expected_improvement', 0)
+                success_prob = getattr(modification, 'success_probability', 0.7)
+                
+                # ปรับตามความน่าจะเป็นสำเร็จ
+                weighted_improvement = position_profit * success_prob
+                total_improvement += weighted_improvement
+            
+            # ปรับตามสถานการณ์ Portfolio
+            balance = account_info.get('balance', 10000)
+            equity = account_info.get('equity', balance)
+            margin_level = account_info.get('margin_level', 1000)
+            
+            # ปัจจัยปรับแต่งตามสถานการณ์
+            if margin_level < 200:  # Margin ต่ำ
+                total_improvement *= 1.5  # เพิ่มความสำคัญ
+            elif margin_level > 1000:  # Margin สูง
+                total_improvement *= 0.8  # ลดความสำคัญ
+            
+            # ปรับตามขนาด Portfolio
+            if current_portfolio_profit < -100:  # Portfolio ขาดทุนหนัก
+                total_improvement *= 1.3  # เพิ่มความสำคัญ
+            elif current_portfolio_profit > 100:  # Portfolio กำไร
+                total_improvement *= 0.7  # ลดความสำคัญ
+            
+            logger.debug(f"💰 PORTFOLIO IMPROVEMENT: Base={total_improvement:.2f}, "
+                        f"Current P&L=${current_portfolio_profit:.2f}, "
+                        f"Margin={margin_level:.0f}%")
+            
+            return max(0.0, total_improvement)
+            
+        except Exception as e:
+            logger.error(f"❌ Error calculating portfolio improvement: {e}")
+            return 0.0
     
     def _estimate_modification_cost(self, individual: List, group: List, current_price: float) -> float:
         return 50.0  # Placeholder
@@ -601,7 +689,73 @@ class DynamicPositionModifier:
         return "5-10 minutes"  # Placeholder
     
     def _calculate_success_probability(self, individual: List, group: List, positions: List) -> float:
-        return 0.75  # Placeholder
+        """🎯 คำนวณความน่าจะเป็นสำเร็จแบบ Dynamic"""
+        try:
+            if not individual:
+                return 0.0
+            
+            total_probability = 0.0
+            total_weight = 0.0
+            
+            for modification in individual:
+                # คำนวณความน่าจะเป็นจากแต่ละ position
+                base_prob = getattr(modification, 'success_probability', 0.7)
+                priority = getattr(modification, 'priority', ModifierPriority.MEDIUM)
+                
+                # ปรับตาม priority
+                priority_weights = {
+                    ModifierPriority.CRITICAL: 1.0,
+                    ModifierPriority.HIGH: 0.9,
+                    ModifierPriority.MEDIUM: 0.8,
+                    ModifierPriority.LOW: 0.7,
+                    ModifierPriority.MONITOR: 0.5
+                }
+                
+                weight = priority_weights.get(priority, 0.8)
+                
+                # ปรับตาม action type
+                action = getattr(modification, 'recommended_action', ModifierAction.WAIT_IMPROVE)
+                action_success_rates = {
+                    ModifierAction.ADD_SUPPORT: 0.8,
+                    ModifierAction.ADD_COUNTER: 0.7,
+                    ModifierAction.PARTIAL_CLOSE: 0.9,
+                    ModifierAction.HEDGE_PROTECT: 0.8,
+                    ModifierAction.AVERAGE_DOWN: 0.6,
+                    ModifierAction.AVERAGE_UP: 0.6,
+                    ModifierAction.CONVERT_HEDGE: 0.7,
+                    ModifierAction.WAIT_IMPROVE: 0.5,
+                    ModifierAction.EMERGENCY_CLOSE: 0.9
+                }
+                
+                action_rate = action_success_rates.get(action, 0.7)
+                final_prob = base_prob * action_rate * weight
+                
+                total_probability += final_prob * weight
+                total_weight += weight
+            
+            if total_weight > 0:
+                average_probability = total_probability / total_weight
+            else:
+                average_probability = 0.0
+            
+            # ปรับตามจำนวน positions
+            position_count = len(positions)
+            if position_count > 5:  # หลาย positions
+                average_probability *= 0.9  # ลดลงเล็กน้อย
+            elif position_count < 2:  # น้อย positions
+                average_probability *= 1.1  # เพิ่มขึ้นเล็กน้อย
+            
+            # จำกัดค่า 0.0 - 1.0
+            final_probability = max(0.0, min(1.0, average_probability))
+            
+            logger.debug(f"🎯 SUCCESS PROBABILITY: {final_probability:.1%} "
+                        f"(from {len(individual)} modifications, {position_count} positions)")
+            
+            return final_probability
+            
+        except Exception as e:
+            logger.error(f"❌ Error calculating success probability: {e}")
+            return 0.5  # Default 50%
     
     def _assess_modification_risk(self, individual: List, group: List, account_info: Dict) -> float:
         return 0.2  # Placeholder
