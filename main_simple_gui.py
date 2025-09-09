@@ -286,15 +286,15 @@ class SimpleBreakoutTradingSystemGUI:
                     self._last_position_management_time = 0
                 
                 current_time = time.time()
-                if current_time - self._last_position_management_time >= 5:  # Every 5 seconds
+                if current_time - self._last_position_management_time >= 10:  # Every 10 seconds
                     self._handle_position_management(current_candle)
                     self._last_position_management_time = current_time
                 
-                # Dynamic Closing (Keep original logic) - Throttle to every 3 seconds
+                # Dynamic Closing (Keep original logic) - Throttle to every 8 seconds
                 if not hasattr(self, '_last_dynamic_closing_time'):
                     self._last_dynamic_closing_time = 0
                 
-                if current_time - self._last_dynamic_closing_time >= 3:  # Every 3 seconds
+                if current_time - self._last_dynamic_closing_time >= 8:  # Every 8 seconds
                     self._handle_dynamic_closing(current_candle)
                     self._last_dynamic_closing_time = current_time
                 
