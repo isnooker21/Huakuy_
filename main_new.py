@@ -35,6 +35,11 @@ from strategic_position_manager import create_strategic_position_manager
 # 🚀 Enhanced 7D Entry + Position Modifier System
 from enhanced_7d_entry_system import create_enhanced_7d_entry_system
 
+# 🚀 Dynamic Adaptive Systems - Full Dynamic Trading Ecosystem
+from dynamic_adaptive_entry_system import create_dynamic_adaptive_entry_system
+from dynamic_position_modifier import create_dynamic_position_modifier
+from dynamic_adaptive_closer import create_dynamic_adaptive_closer
+
 # 📊 Market Analysis Systems
 from market_analysis import MultiTimeframeAnalyzer, MarketSessionAnalyzer
 from price_action_analyzer import PriceActionAnalyzer
@@ -102,6 +107,11 @@ class TradingSystem:
         
         # 🚀 Enhanced 7D Entry + Position Modifier System
         self.enhanced_7d_entry_system = None
+        
+        # 🚀 Dynamic Adaptive Systems - Full Dynamic Trading Ecosystem
+        self.dynamic_adaptive_entry = None
+        self.dynamic_position_modifier = None
+        self.dynamic_adaptive_closer = None
         
         # 📊 Market Analysis Systems
         self.market_analyzer = None
@@ -237,6 +247,30 @@ class TradingSystem:
             )
             logger.info(f"✅ Enhanced 7D Entry System created: {type(self.enhanced_7d_entry_system)}")
             
+            # 🚀 Initialize Dynamic Adaptive Systems - Full Dynamic Trading Ecosystem
+            logger.info("🚀 Initializing Dynamic Adaptive Trading Systems...")
+            
+            # Dynamic Entry System
+            self.dynamic_adaptive_entry = create_dynamic_adaptive_entry_system(
+                mt5_connection=self.mt5_connection,
+                symbol=self.actual_symbol
+            )
+            logger.info(f"✅ Dynamic Adaptive Entry created: {type(self.dynamic_adaptive_entry)}")
+            
+            # Dynamic Position Modifier
+            self.dynamic_position_modifier = create_dynamic_position_modifier(
+                mt5_connection=self.mt5_connection,
+                symbol=self.actual_symbol
+            )
+            logger.info(f"✅ Dynamic Position Modifier created: {type(self.dynamic_position_modifier)}")
+            
+            # Dynamic Adaptive Closer
+            self.dynamic_adaptive_closer = create_dynamic_adaptive_closer(
+                mt5_connection=self.mt5_connection,
+                symbol=self.actual_symbol
+            )
+            logger.info(f"✅ Dynamic Adaptive Closer created: {type(self.dynamic_adaptive_closer)}")
+            
             # 🔗 เชื่อมต่อ Smart Systems กับ Trading Conditions
             logger.info("🔗 Connecting Smart Systems to Trading Conditions...")
             self.trading_conditions.intelligent_position_manager = self.intelligent_position_manager
@@ -245,11 +279,19 @@ class TradingSystem:
             self.trading_conditions.strategic_position_manager = self.strategic_position_manager
             self.trading_conditions.enhanced_7d_entry_system = self.enhanced_7d_entry_system
             
+            # Connect Dynamic Adaptive Systems
+            self.trading_conditions.dynamic_adaptive_entry = self.dynamic_adaptive_entry
+            self.trading_conditions.dynamic_position_modifier = self.dynamic_position_modifier
+            self.trading_conditions.dynamic_adaptive_closer = self.dynamic_adaptive_closer
+            
             # 🔍 Verify connections
             logger.info(f"🔍 VERIFICATION:")
             logger.info(f"   Smart Entry Timing: {type(self.trading_conditions.smart_entry_timing) if self.trading_conditions.smart_entry_timing else 'NULL'}")
             logger.info(f"   Position Purpose Tracker: {type(self.trading_conditions.position_purpose_tracker) if self.trading_conditions.position_purpose_tracker else 'NULL'}")
             logger.info(f"   Enhanced 7D Entry System: {type(self.trading_conditions.enhanced_7d_entry_system) if self.trading_conditions.enhanced_7d_entry_system else 'NULL'}")
+            logger.info(f"   Dynamic Adaptive Entry: {type(self.trading_conditions.dynamic_adaptive_entry) if self.trading_conditions.dynamic_adaptive_entry else 'NULL'}")
+            logger.info(f"   Dynamic Position Modifier: {type(self.trading_conditions.dynamic_position_modifier) if self.trading_conditions.dynamic_position_modifier else 'NULL'}")
+            logger.info(f"   Dynamic Adaptive Closer: {type(self.trading_conditions.dynamic_adaptive_closer) if self.trading_conditions.dynamic_adaptive_closer else 'NULL'}")
             
             # 🚫 REMOVED: Zone Manager connection to Portfolio Manager
             # ✅ Portfolio Manager now uses only Dynamic 7D Smart Closer
@@ -468,8 +510,41 @@ class TradingSystem:
                 raw_signal_direction, current_price, self.order_manager.active_positions
             )
             
-            # 🚀 Enhanced 7D Entry Analysis
+            # 🚀 DYNAMIC ADAPTIVE ANALYSIS - Ultimate Trading Intelligence
             account_info = self.mt5_connection.get_account_info() if self.mt5_connection else {}
+            
+            # 1. 🎯 Dynamic Entry Analysis
+            if self.dynamic_adaptive_entry:
+                dynamic_entry_analysis = self.dynamic_adaptive_entry.analyze_dynamic_entry(
+                    signal_direction=smart_signal_direction,
+                    current_price=current_price,
+                    positions=self.order_manager.active_positions,
+                    account_info=account_info,
+                    candle_data=candle
+                )
+                
+                # Override signal based on dynamic analysis
+                if not dynamic_entry_analysis.should_enter:
+                    logger.info(f"🚫 DYNAMIC ENTRY BLOCKED: {', '.join(dynamic_entry_analysis.entry_reasons)}")
+                    return  # Skip this entry
+                
+                # Use dynamic direction and lot size
+                smart_signal_direction = dynamic_entry_analysis.direction
+                dynamic_lot_size = dynamic_entry_analysis.lot_size
+                logger.info(f"🚀 DYNAMIC ENTRY APPROVED: {smart_signal_direction} {dynamic_lot_size} lot")
+            
+            # 2. 🔧 Dynamic Position Modification
+            if self.dynamic_position_modifier:
+                modification_plan = self.dynamic_position_modifier.analyze_portfolio_modifications(
+                    positions=self.order_manager.active_positions,
+                    account_info=account_info,
+                    current_price=current_price
+                )
+                
+                # Apply high-priority modifications
+                self._apply_dynamic_modifications(modification_plan)
+            
+            # 3. 🚀 Enhanced 7D Entry Analysis (Backup/Validation)
             if self.enhanced_7d_entry_system:
                 entry_7d_analysis = self.enhanced_7d_entry_system.analyze_entry_opportunity(
                     signal_direction=smart_signal_direction,
@@ -479,27 +554,10 @@ class TradingSystem:
                     candle_data=candle
                 )
                 
-                # 🔧 Position Modifier Analysis
-                position_modifications = self.enhanced_7d_entry_system.analyze_position_modifications(
-                    positions=self.order_manager.active_positions,
-                    account_info=account_info
-                )
-                
-                # 🤝 Integration with Closing System
-                integration_result = self.enhanced_7d_entry_system.integrate_with_closing_system(
-                    entry_analysis=entry_7d_analysis,
-                    position_modifications=position_modifications
-                )
-                
-                # 📊 Override signal if 7D analysis suggests
-                if entry_7d_analysis.total_7d_score < 30.0:  # Very low score
-                    logger.info(f"🚫 7D ENTRY BLOCKED: Low score {entry_7d_analysis.total_7d_score:.1f}")
+                # 7D Validation
+                if entry_7d_analysis.total_7d_score < 20.0:  # Very low 7D score
+                    logger.info(f"🚫 7D VALIDATION FAILED: Score {entry_7d_analysis.total_7d_score:.1f}")
                     return  # Skip this entry
-                elif entry_7d_analysis.total_7d_score > 80.0:  # High score
-                    logger.info(f"🚀 7D ENTRY ENHANCED: High score {entry_7d_analysis.total_7d_score:.1f}")
-                
-                # 🔧 Apply Position Modifications if needed
-                self._apply_position_modifications(position_modifications)
             
             basic_signal = Signal(
                 direction=smart_signal_direction,
@@ -597,7 +655,7 @@ class TradingSystem:
     
     def _apply_position_modifications(self, modifications):
         """
-        🔧 Apply Position Modifications
+        🔧 Apply Position Modifications (Legacy)
         """
         try:
             if not modifications:
@@ -620,6 +678,64 @@ class TradingSystem:
                     
         except Exception as e:
             logger.error(f"❌ Error applying position modifications: {e}")
+    
+    def _apply_dynamic_modifications(self, modification_plan):
+        """
+        🚀 Apply Dynamic Position Modifications
+        """
+        try:
+            if not modification_plan or not modification_plan.individual_modifications:
+                return
+            
+            logger.info(f"🚀 APPLYING DYNAMIC MODIFICATIONS: {len(modification_plan.individual_modifications)} individual")
+            
+            # Apply critical and high priority modifications
+            critical_mods = [mod for mod in modification_plan.individual_modifications 
+                           if mod.priority.value in ['critical', 'high']]
+            
+            for mod in critical_mods[:3]:  # Limit to top 3 for safety
+                logger.info(f"🚨 {mod.priority.value.upper()} MODIFICATION:")
+                logger.info(f"   Ticket {mod.position_ticket}: {mod.recommended_action.value}")
+                logger.info(f"   Expected Improvement: {mod.expected_improvement:.1%}")
+                logger.info(f"   Success Probability: {mod.success_probability:.1%}")
+                
+                # Log emergency actions
+                if modification_plan.emergency_actions:
+                    logger.warning(f"🚨 EMERGENCY ACTIONS NEEDED: {', '.join(modification_plan.emergency_actions)}")
+                    
+        except Exception as e:
+            logger.error(f"❌ Error applying dynamic modifications: {e}")
+    
+    def _execute_dynamic_closing(self, closing_groups, analysis):
+        """
+        🚀 Execute Dynamic Closing
+        """
+        try:
+            if not closing_groups:
+                logger.info("🔄 No closing groups to execute")
+                return
+            
+            logger.info(f"🚀 EXECUTING DYNAMIC CLOSING: {len(closing_groups)} groups")
+            
+            for group in closing_groups:
+                logger.info(f"💰 Closing Group {group.group_id}:")
+                logger.info(f"   Positions: {len(group.positions)}")
+                logger.info(f"   Total Profit: ${group.total_profit:.2f}")
+                logger.info(f"   Reason: {group.closing_reason}")
+                
+                # Extract position tickets
+                tickets = [getattr(pos, 'ticket', 0) for pos in group.positions]
+                
+                # Execute closing through order manager
+                if tickets:
+                    close_result = self.order_manager.close_positions_group(tickets)
+                    if close_result.success:
+                        logger.info(f"✅ Group {group.group_id} closed successfully: ${close_result.total_profit:.2f}")
+                    else:
+                        logger.error(f"❌ Group {group.group_id} closing failed: {close_result.error}")
+                        
+        except Exception as e:
+            logger.error(f"❌ Error executing dynamic closing: {e}")
     
     def _simplify_reason(self, reason: str) -> str:
         """ทำให้เหตุผลสั้นลงเพื่อ log ที่อ่านง่าย"""
@@ -758,11 +874,38 @@ class TradingSystem:
                 
                 # 2. 🗑️ Smart Recovery REMOVED - functionality moved to Smart Profit Taking System
                 
-                # 🤝 UNIFIED CLOSING SYSTEM - ระบบปิดไม้แบบประสานงาน
-                logger.info(f"🤝 UNIFIED CLOSING: Analyzing {len(positions)} positions...")
+                # 🚀 DYNAMIC ADAPTIVE CLOSING - Ultimate Closing Intelligence
+                logger.info(f"🚀 DYNAMIC CLOSING: Analyzing {len(positions)} positions...")
                 
-                # 1. 🧠 Get 7D Analysis (คำนวณครั้งเดียว)
+                # 1. 🎯 Dynamic Adaptive Closing Analysis
                 account_info = self.mt5_connection.get_account_info()
+                
+                if self.dynamic_adaptive_closer:
+                    dynamic_closing_analysis = self.dynamic_adaptive_closer.analyze_dynamic_closing(
+                        positions=positions,
+                        account_info=account_info,
+                        current_price=current_price,
+                        market_data={'volatility': 0.5, 'trend_strength': 0.6, 'volume': 0.4}  # Simplified
+                    )
+                    
+                    if dynamic_closing_analysis.should_close:
+                        logger.info(f"🚀 DYNAMIC CLOSING APPROVED: {dynamic_closing_analysis.closing_strategy.value}")
+                        
+                        # Create closing groups
+                        closing_groups = self.dynamic_adaptive_closer.create_closing_groups(
+                            positions=positions,
+                            closing_strategy=dynamic_closing_analysis.closing_strategy,
+                            current_price=current_price
+                        )
+                        
+                        # Execute dynamic closing
+                        self._execute_dynamic_closing(closing_groups, dynamic_closing_analysis)
+                        return
+                
+                # 2. 🔄 Fallback to Enhanced Unified System
+                logger.info(f"🤝 FALLBACK UNIFIED CLOSING: Analyzing {len(positions)} positions...")
+                
+                # Get 7D Analysis (คำนวณครั้งเดียว)
                 margin_health = None
                 position_scores = None
                 
