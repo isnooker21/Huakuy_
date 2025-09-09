@@ -506,10 +506,10 @@ class TradingSystem:
             # Create a smart signal that considers existing positions
             raw_signal_direction = "BUY" if candle.close > candle.open else "SELL"
             
-            # 🧠 Smart Signal Reversal: ดูตำแหน่งที่มีอยู่และปรับ Signal
-            smart_signal_direction = self._get_smart_signal_direction(
-                raw_signal_direction, current_price, self.order_manager.active_positions
-            )
+            # 🚫 SMART SIGNAL REVERSAL DISABLED - Will use S/R Override instead
+            # Using raw signal for new breakout system
+            smart_signal_direction = raw_signal_direction
+            logger.debug(f"🚫 Smart Reversal: DISABLED (Raw Signal: {raw_signal_direction})")
             
             # 🚀 DYNAMIC ADAPTIVE ANALYSIS - Ultimate Trading Intelligence
             account_info = self.mt5_connection.get_account_info() if self.mt5_connection else {}
@@ -524,28 +524,12 @@ class TradingSystem:
             else:
                 logger.warning("⚠️ No account info available")
             
-            # 1. 🎯 Dynamic Entry Analysis
-            dynamic_lot_size = 0.01  # Default lot size
-            if self.dynamic_adaptive_entry:
-                dynamic_entry_analysis = self.dynamic_adaptive_entry.analyze_dynamic_entry(
-                    signal_direction=smart_signal_direction,
-                    current_price=current_price,
-                    positions=self.order_manager.active_positions,
-                    account_info=account_info,
-                    candle_data=candle
-                )
-                
-                # Override signal based on dynamic analysis
-                if not dynamic_entry_analysis.should_enter:
-                    reasons = ', '.join(dynamic_entry_analysis.entry_reasons)
-                    logger.info(f"🚫 DYNAMIC ENTRY BLOCKED: {reasons}")
-                    return  # Skip this entry
-                    
-                # Use dynamic direction and lot size
-                smart_signal_direction = dynamic_entry_analysis.direction
-                dynamic_lot_size = dynamic_entry_analysis.lot_size
+            # 🚫 DYNAMIC ADAPTIVE ENTRY DISABLED - Using Simple Breakout + S/R Logic
+            # Dynamic Entry Analysis removed for new trading system
+            dynamic_lot_size = 0.01  # Default lot size for new system
+            logger.debug("🚫 Dynamic Adaptive Entry: DISABLED (Using Simple Breakout Logic)")
             
-            # 2. 🔧 Dynamic Position Modification
+            # 2. ✅ Dynamic Position Modification (ACTIVE - Works with any entry system)
             if self.dynamic_position_modifier:
                 modification_plan = self.dynamic_position_modifier.analyze_portfolio_modifications(
                     positions=self.order_manager.active_positions,
@@ -556,20 +540,9 @@ class TradingSystem:
                 # Apply high-priority modifications
                 self._apply_dynamic_modifications(modification_plan)
             
-            # 3. 🚀 Enhanced 7D Entry Analysis (Backup/Validation)
-            if self.enhanced_7d_entry_system:
-                entry_7d_analysis = self.enhanced_7d_entry_system.analyze_entry_opportunity(
-                    signal_direction=smart_signal_direction,
-                    current_price=current_price,
-                    positions=self.order_manager.active_positions,
-                    account_info=account_info,
-                    candle_data=candle
-                )
-                
-                # 7D Validation
-                if entry_7d_analysis.total_7d_score < 20.0:  # Very low 7D score
-                    logger.info(f"🚫 7D Score:{entry_7d_analysis.total_7d_score:.0f}")
-                    return  # Skip this entry
+            # 🚫 7D ENTRY SYSTEM DISABLED - Using Simple Breakout + S/R Logic
+            # Enhanced 7D Entry Analysis removed for new trading system
+            logger.debug("🚫 7D Entry System: DISABLED (Using Simple Breakout Logic)")
             
             basic_signal = Signal(
                 direction=smart_signal_direction,
