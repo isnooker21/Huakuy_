@@ -81,6 +81,7 @@ class SimpleBreakoutTradingSystemGUI:
         # ✅ KEEP POSITION MANAGEMENT & CLOSING SYSTEMS
         self.dynamic_position_modifier = None
         self.dynamic_adaptive_closer = None
+        self.dynamic_7d_smart_closer = None
         
         # 🎯 SIMPLE BREAKOUT STATE
         self.last_candle_data = {}  # {timeframe: candle}
@@ -220,6 +221,23 @@ class SimpleBreakoutTradingSystemGUI:
             if self.is_running:
                 logger.warning("ระบบเทรดกำลังทำงานอยู่แล้ว")
                 return True
+            
+            # 🚀 Initialize 7D Smart Closer
+            try:
+                from dynamic_7d_smart_closer import create_dynamic_7d_smart_closer
+                from intelligent_position_manager import IntelligentPositionManager
+                
+                # Create intelligent manager
+                intelligent_manager = IntelligentPositionManager(symbol=self.base_symbol)
+                
+                # Create 7D Smart Closer
+                self.dynamic_7d_smart_closer = create_dynamic_7d_smart_closer(
+                    intelligent_manager=intelligent_manager
+                )
+                logger.info("🚀 7D Smart Closer initialized successfully")
+            except Exception as e:
+                logger.error(f"❌ Failed to initialize 7D Smart Closer: {e}")
+                self.dynamic_7d_smart_closer = None
             
             self.is_running = True
             self.trading_thread = threading.Thread(target=self._trading_loop, daemon=True)
@@ -707,9 +725,9 @@ class SimpleBreakoutTradingSystemGUI:
             logger.error(f"❌ Error in position management: {e}")
     
     def _handle_dynamic_closing(self, candle: CandleData):
-        """Handle dynamic closing (Keep original logic)"""
+        """Handle dynamic closing using 7D Smart Closer"""
         try:
-            if not self.dynamic_adaptive_closer:
+            if not self.dynamic_7d_smart_closer:
                 return
             
             account_info = self.mt5_connection.get_account_info()
@@ -718,29 +736,35 @@ class SimpleBreakoutTradingSystemGUI:
             if not positions:
                 return
             
-            closing_analysis = self.dynamic_adaptive_closer.analyze_dynamic_closing(
+            # 🚀 Use 7D Smart Closer for comprehensive analysis
+            market_conditions = {
+                'current_price': candle.close,
+                'volatility': 'medium',  # Could be enhanced with real volatility calculation
+                'trend': 'neutral'       # Could be enhanced with real trend analysis
+            }
+            
+            closing_result = self.dynamic_7d_smart_closer.find_optimal_closing(
                 positions=positions,
                 account_info=account_info or {},
-                current_price=candle.close
+                market_conditions=market_conditions
             )
             
-            if hasattr(closing_analysis, 'should_close') and closing_analysis.should_close:
-                logger.info(f"💰 CLOSING RECOMMENDED by Dynamic Closer")
-                if hasattr(closing_analysis, 'closing_groups') and closing_analysis.closing_groups:
-                    for group in closing_analysis.closing_groups:
-                        logger.info(f"💰 CLOSING GROUP: {len(group)} positions")
-                        result = self.order_manager.close_positions_group(group)
-                        if result:
-                            logger.info(f"✅ GROUP CLOSED successfully")
-                        else:
-                            logger.warning(f"❌ GROUP CLOSE FAILED")
+            if closing_result and closing_result.should_close:
+                logger.info(f"🚀 7D CLOSING RECOMMENDED: {len(closing_result.positions_to_close)} positions")
+                logger.info(f"   Net P&L: ${closing_result.net_pnl:.2f}, Confidence: {closing_result.confidence_score:.1f}%")
+                logger.info(f"   Reason: {closing_result.reason}")
+                
+                # Execute closing
+                result = self.order_manager.close_positions_group(closing_result.positions_to_close)
+                if result:
+                    logger.info(f"✅ 7D GROUP CLOSED successfully")
                 else:
-                    logger.warning(f"⚠️ No closing groups provided")
+                    logger.warning(f"❌ 7D GROUP CLOSE FAILED")
             else:
-                logger.debug(f"💤 No closing recommended - waiting for better opportunity")
+                logger.debug(f"💤 7D No closing recommended - waiting for better opportunity")
                             
         except Exception as e:
-            logger.error(f"❌ Error in dynamic closing: {e}")
+            logger.error(f"❌ Error in 7D dynamic closing: {e}")
     
     def start_gui(self):
         """Start GUI (Same as original)"""
