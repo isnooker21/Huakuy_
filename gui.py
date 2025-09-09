@@ -419,7 +419,7 @@ class TradingGUI:
         
         # Risk Settings
         risk_settings_frame = tk.LabelFrame(settings_frame, text="Risk Settings (%)", 
-                                          bg='#3a3a3a', fg='white', font=('Arial', 1, 'bold'))
+                                          bg='#3a3a3a', fg='white', font=('Arial', 10, 'bold'))
         risk_settings_frame.pack(fill=tk.X, padx=8, pady=3)
         
         self.risk_settings = {}
@@ -433,7 +433,7 @@ class TradingGUI:
         
         for i, (label, key, default_value) in enumerate(risk_settings_fields):
             tk.Label(risk_settings_frame, text=label, bg='#3a3a3a', fg='lightgray', 
-                    font=('Arial', 1)).grid(row=i, column=0, sticky='w', padx=5, pady=2)
+                    font=('Arial', 9)).grid(row=i, column=0, sticky='w', padx=5, pady=2)
             
             var = tk.DoubleVar(value=default_value)
             entry = tk.Entry(risk_settings_frame, textvariable=var, width=10)
@@ -443,7 +443,7 @@ class TradingGUI:
             
         # Balance Settings
         balance_settings_frame = tk.LabelFrame(settings_frame, text="Balance Settings (%)", 
-                                             bg='#3a3a3a', fg='white', font=('Arial', 1, 'bold'))
+                                             bg='#3a3a3a', fg='white', font=('Arial', 10, 'bold'))
         balance_settings_frame.pack(fill=tk.X, padx=8, pady=3)
         
         self.balance_settings = {}
@@ -456,7 +456,7 @@ class TradingGUI:
         
         for i, (label, key, default_value) in enumerate(balance_settings_fields):
             tk.Label(balance_settings_frame, text=label, bg='#3a3a3a', fg='lightgray', 
-                    font=('Arial', 1)).grid(row=i, column=0, sticky='w', padx=5, pady=2)
+                    font=('Arial', 9)).grid(row=i, column=0, sticky='w', padx=5, pady=2)
             
             var = tk.DoubleVar(value=default_value)
             entry = tk.Entry(balance_settings_frame, textvariable=var, width=10)
@@ -466,7 +466,7 @@ class TradingGUI:
             
         # Save Settings Button
         save_btn = tk.Button(settings_frame, text="Save Settings", command=self.save_settings, 
-                           bg='#4caf50', fg='white', font=('Arial', 1, 'bold'))
+                           bg='#4caf50', fg='white', font=('Arial', 10, 'bold'))
         save_btn.pack(pady=10)
         
     def setup_styles(self):
@@ -559,7 +559,8 @@ class TradingGUI:
                     
                     # อัพเดทข้อมูลอื่นๆ แบบสลับกัน
                     if update_counter % 2 == 0:  # ทุก 20 วินาที
-                        self.root.after_idle(self.update_trading_status)
+                        self.root.after_idle(self.update_account_info)
+                        self.root.after_idle(self.update_trading_status_data)
                         self.root.after_idle(self.update_positions_display_light)
                     
                     if update_counter % 3 == 0:  # ทุก 30 วินาที
@@ -694,30 +695,51 @@ class TradingGUI:
     def update_account_info(self):
         """อัพเดทข้อมูลบัญชี"""
         try:
-            account_info = self.mt5_connection.get_account_info()
-            if account_info:
-                self.account_labels['balance'].config(text=f"{account_info['balance']:.2f}")
-                self.account_labels['equity'].config(text=f"{account_info['equity']:.2f}")
-                self.account_labels['margin'].config(text=f"{account_info['margin']:.2f}")
-                self.account_labels['margin_free'].config(text=f"{account_info['margin_free']:.2f}")
+            if not hasattr(self, 'account_labels'):
+                return
                 
-                margin_level = account_info['margin_level']
-                self.account_labels['margin_level'].config(text=f"{margin_level:.2f}%")
-                
-                # เปลี่ยนสีตาม Margin Level
-                if margin_level < 100:
-                    self.account_labels['margin_level'].config(fg='red')
-                elif margin_level < 200:
-                    self.account_labels['margin_level'].config(fg='orange')
+            if self.mt5_connection and self.mt5_connection.is_connected:
+                account_info = self.mt5_connection.get_account_info()
+                if account_info:
+                    self.account_labels['balance'].config(text=f"{account_info['balance']:.2f}")
+                    self.account_labels['equity'].config(text=f"{account_info['equity']:.2f}")
+                    self.account_labels['margin'].config(text=f"{account_info['margin']:.2f}")
+                    self.account_labels['margin_free'].config(text=f"{account_info['margin_free']:.2f}")
+                    
+                    margin_level = account_info['margin_level']
+                    self.account_labels['margin_level'].config(text=f"{margin_level:.2f}%")
+                    
+                    # เปลี่ยนสีตาม Margin Level
+                    if margin_level < 100:
+                        self.account_labels['margin_level'].config(fg='red')
+                    elif margin_level < 200:
+                        self.account_labels['margin_level'].config(fg='orange')
+                    else:
+                        self.account_labels['margin_level'].config(fg='green')
                 else:
-                    self.account_labels['margin_level'].config(fg='green')
+                    # แสดงข้อมูล default เมื่อไม่สามารถดึงข้อมูลได้
+                    self.account_labels['balance'].config(text="0.00")
+                    self.account_labels['equity'].config(text="0.00")
+                    self.account_labels['margin'].config(text="0.00")
+                    self.account_labels['margin_free'].config(text="0.00")
+                    self.account_labels['margin_level'].config(text="0.00%")
+            else:
+                # แสดงข้อมูล default เมื่อไม่ได้เชื่อมต่อ
+                self.account_labels['balance'].config(text="0.00")
+                self.account_labels['equity'].config(text="0.00")
+                self.account_labels['margin'].config(text="0.00")
+                self.account_labels['margin_free'].config(text="0.00")
+                self.account_labels['margin_level'].config(text="0.00%")
         except Exception as e:
-            logger.error(f"เกิดข้อผิดพลาดในการอัพเดทข้อมูลบัญชี: {str(e)}")
+            logger.debug(f"Account info update error: {str(e)}")
     
     
-    def update_trading_status(self):
-        """อัพเดทสถานะการเทรด"""
+    def update_trading_status_data(self):
+        """อัพเดทข้อมูลสถานะการเทรด"""
         try:
+            if not hasattr(self, 'trading_status_labels'):
+                return
+                
             if self.trading_system and hasattr(self.trading_system, 'order_manager'):
                 positions = self.trading_system.order_manager.active_positions
                 
@@ -771,6 +793,13 @@ class TradingGUI:
                     self.trading_status_labels['daily_pnl'].config(text="0.00", fg='#cccccc')
                     self.trading_status_labels['win_rate'].config(text="0%", fg='#cccccc')
                     self.trading_status_labels['profit_factor'].config(text="0.00", fg='#cccccc')
+            else:
+                # ไม่มี trading system หรือ order manager
+                self.trading_status_labels['active_positions'].config(text="0", fg='#cccccc')
+                self.trading_status_labels['total_pnl'].config(text="0.00", fg='#cccccc')
+                self.trading_status_labels['daily_pnl'].config(text="0.00", fg='#cccccc')
+                self.trading_status_labels['win_rate'].config(text="0%", fg='#cccccc')
+                self.trading_status_labels['profit_factor'].config(text="0.00", fg='#cccccc')
         except Exception as e:
             logger.debug(f"Trading status update error: {str(e)}")
     
