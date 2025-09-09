@@ -986,8 +986,68 @@ class MT5Connection:
         # ✅ GROUP CLOSING ONLY: ปิดเป็นกลุ่มเท่านั้น
         logger.info(f"✅ GROUP CLOSING: {len(tickets)} positions - following user policy")
         
-        # ใช้ close_positions_group_with_spread_check แทน
-        return self.close_positions_group_with_spread_check(tickets)
+        # ใช้ close_positions_group_raw แทน (pure MT5 communication)
+        return self.close_positions_group_raw(tickets)
+    
+    def close_positions_group_raw(self, tickets: List[int]) -> Dict:
+        """
+        🔧 RAW MT5 GROUP CLOSING: Pure MT5 communication without business logic
+        ⚡ Architecture: Only MT5 commands, no spread checks or policies here
+        
+        Args:
+            tickets: List of position tickets to close
+            
+        Returns:
+            Dict: Raw MT5 execution results
+        """
+        if not tickets:
+            return {
+                'success': False,
+                'closed_tickets': [],
+                'rejected_tickets': [],
+                'failed_tickets': [],
+                'total_profit': 0.0,
+                'message': 'No tickets provided'
+            }
+        
+        logger.info(f"🔧 RAW MT5 CLOSE: Executing {len(tickets)} position closures")
+        
+        closed_tickets = []
+        failed_tickets = []
+        total_profit = 0.0
+        
+        # 🔧 RAW MT5 EXECUTION: Close each position via MT5
+        for ticket in tickets:
+            try:
+                result = self._close_position_raw(ticket)
+                
+                if result and result.get('retcode') == 10009:
+                    closed_tickets.append(ticket)
+                    total_profit += result.get('profit', 0.0)
+                    logger.debug(f"🔧 MT5 Close Success: {ticket}")
+                else:
+                    failed_tickets.append(ticket)
+                    retcode = result.get('retcode', 0) if result else 0
+                    error_desc = self._get_retcode_description(retcode)
+                    logger.warning(f"🔧 MT5 Close Failed: {ticket} - {error_desc}")
+                    
+            except Exception as e:
+                failed_tickets.append(ticket)
+                logger.error(f"🔧 MT5 Raw Error: {ticket} - {e}")
+        
+        success = len(closed_tickets) > 0
+        message = f"Raw MT5: {len(closed_tickets)}/{len(tickets)} closed"
+        
+        logger.info(f"🔧 RAW MT5 RESULT: {message}")
+        
+        return {
+            'success': success,
+            'closed_tickets': closed_tickets,
+            'rejected_tickets': [],  # Raw MT5 doesn't reject, only succeeds or fails
+            'failed_tickets': failed_tickets,
+            'total_profit': total_profit,
+            'message': message
+        }
     
     def close_positions_group_with_spread_check(self, tickets: List[int]) -> Dict:
         """
