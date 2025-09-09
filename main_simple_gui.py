@@ -121,8 +121,8 @@ class SimpleBreakoutTradingSystemGUI:
         """Initialize all systems (Same structure as original)"""
         try:
             # 🔗 Connect to MT5
-            if not self.mt5_connection.connect():
-                logger.error("❌ Failed to connect to MT5")
+            if not self.mt5_connection.connect_mt5():
+                logger.error("❌ ไม่สามารถเชื่อมต่อ MT5 ได้")
                 return False
             
             # 🔍 Auto-detect gold symbol
@@ -149,6 +149,9 @@ class SimpleBreakoutTradingSystemGUI:
             positions = self.order_manager.sync_positions_from_mt5()
             logger.info(f"พบ Position ที่เปิดอยู่: {len(positions)} ตัว")
             
+            # โหลดข้อมูลราคาเริ่มต้น
+            self.load_initial_market_data()
+            
             # ✅ Initialize Position Management Systems (Keep from original)
             logger.info("✅ Initializing Position Management Systems...")
             
@@ -168,6 +171,28 @@ class SimpleBreakoutTradingSystemGUI:
         except Exception as e:
             logger.error(f"❌ เกิดข้อผิดพลาดในการเริ่มต้นระบบ: {str(e)}")
             return False
+    
+    def load_initial_market_data(self):
+        """โหลดข้อมูลตลาดเริ่มต้น (Same as original)"""
+        try:
+            if not self.actual_symbol:
+                return
+                
+            # โหลดราคาปัจจุบัน
+            current_price = self.mt5_connection.get_current_price(self.actual_symbol)
+            if current_price:
+                self.current_prices[self.actual_symbol] = current_price
+                logger.info(f"โหลดราคาปัจจุบัน: {current_price}")
+            
+            # โหลดข้อมูลเทียนเริ่มต้น
+            candles = self.mt5_connection.get_candles(self.actual_symbol, count=100, timeframe='H1')
+            if candles:
+                self.price_history = [candle.get('close', 0) for candle in candles[-50:]]
+                self.volume_history = [candle.get('volume', 0) for candle in candles[-50:]]
+                logger.info(f"โหลดข้อมูลเทียน: {len(candles)} แท่ง")
+                
+        except Exception as e:
+            logger.error(f"เกิดข้อผิดพลาดในการโหลดข้อมูลตลาด: {str(e)}")
     
     def start_trading(self):
         """Start trading loop (Same as original structure)"""
@@ -547,7 +572,7 @@ class SimpleBreakoutTradingSystemGUI:
             self.stop_trading()
             
             if self.mt5_connection:
-                self.mt5_connection.disconnect()
+                self.mt5_connection.disconnect_mt5()
                 
             logger.info("✅ ปิดระบบเรียบร้อยแล้ว")
             
