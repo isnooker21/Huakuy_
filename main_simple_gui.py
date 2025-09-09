@@ -179,13 +179,20 @@ class SimpleBreakoutTradingSystemGUI:
                 return
                 
             # โหลดราคาปัจจุบัน
-            current_price = self.mt5_connection.get_current_price(self.actual_symbol)
-            if current_price:
+            tick_data = self.mt5_connection.get_current_tick(self.actual_symbol)
+            if tick_data:
+                current_price = tick_data.get('bid', 0)
                 self.current_prices[self.actual_symbol] = current_price
                 logger.info(f"โหลดราคาปัจจุบัน: {current_price}")
             
-            # โหลดข้อมูลเทียนเริ่มต้น
-            candles = self.mt5_connection.get_candles(self.actual_symbol, count=100, timeframe='H1')
+            # โหลดข้อมูลเทียนเริ่มต้น (ใช้ H1 = 16385)
+            try:
+                import MetaTrader5 as mt5
+                candles = self.mt5_connection.get_market_data(self.actual_symbol, mt5.TIMEFRAME_H1, count=100)
+            except:
+                # Fallback if MT5 not available (for Mac development)
+                candles = self.mt5_connection.get_market_data(self.actual_symbol, 16385, count=100)
+            
             if candles:
                 self.price_history = [candle.get('close', 0) for candle in candles[-50:]]
                 self.volume_history = [candle.get('volume', 0) for candle in candles[-50:]]
@@ -251,12 +258,20 @@ class SimpleBreakoutTradingSystemGUI:
     def _get_current_candle(self) -> Optional[CandleData]:
         """Get current candle data"""
         try:
-            current_price = self.mt5_connection.get_current_price(self.actual_symbol)
-            if not current_price:
+            tick_data = self.mt5_connection.get_current_tick(self.actual_symbol)
+            if not tick_data:
                 return None
             
-            # Get latest candles
-            candles = self.mt5_connection.get_candles(self.actual_symbol, count=2, timeframe='M1')
+            current_price = tick_data.get('bid', 0)
+            
+            # Get latest candles (ใช้ M1 = 1)
+            try:
+                import MetaTrader5 as mt5
+                candles = self.mt5_connection.get_market_data(self.actual_symbol, mt5.TIMEFRAME_M1, count=2)
+            except:
+                # Fallback if MT5 not available (for Mac development)
+                candles = self.mt5_connection.get_market_data(self.actual_symbol, 1, count=2)
+                
             if not candles or len(candles) < 1:
                 return None
             
@@ -348,18 +363,35 @@ class SimpleBreakoutTradingSystemGUI:
         """Get previous candle for timeframe"""
         try:
             # Get candles from MT5
-            mt5_timeframe = {
-                'M5': 'M5',
-                'M15': 'M15',
-                'M30': 'M30',
-                'H1': 'H1'
-            }.get(timeframe, 'M5')
+            mt5_timeframe_map = {
+                'M5': 5,     # TIMEFRAME_M5
+                'M15': 15,   # TIMEFRAME_M15
+                'M30': 30,   # TIMEFRAME_M30
+                'H1': 16385  # TIMEFRAME_H1
+            }
             
-            candles = self.mt5_connection.get_candles(
-                self.actual_symbol, 
-                count=2, 
-                timeframe=mt5_timeframe
-            )
+            tf_value = mt5_timeframe_map.get(timeframe, 5)
+            
+            try:
+                import MetaTrader5 as mt5
+                tf_constants = {
+                    'M5': mt5.TIMEFRAME_M5,
+                    'M15': mt5.TIMEFRAME_M15,
+                    'M30': mt5.TIMEFRAME_M30,
+                    'H1': mt5.TIMEFRAME_H1
+                }
+                candles = self.mt5_connection.get_market_data(
+                    self.actual_symbol, 
+                    tf_constants.get(timeframe, mt5.TIMEFRAME_M5),
+                    count=2
+                )
+            except:
+                # Fallback if MT5 not available
+                candles = self.mt5_connection.get_market_data(
+                    self.actual_symbol, 
+                    tf_value,
+                    count=2
+                )
             
             if not candles or len(candles) < 2:
                 return None
