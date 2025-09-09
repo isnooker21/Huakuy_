@@ -73,11 +73,11 @@ class DynamicAdaptiveCloser:
         self.mt5_connection = mt5_connection
         self.symbol = symbol
         
-        # 🎯 Dynamic Closing Parameters - ปรับให้ปิดได้ง่ายขึ้น
-        self.min_profit_threshold = 2.0     # ลดจาก 5 เป็น 2
-        self.max_loss_threshold = -100.0    # ลดจาก -200 เป็น -100
-        self.balance_tolerance = 0.3        # เพิ่มจาก 20% เป็น 30%
-        self.margin_safety_level = 150      # ลดจาก 200 เป็น 150
+        # 🔥 AGGRESSIVE CLOSING: สู้ให้สุด - ปิดเมื่อมีกำไรเล็กน้อย!
+        self.min_profit_threshold = 0.5     # ลดจาก 2 เป็น 0.5 - กำไรนิดเดียวก็ปิด
+        self.max_loss_threshold = -300.0    # เพิ่มจาก -100 เป็น -300 - ทนขาดทุนได้มากขึ้น
+        self.balance_tolerance = 0.6        # เพิ่มจาก 0.3 เป็น 0.6 - ยอมให้ไม่สมดุลได้มากขึ้น
+        self.margin_safety_level = 80       # ลดจาก 150 เป็น 80 - เสี่ยงได้มากขึ้น
         
         # 📊 Market Timing Parameters
         self.volatility_window = 14         # periods for volatility calculation
@@ -252,8 +252,8 @@ class DynamicAdaptiveCloser:
             equity = account_info.get('equity', balance)
             margin_level = account_info.get('margin_level', 1000)
             
-            # Emergency conditions - แก้ไขการตรวจสอบเมื่อไม่มี positions
-            if len(positions) > 0 and margin_level > 0 and margin_level < 100:
+            # AGGRESSIVE MODE: สู้ให้สุด - ปิดก็ต่อเมื่อจำเป็นจริงๆ!
+            if len(positions) > 0 and margin_level > 0 and margin_level < 30:  # ลดจาก 100 เป็น 30
                 return ClosingUrgency.IMMEDIATE
             
             if equity < balance * 0.8:
