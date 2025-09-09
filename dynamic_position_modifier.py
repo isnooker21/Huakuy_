@@ -423,8 +423,8 @@ class DynamicPositionModifier:
             equity = account_info.get('equity', balance)
             margin_level = account_info.get('margin_level', 1000)
             
-            # Margin Call Risk - สอดคล้องกับ Dynamic Entry System
-            if margin_level < 100:  # เปลี่ยนจาก 150 เป็น 100
+            # Margin Call Risk - แก้ไขการตรวจสอบเมื่อไม่มี positions
+            if len(positions) > 0 and margin_level > 0 and margin_level < 100:
                 emergency_actions.append("MARGIN_CALL_PREVENTION")
             
             # Equity Protection

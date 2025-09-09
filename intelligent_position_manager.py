@@ -126,8 +126,12 @@ class IntelligentPositionManager:
             equity = account_info.get('equity', 0)
             balance = account_info.get('balance', 0)
             
-            # กำหนดระดับความเสี่ยง
-            if margin_level < self.margin_thresholds['critical']:
+            # กำหนดระดับความเสี่ยง - แก้ไขการตรวจสอบเมื่อไม่มี positions
+            if margin_level <= 0:
+                # ไม่มี positions หรือ margin data ไม่ถูกต้อง
+                risk_level = 'SAFE'
+                recommendation = 'ไม่มี positions - ไม่มีความเสี่ยง margin'
+            elif margin_level < self.margin_thresholds['critical']:
                 risk_level = 'CRITICAL'
                 recommendation = 'ปิดไม้ด่วน! Margin Level อันตราย'
             elif margin_level < self.margin_thresholds['high_risk']:

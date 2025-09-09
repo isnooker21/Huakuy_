@@ -252,8 +252,8 @@ class DynamicAdaptiveCloser:
             equity = account_info.get('equity', balance)
             margin_level = account_info.get('margin_level', 1000)
             
-            # Emergency conditions - สอดคล้องกับระบบอื่น
-            if margin_level < 100:  # เปลี่ยนจาก 120 เป็น 100
+            # Emergency conditions - แก้ไขการตรวจสอบเมื่อไม่มี positions
+            if len(positions) > 0 and margin_level > 0 and margin_level < 100:
                 return ClosingUrgency.IMMEDIATE
             
             if equity < balance * 0.8:
