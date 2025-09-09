@@ -678,25 +678,32 @@ class OrderManager:
             return 0.0
     
     def _calculate_safety_buffer(self, positions: List[Position]) -> float:
-        """🛡️ คำนวณ Safety Buffer ตามต้นทุนการปิด"""
+        """🛡️ คำนวณ Safety Buffer ตามต้นทุนการปิด - Realistic for XAUUSD"""
         try:
             total_volume = sum(getattr(pos, 'volume', 0.01) for pos in positions)
             position_count = len(positions)
             
-            # คำนวณต้นทุนต่างๆ
-            spread_cost = total_volume * 10.0  # ประมาณ spread cost
-            commission_cost = total_volume * 2.0  # ประมาณ commission
-            slippage_cost = position_count * 1.0  # ประมาณ slippage per position
+            # 🔧 REALISTIC COSTS สำหรับ XAUUSD
+            spread_cost = total_volume * 2.0   # ลดลง: ~$2 per lot (realistic spread)
+            commission_cost = total_volume * 0.5  # ลดลง: ~$0.5 per lot (typical commission)
+            slippage_cost = position_count * 0.5  # ลดลง: ~$0.5 per position
             
-            # Safety buffer = ต้นทุนรวม + buffer 20%
+            # Safety buffer = ต้นทุนรวม + buffer 10% (ลดจาก 20%)
             total_cost = spread_cost + commission_cost + slippage_cost
-            safety_buffer = total_cost * 1.2  # เพิ่ม 20% buffer
+            safety_buffer = total_cost * 1.1  # เพิ่ม 10% buffer
             
-            # ขั้นต่ำ $3 per position
-            minimum_buffer = position_count * 3.0
+            # 🔧 ขั้นต่ำ $1 per position (ลดจาก $3)
+            minimum_buffer = position_count * 1.0
             
-            return max(safety_buffer, minimum_buffer)
+            final_buffer = max(safety_buffer, minimum_buffer)
+            
+            logger.debug(f"🛡️ Safety Buffer Calculation:")
+            logger.debug(f"   Positions: {position_count}, Volume: {total_volume:.2f}")
+            logger.debug(f"   Spread: ${spread_cost:.2f}, Commission: ${commission_cost:.2f}, Slippage: ${slippage_cost:.2f}")
+            logger.debug(f"   Total Cost: ${total_cost:.2f}, Buffer: ${final_buffer:.2f}")
+            
+            return final_buffer
             
         except Exception as e:
             logger.error(f"❌ Error calculating safety buffer: {e}")
-            return len(positions) * 5.0  # Fallback: $5 per position
+            return len(positions) * 2.0  # Fallback: $2 per position (ลดจาก $5)
