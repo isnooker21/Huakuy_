@@ -27,8 +27,8 @@ def test_position_finder():
         print("1. 🔗 Connecting to MT5...")
         mt5 = MT5Connection()
         
-        if not mt5.initialize_mt5():
-            print("❌ Cannot initialize MT5")
+        if not mt5.connect_mt5():
+            print("❌ Cannot connect to MT5")
             return False
             
         if not mt5.check_connection_health():
