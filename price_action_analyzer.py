@@ -107,49 +107,7 @@ class PriceActionAnalyzer:
             logger.error(f"❌ Error analyzing market structure: {e}")
             return self._default_trend_analysis()
     
-    def get_current_signal(self, current_price: float) -> Optional[PriceActionSignal]:
-        """
-        🎯 ได้สัญญาณจาก Price Action ปัจจุบัน
-        
-        Args:
-            current_price: ราคาปัจจุบัน
-            
-        Returns:
-            PriceActionSignal: สัญญาณการเทรด หรือ None ถ้าไม่มี
-        """
-        try:
-            if not self.swing_highs or not self.swing_lows:
-                return None
-            
-            # วิเคราะห์ trend ปัจจุบัน
-            trend_analysis = self._analyze_trend_structure()
-            
-            # หาสัญญาณจาก Support/Resistance
-            sr_signal = self._check_sr_signals(current_price)
-            
-            # หาสัญญาณจาก Swing Structure
-            swing_signal = self._check_swing_signals(current_price, trend_analysis)
-            
-            # หาสัญญาณจาก Momentum
-            momentum_signal = self._check_momentum_signals(current_price)
-            
-            # รวมสัญญาณทั้งหมด
-            final_signal = self._combine_signals(sr_signal, swing_signal, momentum_signal, current_price)
-            
-            if final_signal:
-                logger.info(f"🎯 Price Action Signal: {final_signal.signal_type} {final_signal.direction}")
-                logger.info(f"   Strength: {final_signal.strength:.1f}% | Confidence: {final_signal.confidence:.1f}%")
-                logger.info(f"   Reason: {final_signal.reason}")
-            
-            return final_signal
-            
-        except Exception as e:
-            logger.error(f"❌ Error getting current signal: {e}")
-            return None
     
-    def get_support_resistance_levels(self) -> List[SupportResistanceLevel]:
-        """📊 ได้ระดับ Support/Resistance ปัจจุบัน"""
-        return sorted(self.sr_levels, key=lambda x: x.strength, reverse=True)
     
     def is_at_key_level(self, price: float, tolerance_pips: float = 2.0) -> Optional[SupportResistanceLevel]:
         """

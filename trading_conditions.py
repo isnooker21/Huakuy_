@@ -406,8 +406,6 @@ class TradingConditions:
             result['reasons'].append(f"Entry price invalid: {price_validation['reason']}")
             result['signal'] = None
             return result
-        
-        # 🗑️ Portfolio Quality Check REMOVED - ให้ระบบเข้าไม้ได้เสมอ
         # เพื่อไม่ให้พอร์ตแย่ยิ่งแย่หนัก จากการไม่ออกไม้
 
         # 🚀 Adaptive Entry Control - ENHANCED for Balance Enforcement
@@ -961,8 +959,6 @@ class TradingConditions:
         
         if not positions:
             return result
-            
-        # 🗑️ ALL EXIT LOGIC REMOVED - Now handled by Smart Profit Taking System
         logger.debug("🗑️ Exit conditions removed - all exits handled by Smart Profit Taking System")
         return {
             'should_exit': False,
@@ -1056,8 +1052,6 @@ class TradingConditions:
             result['quality_score'] = 0.0
             
         return result
-    
-    # 🗑️ OLD PROFIT/STOP LOSS METHODS REMOVED
     # Replaced by Lightning Portfolio Cleanup System
         
     def _check_pullback_conditions(self, positions: List[Position], current_prices: Dict[str, float],

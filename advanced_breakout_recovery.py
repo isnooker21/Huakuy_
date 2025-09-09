@@ -674,24 +674,3 @@ class AdvancedBreakoutRecovery:
                 'reason': f'เกิดข้อผิดพลาด: {str(e)}'
             }
     
-    def get_recovery_status(self) -> Dict[str, Any]:
-        """ดึงสถานะของ recovery system"""
-        try:
-            return {
-                'active_recoveries': len(self.active_recoveries),
-                'completed_recoveries': len(self.completed_recoveries),
-                'max_concurrent': self.max_concurrent_recoveries,
-                'active_groups': {
-                    group_id: {
-                        'type': group.breakout_type.value,
-                        'phase': group.phase.value,
-                        'age_seconds': (datetime.now() - group.created_time).total_seconds(),
-                        'new_position_profit': group.new_position.profit if group.new_position else None
-                    }
-                    for group_id, group in self.active_recoveries.items()
-                }
-            }
-            
-        except Exception as e:
-            logger.error(f"Error getting recovery status: {e}")
-            return {'error': str(e)}

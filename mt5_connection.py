@@ -683,91 +683,6 @@ class MT5Connection:
             logger.error(f"เกิดข้อผิดพลาดในการคำนวณกำไร Position {ticket}: {e}")
             return None
 
-    # 🚫 REMOVED: close_position() - User policy: Group closing only
-    def close_position_REMOVED(self, ticket: int) -> Optional[Dict]:
-        """
-        ปิด Position (ตรวจสอบ spread ก่อน)
-        
-        Args:
-            ticket: หมายเลข Position
-            
-        Returns:
-            Dict: ผลลัพธ์การปิด Position หรือ None
-        """
-        if not self.check_connection_health():
-            return None
-            
-        try:
-            # คำนวณกำไรและ spread ก่อน
-            profit_info = self.calculate_position_profit_with_spread(ticket)
-            if not profit_info:
-                logger.error(f"ไม่สามารถคำนวณกำไร Position {ticket}")
-                return None
-            
-            # แสดงข้อมูลก่อนปิด
-            logger.info(f"📊 ข้อมูลก่อนปิด Position {ticket}:")
-            logger.info(f"   Symbol: {profit_info['symbol']}")
-            logger.info(f"   Type: {profit_info['type']}, Volume: {profit_info['volume']}")
-            logger.info(f"   Open: {profit_info['open_price']:.5f}, Close: {profit_info['close_price']:.5f}")
-            logger.info(f"   Spread: {profit_info['spread_points']:.5f} ({profit_info['spread_percentage']:.3f}%)")
-            logger.info(f"   Profit: ${profit_info['calculated_profit']:.2f} ({profit_info['profit_percentage']:.2f}%)")
-            logger.info(f"   Should Close: {profit_info['should_close']}")
-            
-            # บังคับไม่ให้ปิดติดลบ - RELAXED CHECK
-            if profit_info['profit_percentage'] < -1.0:  # ปิดเฉพาะขาดทุนมากกว่า 1%
-                logger.warning(f"🚫 Position {ticket} ขาดทุนมาก {profit_info['profit_percentage']:.2f}% - ห้ามปิด!")
-                logger.info(f"💡 รอให้ขาดทุนน้อยกว่า -1.0% ก่อนปิด")
-                return {
-                    'retcode': 10027,  # TRADE_RETCODE_REJECT (custom)
-                    'error_description': f'ขาดทุนมาก: {profit_info["profit_percentage"]:.2f}% < -1.0%',
-                    'profit_info': profit_info
-                }
-            
-            # ดึงข้อมูล Position
-            position = mt5.positions_get(ticket=ticket)
-            if not position:
-                logger.error(f"ไม่พบ Position ticket {ticket}")
-                return None
-                
-            pos = position[0]
-            
-            # กำหนดประเภท Order สำหรับปิด Position
-            if pos.type == mt5.POSITION_TYPE_BUY:
-                order_type = mt5.ORDER_TYPE_SELL
-                price = mt5.symbol_info_tick(pos.symbol).bid
-            else:
-                order_type = mt5.ORDER_TYPE_BUY
-                price = mt5.symbol_info_tick(pos.symbol).ask
-                
-            # ใช้ราคาจาก symbol_info แทน symbol_info_tick
-            
-            # เตรียมข้อมูล request แบบง่าย (ตามที่ทดสอบสำเร็จ)
-            request = {
-                "action": mt5.TRADE_ACTION_DEAL,
-                "symbol": pos.symbol,
-                "volume": pos.volume,
-                "type": order_type,
-                "position": ticket,
-                "price": price,
-                "magic": pos.magic,
-                "comment": f"Close position {ticket}",
-            }
-            
-            # ปิด Position
-            result = mt5.order_send(request)
-            if result:
-                return {
-                    'retcode': result.retcode,
-                    'deal': result.deal,
-                    'order': result.order,
-                    'volume': result.volume,
-                    'price': result.price,
-                    'comment': result.comment
-                }
-        except Exception as e:
-            logger.error(f"เกิดข้อผิดพลาดในการปิด Position {ticket}: {e}")
-            
-        return None
         
     def _load_broker_symbols(self):
         """
@@ -967,8 +882,6 @@ class MT5Connection:
         failed_tickets = []
         total_profit = 0.0
         results_lock = threading.Lock()
-        
-        # 🚫 REMOVED: Single position closing - User explicitly prohibited individual position closing
         # All positions must be closed as groups only to maintain portfolio balance
         
         # 🚫 NO SINGLE POSITION CLOSING: ปฏิเสธการปิดแค่ตัวเดียว
@@ -1207,8 +1120,6 @@ class MT5Connection:
                 'comment': f'Exception: {str(e)}',
                 'ticket': ticket
             }
-    
-    # 🚫 REMOVED: close_positions_group_with_spread_check() - Redundant with group closing
     def close_positions_group_with_spread_check_REMOVED(self, tickets: List[int]) -> Dict:
         """
         ปิด Position หลายตัวพร้อมกัน โดยเช็ค spread ก่อน
@@ -1302,10 +1213,7 @@ class MT5Connection:
             'total_profit': total_profit,
             'message': message
         }
-    
-    # 🚫 REMOVED: close_position_safe() - User explicitly prohibited individual position closing
-    
-    # 🚫 REMOVED: _close_position_raw() - Replaced by _execute_group_close_single()
+
     def _close_position_raw_REMOVED(self, ticket: int) -> Optional[Dict]:
         """
         🚨 EMERGENCY RAW CLOSE: Only for internal group closing
@@ -1448,8 +1356,6 @@ class MT5Connection:
                 'comment': f'Exception: {str(e)}',
                 'ticket': ticket
             }
-    
-    # 🚫 REMOVED: close_position_direct() - User explicitly prohibited individual position closing
     def close_position_direct_REMOVED(self, ticket: int) -> Optional[Dict]:
         """
         ปิด Position โดยตรง - ⚠️ DEPRECATED: ควรใช้ close_position แทน

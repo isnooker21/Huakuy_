@@ -315,25 +315,3 @@ class ForceTradingMode:
             'last_momentum': self.last_momentum_analysis
         }
     
-    def update_success_rate(self, trade_result: bool):
-        """อัพเดทอัตราความสำเร็จ"""
-        try:
-            if not hasattr(self, '_force_trade_results'):
-                self._force_trade_results = []
-            
-            self._force_trade_results.append(trade_result)
-            
-            # เก็บแค่ 20 ผลลัพธ์ล่าสุด
-            if len(self._force_trade_results) > 20:
-                self._force_trade_results = self._force_trade_results[-20:]
-            
-            # คำนวณอัตราความสำเร็จ
-            successful_trades = sum(self._force_trade_results)
-            total_trades = len(self._force_trade_results)
-            self.success_rate = (successful_trades / total_trades) * 100 if total_trades > 0 else 0.0
-            
-            logger.info(f"📊 Force Trading Success Rate Updated: {self.success_rate:.1f}% "
-                       f"({successful_trades}/{total_trades})")
-            
-        except Exception as e:
-            logger.error(f"Error updating success rate: {e}")
