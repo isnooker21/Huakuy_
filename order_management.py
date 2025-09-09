@@ -196,11 +196,19 @@ class OrderManager:
             # 🔍 Pre-validate positions exist before attempting to close
             valid_positions = []
             
+            # 🎯 DEBUG: Log input position types and tickets
+            logger.info(f"🔍 VALIDATION INPUT: {len(positions)} positions to validate")
+            for i, pos in enumerate(positions[:3]):  # Show first 3
+                pos_type = type(pos).__name__
+                ticket = getattr(pos, 'ticket', 'NO_TICKET')
+                logger.info(f"   Position {i}: Type={pos_type}, Ticket={ticket}")
+            
             # 🎯 CRITICAL FIX: Get positions ONCE, not in loop
             current_positions = self.mt5.get_positions()
             if current_positions:
                 existing_tickets = [p.ticket for p in current_positions if hasattr(p, 'ticket')]
                 logger.info(f"🔍 Current MT5 positions: {len(existing_tickets)} tickets")
+                logger.info(f"🔍 MT5 tickets sample: {existing_tickets[:5]}")
                 
                 for pos in positions:
                     ticket = getattr(pos, 'ticket', None)
