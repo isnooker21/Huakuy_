@@ -203,12 +203,12 @@ class OrderManager:
                 ticket = getattr(pos, 'ticket', 'NO_TICKET')
                 logger.info(f"   Position {i}: Type={pos_type}, Ticket={ticket}")
             
-            # 🎯 CRITICAL FIX: Get positions ONCE, not in loop
+            # 🎯 CRITICAL FIX: Get ALL positions from broker directly
             current_positions = self.mt5.get_positions()
             if current_positions:
                 existing_tickets = [p.ticket for p in current_positions if hasattr(p, 'ticket')]
-                logger.info(f"🔍 Current MT5 positions: {len(existing_tickets)} tickets")
-                logger.info(f"🔍 MT5 tickets sample: {existing_tickets[:5]}")
+                logger.info(f"💎 BROKER DIRECT: {len(existing_tickets)} total positions from broker")
+                logger.info(f"🔍 Broker tickets sample: {existing_tickets[:5]}")
                 
                 for pos in positions:
                     ticket = getattr(pos, 'ticket', None)
@@ -391,16 +391,15 @@ class OrderManager:
                 logger.info(f"🔍 Magic Number Summary: {magic_numbers}")
                 logger.info(f"🔍 System Magic Number: {self.magic_number}")
             
-            # กรองเฉพาะ Position ของระบบ (ตาม Magic Number)
-            system_positions = [
-                pos for pos in mt5_positions 
-                if pos.get('magic') == self.magic_number
-            ]
+            # 🚨 DIRECT BROKER ACCESS: ใช้ positions ทั้งหมดจากโบรกเกอร์
+            logger.info(f"💎 DIRECT BROKER ACCESS: Using ALL {len(mt5_positions)} positions from broker")
+            system_positions = mt5_positions  # ใช้ทั้งหมดโดยไม่กรอง Magic Number
             
-            # 🚨 CRITICAL: If no system positions, try without magic filter
-            if not system_positions and mt5_positions:
-                logger.warning(f"⚠️ NO POSITIONS with magic {self.magic_number} - using ALL positions")
-                system_positions = mt5_positions
+            # # เดิม: กรองเฉพาะ Position ของระบบ (ตาม Magic Number) - DISABLED
+            # system_positions = [
+            #     pos for pos in mt5_positions 
+            #     if pos.get('magic') == self.magic_number
+            # ]
             
             # แปลงเป็น Position objects
             synced_positions = []

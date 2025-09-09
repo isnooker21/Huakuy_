@@ -563,7 +563,7 @@ class Dynamic7DSmartCloser:
                         selected = []
                     else:
                         selected = selected_buys + selected_sells
-                        logger.info(f"🧠 Smart 7D Balance: {len(selected_buys)}B+{len(selected_sells)}S = {len(selected)} total")
+                        logger.debug(f"🧠 Smart 7D Balance: {len(selected_buys)}B+{len(selected_sells)}S = {len(selected)} total")
                 
             elif method_name == 'top_edge_7d':
                 # ขอบบน + 7D Score + BALANCED
@@ -582,7 +582,7 @@ class Dynamic7DSmartCloser:
                     # ตรวจสอบ balance
                     buys = len([s for s in selected if getattr(s.position, 'type', 0) == 0])
                     sells = len([s for s in selected if getattr(s.position, 'type', 0) == 1])
-                    logger.info(f"🔝 Top Edge Balance: {buys}B+{sells}S = {len(selected)} total")
+                    logger.debug(f"🔝 Top Edge Balance: {buys}B+{sells}S = {len(selected)} total")
                 else:
                     logger.warning(f"❌ Top Edge: Cannot create balanced selection")
                     selected = []
