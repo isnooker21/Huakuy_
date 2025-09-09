@@ -650,6 +650,7 @@ class TradingSystem:
                         # 📊 แสดงการตัดสินใจปิดไม้
                         count = len(filtered_positions)
                         expected_pnl = closing_result.get('expected_pnl', 0.0)
+                        method = closing_result.get('method', 'unknown')
                         
                         logger.info(f"💰 Closing {count} positions (Expected: ${expected_pnl:.2f})")
                         
