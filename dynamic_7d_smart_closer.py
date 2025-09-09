@@ -544,8 +544,14 @@ class Dynamic7DSmartCloser:
                 sell_scores = [s for s in position_scores if getattr(s.position, 'type', 0) == 1]
                 
                 if not buy_scores or not sell_scores:
-                    logger.warning(f"❌ Smart 7D: Missing BUY or SELL positions")
-                    selected = []
+                    # 🎯 SMART UNBALANCED MODE: ปิดแบบไม่ balance เมื่อจำเป็น
+                    logger.info(f"🔄 Smart 7D: Unbalanced portfolio - using single-type closing")
+                    all_scores = buy_scores + sell_scores
+                    all_scores.sort(key=lambda x: x.total_score, reverse=True)
+                    selected = all_scores[:min(size, len(all_scores))]
+                    
+                    type_name = "BUY" if buy_scores else "SELL"
+                    logger.info(f"✅ Unbalanced Close: {len(selected)} {type_name} positions selected")
                 else:
                     # เรียงตาม score
                     buy_scores.sort(key=lambda x: x.total_score, reverse=True)
@@ -559,11 +565,12 @@ class Dynamic7DSmartCloser:
                     selected_sells = sell_scores[:sell_count] if len(sell_scores) >= sell_count else sell_scores
                     
                     if len(selected_buys) == 0 or len(selected_sells) == 0:
-                        logger.warning(f"❌ Smart 7D: Cannot create balanced selection")
-                        selected = []
+                        # 🎯 FALLBACK: ใช้ที่มี
+                        selected = selected_buys + selected_sells
+                        logger.info(f"🔄 Smart 7D Fallback: Using available positions ({len(selected)} total)")
                     else:
                         selected = selected_buys + selected_sells
-                        logger.debug(f"🧠 Smart 7D Balance: {len(selected_buys)}B+{len(selected_sells)}S = {len(selected)} total")
+                        logger.info(f"✅ Smart 7D Balance: {len(selected_buys)}B+{len(selected_sells)}S = {len(selected)} total")
                 
             elif method_name == 'top_edge_7d':
                 # ขอบบน + 7D Score + BALANCED
@@ -584,8 +591,11 @@ class Dynamic7DSmartCloser:
                     sells = len([s for s in selected if getattr(s.position, 'type', 0) == 1])
                     logger.debug(f"🔝 Top Edge Balance: {buys}B+{sells}S = {len(selected)} total")
                 else:
-                    logger.warning(f"❌ Top Edge: Cannot create balanced selection")
-                    selected = []
+                    # 🎯 UNBALANCED TOP EDGE: ปิดแค่ที่มี
+                    all_edge = top_buys + top_sells
+                    all_edge.sort(key=lambda x: getattr(x.position, 'price_open', 0), reverse=True)
+                    selected = all_edge[:min(size, len(all_edge))]
+                    logger.info(f"🔄 Top Edge Unbalanced: {len(selected)} positions from top edge")
                 
             elif method_name == 'bottom_edge_7d':
                 # ขอบล่าง + 7D Score + BALANCED
@@ -606,8 +616,11 @@ class Dynamic7DSmartCloser:
                     sells = len([s for s in selected if getattr(s.position, 'type', 0) == 1])
                     logger.info(f"🔻 Bottom Edge Balance: {buys}B+{sells}S = {len(selected)} total")
                 else:
-                    logger.warning(f"❌ Bottom Edge: Cannot create balanced selection")
-                    selected = []
+                    # 🎯 UNBALANCED BOTTOM EDGE: ปิดแค่ที่มี
+                    all_edge = bottom_buys + bottom_sells
+                    all_edge.sort(key=lambda x: getattr(x.position, 'price_open', 0))
+                    selected = all_edge[:min(size, len(all_edge))]
+                    logger.info(f"🔄 Bottom Edge Unbalanced: {len(selected)} positions from bottom edge")
                 
             elif method_name == 'mixed_edge_7d':
                 # ขอบผสม + 7D Score + BALANCED
@@ -628,8 +641,11 @@ class Dynamic7DSmartCloser:
                     sells = len([s for s in selected if getattr(s.position, 'type', 0) == 1])
                     logger.info(f"🔀 Mixed Edge Balance: {buys}B+{sells}S = {len(selected)} total")
                 else:
-                    logger.warning(f"❌ Mixed Edge: Cannot create balanced selection")
-                    selected = []
+                    # 🎯 UNBALANCED MIXED EDGE: ปิดแค่ที่มี
+                    all_edge = edge_buys + edge_sells
+                    all_edge.sort(key=lambda x: x.total_score, reverse=True)
+                    selected = all_edge[:min(size, len(all_edge))]
+                    logger.info(f"🔄 Mixed Edge Unbalanced: {len(selected)} positions from edges")
                     
             elif method_name == 'force_balance_7d':
                 # บังคับ Balance + 7D Score
@@ -652,8 +668,14 @@ class Dynamic7DSmartCloser:
                 sell_scores = [s for s in position_scores if getattr(s.position, 'type', 0) == 1]
                 
                 if not buy_scores or not sell_scores:
-                    logger.warning(f"❌ Fallback: Missing BUY or SELL positions")
-                    selected = []
+                    # 🎯 FINAL FALLBACK: ปิดแบบไม่ balance
+                    logger.info(f"🔄 Final Fallback: Unbalanced closing")
+                    all_scores = buy_scores + sell_scores
+                    all_scores.sort(key=lambda x: x.total_score, reverse=True)
+                    selected = all_scores[:min(size, len(all_scores))]
+                    
+                    type_name = "BUY" if buy_scores else "SELL"
+                    logger.info(f"✅ Final Fallback: {len(selected)} {type_name} positions")
                 else:
                     # เรียงตาม score
                     buy_scores.sort(key=lambda x: x.total_score, reverse=True)
@@ -667,11 +689,12 @@ class Dynamic7DSmartCloser:
                     selected_sells = sell_scores[:sell_count] if len(sell_scores) >= sell_count else sell_scores
                     
                     if len(selected_buys) == 0 or len(selected_sells) == 0:
-                        logger.warning(f"❌ Fallback: Cannot create balanced selection")
-                        selected = []
+                        # 🎯 ใช้ที่มี
+                        selected = selected_buys + selected_sells
+                        logger.info(f"🔄 Fallback Partial: Using available positions ({len(selected)} total)")
                     else:
                         selected = selected_buys + selected_sells
-                        logger.info(f"🔄 Fallback Balance: {len(selected_buys)}B+{len(selected_sells)}S = {len(selected)} total")
+                        logger.info(f"✅ Fallback Balance: {len(selected_buys)}B+{len(selected_sells)}S = {len(selected)} total")
             
             if not selected:
                 return None

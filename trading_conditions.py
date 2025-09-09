@@ -1235,124 +1235,15 @@ class TradingConditions:
         if not positions:
             return result
             
-        # 🏥 วิเคราะห์สุขภาพ Portfolio
-        wrong_buys = sum(1 for pos in positions if pos.type == 0 and pos.price_open > current_price)
-        wrong_sells = sum(1 for pos in positions if pos.type == 1 and pos.price_open < current_price)
-        total_positions = len(positions)
-        wrong_percentage = ((wrong_buys + wrong_sells) / total_positions) * 100 if total_positions > 0 else 0
+        # 🚫 OLD BALANCE CONTROL SYSTEM REMOVED
+        # ✅ Smart Entry Timing System now handles all entry logic
+        # ✅ Price Hierarchy Rules prevent bad entries
+        # ✅ Zone-Aware Reversal Logic manages balance
         
-        # 🎯 Smart Imbalance Detection & Counter-Trade Logic
-        buy_count = sum(1 for pos in positions if pos.type == 0)
-        sell_count = sum(1 for pos in positions if pos.type == 1)
-        buy_percentage = (buy_count / total_positions) * 100 if total_positions > 0 else 0
-        sell_percentage = (sell_count / total_positions) * 100 if total_positions > 0 else 0
-        
-        # 📊 Debug Portfolio Balance
-        logger.info(f"📊 Portfolio Balance: BUY={buy_count} ({buy_percentage:.1f}%) | SELL={sell_count} ({sell_percentage:.1f}%) | Total={total_positions}")
-        
-        # 🎯 DYNAMIC BALANCE THRESHOLD - ปรับตามสภาพตลาด
-        dynamic_threshold = self._calculate_dynamic_balance_threshold(strength_analysis, total_positions, current_price)
-        logger.info(f"🎯 Dynamic Threshold: {dynamic_threshold:.1f}% (Market: {strength_analysis['total_strength']:.1f}%)")
-        
-        # 🚀 SMART LOGIC: เมื่อเสียสมดุล → Force Counter-Trade (Dynamic)
-        if sell_percentage > dynamic_threshold:
-            # Portfolio เอียงไป SELL มาก → ต้อง BUY เพื่อแก้สมดุล
-            if direction == "BUY":
-                result['force_trade'] = True
-                result['reason'] = f'🚀 SMART: Force BUY to balance (SELL: {sell_percentage:.1f}%)'
-                logger.info(f"🚀 FORCE BUY: Portfolio เอียง SELL {sell_percentage:.1f}% → ซื้อถูกแก้สมดุล")
-                return result
-            else:  # direction == "SELL"
-                result['should_block'] = True
-                result['reason'] = f'❌ BLOCK: Too many SELL already ({sell_percentage:.1f}% > {dynamic_threshold:.1f}%)'
-                return result
-                
-        elif buy_percentage > dynamic_threshold:
-            # Portfolio เอียงไป BUY มาก → บังคับ SELL เพื่อแก้สมดุล
-            result['force_trade'] = True
-            result['forced_direction'] = "SELL"  # บังคับ SELL ไม่ว่า signal จะเป็นอะไร
-            result['reason'] = f'🚀 FORCE SELL: Too many BUY ({buy_percentage:.1f}%) - Must balance!'
-            logger.info(f"🚀 FORCE SELL: Portfolio เอียง BUY {buy_percentage:.1f}% → บังคับขายเพื่อแก้สมดุล")
-            return result
-        
-        elif total_positions > 50:
-            # 🔴 High Volume Block: บล็อคเมื่อมี positions มากเกินไป
-            result['should_block'] = True
-            result['reason'] = f'❌ BLOCK: Too many positions ({total_positions} > 50)'
-            logger.warning(f"🔴 HIGH VOLUME BLOCK: {total_positions} positions เกินขีดจำกัด → หยุดเปิดออเดอร์")
-            return result
-        elif total_positions > 30:
-            # 🚀 Aggressive Balance Mode: เร่งหาคู่ปิดเมื่อ positions เยอะ
-            logger.info(f"🚀 AGGRESSIVE BALANCE MODE: {total_positions} positions → เร่งหาคู่ปิด")
-            result['reason'] = f'Aggressive Balance Mode: Speed up closing ({total_positions} positions)'
-            return result
-        
-        # 🟢 Normal Mode: อนุญาตทุกการเข้า (Unlimited Entry)
-        result['reason'] = f'Normal Mode: Unlimited entry allowed (Wrong: {wrong_percentage:.1f}%)'
+        result['reason'] = 'Entry control handled by Smart Entry Timing System'
         return result
     
-    def _calculate_dynamic_balance_threshold(self, strength_analysis: Dict, total_positions: int, current_price: float) -> float:
-        """
-        🎯 คำนวณ Dynamic Balance Threshold ตามสภาพตลาด
-        
-        Args:
-            strength_analysis: ข้อมูลแรงตลาด
-            total_positions: จำนวน positions ทั้งหมด
-            current_price: ราคาปัจจุบัน
-            
-        Returns:
-            float: Balance threshold (50-80%)
-        """
-        try:
-            # Base threshold
-            base_threshold = 60.0  # เริ่มต้น 60%
-            
-            # 🚀 Market Strength Factor (แรงตลาดสูง = threshold สูง = ยอมให้เสียสมดุลมากขึ้น)
-            market_strength = strength_analysis.get('total_strength', 0)
-            if market_strength >= 50.0:
-                # ตลาดแรงมาก → ยอมให้เสียสมดุลถึง 80%
-                strength_bonus = min(20.0, (market_strength - 50.0) * 0.6)  # สูงสุด +20%
-                base_threshold += strength_bonus
-                logger.debug(f"💪 Strong Market Bonus: +{strength_bonus:.1f}% (Market: {market_strength:.1f}%)")
-            elif market_strength <= 20.0:
-                # ตลาดอ่อน → เข้มงวดขึ้น ลดเหลือ 50%
-                strength_penalty = min(10.0, (20.0 - market_strength) * 0.5)  # สูงสุด -10%
-                base_threshold -= strength_penalty
-                logger.debug(f"🔻 Weak Market Penalty: -{strength_penalty:.1f}% (Market: {market_strength:.1f}%)")
-            
-            # 📊 Position Count Factor (positions เยอะ = เข้มงวดขึ้น)
-            if total_positions >= 40:
-                # positions เยอะมาก → เข้มงวด
-                position_penalty = min(15.0, (total_positions - 40) * 0.5)  # สูงสุด -15%
-                base_threshold -= position_penalty
-                logger.debug(f"📊 High Position Penalty: -{position_penalty:.1f}% ({total_positions} positions)")
-            elif total_positions <= 10:
-                # positions น้อย → ผ่อนปรน
-                position_bonus = min(5.0, (10 - total_positions) * 0.5)  # สูงสุด +5%
-                base_threshold += position_bonus
-                logger.debug(f"📈 Low Position Bonus: +{position_bonus:.1f}% ({total_positions} positions)")
-            
-            # 🕐 Session Factor (session ดี = ผ่อนปรน)
-            if hasattr(self, 'session_analyzer') and self.session_analyzer:
-                current_session = self.session_analyzer.get_current_session()
-                if current_session in ['OVERLAP_LONDON_NY', 'LONDON']:
-                    # Session ดี → ผ่อนปรน +5%
-                    base_threshold += 5.0
-                    logger.debug(f"🕐 Good Session Bonus: +5.0% ({current_session})")
-                elif current_session in ['SYDNEY', 'ASIAN']:
-                    # Session อ่อน → เข้มงวด -5%
-                    base_threshold -= 5.0
-                    logger.debug(f"🕐 Weak Session Penalty: -5.0% ({current_session})")
-            
-            # จำกัดขอบเขต 45% - 85%
-            final_threshold = max(45.0, min(85.0, base_threshold))
-            
-            logger.debug(f"🎯 Dynamic Threshold Calculation: {base_threshold:.1f}% → {final_threshold:.1f}%")
-            return final_threshold
-            
-        except Exception as e:
-            logger.error(f"❌ Error calculating dynamic threshold: {e}")
-            return 60.0  # Fallback to default
+    # 🚫 REMOVED: _calculate_dynamic_balance_threshold - Not needed with Smart Entry Timing System
     
     # 🧠 ===== 7D ENTRY INTELLIGENCE SYSTEM =====
     

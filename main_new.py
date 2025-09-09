@@ -36,40 +36,33 @@ from strategic_position_manager import create_strategic_position_manager
 from market_analysis import MultiTimeframeAnalyzer, MarketSessionAnalyzer
 from price_action_analyzer import PriceActionAnalyzer
 
-# Configure logging - เฉพาะระบบเทรดและปิดกำไร
+# 🎯 SIMPLE & CLEAN LOGGING CONFIGURATION
 logging.basicConfig(
-    level=logging.INFO,  # ลดเป็น INFO เพื่อลด noise
-    format='%(asctime)s - %(levelname)s - %(message)s',  # ลบ module name
+    level=logging.INFO,
+    format='%(asctime)s - %(message)s',  # ลบ levelname เพื่อความสะอาด
     handlers=[
         logging.FileHandler('trading_system.log', encoding='utf-8'),
         logging.StreamHandler()
     ]
 )
 
-# ปิด debug logs จากระบบอื่นๆ
-logging.getLogger('mt5_connection').setLevel(logging.WARNING)
+# 🎯 CLEAN LOGGING - แสดงแค่สิ่งสำคัญ
+logging.getLogger('mt5_connection').setLevel(logging.ERROR)
 logging.getLogger('order_management').setLevel(logging.WARNING)
-logging.getLogger('trading_conditions').setLevel(logging.DEBUG)  # Enable DEBUG for entry conditions
-logging.getLogger('smart_entry_timing').setLevel(logging.DEBUG)  # Enable DEBUG for hierarchy check
+logging.getLogger('trading_conditions').setLevel(logging.WARNING)
+logging.getLogger('smart_entry_timing').setLevel(logging.WARNING)
 logging.getLogger('portfolio_manager').setLevel(logging.WARNING)
-logging.getLogger('calculations').setLevel(logging.WARNING)
-logging.getLogger('signal_manager').setLevel(logging.INFO)
-logging.getLogger('smart_gap_filler').setLevel(logging.WARNING)
-logging.getLogger('force_trading_mode').setLevel(logging.WARNING)
-logging.getLogger('advanced_breakout_recovery').setLevel(logging.WARNING)
-logging.getLogger('price_zone_analysis').setLevel(logging.WARNING)
-logging.getLogger('zone_rebalancer').setLevel(logging.WARNING)
-logging.getLogger('market_analysis').setLevel(logging.WARNING)
+logging.getLogger('calculations').setLevel(logging.ERROR)
+logging.getLogger('intelligent_position_manager').setLevel(logging.ERROR)
+logging.getLogger('position_purpose_tracker').setLevel(logging.ERROR)
+logging.getLogger('dynamic_7d_smart_closer').setLevel(logging.WARNING)
+logging.getLogger('market_analysis').setLevel(logging.ERROR)
 
-# 🚀 PERFORMANCE-OPTIMIZED LOGGING
-logging.getLogger('zone_position_manager').setLevel(logging.INFO)  # เปิด Zone Analysis logs
-logging.getLogger('zone_manager').setLevel(logging.INFO)  # เปิด Zone Health calculation logs
-logging.getLogger('zone_analyzer').setLevel(logging.WARNING)  # ปิด INFO logs
-logging.getLogger('zone_coordinator').setLevel(logging.WARNING)  # ปิด INFO logs
-logging.getLogger('intelligent_position_manager').setLevel(logging.WARNING)  # ปิด DEBUG logs ที่เยอะมาก
-logging.getLogger('position_purpose_tracker').setLevel(logging.INFO)  # เปิด Purpose Analysis logs
-logging.getLogger('dynamic_7d_smart_closer').setLevel(logging.INFO)  # เปิด Purpose-Aware Closing logs
-logging.getLogger('__main__').setLevel(logging.INFO)
+# ปิด logs ที่ไม่จำเป็น
+for module in ['signal_manager', 'smart_gap_filler', 'force_trading_mode', 
+               'advanced_breakout_recovery', 'price_zone_analysis', 'zone_rebalancer',
+               'zone_position_manager', 'zone_manager', 'zone_analyzer', 'zone_coordinator']:
+    logging.getLogger(module).setLevel(logging.ERROR)
 
 logger = logging.getLogger(__name__)
 
@@ -415,12 +408,11 @@ class TradingSystem:
     def process_new_candle(self, candle: CandleData):
         """ประมวลผลแท่งเทียนใหม่ - ใช้ Smart Entry Timing System"""
         try:
-            # แสดงเฉพาะราคาปิด
-            logger.info(f"📊 PRICE: {candle.close}")
-            # ✅ Signal generation now handled by Smart Entry Timing in Portfolio Manager
+            # แสดงราคาแบบเรียบง่าย
+            logger.info(f"📊 {candle.close:.2f}")
             
         except Exception as e:
-            logger.error(f"เกิดข้อผิดพลาดในการประมวลผลแท่งเทียน: {str(e)}")
+            logger.info(f"❌ Candle processing error: {str(e)}")
             
     # 🚫 REMOVED: calculate_signal_strength - Signal analysis moved to Smart Entry Timing System
             
@@ -464,28 +456,26 @@ class TradingSystem:
             )
             
             if decision['should_enter']:
-                # 🎯 TRADE ENTRY (Smart Entry Timing approved)
-                logger.info(f"🎯 ENTRY: {basic_signal.direction} {decision['lot_size']:.2f} lots @ {basic_signal.price}")
+                # 🎯 เข้าไม้
+                logger.info(f"🎯 {basic_signal.direction} {decision['lot_size']:.2f} lots @ {basic_signal.price:.2f}")
                 
                 # ดำเนินการเทรด
                 result = self.portfolio_manager.execute_trade_decision(decision)
                 
                 if result.success:
-                    logger.info(f"✅ ORDER SUCCESS: Ticket #{result.ticket}")
+                    logger.info(f"✅ Order #{result.ticket} opened successfully")
                     self.portfolio_manager.update_trade_timing(trade_executed=True)
                 else:
-                    logger.error(f"❌ ORDER FAILED: {result.error_message}")
+                    logger.info(f"❌ Order failed: {result.error_message}")
             else:
-                # 🚫 แสดงสาเหตุที่ไม่เข้าไม้ (สั้นๆ)
-                reasons = decision.get('reasons', ['Unknown reason'])
-                if reasons and len(reasons) > 0:
-                    # เอาแค่เหตุผลแรก และทำให้สั้น
+                # 🚫 ไม่เข้าไม้ (แสดงเฉพาะเหตุผลสำคัญ)
+                reasons = decision.get('reasons', [])
+                if reasons:
                     main_reason = reasons[0] if isinstance(reasons, list) else str(reasons)
-                    # ทำให้เหตุผลสั้นลง
                     short_reason = self._simplify_reason(main_reason)
-                    logger.info(f"⏸️ NO ENTRY: {short_reason}")
-                else:
-                    logger.info(f"⏸️ NO ENTRY: No specific reason provided")
+                    if 'Smart Entry' in short_reason or 'Price Hierarchy' in short_reason:
+                        logger.info(f"⏸️ {short_reason}")
+                    # ไม่แสดง reason ธรรมดาเพื่อลด noise
                     
             # ล้าง signal หลังจากประมวลผล
             self.last_signal = None
@@ -657,14 +647,11 @@ class TradingSystem:
                             logger.info("🔒 All selected positions are already being closed - skipping")
                             return
                         
-                        # 📊 Log unified decision
-                        method = closing_result.get('method', 'unified')
+                        # 📊 แสดงการตัดสินใจปิดไม้
                         count = len(filtered_positions)
                         expected_pnl = closing_result.get('expected_pnl', 0.0)
-                        reason = closing_result.get('reason', '')
                         
-                        logger.info(f"🤝 UNIFIED DECISION ({method.upper()}): {count} positions")
-                        logger.info(f"💰 Expected P&L: ${expected_pnl:.2f} - {reason}")
+                        logger.info(f"💰 Closing {count} positions (Expected: ${expected_pnl:.2f})")
                         
                         # 🔒 Lock positions before closing
                         self._lock_positions(filtered_positions)
@@ -678,9 +665,9 @@ class TradingSystem:
                             if close_result.success:
                                 closed_count = len(close_result.closed_tickets)
                                 total_profit = close_result.total_profit
-                                logger.info(f"✅ UNIFIED SUCCESS: {closed_count} positions closed, ${total_profit:.2f} profit")
+                                logger.info(f"✅ Closed {closed_count} positions: ${total_profit:.2f} profit")
                             else:
-                                logger.warning(f"❌ UNIFIED FAILED: {close_result.error_message}")
+                                logger.info(f"❌ Close failed: {close_result.error_message}")
                         finally:
                             # 🔓 Always unlock positions after attempt
                             self._unlock_positions(filtered_positions)
@@ -722,7 +709,7 @@ class TradingSystem:
 def main():
     """ฟังก์ชันหลัก"""
     try:
-        logger.info("🚀 TRADING SYSTEM STARTING")
+        logger.info("🚀 Trading System Starting...")
         
         # สร้างระบบเทรด
         trading_system = TradingSystem(
@@ -732,15 +719,14 @@ def main():
         
         # เริ่มต้นระบบ
         if not trading_system.initialize_system():
-            logger.error("ไม่สามารถเริ่มต้นระบบได้")
+            logger.info("❌ System initialization failed")
             return
             
         # แสดงข้อมูลสำคัญ
         logger.info(f"💰 Balance: ${trading_system.initial_balance:,.2f}")
         logger.info(f"📊 Symbol: {trading_system.actual_symbol}")
-        logger.info("")
-        logger.info("⚠️  ระบบพร้อมใช้งาน - กดปุ่ม 'Start Trading' ใน GUI เพื่อเริ่มเทรด")
-        logger.info("=" * 60)
+        logger.info("✅ System ready - Press 'Start Trading' to begin")
+        logger.info("-" * 50)
         
         # เริ่ม GUI (ไม่เริ่มการเทรดอัตโนมัติ)
         trading_system.start_gui()
