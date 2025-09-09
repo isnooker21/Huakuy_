@@ -117,6 +117,11 @@ class SimpleBreakoutTradingSystemGUI:
         logger.info(f"📊 Target Symbol: {symbol}")
         logger.info(f"⏰ Monitoring Timeframes: {self.timeframes}")
     
+    @property
+    def is_trading(self):
+        """Property สำหรับ GUI compatibility"""
+        return self.is_running
+    
     def initialize_system(self) -> bool:
         """Initialize all systems (Same structure as original)"""
         try:
@@ -203,15 +208,21 @@ class SimpleBreakoutTradingSystemGUI:
     
     def start_trading(self):
         """Start trading loop (Same as original structure)"""
-        if self.is_running:
-            logger.warning("ระบบเทรดกำลังทำงานอยู่แล้ว")
-            return
-        
-        self.is_running = True
-        self.trading_thread = threading.Thread(target=self._trading_loop, daemon=True)
-        self.trading_thread.start()
-        
-        logger.info("🚀 เริ่มระบบเทรดแล้ว")
+        try:
+            if self.is_running:
+                logger.warning("ระบบเทรดกำลังทำงานอยู่แล้ว")
+                return True
+            
+            self.is_running = True
+            self.trading_thread = threading.Thread(target=self._trading_loop, daemon=True)
+            self.trading_thread.start()
+            
+            logger.info("🚀 เริ่มระบบเทรดแล้ว")
+            return True
+            
+        except Exception as e:
+            logger.error(f"❌ Error starting trading: {e}")
+            return False
     
     def stop_trading(self):
         """Stop trading loop (Same as original)"""
@@ -423,14 +434,17 @@ class SimpleBreakoutTradingSystemGUI:
             logger.info(f"   🎯 Price: {current_candle.close:.2f}")
             logger.info(f"   📝 Reason: {reason}")
             
-            # Create signal for portfolio manager
+            # Create signal for portfolio manager with detailed comment
+            comment = f"SimpleBreakout-{timeframe}-{direction}-{current_candle.close:.2f}"
+            
             signal = Signal(
                 direction=direction,
                 symbol=self.actual_symbol,
                 strength=self._calculate_candle_strength(current_candle),
                 confidence=80.0,  # High confidence for breakouts
                 timestamp=datetime.now(),
-                price=current_candle.close
+                price=current_candle.close,
+                comment=comment  # Add comment to signal
             )
             
             # Use portfolio manager to execute (keeps all original logic)
