@@ -298,9 +298,9 @@ class DynamicAdaptiveCloser:
                 else:
                     return ClosingStrategy.EMERGENCY_EXIT
             
-            # Profit opportunities
-            profitable_positions = [pos for pos in positions if getattr(pos, 'profit', 0) > 10]
-            if len(profitable_positions) > 3 and market_timing in [MarketTiming.PERFECT, MarketTiming.GOOD]:
+            # Profit opportunities - ลดเกณฑ์ให้ปิดได้ง่ายขึ้น
+            profitable_positions = [pos for pos in positions if getattr(pos, 'profit', 0) > 1]  # ลดจาก 10 เป็น 1
+            if len(profitable_positions) > 1 and market_timing in [MarketTiming.PERFECT, MarketTiming.GOOD, MarketTiming.ACCEPTABLE]:  # ลดจาก 3 เป็น 1 และเพิ่ม ACCEPTABLE
                 return ClosingStrategy.PROFIT_TAKING
             
             # Balance issues
@@ -383,12 +383,12 @@ class DynamicAdaptiveCloser:
         groups = []
         
         try:
-            profitable_positions = [pos for pos in positions if getattr(pos, 'profit', 0) > 1]  # ลดจาก 10 เป็น 1
+            profitable_positions = [pos for pos in positions if getattr(pos, 'profit', 0) > 0.5]  # ลดจาก 1 เป็น 0.5
             
             if profitable_positions:
                 # Group by profit level - ลดเกณฑ์ให้ปิดได้ง่ายขึ้น
-                high_profit = [pos for pos in profitable_positions if getattr(pos, 'profit', 0) > 20]  # ลดจาก 50 เป็น 20
-                medium_profit = [pos for pos in profitable_positions if 2 < getattr(pos, 'profit', 0) <= 20]  # ลดจาก 10 เป็น 2
+                high_profit = [pos for pos in profitable_positions if getattr(pos, 'profit', 0) > 5]  # ลดจาก 20 เป็น 5
+                medium_profit = [pos for pos in profitable_positions if 0.5 < getattr(pos, 'profit', 0) <= 5]  # ลดจาก 2 เป็น 0.5
                 
                 if high_profit:
                     groups.append(ClosingGroup(
@@ -477,10 +477,18 @@ class DynamicAdaptiveCloser:
     
     def _make_final_closing_decision(self, confidence: float, urgency: ClosingUrgency,
                                    expected_profit: float, risk_reduction: float, account_info: Dict) -> bool:
+        """🧠 การตัดสินใจปิดแบบอัจฉริยะ - ไม่ใช้เกณฑ์กำไรคงที่"""
         if urgency == ClosingUrgency.IMMEDIATE:
             return True
-        if confidence > 70 and expected_profit > 20:
+        
+        # 🎯 INTELLIGENT DECISION: ใช้ confidence และ profit efficiency
+        if confidence > 60 and expected_profit > 0:  # ลดเกณฑ์จาก 70 เป็น 60 และจาก 20 เป็น 0
             return True
+        
+        # 🎯 AGGRESSIVE MODE: ปิดถ้ามีกำไรเล็กน้อย
+        if expected_profit > 1 and confidence > 50:  # กำไร > $1 และ confidence > 50%
+            return True
+            
         return False
     
     # Additional placeholder methods for position selection
@@ -670,8 +678,8 @@ class DynamicAdaptiveCloser:
                 opportunity_score * 0.2
             )
             
-            # ตัดสินใจปิดถ้าคะแนน > 60 (ไม่ใช่เกณฑ์กำไรคงที่)
-            should_close = total_score > 60
+            # ตัดสินใจปิดถ้าคะแนน > 50 (ลดจาก 60 เป็น 50 เพื่อปิดได้ง่ายขึ้น)
+            should_close = total_score > 50
             
             if should_close:
                 logger.debug(f"🧠 INTELLIGENT CLOSE: Ticket {getattr(position, 'ticket', 'N/A')} "

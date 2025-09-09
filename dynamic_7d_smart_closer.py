@@ -1510,9 +1510,9 @@ class Dynamic7DSmartCloser:
             elif imbalance > 50:
                 intelligent_score += 10  # ไม่สมดุลปานกลาง = +10 คะแนน
             
-            # 4. 🎯 INTELLIGENT DECISION
-            # ตัดสินใจปิดถ้าคะแนนรวม > 50 (ไม่ใช่เกณฑ์กำไรคงที่)
-            should_close = intelligent_score > 50
+            # 4. 🎯 INTELLIGENT DECISION - AGGRESSIVE MODE
+            # ตัดสินใจปิดถ้าคะแนนรวม > 40 (ลดจาก 50 เป็น 40 เพื่อปิดได้ง่ายขึ้น)
+            should_close = intelligent_score > 40
             
             if should_close:
                 logger.info(f"🧠 INTELLIGENT DECISION: Score {intelligent_score:.1f} → CLOSE "
