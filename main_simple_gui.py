@@ -227,8 +227,12 @@ class SimpleBreakoutTradingSystemGUI:
                 from dynamic_7d_smart_closer import create_dynamic_7d_smart_closer
                 from intelligent_position_manager import IntelligentPositionManager
                 
-                # Create intelligent manager
-                intelligent_manager = IntelligentPositionManager(symbol=self.base_symbol)
+                # Create intelligent manager with required parameters
+                intelligent_manager = IntelligentPositionManager(
+                    mt5_connection=self.mt5_connection,
+                    order_manager=self.order_manager,
+                    symbol=self.base_symbol
+                )
                 
                 # Create 7D Smart Closer
                 self.dynamic_7d_smart_closer = create_dynamic_7d_smart_closer(
