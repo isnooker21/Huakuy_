@@ -409,20 +409,20 @@ class DynamicAdaptiveCloser:
         return groups
     
     def _log_closing_analysis(self, analysis: DynamicClosingAnalysis):
-        """📊 แสดง log การวิเคราะห์การปิด"""
+        """📊 แสดง log การวิเคราะห์การปิดแบบสั้นกระชับ"""
         status = "✅ CLOSE" if analysis.should_close else "🚫 HOLD"
-        logger.info(f"{status} DYNAMIC CLOSING:")
-        logger.info(f"   Strategy: {analysis.closing_strategy.value}")
-        logger.info(f"   Market Timing: {analysis.market_timing.value}")
-        logger.info(f"   Urgency: {analysis.urgency.value}")
-        logger.info(f"   Positions to Close: {len(analysis.positions_to_close)}")
-        logger.info(f"   Expected Profit: ${analysis.expected_profit:.2f}")
-        logger.info(f"   Risk Reduction: {analysis.risk_reduction:.1%}")
-        logger.info(f"   Confidence: {analysis.confidence:.1f}%")
         
-        if analysis.alternative_strategies:
-            alt_strategies = [s.value for s in analysis.alternative_strategies[:2]]
-            logger.info(f"   Alternatives: {', '.join(alt_strategies)}")
+        # Log แบบบรรทัดเดียว สั้นกระชับ
+        logger.info(f"{status} {len(analysis.positions_to_close)}pos | "
+                   f"${analysis.expected_profit:.0f} | "
+                   f"Conf:{analysis.confidence:.0f}% | "
+                   f"{analysis.market_timing.value.upper()} | "
+                   f"{analysis.urgency.value.upper()}")
+        
+        # แสดง alternatives เฉพาะเมื่อไม่ปิด
+        if not analysis.should_close and analysis.alternative_strategies:
+            alt = analysis.alternative_strategies[0].value if analysis.alternative_strategies else "none"
+            logger.info(f"💡 Alt: {alt}")
     
     def _create_safe_closing_analysis(self) -> DynamicClosingAnalysis:
         """🛡️ สร้างการวิเคราะห์ fallback ที่ปลอดภัย"""

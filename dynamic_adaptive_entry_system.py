@@ -564,22 +564,21 @@ class DynamicAdaptiveEntrySystem:
         return reasons
     
     def _log_dynamic_entry_decision(self, analysis: DynamicEntryAnalysis):
-        """📊 แสดง log การตัดสินใจ"""
+        """📊 แสดง log การตัดสินใจแบบสั้นกระชับ"""
         status = "✅ ENTER" if analysis.should_enter else "🚫 BLOCK"
-        logger.info(f"{status} DYNAMIC ENTRY:")
-        logger.info(f"   Direction: {analysis.direction}")
-        logger.info(f"   Lot Size: {analysis.lot_size}")
-        logger.info(f"   Confidence: {analysis.confidence:.1f}%")
-        logger.info(f"   Strategy: {analysis.entry_strategy.value}")
-        logger.info(f"   Market: {analysis.market_condition.value}")
-        logger.info(f"   Health: {analysis.portfolio_health.value}")
-        logger.info(f"   Risk: {analysis.risk_level*100:.1f}%")
         
+        # Log แบบบรรทัดเดียว สั้นกระชับ
+        logger.info(f"{status} {analysis.direction} {analysis.lot_size}lot | "
+                   f"Conf:{analysis.confidence:.0f}% | {analysis.market_condition.value.upper()} | "
+                   f"Health:{analysis.portfolio_health.value.upper()}")
+        
+        # แสดง emergency overrides เฉพาะเมื่อมี
         if analysis.emergency_overrides:
-            logger.warning(f"   🚨 Overrides: {', '.join(analysis.emergency_overrides)}")
+            logger.warning(f"🚨 {', '.join(analysis.emergency_overrides)}")
         
-        if analysis.dynamic_adjustments['adjustments_applied']:
-            logger.info(f"   🔧 Adjustments: {', '.join(analysis.dynamic_adjustments['adjustments_applied'])}")
+        # แสดง adjustments เฉพาะเมื่อมี
+        if analysis.dynamic_adjustments.get('adjustments_applied'):
+            logger.info(f"🔧 {', '.join(analysis.dynamic_adjustments['adjustments_applied'])}")
     
     def _create_safe_fallback_analysis(self, signal_direction: str) -> DynamicEntryAnalysis:
         """🛡️ สร้างการวิเคราะห์ fallback ที่ปลอดภัย"""

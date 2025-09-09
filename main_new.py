@@ -474,11 +474,12 @@ class TradingSystem:
     def process_new_candle(self, candle: CandleData):
         """ประมวลผลแท่งเทียนใหม่ - ใช้ Smart Entry Timing System"""
         try:
-            # แสดงราคาแบบเรียบง่าย
-            logger.info(f"📊 {candle.close:.2f}")
+            # แสดงราคาและ signal แบบสั้น
+            raw_signal = "BUY" if candle.close > candle.open else "SELL"
+            logger.info(f"📊 {candle.close:.2f} → {raw_signal}")
             
         except Exception as e:
-            logger.info(f"❌ Candle processing error: {str(e)}")
+            logger.info(f"❌ Error: {str(e)}")
             
     # 🚫 REMOVED: calculate_signal_strength - Signal analysis moved to Smart Entry Timing System
             
@@ -525,13 +526,11 @@ class TradingSystem:
                 
                 # Override signal based on dynamic analysis
                 if not dynamic_entry_analysis.should_enter:
-                    logger.info(f"🚫 DYNAMIC ENTRY BLOCKED: {', '.join(dynamic_entry_analysis.entry_reasons)}")
-                    return  # Skip this entry
+                    return  # Skip this entry (แสดง log แล้วใน dynamic system)
                 
                 # Use dynamic direction and lot size
                 smart_signal_direction = dynamic_entry_analysis.direction
                 dynamic_lot_size = dynamic_entry_analysis.lot_size
-                logger.info(f"🚀 DYNAMIC ENTRY APPROVED: {smart_signal_direction} {dynamic_lot_size} lot")
             
             # 2. 🔧 Dynamic Position Modification
             if self.dynamic_position_modifier:
@@ -556,7 +555,7 @@ class TradingSystem:
                 
                 # 7D Validation
                 if entry_7d_analysis.total_7d_score < 20.0:  # Very low 7D score
-                    logger.info(f"🚫 7D VALIDATION FAILED: Score {entry_7d_analysis.total_7d_score:.1f}")
+                    logger.info(f"🚫 7D Score:{entry_7d_analysis.total_7d_score:.0f}")
                     return  # Skip this entry
             
             basic_signal = Signal(
@@ -687,21 +686,18 @@ class TradingSystem:
             if not modification_plan or not modification_plan.individual_modifications:
                 return
             
-            logger.info(f"🚀 APPLYING DYNAMIC MODIFICATIONS: {len(modification_plan.individual_modifications)} individual")
-            
             # Apply critical and high priority modifications
             critical_mods = [mod for mod in modification_plan.individual_modifications 
                            if mod.priority.value in ['critical', 'high']]
             
-            for mod in critical_mods[:3]:  # Limit to top 3 for safety
-                logger.info(f"🚨 {mod.priority.value.upper()} MODIFICATION:")
-                logger.info(f"   Ticket {mod.position_ticket}: {mod.recommended_action.value}")
-                logger.info(f"   Expected Improvement: {mod.expected_improvement:.1%}")
-                logger.info(f"   Success Probability: {mod.success_probability:.1%}")
+            if critical_mods:
+                logger.info(f"🚨 {len(critical_mods)} critical mods")
+                for mod in critical_mods[:2]:  # แสดงแค่ 2 อันแรก
+                    logger.info(f"🚨 #{mod.position_ticket}: {mod.recommended_action.value}")
                 
-                # Log emergency actions
+                # Log emergency actions เฉพาะเมื่อมี
                 if modification_plan.emergency_actions:
-                    logger.warning(f"🚨 EMERGENCY ACTIONS NEEDED: {', '.join(modification_plan.emergency_actions)}")
+                    logger.warning(f"🚨 {', '.join(modification_plan.emergency_actions[:2])}")
                     
         except Exception as e:
             logger.error(f"❌ Error applying dynamic modifications: {e}")
@@ -715,13 +711,10 @@ class TradingSystem:
                 logger.info("🔄 No closing groups to execute")
                 return
             
-            logger.info(f"🚀 EXECUTING DYNAMIC CLOSING: {len(closing_groups)} groups")
+            logger.info(f"🚀 EXECUTE: {len(closing_groups)} groups")
             
             for group in closing_groups:
-                logger.info(f"💰 Closing Group {group.group_id}:")
-                logger.info(f"   Positions: {len(group.positions)}")
-                logger.info(f"   Total Profit: ${group.total_profit:.2f}")
-                logger.info(f"   Reason: {group.closing_reason}")
+                logger.info(f"💰 {group.group_id}: {len(group.positions)}pos ${group.total_profit:.0f}")
                 
                 # Extract position tickets
                 tickets = [getattr(pos, 'ticket', 0) for pos in group.positions]
@@ -730,9 +723,9 @@ class TradingSystem:
                 if tickets:
                     close_result = self.order_manager.close_positions_group(tickets)
                     if close_result.success:
-                        logger.info(f"✅ Group {group.group_id} closed successfully: ${close_result.total_profit:.2f}")
+                        logger.info(f"✅ {group.group_id}: ${close_result.total_profit:.0f}")
                     else:
-                        logger.error(f"❌ Group {group.group_id} closing failed: {close_result.error}")
+                        logger.error(f"❌ {group.group_id}: {close_result.error}")
                         
         except Exception as e:
             logger.error(f"❌ Error executing dynamic closing: {e}")
@@ -889,8 +882,6 @@ class TradingSystem:
                     )
                     
                     if dynamic_closing_analysis.should_close:
-                        logger.info(f"🚀 DYNAMIC CLOSING APPROVED: {dynamic_closing_analysis.closing_strategy.value}")
-                        
                         # Create closing groups
                         closing_groups = self.dynamic_adaptive_closer.create_closing_groups(
                             positions=positions,
