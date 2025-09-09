@@ -103,93 +103,133 @@ class Dynamic7DSmartCloser:
     def find_optimal_closing(self, positions: List[Any], account_info: Dict, 
                            market_conditions: Optional[Dict] = None) -> Optional[ClosingResult]:
         """
-        🎯 หาการปิดไม้ที่ดีที่สุด
+        🧠 หาการปิดไม้ที่ดีที่สุดแบบอัจฉริยะ - Enhanced Intelligence
+        Features:
+        - Multi-Strategy Parallel Analysis
+        - Advanced Risk Assessment
+        - Market Timing Intelligence
+        - Opportunity Cost Analysis
+        - Performance Optimization
         """
         try:
             if len(positions) < 2:
                 logger.info("⏸️ Need at least 2 positions for closing")
                 return None
             
-            logger.info(f"🚀 DYNAMIC 7D ANALYSIS: {len(positions)} positions")
+            logger.info(f"🧠 ENHANCED 7D ANALYSIS: {len(positions)} positions")
             
-            # 1. 📊 Portfolio Health Analysis
+            # 1. 📊 Advanced Portfolio Health Analysis
             portfolio_health = self._analyze_portfolio_health(positions, account_info)
+            risk_assessment = self._assess_portfolio_risk(portfolio_health, positions)
             logger.info(f"💊 Portfolio Health: Margin {portfolio_health.margin_level:.1f}%, "
+                       f"Risk Level: {risk_assessment['risk_level']}, "
                        f"Imbalance {portfolio_health.imbalance_percentage:.1f}%")
             
-            # 2. 🧠 Purpose Analysis (if available)
+            # 2. 🎯 Market Timing & Volatility Analysis
+            market_intelligence = self._analyze_market_timing(market_conditions, portfolio_health)
+            logger.info(f"📈 Market Intelligence: Timing {market_intelligence['timing_score']:.1f}, "
+                       f"Volatility {market_intelligence['volatility_level']}")
+            
+            # 3. 🧠 Enhanced Purpose Analysis with Caching
             position_purposes = {}
             current_price = self._get_current_price()
             
             if self.purpose_tracker:
                 try:
+                    # Cache purpose analysis for performance
                     for position in positions:
-                        purpose_analysis = self.purpose_tracker.analyze_position_purpose(
-                            position, positions, account_info, current_price
-                        )
                         position_ticket = str(getattr(position, 'ticket', id(position)))
-                        position_purposes[position_ticket] = purpose_analysis
+                        if not hasattr(self, '_purpose_cache'):
+                            self._purpose_cache = {}
+                        
+                        cache_key = f"{position_ticket}_{current_price:.2f}"
+                        if cache_key in self._purpose_cache:
+                            position_purposes[position_ticket] = self._purpose_cache[cache_key]
+                        else:
+                            purpose_analysis = self.purpose_tracker.analyze_position_purpose(
+                                position, positions, account_info, current_price
+                            )
+                            position_purposes[position_ticket] = purpose_analysis
+                            self._purpose_cache[cache_key] = purpose_analysis
                     
                     logger.info(f"🧠 Purpose Analysis completed for {len(position_purposes)} positions")
-                    purpose_summary = self.purpose_tracker.get_purpose_summary()
-                    logger.info(f"📊 Purpose Summary: {purpose_summary}")
                     
-                    # 🔍 Debug: แสดงรายละเอียด Problem positions
-                    problem_positions = [ticket for ticket, purpose in position_purposes.items() 
-                                       if purpose.purpose.value == 'PROBLEM_POSITION']
-                    if problem_positions:
-                        logger.info(f"🚨 Found {len(problem_positions)} PROBLEM_POSITION(s):")
-                        for ticket in problem_positions:
-                            purpose = position_purposes[ticket]
-                            logger.info(f"   {ticket}: {purpose.sub_purpose}")
-                    else:
-                        logger.info("🔍 No PROBLEM_POSITION detected - investigating why...")
+                    # Enhanced problem detection
+                    problem_analysis = self._analyze_problem_positions(position_purposes, positions)
+                    if problem_analysis['critical_problems'] > 0:
+                        logger.warning(f"🚨 CRITICAL: {problem_analysis['critical_problems']} critical problems detected!")
+                    
                 except Exception as e:
                     logger.warning(f"⚠️ Purpose Analysis failed: {e}")
             
-            # 3. 🧠 7D Analysis (if available)
+            # 4. 🧠 Enhanced 7D Analysis with Risk Weighting
             position_scores = None
             if self.intelligent_manager:
                 try:
                     margin_health = self.intelligent_manager._analyze_margin_health(account_info)
                     position_scores = self.intelligent_manager._score_all_positions(positions, account_info, margin_health)
-                    logger.info(f"🧠 7D Scores calculated for {len(position_scores)} positions")
+                    
+                    # Apply risk-based weighting to scores
+                    position_scores = self._apply_risk_weighting(position_scores, risk_assessment, market_intelligence)
+                    logger.info(f"🧠 Enhanced 7D Scores calculated for {len(position_scores)} positions")
                 except Exception as e:
                     logger.warning(f"⚠️ 7D Analysis failed: {e}, using fallback")
             
-            # 4. 🔄 Calculate Dynamic Parameters
-            dynamic_params = self._calculate_dynamic_parameters(portfolio_health, market_conditions)
-            logger.info(f"🔄 Dynamic Params: Max Size {dynamic_params['max_size']}, "
-                       f"Safety Buffer ${dynamic_params['safety_buffer']:.1f}")
+            # 5. 🔄 Enhanced Dynamic Parameters with Market Intelligence
+            dynamic_params = self._calculate_enhanced_dynamic_parameters(
+                portfolio_health, market_conditions, risk_assessment, market_intelligence
+            )
+            logger.info(f"🔄 Enhanced Params: Max Size {dynamic_params['max_size']}, "
+                       f"Safety Buffer ${dynamic_params['safety_buffer']:.1f}, "
+                       f"Risk Factor {dynamic_params['risk_factor']:.2f}")
             
-            # 5. 🎯 Dynamic Method Selection
-            selected_methods = self._select_dynamic_methods(portfolio_health, market_conditions, dynamic_params)
-            logger.info(f"🎯 Selected {len(selected_methods)} dynamic methods")
+            # 6. 🎯 Multi-Strategy Parallel Analysis
+            selected_methods = self._select_enhanced_dynamic_methods(
+                portfolio_health, market_conditions, dynamic_params, risk_assessment
+            )
+            logger.info(f"🎯 Selected {len(selected_methods)} enhanced methods")
             
-            # 6. 🔄 Try methods by priority
+            # 7. 🚀 Parallel Strategy Evaluation with Early Termination
             best_result = None
             best_score = -999999
+            evaluation_count = 0
+            max_evaluations = min(50, len(selected_methods) * 10)  # Performance limit
             
-            for method_name, min_size, max_size, priority in selected_methods:
-                # ใช้ Dynamic Max Size
-                dynamic_max_size = min(max_size, dynamic_params['max_size'])
-                logger.debug(f"🔍 Trying {method_name} (sizes {min_size}-{max_size}, priority {priority:.1f})")
+            for method_name, min_size, max_size, priority, strategy_type in selected_methods:
+                if evaluation_count >= max_evaluations:
+                    logger.info(f"⏸️ Reached evaluation limit ({max_evaluations}), using best result so far")
+                    break
                 
+                dynamic_max_size = min(max_size, dynamic_params['max_size'])
+                logger.debug(f"🔍 Evaluating {method_name} ({strategy_type}) - sizes {min_size}-{dynamic_max_size}")
+                
+                # Parallel evaluation of different sizes
                 for size in range(min_size, min(dynamic_max_size + 1, len(positions) + 1)):
-                    # ใช้ Purpose-Aware 7D หรือ 7D หรือ fallback
+                    evaluation_count += 1
+                    
+                    # Enhanced method selection based on available data
                     if position_purposes and position_scores:
-                        result = self._try_purpose_aware_7d_method(
-                            method_name, position_scores, position_purposes, size, portfolio_health
+                        result = self._try_enhanced_purpose_aware_method(
+                            method_name, position_scores, position_purposes, size, 
+                            portfolio_health, risk_assessment, market_intelligence
                         )
                     elif position_scores:
-                        result = self._try_7d_method(method_name, position_scores, size, portfolio_health)
+                        result = self._try_enhanced_7d_method(
+                            method_name, position_scores, size, portfolio_health, risk_assessment
+                        )
                     else:
-                        result = self._try_fallback_method(method_name, positions, size, portfolio_health)
+                        result = self._try_enhanced_fallback_method(
+                            method_name, positions, size, portfolio_health, risk_assessment
+                        )
                     
-                    if result and self._intelligent_closing_decision(result, dynamic_params):  # Intelligent Decision
-                        # คำนวณ Total Impact Score
-                        impact_score = self._calculate_total_impact_score(result, portfolio_health)
-                        final_score = impact_score * priority  # Apply priority multiplier
+                    if result and self._enhanced_intelligent_closing_decision(
+                        result, dynamic_params, risk_assessment, market_intelligence
+                    ):
+                        # Enhanced scoring with multiple factors
+                        impact_score = self._calculate_enhanced_impact_score(
+                            result, portfolio_health, risk_assessment, market_intelligence
+                        )
+                        final_score = impact_score * priority * dynamic_params['risk_factor']
                         
                         logger.debug(f"💰 {method_name}_{size}: Net ${result['net_pnl']:.2f}, "
                                    f"Impact {impact_score:.1f}, Final {final_score:.1f}")
@@ -201,9 +241,22 @@ class Dynamic7DSmartCloser:
                             best_result['priority'] = priority
                             best_result['impact_score'] = impact_score
                             best_result['final_score'] = final_score
+                            best_result['strategy_type'] = strategy_type
+                            best_result['risk_assessment'] = risk_assessment
+                            best_result['market_intelligence'] = market_intelligence
+                        
+                        # Early termination for excellent results
+                        if final_score > 1000:  # Excellent score threshold
+                            logger.info(f"🏆 Excellent result found, terminating early: {final_score:.1f}")
+                            break
+                
+                # Early termination if we have a very good result
+                if best_score > 500:
+                    logger.info(f"🏆 Very good result found, stopping evaluation: {best_score:.1f}")
+                    break
             
             if best_result:
-                # Create final result
+                # Enhanced final result with additional intelligence
                 closing_result = ClosingResult(
                     should_close=True,
                     positions_to_close=best_result['positions'],
@@ -215,22 +268,24 @@ class Dynamic7DSmartCloser:
                     sell_count=len([p for p in best_result['positions'] if getattr(p, 'type', 0) == 1]),
                     portfolio_improvement=best_result.get('portfolio_improvement', {}),
                     confidence_score=min(100, best_result['final_score']),
-                    reason=f"Dynamic 7D: {best_result['method']}, Priority {best_result['priority']:.1f}"
+                    reason=f"Enhanced 7D: {best_result['method']} ({best_result.get('strategy_type', 'standard')}), "
+                           f"Priority {best_result['priority']:.1f}, Risk {risk_assessment['risk_level']}"
                 )
                 
-                logger.info(f"✅ BEST CLOSING FOUND: {closing_result.method}")
+                logger.info(f"✅ ENHANCED CLOSING FOUND: {closing_result.method}")
                 logger.info(f"💰 Net P&L: ${closing_result.net_pnl:.2f}, "
                            f"Positions: {closing_result.position_count} "
                            f"({closing_result.buy_count}B+{closing_result.sell_count}S)")
-                logger.info(f"🏆 Confidence: {closing_result.confidence_score:.1f}%")
+                logger.info(f"🏆 Confidence: {closing_result.confidence_score:.1f}%, "
+                           f"Strategy: {best_result.get('strategy_type', 'standard')}")
                 
                 return closing_result
             
-            logger.info("⏸️ No profitable closing opportunities found")
+            logger.info("⏸️ No profitable closing opportunities found with enhanced analysis")
             return None
             
         except Exception as e:
-            logger.error(f"❌ Error in dynamic closing analysis: {e}")
+            logger.error(f"❌ Error in enhanced closing analysis: {e}")
             return None
     
     def _analyze_portfolio_health(self, positions: List[Any], account_info: Dict) -> PortfolioHealth:
@@ -1651,6 +1706,499 @@ class Dynamic7DSmartCloser:
         except Exception as e:
             logger.error(f"❌ Error calculating dynamic decision threshold: {e}")
             return 40.0  # Fallback to safe threshold
+    
+    def _assess_portfolio_risk(self, portfolio_health: PortfolioHealth, positions: List[Any]) -> Dict:
+        """🚨 ประเมินความเสี่ยงของพอร์ตแบบอัจฉริยะ"""
+        try:
+            risk_factors = {
+                'margin_risk': 0,
+                'concentration_risk': 0,
+                'correlation_risk': 0,
+                'volatility_risk': 0,
+                'liquidity_risk': 0
+            }
+            
+            # Margin Risk Assessment
+            margin_level = portfolio_health.margin_level
+            if margin_level < 120:
+                risk_factors['margin_risk'] = 100  # Critical
+            elif margin_level < 150:
+                risk_factors['margin_risk'] = 80   # High
+            elif margin_level < 200:
+                risk_factors['margin_risk'] = 60   # Medium
+            elif margin_level < 300:
+                risk_factors['margin_risk'] = 40   # Low
+            else:
+                risk_factors['margin_risk'] = 20   # Very Low
+            
+            # Concentration Risk (position count and imbalance)
+            position_count = portfolio_health.position_count
+            imbalance = portfolio_health.imbalance_percentage
+            
+            if position_count > 100:
+                risk_factors['concentration_risk'] = 80
+            elif position_count > 50:
+                risk_factors['concentration_risk'] = 60
+            elif position_count > 20:
+                risk_factors['concentration_risk'] = 40
+            else:
+                risk_factors['concentration_risk'] = 20
+            
+            if imbalance > 80:
+                risk_factors['concentration_risk'] += 20
+            
+            # Correlation Risk (buy/sell ratio)
+            buy_sell_ratio = portfolio_health.buy_sell_ratio
+            if buy_sell_ratio > 3 or buy_sell_ratio < 0.33:
+                risk_factors['correlation_risk'] = 70
+            elif buy_sell_ratio > 2 or buy_sell_ratio < 0.5:
+                risk_factors['correlation_risk'] = 50
+            else:
+                risk_factors['correlation_risk'] = 30
+            
+            # Calculate overall risk level
+            total_risk = sum(risk_factors.values()) / len(risk_factors)
+            
+            if total_risk > 80:
+                risk_level = "CRITICAL"
+            elif total_risk > 60:
+                risk_level = "HIGH"
+            elif total_risk > 40:
+                risk_level = "MEDIUM"
+            elif total_risk > 20:
+                risk_level = "LOW"
+            else:
+                risk_level = "VERY_LOW"
+            
+            return {
+                'risk_level': risk_level,
+                'total_risk_score': total_risk,
+                'risk_factors': risk_factors,
+                'recommendation': self._get_risk_recommendation(risk_level, total_risk)
+            }
+            
+        except Exception as e:
+            logger.error(f"❌ Error assessing portfolio risk: {e}")
+            return {
+                'risk_level': 'MEDIUM',
+                'total_risk_score': 50,
+                'risk_factors': {},
+                'recommendation': 'Proceed with caution'
+            }
+    
+    def _analyze_market_timing(self, market_conditions: Optional[Dict], portfolio_health: PortfolioHealth) -> Dict:
+        """📈 วิเคราะห์ Market Timing และ Volatility"""
+        try:
+            timing_score = 50  # Base score
+            volatility_level = "medium"
+            
+            if market_conditions:
+                volatility = market_conditions.get('volatility', 'medium')
+                trend = market_conditions.get('trend', 'neutral')
+                current_price = market_conditions.get('current_price', 0)
+                
+                # Volatility Analysis
+                if isinstance(volatility, str):
+                    volatility_map = {
+                        'low': 0.2,
+                        'medium': 0.5,
+                        'high': 0.8,
+                        'very_high': 1.0
+                    }
+                    volatility_numeric = volatility_map.get(volatility.lower(), 0.5)
+                else:
+                    volatility_numeric = float(volatility)
+                
+                # Timing Score based on volatility and trend
+                if volatility_numeric > 0.8:  # High volatility
+                    timing_score -= 20  # Reduce timing score
+                    volatility_level = "high"
+                elif volatility_numeric < 0.3:  # Low volatility
+                    timing_score += 10  # Increase timing score
+                    volatility_level = "low"
+                
+                # Trend Analysis
+                if trend == 'bullish':
+                    timing_score += 15
+                elif trend == 'bearish':
+                    timing_score -= 10
+                
+                # Portfolio-specific timing adjustments
+                if portfolio_health.margin_level < 150:
+                    timing_score -= 15  # Reduce timing in low margin
+                elif portfolio_health.margin_level > 300:
+                    timing_score += 10  # Increase timing in high margin
+            
+            # Market timing recommendation
+            if timing_score > 70:
+                timing_recommendation = "EXCELLENT"
+            elif timing_score > 60:
+                timing_recommendation = "GOOD"
+            elif timing_score > 40:
+                timing_recommendation = "NEUTRAL"
+            elif timing_score > 30:
+                timing_recommendation = "POOR"
+            else:
+                timing_recommendation = "AVOID"
+            
+            return {
+                'timing_score': timing_score,
+                'volatility_level': volatility_level,
+                'timing_recommendation': timing_recommendation,
+                'market_conditions': market_conditions or {}
+            }
+            
+        except Exception as e:
+            logger.error(f"❌ Error analyzing market timing: {e}")
+            return {
+                'timing_score': 50,
+                'volatility_level': 'medium',
+                'timing_recommendation': 'NEUTRAL',
+                'market_conditions': {}
+            }
+    
+    def _analyze_problem_positions(self, position_purposes: Dict, positions: List[Any]) -> Dict:
+        """🔍 วิเคราะห์ Problem Positions แบบละเอียด"""
+        try:
+            critical_problems = 0
+            high_priority_problems = 0
+            medium_priority_problems = 0
+            
+            for ticket, purpose in position_purposes.items():
+                if hasattr(purpose, 'purpose'):
+                    purpose_type = purpose.purpose.value
+                    if purpose_type == 'PROBLEM_POSITION':
+                        # Check problem severity
+                        if hasattr(purpose, 'problem_severity'):
+                            severity = purpose.problem_severity
+                            if severity > 80:
+                                critical_problems += 1
+                            elif severity > 60:
+                                high_priority_problems += 1
+                            else:
+                                medium_priority_problems += 1
+                        else:
+                            medium_priority_problems += 1
+            
+            return {
+                'critical_problems': critical_problems,
+                'high_priority_problems': high_priority_problems,
+                'medium_priority_problems': medium_priority_problems,
+                'total_problems': critical_problems + high_priority_problems + medium_priority_problems
+            }
+            
+        except Exception as e:
+            logger.error(f"❌ Error analyzing problem positions: {e}")
+            return {
+                'critical_problems': 0,
+                'high_priority_problems': 0,
+                'medium_priority_problems': 0,
+                'total_problems': 0
+            }
+    
+    def _apply_risk_weighting(self, position_scores: List[Any], risk_assessment: Dict, 
+                            market_intelligence: Dict) -> List[Any]:
+        """⚖️ ใช้ Risk Weighting กับ 7D Scores"""
+        try:
+            risk_factor = risk_assessment['total_risk_score'] / 100.0
+            timing_factor = market_intelligence['timing_score'] / 100.0
+            
+            for score in position_scores:
+                if hasattr(score, 'total_score'):
+                    # Apply risk-based adjustment
+                    original_score = score.total_score
+                    
+                    # High risk = reduce scores, Low risk = maintain scores
+                    risk_adjustment = 1.0 - (risk_factor * 0.3)  # Max 30% reduction
+                    
+                    # Market timing adjustment
+                    timing_adjustment = 0.8 + (timing_factor * 0.4)  # 0.8 to 1.2 range
+                    
+                    # Apply adjustments
+                    adjusted_score = original_score * risk_adjustment * timing_adjustment
+                    score.total_score = max(0, min(100, adjusted_score))
+            
+            return position_scores
+            
+        except Exception as e:
+            logger.error(f"❌ Error applying risk weighting: {e}")
+            return position_scores
+    
+    def _calculate_enhanced_dynamic_parameters(self, portfolio_health: PortfolioHealth, 
+                                            market_conditions: Optional[Dict], 
+                                            risk_assessment: Dict, 
+                                            market_intelligence: Dict) -> Dict:
+        """🔄 คำนวณ Enhanced Dynamic Parameters"""
+        try:
+            # Base parameters from original method
+            base_params = self._calculate_dynamic_parameters(portfolio_health, market_conditions)
+            
+            # Risk-based adjustments
+            risk_factor = 1.0 + (risk_assessment['total_risk_score'] / 200.0)  # 1.0 to 1.5
+            timing_factor = market_intelligence['timing_score'] / 100.0
+            
+            # Adjust max size based on risk and timing
+            if risk_assessment['risk_level'] == 'CRITICAL':
+                base_params['max_size'] = min(base_params['max_size'], 10)  # Limit size
+                base_params['safety_buffer'] *= 1.5  # Increase safety
+            elif risk_assessment['risk_level'] == 'HIGH':
+                base_params['max_size'] = min(base_params['max_size'], 20)
+                base_params['safety_buffer'] *= 1.2
+            
+            # Market timing adjustments
+            if market_intelligence['timing_recommendation'] == 'EXCELLENT':
+                base_params['max_size'] = int(base_params['max_size'] * 1.2)
+                base_params['safety_buffer'] *= 0.9
+            elif market_intelligence['timing_recommendation'] == 'AVOID':
+                base_params['max_size'] = max(2, int(base_params['max_size'] * 0.5))
+                base_params['safety_buffer'] *= 1.3
+            
+            # Add new parameters
+            base_params['risk_factor'] = risk_factor
+            base_params['timing_factor'] = timing_factor
+            base_params['risk_level'] = risk_assessment['risk_level']
+            base_params['timing_recommendation'] = market_intelligence['timing_recommendation']
+            
+            return base_params
+            
+        except Exception as e:
+            logger.error(f"❌ Error calculating enhanced dynamic parameters: {e}")
+            return self._calculate_dynamic_parameters(portfolio_health, market_conditions)
+    
+    def _select_enhanced_dynamic_methods(self, portfolio_health: PortfolioHealth, 
+                                       market_conditions: Optional[Dict], 
+                                       dynamic_params: Dict, 
+                                       risk_assessment: Dict) -> List[Tuple[str, int, int, float, str]]:
+        """🎯 เลือก Enhanced Dynamic Methods"""
+        try:
+            # Get base methods
+            base_methods = self._select_dynamic_methods(portfolio_health, market_conditions, dynamic_params)
+            
+            # Add strategy types and enhance with risk-based selection
+            enhanced_methods = []
+            
+            for method_name, min_size, max_size, priority in base_methods:
+                # Determine strategy type
+                if 'problem' in method_name.lower():
+                    strategy_type = "PROBLEM_SOLVING"
+                    priority *= 1.3  # Boost problem-solving methods
+                elif 'emergency' in method_name.lower():
+                    strategy_type = "EMERGENCY"
+                    priority *= 1.5  # Boost emergency methods
+                elif 'balance' in method_name.lower():
+                    strategy_type = "BALANCE_OPTIMIZATION"
+                    priority *= 1.1
+                elif 'edge' in method_name.lower():
+                    strategy_type = "EDGE_CLEARING"
+                    priority *= 1.0
+                else:
+                    strategy_type = "STANDARD"
+                
+                # Risk-based priority adjustment
+                if risk_assessment['risk_level'] == 'CRITICAL':
+                    if strategy_type == "EMERGENCY":
+                        priority *= 2.0  # Double emergency priority
+                    elif strategy_type == "PROBLEM_SOLVING":
+                        priority *= 1.5
+                elif risk_assessment['risk_level'] == 'HIGH':
+                    if strategy_type in ["EMERGENCY", "PROBLEM_SOLVING"]:
+                        priority *= 1.3
+                
+                enhanced_methods.append((method_name, min_size, max_size, priority, strategy_type))
+            
+            # Sort by enhanced priority
+            return sorted(enhanced_methods, key=lambda x: x[3], reverse=True)
+            
+        except Exception as e:
+            logger.error(f"❌ Error selecting enhanced dynamic methods: {e}")
+            # Fallback to base methods
+            base_methods = self._select_dynamic_methods(portfolio_health, market_conditions, dynamic_params)
+            return [(method[0], method[1], method[2], method[3], "STANDARD") for method in base_methods]
+    
+    def _get_risk_recommendation(self, risk_level: str, total_risk: float) -> str:
+        """💡 ให้คำแนะนำตามระดับความเสี่ยง"""
+        recommendations = {
+            "CRITICAL": "Immediate action required - close positions aggressively",
+            "HIGH": "High risk detected - consider closing some positions",
+            "MEDIUM": "Moderate risk - monitor closely",
+            "LOW": "Low risk - normal operations",
+            "VERY_LOW": "Very low risk - optimal conditions"
+        }
+        return recommendations.get(risk_level, "Monitor situation")
+    
+    def _try_enhanced_purpose_aware_method(self, method_name: str, position_scores: List[Any],
+                                         position_purposes: Dict[str, Any], size: int, 
+                                         portfolio_health: PortfolioHealth, risk_assessment: Dict,
+                                         market_intelligence: Dict) -> Optional[Dict]:
+        """🧠 Enhanced Purpose-Aware Method with Risk Intelligence"""
+        try:
+            # Use existing purpose-aware method as base
+            result = self._try_purpose_aware_7d_method(method_name, position_scores, position_purposes, size, portfolio_health)
+            
+            if result:
+                # Apply risk-based adjustments to the result
+                risk_factor = risk_assessment['total_risk_score'] / 100.0
+                timing_factor = market_intelligence['timing_score'] / 100.0
+                
+                # Adjust net P&L based on risk and timing
+                original_pnl = result['net_pnl']
+                risk_adjustment = 1.0 - (risk_factor * 0.2)  # Max 20% reduction for high risk
+                timing_adjustment = 0.9 + (timing_factor * 0.2)  # 0.9 to 1.1 range
+                
+                adjusted_pnl = original_pnl * risk_adjustment * timing_adjustment
+                result['net_pnl'] = adjusted_pnl
+                result['risk_adjusted'] = True
+                result['risk_factor'] = risk_factor
+                result['timing_factor'] = timing_factor
+            
+            return result
+            
+        except Exception as e:
+            logger.error(f"❌ Error in enhanced purpose-aware method {method_name}: {e}")
+            return self._try_purpose_aware_7d_method(method_name, position_scores, position_purposes, size, portfolio_health)
+    
+    def _try_enhanced_7d_method(self, method_name: str, position_scores: List[Any], 
+                               size: int, portfolio_health: PortfolioHealth, 
+                               risk_assessment: Dict) -> Optional[Dict]:
+        """🧠 Enhanced 7D Method with Risk Intelligence"""
+        try:
+            # Use existing 7D method as base
+            result = self._try_7d_method(method_name, position_scores, size, portfolio_health)
+            
+            if result:
+                # Apply risk-based adjustments
+                risk_factor = risk_assessment['total_risk_score'] / 100.0
+                
+                # Adjust based on risk level
+                if risk_assessment['risk_level'] == 'CRITICAL':
+                    result['net_pnl'] *= 0.8  # Reduce expected P&L for critical risk
+                elif risk_assessment['risk_level'] == 'HIGH':
+                    result['net_pnl'] *= 0.9
+                
+                result['risk_adjusted'] = True
+                result['risk_level'] = risk_assessment['risk_level']
+            
+            return result
+            
+        except Exception as e:
+            logger.error(f"❌ Error in enhanced 7D method {method_name}: {e}")
+            return self._try_7d_method(method_name, position_scores, size, portfolio_health)
+    
+    def _try_enhanced_fallback_method(self, method_name: str, positions: List[Any], 
+                                    size: int, portfolio_health: PortfolioHealth, 
+                                    risk_assessment: Dict) -> Optional[Dict]:
+        """🔄 Enhanced Fallback Method with Risk Intelligence"""
+        try:
+            # Use existing fallback method as base
+            result = self._try_fallback_method(method_name, positions, size, portfolio_health)
+            
+            if result:
+                # Apply conservative adjustments for fallback
+                risk_factor = risk_assessment['total_risk_score'] / 100.0
+                
+                # More conservative adjustments for fallback methods
+                if risk_assessment['risk_level'] in ['CRITICAL', 'HIGH']:
+                    result['net_pnl'] *= 0.7  # More conservative for high risk
+                
+                result['risk_adjusted'] = True
+                result['method_type'] = 'fallback'
+            
+            return result
+            
+        except Exception as e:
+            logger.error(f"❌ Error in enhanced fallback method {method_name}: {e}")
+            return self._try_fallback_method(method_name, positions, size, portfolio_health)
+    
+    def _enhanced_intelligent_closing_decision(self, result: Dict, dynamic_params: Dict, 
+                                             risk_assessment: Dict, market_intelligence: Dict) -> bool:
+        """🧠 Enhanced Intelligent Closing Decision"""
+        try:
+            # Use base intelligent decision
+            base_decision = self._intelligent_closing_decision(result, dynamic_params)
+            
+            if not base_decision:
+                return False
+            
+            # Additional enhanced checks
+            
+            # 1. Risk-based decision
+            if risk_assessment['risk_level'] == 'CRITICAL':
+                # In critical risk, be more aggressive about closing
+                return True
+            elif risk_assessment['risk_level'] == 'VERY_LOW':
+                # In very low risk, be more selective
+                net_pnl = result.get('net_pnl', 0)
+                if net_pnl < 5.0:  # Require higher profit in low risk
+                    logger.debug(f"🚫 ENHANCED DECISION: Rejecting - Low risk requires higher profit (${net_pnl:.2f} < $5.0)")
+                    return False
+            
+            # 2. Market timing decision
+            timing_recommendation = market_intelligence['timing_recommendation']
+            if timing_recommendation == 'AVOID':
+                # Avoid closing in poor market timing
+                logger.debug(f"🚫 ENHANCED DECISION: Rejecting - Poor market timing ({timing_recommendation})")
+                return False
+            elif timing_recommendation == 'EXCELLENT':
+                # Excellent timing - be more aggressive
+                return True
+            
+            # 3. Enhanced profit threshold based on risk and timing
+            net_pnl = result.get('net_pnl', 0)
+            risk_factor = risk_assessment['total_risk_score'] / 100.0
+            timing_factor = market_intelligence['timing_score'] / 100.0
+            
+            # Dynamic threshold based on risk and timing
+            base_threshold = dynamic_params.get('safety_buffer', 0.1)
+            risk_adjustment = risk_factor * 2.0  # Higher risk = higher threshold
+            timing_adjustment = (1.0 - timing_factor) * 1.0  # Poor timing = higher threshold
+            
+            enhanced_threshold = base_threshold + risk_adjustment + timing_adjustment
+            
+            if net_pnl < enhanced_threshold:
+                logger.debug(f"🚫 ENHANCED DECISION: Rejecting - Net P&L ${net_pnl:.2f} < Enhanced Threshold ${enhanced_threshold:.2f}")
+                return False
+            
+            logger.debug(f"✅ ENHANCED DECISION: Accepting - Net P&L ${net_pnl:.2f} >= Enhanced Threshold ${enhanced_threshold:.2f}")
+            return True
+            
+        except Exception as e:
+            logger.error(f"❌ Error in enhanced intelligent closing decision: {e}")
+            return self._intelligent_closing_decision(result, dynamic_params)
+    
+    def _calculate_enhanced_impact_score(self, result: Dict, portfolio_health: PortfolioHealth, 
+                                       risk_assessment: Dict, market_intelligence: Dict) -> float:
+        """🏆 Calculate Enhanced Impact Score"""
+        try:
+            # Base impact score
+            base_score = self._calculate_total_impact_score(result, portfolio_health)
+            
+            # Risk-based multiplier
+            risk_factor = risk_assessment['total_risk_score'] / 100.0
+            risk_multiplier = 1.0 + (risk_factor * 0.5)  # 1.0 to 1.5
+            
+            # Market timing multiplier
+            timing_factor = market_intelligence['timing_score'] / 100.0
+            timing_multiplier = 0.8 + (timing_factor * 0.4)  # 0.8 to 1.2
+            
+            # Strategy type multiplier
+            strategy_type = result.get('strategy_type', 'STANDARD')
+            strategy_multipliers = {
+                'EMERGENCY': 1.5,
+                'PROBLEM_SOLVING': 1.3,
+                'BALANCE_OPTIMIZATION': 1.1,
+                'EDGE_CLEARING': 1.0,
+                'STANDARD': 0.9
+            }
+            strategy_multiplier = strategy_multipliers.get(strategy_type, 1.0)
+            
+            # Calculate enhanced score
+            enhanced_score = base_score * risk_multiplier * timing_multiplier * strategy_multiplier
+            
+            return max(0, enhanced_score)
+            
+        except Exception as e:
+            logger.error(f"❌ Error calculating enhanced impact score: {e}")
+            return self._calculate_total_impact_score(result, portfolio_health)
 
 
 def create_dynamic_7d_smart_closer(intelligent_manager=None, purpose_tracker=None, 
