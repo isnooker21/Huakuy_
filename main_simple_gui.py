@@ -283,7 +283,7 @@ class SimpleBreakoutTradingSystemGUI:
                 low=latest_candle.get('low', current_price),
                 close=latest_candle.get('close', current_price),
                 volume=latest_candle.get('volume', 100),
-                time=datetime.now()
+                timestamp=datetime.now()
             )
             
         except Exception as e:
@@ -404,7 +404,7 @@ class SimpleBreakoutTradingSystemGUI:
                 low=prev_candle.get('low', 0),
                 close=prev_candle.get('close', 0),
                 volume=prev_candle.get('volume', 100),
-                time=datetime.now()
+                timestamp=datetime.now()
             )
             
         except Exception as e:
