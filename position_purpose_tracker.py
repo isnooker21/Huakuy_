@@ -146,15 +146,17 @@ class PositionPurposeTracker:
         self.purpose_update_cooldown = 180  # 3 นาที
         self.last_purpose_updates: Dict[str, float] = {}
         
-        # 🎯 Configuration
+        # 🎯 Configuration - ปรับให้เหมาะกับการเทรดจริง
         self.config = {
             'min_confidence_threshold': 70,    # Purpose confidence ขั้นต่ำ
             'market_strength_threshold': 60,   # Market strength ที่มีผล
-            'problem_loss_threshold': -20,     # ขาดทุนเท่าไหร่ถือว่า Problem
-            'profit_take_threshold': 15,       # กำไรเท่าไหร่ถือว่า Ready to close
-            'helper_distance_max': 50,         # Helper ห่างจาก Problem ได้สูงสุดกี่ pips
+            'problem_loss_threshold': -5,      # ขาดทุนเท่าไหร่ถือว่า Problem (ลดจาก -20 เป็น -5)
+            'profit_take_threshold': 5,        # กำไรเท่าไหร่ถือว่า Ready to close (ลดจาก 15 เป็น 5)
+            'helper_distance_max': 200,        # Helper ห่างจาก Problem ได้สูงสุดกี่ pips (เพิ่มจาก 50 เป็น 200)
             'balance_tolerance': 0.3,          # ความไม่สมดุลที่ยอมรับได้
             'trend_follow_min_strength': 65,   # Trend strength ขั้นต่ำสำหรับ TREND_FOLLOWER
+            'heavy_loss_threshold': -50,       # ขาดทุนหนักมาก (เพิ่มใหม่)
+            'distance_weight_factor': 0.1,     # น้ำหนักระยะห่าง (เพิ่มใหม่)
         }
         
         logger.info("🧠 Position Purpose Tracker initialized")
@@ -336,19 +338,39 @@ class PositionPurposeTracker:
             priority = PurposePriority.MEDIUM
             confidence = 70.0
             
-            # 💔 PROBLEM_POSITION Detection
+            # 💔 PROBLEM_POSITION Detection (Enhanced with Distance Factor)
+            is_problem = False
+            
+            # เงื่อนไขที่ 1: ขาดทุน
             if profit < self.config['problem_loss_threshold']:
+                is_problem = True
+            
+            # เงื่อนไขที่ 2: ระยะห่างไกลมาก + ขาดทุน (แม้น้อย)
+            elif distance_pips > 500 and profit < 0:  # ห่าง > 500 pips + ขาดทุน
+                is_problem = True
+            
+            # เงื่อนไขที่ 3: ระยะห่างไกลมหาศาล (แม้ไม่ขาดทุน)
+            elif distance_pips > 1000:  # ห่าง > 1000 pips
+                is_problem = True
+            
+            if is_problem:
                 purpose = PurposeType.PROBLEM_POSITION
-                if profit < -50:
-                    sub_purpose = "Heavy Loss Position"
+                
+                # จัดระดับตามความรุนแรง
+                if profit < self.config['heavy_loss_threshold'] or distance_pips > 1000:
+                    sub_purpose = f"Critical Problem (${profit:.1f}, {distance_pips:.0f} pips)"
                     priority = PurposePriority.CRITICAL
                     confidence = 95.0
-                elif profit < -30:
-                    sub_purpose = "Moderate Loss Position"
+                elif profit < -20 or distance_pips > 700:
+                    sub_purpose = f"Heavy Problem (${profit:.1f}, {distance_pips:.0f} pips)"
+                    priority = PurposePriority.HIGH
+                    confidence = 90.0
+                elif profit < -10 or distance_pips > 400:
+                    sub_purpose = f"Moderate Problem (${profit:.1f}, {distance_pips:.0f} pips)"
                     priority = PurposePriority.HIGH
                     confidence = 85.0
                 else:
-                    sub_purpose = "Light Loss Position"
+                    sub_purpose = f"Light Problem (${profit:.1f}, {distance_pips:.0f} pips)"
                     priority = PurposePriority.MEDIUM
                     confidence = 75.0
             

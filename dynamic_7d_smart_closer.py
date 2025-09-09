@@ -71,14 +71,22 @@ class Dynamic7DSmartCloser:
         self.critical_margin_threshold = 120.0   # Margin Level < 120%
         self.imbalance_threshold = 70.0          # Imbalance > 70%
         
-        # 🧠 Purpose-Aware Configuration
+        # 🧠 Purpose-Aware Configuration - ปรับให้เน้นปิด Problem positions
         self.purpose_priority_weights = {
-            'RECOVERY_HELPER': 0.8,      # ลดน้ำหนัก - ไม่ปิดง่าย
-            'PROBLEM_POSITION': 1.5,     # เพิ่มน้ำหนัก - ต้องจับคู่
-            'BALANCE_KEEPER': 0.9,       # ปานกลาง - ระวังสมดุล
-            'PROFIT_TAKER': 1.3,         # เพิ่มน้ำหนัก - ปิดได้
-            'TREND_FOLLOWER': 0.7,       # ลดน้ำหนัก - เก็บไว้
+            'RECOVERY_HELPER': 0.6,      # ลดน้ำหนักมากขึ้น - ไม่ปิดง่าย
+            'PROBLEM_POSITION': 2.0,     # เพิ่มน้ำหนักมาก - ต้องปิดด่วน
+            'BALANCE_KEEPER': 0.8,       # ลดลง - ให้ทางปิด Problem
+            'PROFIT_TAKER': 1.5,         # เพิ่มน้ำหนัก - ปิดได้
+            'TREND_FOLLOWER': 0.5,       # ลดน้ำหนักมาก - เก็บไว้
             'HEDGE_POSITION': 1.0        # ปกติ
+        }
+        
+        # 🎯 Distance-based Priority (เพิ่มใหม่)
+        self.distance_priority_multiplier = {
+            'near': 0.8,      # ใกล้ราคาปัจจุบัน - ลดความสำคัญ
+            'medium': 1.0,    # ระยะปานกลาง - ปกติ
+            'far': 1.5,       # ไกล - เพิ่มความสำคัญ
+            'very_far': 2.0   # ไกลมาก - เพิ่มความสำคัญมาก
         }
         
         logger.info("🚀 Dynamic 7D Smart Closer initialized - Purpose-Aware Mode")
@@ -465,6 +473,13 @@ class Dynamic7DSmartCloser:
                 ('smart_7d_selection', 2, min(max_size, 10), 0.9 * priority_multiplier)
             ])
         
+        # 🎯 Problem Position Priority Methods (เพิ่มใหม่)
+        methods.extend([
+            ('distant_problem_clearing', 3, min(max_size, 40), 1.8 * priority_multiplier),  # ปิด Problem ไกลๆ
+            ('problem_helper_pairing', 2, min(max_size, 30), 1.7 * priority_multiplier),    # จับคู่ Problem+Helper
+            ('balanced_problem_exit', 4, min(max_size, 35), 1.6 * priority_multiplier)      # ปิด Problem แบบสมดุล
+        ])
+        
         # ⚖️ Imbalance-based selection (ใช้ Dynamic Max Size)
         if portfolio_health.imbalance_percentage > self.imbalance_threshold:
             methods.extend([
@@ -838,13 +853,21 @@ class Dynamic7DSmartCloser:
                     adaptability = purpose_analysis.adaptability
                     problem_solving = purpose_analysis.problem_solving_potential
                     
-                    # 🧠 Enhanced Score Calculation
+                    # 🎯 Distance-based Priority
+                    current_price = self._get_current_price()
+                    position_price = getattr(score_obj.position, 'open_price', current_price)
+                    distance_pips = abs(current_price - position_price) * 10000
+                    
+                    distance_category = self._get_distance_category(distance_pips)
+                    distance_multiplier = self.distance_priority_multiplier.get(distance_category, 1.0)
+                    
+                    # 🧠 Enhanced Score Calculation (รวม Distance Factor)
                     enhanced_score = (
-                        base_7d_score * 0.6 +           # 60% 7D Score
-                        purpose_score * 0.25 +          # 25% Purpose Score  
+                        base_7d_score * 0.5 +           # 50% 7D Score (ลดลง)
+                        purpose_score * 0.3 +           # 30% Purpose Score (เพิ่มขึ้น)
                         adaptability * 0.1 +            # 10% Adaptability
-                        problem_solving * 0.05          # 5% Problem Solving
-                    ) * purpose_weight
+                        problem_solving * 0.1           # 10% Problem Solving (เพิ่มขึ้น)
+                    ) * purpose_weight * distance_multiplier
                     
                     # 🎯 Special Purpose Logic
                     if purpose_analysis.purpose.value == 'RECOVERY_HELPER':
@@ -904,6 +927,15 @@ class Dynamic7DSmartCloser:
             
             elif method_name == 'problem_position_clearing':
                 return self._problem_position_clearing(enhanced_scores, size, portfolio_health)
+            
+            elif method_name == 'distant_problem_clearing':
+                return self._distant_problem_clearing(enhanced_scores, size, portfolio_health)
+            
+            elif method_name == 'problem_helper_pairing':
+                return self._smart_purpose_pairing(enhanced_scores, size, portfolio_health)
+            
+            elif method_name == 'balanced_problem_exit':
+                return self._balanced_problem_exit(enhanced_scores, size, portfolio_health)
             
             else:
                 # Use existing 7D methods with enhanced scores
@@ -1041,6 +1073,130 @@ class Dynamic7DSmartCloser:
             logger.error(f"❌ Error calculating pairing compatibility: {e}")
             return 0
     
+    def _distant_problem_clearing(self, enhanced_scores: List[Any], size: int, 
+                                portfolio_health: PortfolioHealth) -> Optional[Dict]:
+        """🎯 ปิด Problem Positions ที่ไกลเป็นพิเศษ"""
+        try:
+            current_price = self._get_current_price()
+            
+            # หา Problem positions ที่ไกลมาก
+            distant_problems = []
+            for score in enhanced_scores:
+                if hasattr(score, 'purpose_analysis'):
+                    purpose = score.purpose_analysis.purpose.value
+                    if purpose == 'PROBLEM_POSITION':
+                        position_price = getattr(score.position, 'open_price', current_price)
+                        distance = abs(current_price - position_price) * 10000
+                        
+                        if distance > 400:  # ไกลกว่า 400 pips
+                            distant_problems.append({
+                                'score': score,
+                                'distance': distance,
+                                'priority': score.total_score + (distance * 0.01)  # เพิ่ม priority ตามระยะ
+                            })
+            
+            if not distant_problems:
+                return None
+            
+            # เรียงตาม priority (ไกลสุด + Problem score สูงสุด)
+            distant_problems.sort(key=lambda x: x['priority'], reverse=True)
+            
+            # เลือกไม้ที่จะปิด
+            selected_problems = distant_problems[:min(size//2, len(distant_problems))]
+            selected_positions = [item['score'] for item in selected_problems]
+            
+            # หา Helper positions หรือ Profit takers เพื่อจับคู่
+            helpers_and_profits = []
+            for score in enhanced_scores:
+                if hasattr(score, 'purpose_analysis'):
+                    purpose = score.purpose_analysis.purpose.value
+                    if purpose in ['RECOVERY_HELPER', 'PROFIT_TAKER']:
+                        helpers_and_profits.append(score)
+            
+            # เติมให้ครบ size
+            remaining_size = size - len(selected_positions)
+            if remaining_size > 0 and helpers_and_profits:
+                helpers_sorted = sorted(helpers_and_profits, 
+                                      key=lambda x: x.total_score, reverse=True)
+                selected_positions.extend(helpers_sorted[:remaining_size])
+            
+            # ถ้ายังไม่ครบ เติมด้วยคะแนนสูงสุด
+            if len(selected_positions) < size:
+                remaining = [s for s in enhanced_scores if s not in selected_positions]
+                remaining_sorted = sorted(remaining, 
+                                        key=lambda x: x.total_score, reverse=True)
+                selected_positions.extend(remaining_sorted[:size - len(selected_positions)])
+            
+            if not selected_positions:
+                return None
+            
+            positions = [s.position for s in selected_positions[:size]]
+            
+            logger.info(f"🎯 DISTANT PROBLEM CLEARING: {len(selected_problems)} problems + "
+                       f"{len(selected_positions) - len(selected_problems)} helpers")
+            
+            return self._calculate_combination_result(positions, portfolio_health)
+            
+        except Exception as e:
+            logger.error(f"❌ Error in distant problem clearing: {e}")
+            return None
+    
+    def _balanced_problem_exit(self, enhanced_scores: List[Any], size: int, 
+                             portfolio_health: PortfolioHealth) -> Optional[Dict]:
+        """⚖️ ปิด Problem positions แบบรักษาสมดุล"""
+        try:
+            # หา Problem positions แยกตาม BUY/SELL
+            buy_problems = []
+            sell_problems = []
+            
+            for score in enhanced_scores:
+                if hasattr(score, 'purpose_analysis'):
+                    if score.purpose_analysis.purpose.value == 'PROBLEM_POSITION':
+                        position_type = getattr(score.position, 'type', 0)
+                        if position_type == 0:  # BUY
+                            buy_problems.append(score)
+                        else:  # SELL
+                            sell_problems.append(score)
+            
+            if not buy_problems and not sell_problems:
+                return None
+            
+            # เรียงตามคะแนน
+            buy_problems.sort(key=lambda x: x.total_score, reverse=True)
+            sell_problems.sort(key=lambda x: x.total_score, reverse=True)
+            
+            selected = []
+            target_buy = size // 2
+            target_sell = size - target_buy
+            
+            # เลือกแบบสมดุล
+            selected.extend(buy_problems[:min(target_buy, len(buy_problems))])
+            selected.extend(sell_problems[:min(target_sell, len(sell_problems))])
+            
+            # ถ้าไม่ครบ เติมด้วย Helpers
+            if len(selected) < size:
+                helpers = [s for s in enhanced_scores 
+                          if hasattr(s, 'purpose_analysis') and 
+                          s.purpose_analysis.purpose.value in ['RECOVERY_HELPER', 'PROFIT_TAKER']
+                          and s not in selected]
+                
+                helpers.sort(key=lambda x: x.total_score, reverse=True)
+                selected.extend(helpers[:size - len(selected)])
+            
+            if not selected:
+                return None
+            
+            positions = [s.position for s in selected[:size]]
+            
+            logger.info(f"⚖️ BALANCED PROBLEM EXIT: {len(selected)} positions "
+                       f"(Problems: {len([s for s in selected if hasattr(s, 'purpose_analysis') and s.purpose_analysis.purpose.value == 'PROBLEM_POSITION'])})")
+            
+            return self._calculate_combination_result(positions, portfolio_health)
+            
+        except Exception as e:
+            logger.error(f"❌ Error in balanced problem exit: {e}")
+            return None
+    
     def _get_current_price(self) -> float:
         """💰 ดึงราคาปัจจุบัน"""
         try:
@@ -1054,6 +1210,17 @@ class Dynamic7DSmartCloser:
         
         # Fallback price
         return 2000.0
+    
+    def _get_distance_category(self, distance_pips: float) -> str:
+        """📏 จัดหมวดหมู่ระยะห่าง"""
+        if distance_pips < 100:
+            return 'near'
+        elif distance_pips < 300:
+            return 'medium'
+        elif distance_pips < 800:
+            return 'far'
+        else:
+            return 'very_far'
 
 
 def create_dynamic_7d_smart_closer(intelligent_manager=None, purpose_tracker=None, 
