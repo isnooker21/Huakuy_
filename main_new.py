@@ -447,10 +447,11 @@ class TradingSystem:
             signal_direction = "BUY" if candle.close > candle.open else "SELL"
             basic_signal = Signal(
                 direction=signal_direction,
-                strength=abs(candle.close - candle.open) / (candle.high - candle.low) * 100 if candle.high != candle.low else 50,
-                entry_price=current_price,
                 symbol=self.actual_symbol,
-                timestamp=datetime.now()
+                strength=abs(candle.close - candle.open) / (candle.high - candle.low) * 100 if candle.high != candle.low else 50,
+                confidence=70.0,  # Default confidence
+                timestamp=datetime.now(),
+                price=current_price
             )
             
             # ✅ Smart Entry Timing will analyze and approve/reject this signal
@@ -463,7 +464,7 @@ class TradingSystem:
             
             if decision['should_enter']:
                 # 🎯 TRADE ENTRY (Smart Entry Timing approved)
-                logger.info(f"🎯 ENTRY: {basic_signal.direction} {decision['lot_size']:.2f} lots @ {basic_signal.entry_price}")
+                logger.info(f"🎯 ENTRY: {basic_signal.direction} {decision['lot_size']:.2f} lots @ {basic_signal.price}")
                 
                 # ดำเนินการเทรด
                 result = self.portfolio_manager.execute_trade_decision(decision)

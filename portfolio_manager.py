@@ -221,8 +221,8 @@ class PortfolioManager:
             #     }
             logger.info(f"🚀 ADAPTIVE: Portfolio limits disabled - Unlimited Entry enabled")
             
-            # 🎯 Zone-Based Entry Analysis (NEW) - แทนที่ระบบเก่า
-            zone_recommendation = self._get_zone_based_entry_analysis(signal, candle.close)
+            # ✅ Smart Entry Timing Analysis already handled in should_enter_trade
+            # No additional zone analysis needed - Smart Entry Timing covers all entry logic
                 
             # คำนวณขนาด Lot พร้อม Zone Multiplier
             lot_calculator = LotSizeCalculator(current_state.account_balance, self.max_risk_per_trade)
@@ -822,6 +822,11 @@ class PortfolioManager:
         }
     
     def _get_zone_based_entry_analysis(self, signal: Signal, current_price: float) -> Optional[Dict[str, Any]]:
+        """🚫 REMOVED: Zone-Based Entry Analysis - Replaced by Smart Entry Timing System"""
+        # ✅ Smart Entry Timing System handles all entry analysis
+        return None
+    
+    def _get_zone_based_entry_analysis_REMOVED(self, signal: Signal, current_price: float) -> Optional[Dict[str, Any]]:
         """
         🎯 ใหม่! วิเคราะห์การเข้าไม้แบบ Zone-Based ที่เข้ากับระบบปิดไม้
         
