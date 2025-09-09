@@ -630,7 +630,7 @@ class TradingConditions:
         
         if max_buy_price >= min_sell_price:
             # ตรวจสอบว่าเป็น Breakout Scenario หรือไม่
-            gap_pips = (max_buy_price - min_sell_price) * 10  # แปลงเป็น pips
+            gap_pips = (max_buy_price - min_sell_price) * 0.1  # XAUUSD: 1 point = 0.1 pip
             
             # หลวมขึ้น: อนุญาตถ้า gap ไม่ใหญ่มาก (< 200 pips สำหรับ Recovery System)
             if gap_pips < 200.0:  # เพิ่มจาก 50 เป็น 200 pips เพื่อให้เหมาะกับ Recovery/Grid System

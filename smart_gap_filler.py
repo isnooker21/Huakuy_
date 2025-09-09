@@ -77,8 +77,8 @@ class SmartGapFiller:
             max_buy_price = max(pos.price_open for pos in buy_positions)
             min_sell_price = min(pos.price_open for pos in sell_positions)
             
-            # สำหรับ XAUUSD: 1 pip = 0.10
-            gap_size = abs(max_buy_price - min_sell_price) * 10  # แปลงเป็น pips
+            # สำหรับ XAUUSD: 1 point = 0.1 pip
+            gap_size = abs(max_buy_price - min_sell_price) * 0.1  # แปลงเป็น pips
             middle_price = (max_buy_price + min_sell_price) / 2
             
             # ตรวจสอบว่าควรเติมหรือไม่

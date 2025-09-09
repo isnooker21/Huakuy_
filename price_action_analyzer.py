@@ -493,8 +493,8 @@ class PriceActionAnalyzer:
             recent_low = min(self.swing_lows[-3:], key=lambda x: x.timestamp) if len(self.swing_lows) >= 3 else self.swing_lows[-1]
             
             # คำนวณ momentum score
-            high_distance = abs(current_price - recent_high.price) * 10  # pips
-            low_distance = abs(current_price - recent_low.price) * 10   # pips
+            high_distance = abs(current_price - recent_high.price) * 0.1  # XAUUSD: 1 point = 0.1 pip
+            low_distance = abs(current_price - recent_low.price) * 0.1   # XAUUSD: 1 point = 0.1 pip
             
             if high_distance < 5 and recent_high.timestamp > recent_low.timestamp:
                 return {

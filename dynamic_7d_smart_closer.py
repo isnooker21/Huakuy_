@@ -1055,7 +1055,7 @@ class Dynamic7DSmartCloser:
             # เช็คระยะห่างราคา
             problem_price = getattr(problem_position, 'open_price', 0)
             helper_price = getattr(helper_position, 'open_price', 0)
-            distance = abs(problem_price - helper_price) * 10000  # pips
+            distance = abs(problem_price - helper_price) * 0.1  # XAUUSD: 1 point = 0.1 pip
             
             # เช็คกำไร/ขาดทุน
             problem_profit = getattr(problem_position, 'profit', 0)
@@ -1099,7 +1099,7 @@ class Dynamic7DSmartCloser:
                         position_price = getattr(score.position, 'open_price', current_price)
                         distance = abs(current_price - position_price) * 0.1  # XAUUSD: 1 point = 0.1 pip
                         
-                        if distance > 150:  # ไกลกว่า 150 pips (ปรับสำหรับทองคำ)
+                        if distance > 15:  # ไกลกว่า 15 pips (ปรับสำหรับ pip ที่ถูกต้อง)
                             distant_problems.append({
                                 'score': score,
                                 'distance': distance,
@@ -1224,13 +1224,13 @@ class Dynamic7DSmartCloser:
     
     def _get_distance_category(self, distance_pips: float) -> str:
         """📏 จัดหมวดหมู่ระยะห่าง - ปรับสำหรับทองคำ"""
-        if distance_pips < 30:      # < 30 pips = ใกล้มาก
+        if distance_pips < 3:       # < 3 pips = ใกล้มาก
             return 'near'
-        elif distance_pips < 100:   # 30-100 pips = ปานกลาง
+        elif distance_pips < 10:    # 3-10 pips = ปานกลาง
             return 'medium'
-        elif distance_pips < 300:   # 100-300 pips = ไกล
+        elif distance_pips < 30:    # 10-30 pips = ไกล
             return 'far'
-        else:                       # > 300 pips = ไกลมาก
+        else:                       # > 30 pips = ไกลมาก
             return 'very_far'
 
 

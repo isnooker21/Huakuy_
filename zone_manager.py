@@ -259,7 +259,7 @@ class ZoneManager:
             )
             
             # คำนวณข้อมูลเพิ่มเติม
-            zone_position.distance_pips = abs(current_price - zone_position.price_open) * 100
+            zone_position.distance_pips = abs(current_price - zone_position.price_open) * 0.1  # XAUUSD: 1 point = 0.1 pip
             
             # คำนวณอายุ
             if hasattr(position, 'time_open') and position.time_open:
