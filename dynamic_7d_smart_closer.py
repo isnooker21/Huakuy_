@@ -65,12 +65,12 @@ class Dynamic7DSmartCloser:
         self.base_max_group_size = 50  # เพิ่มสูงสุดให้ระบบเลือกได้มากขึ้น
         self.min_group_size = 1        # ลดต่ำสุดให้ระบบยืดหยุ่นมากขึ้น
         
-        # 🎯 SMART CLOSING STRATEGY: ปิดไม้ฉลาด - รวมไม้กำไรและไม้ขาดทุนเพื่อลดความเสี่ยง
+        # 🎯 ZERO LOSS POLICY: ปิดไม้เฉพาะเมื่อผลรวมเป็นบวกเสมอ - ไม่ปิดขาดทุนเลย
         self.smart_closing_enabled = True
-        self.min_net_profit = 0.01     # ลดเกณฑ์กำไรสุทธิขั้นต่ำเป็น $0.01
-        self.max_acceptable_loss = 5.0  # ยอมรับขาดทุนได้ถึง $5.0 เพื่อปิดไม้แย่
+        self.min_net_profit = 0.01     # เกณฑ์กำไรสุทธิขั้นต่ำ $0.01
+        self.max_acceptable_loss = 0.0  # ไม่ยอมรับขาดทุนเลย = $0
         self.old_position_hours = 6     # ลดเวลาไม้เก่าเป็น 6 ชั่วโมง
-        self.far_loss_threshold = 10.0   # ปิดไม้ขาดทุนมากกว่า $10.0
+        self.far_loss_threshold = 0.0   # ไม่ปิดไม้ขาดทุนเลย = $0
         
         # Dynamic thresholds
         self.emergency_margin_threshold = 150.0  # Margin Level < 150%
@@ -100,7 +100,7 @@ class Dynamic7DSmartCloser:
         logger.info(f"   📊 Market Analyzer: {'✅' if market_analyzer else '❌'}")
         logger.info("   🚫 Intelligent Manager: ❌ (Replaced by internal 7D analysis)")
     
-    def find_optimal_closing(self, positions: List[Any], account_info: Dict, 
+    def มั(self, positions: List[Any], account_info: Dict, 
                            market_conditions: Optional[Dict] = None) -> Optional[ClosingResult]:
         """
         🧠 หาการปิดไม้ที่ดีที่สุดแบบอัจฉริยะ - Enhanced Intelligence
@@ -223,13 +223,10 @@ class Dynamic7DSmartCloser:
                         # กำหนดค่า default สำหรับ final_score
                         final_score = 0
                         
-                        # ตรวจสอบเกณฑ์พื้นฐานก่อน (รวมไม้ขาดทุน)
+                        # ตรวจสอบเกณฑ์พื้นฐานก่อน (ZERO LOSS POLICY)
                         net_pnl = result['net_pnl']
-                        if net_pnl >= self.min_net_profit or net_pnl >= -self.max_acceptable_loss:
-                            if net_pnl >= self.min_net_profit:
-                                logger.info(f"✅ BASIC CHECK PASSED: Net P&L ${net_pnl:.2f} >= min_net_profit ${self.min_net_profit:.2f}")
-                            else:
-                                logger.info(f"✅ BASIC CHECK PASSED: Net P&L ${net_pnl:.2f} >= -max_acceptable_loss ${self.max_acceptable_loss:.2f} (ปิดไม้ขาดทุน)")
+                        if net_pnl >= self.min_net_profit:
+                            logger.info(f"✅ BASIC CHECK PASSED: Net P&L ${net_pnl:.2f} >= min_net_profit ${self.min_net_profit:.2f}")
                             
                             if self._enhanced_intelligent_closing_decision(
                                 result, dynamic_params, risk_assessment, market_intelligence
@@ -254,7 +251,7 @@ class Dynamic7DSmartCloser:
                                     best_result['risk_assessment'] = risk_assessment
                                     best_result['market_intelligence'] = market_intelligence
                         else:
-                            logger.info(f"🚫 BASIC CHECK FAILED: Net P&L ${net_pnl:.2f} < min_net_profit ${self.min_net_profit:.2f} และ > -max_acceptable_loss ${self.max_acceptable_loss:.2f}")
+                            logger.info(f"🚫 BASIC CHECK FAILED: Net P&L ${net_pnl:.2f} < min_net_profit ${self.min_net_profit:.2f} (ZERO LOSS POLICY)")
                         
                         # Early termination for excellent results
                         if final_score > 1000:  # Excellent score threshold
@@ -807,34 +804,8 @@ class Dynamic7DSmartCloser:
                 base_method = method_name
             
             if base_method == 'smart_selection':
-                # 🧠 SMART SELECTION: เลือกไม้ฉลาด - รวมไม้กำไรและไม้ขาดทุนเพื่อลดความเสี่ยง
-                profitable_positions = [p for p in positions if getattr(p, 'profit', 0) > 0]
-                losing_positions = [p for p in positions if getattr(p, 'profit', 0) < 0]
-                
-                # เรียงไม้กำไรตาม profit (มากสุดก่อน)
-                profitable_sorted = sorted(profitable_positions, 
-                                         key=lambda x: getattr(x, 'profit', 0), reverse=True)
-                
-                # เรียงไม้ขาดทุนตาม loss (ขาดทุนมากสุดก่อน - เพื่อปิดไม้แย่)
-                losing_sorted = sorted(losing_positions, 
-                                     key=lambda x: getattr(x, 'profit', 0))  # ไม่ reverse เพื่อให้ขาดทุนมากสุดอยู่หน้า
-                
-                # เลือกไม้แบบฉลาด: ไม้กำไร 70% + ไม้ขาดทุน 30%
-                profit_count = max(1, int(size * 0.7))
-                loss_count = size - profit_count
-                
-                selected = []
-                selected.extend(profitable_sorted[:profit_count])
-                selected.extend(losing_sorted[:loss_count])
-                
-                logger.info(f"🧠 SMART SELECTION: เลือกไม้กำไร {len(profitable_sorted[:profit_count])} ตัว, ไม้ขาดทุน {len(losing_sorted[:loss_count])} ตัว")
-                
-                # เติมให้ครบถ้าไม่พอ
-                if len(selected) < size:
-                    remaining = [p for p in positions if p not in selected]
-                    remaining_sorted = sorted(remaining, 
-                                            key=lambda x: getattr(x, 'profit', 0), reverse=True)
-                    selected.extend(remaining_sorted[:size - len(selected)])
+                # 🧠 SMART SELECTION: เลือกไม้ฉลาด - รวมไม้ให้ผลรวมเป็นบวกเสมอ
+                selected = self._smart_profit_optimized_selection(positions, size)
                 
             elif base_method == 'top_edge':
                 # ขอบบน - 🎯 FORCE BUY+SELL BALANCE
@@ -850,34 +821,7 @@ class Dynamic7DSmartCloser:
                 
             else:
                 # 🧠 DEFAULT SMART SELECTION: เลือกไม้ฉลาดแบบ default
-                profitable_positions = [p for p in positions if getattr(p, 'profit', 0) > 0]
-                losing_positions = [p for p in positions if getattr(p, 'profit', 0) < 0]
-                
-                # เลือกไม้แบบฉลาด: ไม้กำไร 60% + ไม้ขาดทุน 40%
-                profit_count = max(1, int(size * 0.6))
-                loss_count = size - profit_count
-                
-                selected = []
-                
-                # เลือกไม้กำไร (มากสุดก่อน)
-                if profitable_positions:
-                    profitable_sorted = sorted(profitable_positions, 
-                                             key=lambda x: getattr(x, 'profit', 0), reverse=True)
-                    selected.extend(profitable_sorted[:profit_count])
-                
-                # เลือกไม้ขาดทุน (ขาดทุนมากสุดก่อน)
-                if losing_positions and len(selected) < size:
-                    losing_sorted = sorted(losing_positions, 
-                                         key=lambda x: getattr(x, 'profit', 0))
-                    selected.extend(losing_sorted[:loss_count])
-                    logger.info(f"🧠 DEFAULT SELECTION: เลือกไม้กำไร {profit_count} ตัว, ไม้ขาดทุน {len(losing_sorted[:loss_count])} ตัว")
-                
-                # เติมให้ครบถ้าไม่พอ
-                if len(selected) < size:
-                    remaining = [p for p in positions if p not in selected]
-                    remaining_sorted = sorted(remaining, 
-                                            key=lambda x: getattr(x, 'profit', 0), reverse=True)
-                    selected.extend(remaining_sorted[:size - len(selected)])
+                selected = self._smart_profit_optimized_selection(positions, size)
             
             if not selected:
                 return None
@@ -887,6 +831,47 @@ class Dynamic7DSmartCloser:
         except Exception as e:
             logger.error(f"❌ Error in fallback method {method_name}: {e}")
             return None
+    
+    def _smart_profit_optimized_selection(self, positions: List[Any], size: int) -> List[Any]:
+        """🧠 Smart Profit-Optimized Selection - ZERO LOSS POLICY: เลือกเฉพาะไม้กำไร"""
+        try:
+            if not positions or size <= 0:
+                return []
+            
+            # แยกไม้กำไรและไม้ขาดทุน
+            profitable_positions = [p for p in positions if getattr(p, 'profit', 0) > 0]
+            losing_positions = [p for p in positions if getattr(p, 'profit', 0) < 0]
+            
+            logger.info(f"🧠 ZERO LOSS POLICY: ไม้กำไร {len(profitable_positions)} ตัว, ไม้ขาดทุน {len(losing_positions)} ตัว")
+            
+            # ZERO LOSS POLICY: เลือกเฉพาะไม้กำไรเท่านั้น
+            if not profitable_positions:
+                logger.warning("⚠️ ZERO LOSS POLICY: ไม่มีไม้กำไรเลย - ไม่ปิดไม้เลย")
+                return []
+            
+            # เลือกไม้กำไรมากที่สุดตามขนาดที่ต้องการ
+            profitable_sorted = sorted(profitable_positions, 
+                                     key=lambda x: getattr(x, 'profit', 0), reverse=True)
+            
+            # เลือกไม้กำไรตามขนาดที่ต้องการ (ไม่เกินจำนวนที่มี)
+            selected_count = min(size, len(profitable_positions))
+            selected = profitable_sorted[:selected_count]
+            
+            # คำนวณผลรวม
+            total_profit = sum(getattr(p, 'profit', 0) for p in selected)
+            
+            logger.info(f"🏆 ZERO LOSS SELECTION: {len(selected)} ไม้กำไร, Total Profit ${total_profit:.2f}")
+            return selected
+            
+        except Exception as e:
+            logger.error(f"❌ Error in smart profit optimized selection: {e}")
+            # Fallback: เลือกไม้กำไรมากที่สุด
+            profitable_positions = [p for p in positions if getattr(p, 'profit', 0) > 0]
+            if profitable_positions:
+                profitable_sorted = sorted(profitable_positions, 
+                                         key=lambda x: getattr(x, 'profit', 0), reverse=True)
+                return profitable_sorted[:size]
+            return []
     
     def _get_top_edge_positions(self, position_scores: List[Any]) -> List[Any]:
         """🔝 หา positions ขอบบน (ราคาสูงสุด)"""
