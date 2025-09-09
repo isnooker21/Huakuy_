@@ -737,7 +737,7 @@ class TradingSystem:
                 if ticket and ticket not in self.closing_positions:
                     filtered.append(pos)
                 else:
-                    logger.debug(f"🔒 Position {ticket} is already being closed - skipping")
+                    logger.info(f"🔒 Position {ticket} is already being closed - skipping")
             return filtered
     
     def _lock_positions(self, positions: List[Any]):
@@ -747,7 +747,7 @@ class TradingSystem:
                 ticket = getattr(pos, 'ticket', None)
                 if ticket:
                     self.closing_positions.add(ticket)
-                    logger.debug(f"🔒 Locked position {ticket}")
+                    logger.info(f"🔒 Locked position {ticket}")
     
     def _unlock_positions(self, positions: List[Any]):
         """🔓 ปลดล็อคไม้หลังปิดเสร็จ"""
@@ -756,7 +756,7 @@ class TradingSystem:
                 ticket = getattr(pos, 'ticket', None)
                 if ticket and ticket in self.closing_positions:
                     self.closing_positions.remove(ticket)
-                    logger.debug(f"🔓 Unlocked position {ticket}")
+                    logger.info(f"🔓 Unlocked position {ticket}")
             
     def check_exit_conditions(self, portfolio_state):
         """ตรวจสอบเงื่อนไขการปิด Position"""
