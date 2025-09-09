@@ -194,10 +194,27 @@ class PortfolioManager:
             Dict: ผลการตัดสินใจ
         """
         try:
-            # ตรวจสอบเงื่อนไขพื้นฐาน
+            # 🎯 1. ตรวจสอบ Smart Entry Timing ก่อน (ป้องกัน BUY สูง SELL ต่ำ)
+            smart_entry_check = self.trading_conditions.check_smart_entry_timing(
+                signal_direction=signal.direction,
+                current_price=candle.close,
+                positions=self.order_manager.active_positions
+            )
+            
+            if not smart_entry_check.get('approved', True):
+                logger.info(f"🚫 SMART ENTRY BLOCKED: {smart_entry_check['reason']}")
+                return {
+                    'should_enter': False,
+                    'reason': f"Smart Entry Filter: {smart_entry_check['reason']}",
+                    'signal_blocked': True,
+                    'smart_entry_reason': smart_entry_check['reason']
+                }
+            
+            logger.info(f"✅ SMART ENTRY APPROVED: {smart_entry_check.get('quality', 'UNKNOWN')}")
+            
+            # 🔍 2. ตรวจสอบเงื่อนไขพื้นฐาน
             basic_conditions = self.trading_conditions.check_entry_conditions(
                 candle, self.order_manager.active_positions, 
-
                 current_state.account_balance, volume_history, signal.symbol
             )
             
@@ -359,6 +376,28 @@ class PortfolioManager:
             )
             
             if result.success:
+                # 📝 บันทึก Entry Analysis สำหรับ Strategic Position Manager
+                if hasattr(self.trading_conditions, 'strategic_position_manager') and self.trading_conditions.strategic_position_manager:
+                    try:
+                        # สร้าง position object จากผลลัพธ์
+                        position = type('Position', (), {
+                            'ticket': result.ticket,
+                            'price_open': signal.entry_price if hasattr(signal, 'entry_price') else 0,
+                            'type': 0 if signal.direction == "BUY" else 1,
+                            'symbol': signal.symbol
+                        })()
+                        
+                        # บันทึก entry analysis
+                        entry_analysis = decision.get('smart_entry_check', {}).get('entry_analysis')
+                        if entry_analysis:
+                            self.trading_conditions.strategic_position_manager.record_position_entry(
+                                position, entry_analysis
+                            )
+                            logger.info(f"📝 Strategic entry recorded for {result.ticket}: {entry_analysis.quality.value}")
+                        
+                    except Exception as e:
+                        logger.error(f"❌ Error recording strategic entry: {e}")
+                
                 # บันทึกการเทรด
                 self.trading_conditions.register_order_for_candle(signal.timestamp)
                 
