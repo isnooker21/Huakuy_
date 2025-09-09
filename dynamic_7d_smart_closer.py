@@ -518,10 +518,10 @@ class Dynamic7DSmartCloser:
             logger.error(f"❌ Error calculating dynamic profit threshold: {e}")
             return self.base_safety_buffer  # Fallback
     
-    def _select_dynamic_methods(self, portfolio_health: PortfolioHealth, 
-                               market_conditions: Optional[Dict] = None,
-                               dynamic_params: Optional[Dict] = None) -> List[Tuple[str, int, int, float]]:
-        """🎯 เลือกวิธีการปิดแบบ Dynamic"""
+    def _get_base_dynamic_methods(self, portfolio_health: PortfolioHealth, 
+                                 market_conditions: Optional[Dict] = None,
+                                 dynamic_params: Optional[Dict] = None) -> List[Tuple[str, int, int, float]]:
+        """🎯 Get base dynamic methods (simplified version)"""
         methods = []
         
         # 📊 Dynamic method selection based on parameters
@@ -530,55 +530,55 @@ class Dynamic7DSmartCloser:
         priority_multiplier = dynamic_params.get('priority_multiplier', 1.0) if dynamic_params else 1.0
         
         if total_positions > 40:
-            # เยอะมาก → เน้น Large Groups (ใช้ Dynamic Max Size)
+            # เยอะมาก → เน้น Large Groups
             methods.extend([
                 ('large_groups_7d', 15, min(max_size, 50), 1.0 * priority_multiplier),
                 ('mixed_edge_7d', 12, min(max_size, 40), 0.9 * priority_multiplier),
                 ('emergency_mass_closing', 20, min(max_size, 60), 0.8 * priority_multiplier)
             ])
         elif total_positions > 25:
-            # ปานกลาง → เน้น Medium Groups (ใช้ Dynamic Max Size)
+            # ปานกลาง → เน้น Medium Groups
             methods.extend([
                 ('medium_groups_7d', 8, min(max_size, 30), 1.0 * priority_multiplier),
                 ('mixed_edge_7d', 8, min(max_size, 25), 0.9 * priority_multiplier),
                 ('smart_7d_selection', 6, min(max_size, 20), 0.8 * priority_multiplier)
             ])
         elif total_positions > 10:
-            # น้อย → เน้น Small Groups (ใช้ Dynamic Max Size)
+            # น้อย → เน้น Small Groups
             methods.extend([
                 ('small_groups_7d', 4, min(max_size, 15), 1.0 * priority_multiplier),
                 ('balanced_pairs_7d', 2, min(max_size, 10), 0.9 * priority_multiplier),
                 ('smart_7d_selection', 3, min(max_size, 12), 0.8 * priority_multiplier)
             ])
         else:
-            # น้อยมาก → เน้น Pairs (ใช้ Dynamic Max Size)
+            # น้อยมาก → เน้น Pairs
             methods.extend([
                 ('balanced_pairs_7d', 2, min(max_size, 8), 1.0 * priority_multiplier),
                 ('smart_7d_selection', 2, min(max_size, 10), 0.9 * priority_multiplier)
             ])
         
-        # 🎯 Problem Position Priority Methods (เพิ่มใหม่)
+        # 🎯 Problem Position Priority Methods
         methods.extend([
-            ('distant_problem_clearing', 3, min(max_size, 40), 1.8 * priority_multiplier),  # ปิด Problem ไกลๆ
-            ('problem_helper_pairing', 2, min(max_size, 30), 1.7 * priority_multiplier),    # จับคู่ Problem+Helper
-            ('balanced_problem_exit', 4, min(max_size, 35), 1.6 * priority_multiplier)      # ปิด Problem แบบสมดุล
+            ('distant_problem_clearing', 3, min(max_size, 40), 1.8 * priority_multiplier),
+            ('problem_helper_pairing', 2, min(max_size, 30), 1.7 * priority_multiplier),
+            ('balanced_problem_exit', 4, min(max_size, 35), 1.6 * priority_multiplier)
         ])
         
-        # ⚖️ Imbalance-based selection (ใช้ Dynamic Max Size)
+        # ⚖️ Imbalance-based selection
         if portfolio_health.imbalance_percentage > self.imbalance_threshold:
             methods.extend([
                 ('force_balance_7d', 4, min(max_size, 30), 1.3 * priority_multiplier),
                 ('cross_balance_groups_7d', 6, min(max_size, 35), 1.2 * priority_multiplier)
             ])
         
-        # 🚨 Margin-based selection (ใช้ Dynamic Max Size)
+        # 🚨 Margin-based selection
         if portfolio_health.margin_level < self.emergency_margin_threshold:
             methods.extend([
                 ('emergency_margin_relief', 8, min(max_size, 50), 1.5 * priority_multiplier),
                 ('high_margin_impact_7d', 6, min(max_size, 40), 1.4 * priority_multiplier)
             ])
         
-        # 🎯 Edge-based methods (always available, ใช้ Dynamic Max Size)
+        # 🎯 Edge-based methods (always available)
         methods.extend([
             ('top_edge_7d', 3, min(max_size, 25), 0.7 * priority_multiplier),
             ('bottom_edge_7d', 3, min(max_size, 25), 0.7 * priority_multiplier),
@@ -1520,127 +1520,7 @@ class Dynamic7DSmartCloser:
         else:                       # > 30 pips = ไกลมาก
             return 'very_far'
     
-    def _intelligent_closing_decision(self, result: Dict, dynamic_params: Dict) -> bool:
-        """🧠 การตัดสินใจปิดแบบอัจฉริยะ - ปิดไม้กำไร + ไม้ขาดทุนไกล + ไม้เก่า"""
-        try:
-            net_pnl = result.get('net_pnl', 0)
-            positions = result.get('positions', [])
-            portfolio_improvement = result.get('portfolio_improvement', {})
-            
-            # 🎯 SMART CLOSING STRATEGY CHECK
-            if self.smart_closing_enabled:
-                # ตรวจสอบว่าการปิดนี้ฉลาดหรือไม่
-                if net_pnl < self.min_net_profit:
-                    logger.debug(f"🚫 SMART CLOSING: Rejecting - Net P&L ${net_pnl:.2f} < ${self.min_net_profit:.2f}")
-                    return False
-                
-                # วิเคราะห์ไม้ที่จะปิด (เฉพาะไม้กำไรและไม้เก่า)
-                profitable_positions = [pos for pos in positions if getattr(pos, 'profit', 0) > 0]
-                old_positions = []
-                
-                current_time = time.time()
-                for pos in positions:
-                    profit = getattr(pos, 'profit', 0)
-                    open_time = getattr(pos, 'time', current_time)
-                    hours_old = (current_time - open_time) / 3600
-                    
-                    # ไม้เก่าที่มีกำไรหรือไม่ขาดทุน
-                    if hours_old > self.old_position_hours and profit >= 0:
-                        old_positions.append(pos)
-                
-                # ตรวจสอบว่ามีไม้ที่ควรปิดหรือไม่ (เฉพาะไม้กำไรและไม้เก่า)
-                has_profitable = len(profitable_positions) > 0
-                has_old_positions = len(old_positions) > 0
-                
-                if not (has_profitable or has_old_positions):
-                    logger.debug(f"🚫 SMART CLOSING: Rejecting - No profitable or old positions (no loss positions allowed)")
-                    return False
-                
-                # ตรวจสอบว่าไม่มีไม้ขาดทุนในชุดที่จะปิด
-                losing_positions = [pos for pos in positions if getattr(pos, 'profit', 0) < 0]
-                if len(losing_positions) > 0:
-                    logger.debug(f"🚫 SMART CLOSING: Rejecting - Contains {len(losing_positions)} losing positions (not allowed)")
-                    return False
-                
-                logger.debug(f"✅ SMART CLOSING: Accepting - Net P&L ${net_pnl:.2f}, "
-                           f"Profitable: {len(profitable_positions)}, "
-                           f"Old: {len(old_positions)} (No loss positions)")
-            
-            # 🎯 INTELLIGENT FACTORS (ไม่ใช้เกณฑ์กำไรคงที่)
-            
-            # 1. 📊 Portfolio Health Impact
-            health_impact = portfolio_improvement.get('pnl_improvement', 0)
-            position_reduction = portfolio_improvement.get('position_reduction', 0)
-            balance_improvement = portfolio_improvement.get('balance_improvement', 0)
-            margin_improvement = portfolio_improvement.get('margin_improvement', 0)
-            
-            # 2. 🧠 Intelligent Scoring
-            intelligent_score = 0
-            
-            # P&L Factor (ไม่ใช่เกณฑ์คงที่)
-            if net_pnl > 0:
-                intelligent_score += 30  # กำไร = +30 คะแนน
-            elif net_pnl > -10:  # ขาดทุนเล็กน้อย
-                intelligent_score += 20  # ขาดทุนเล็กน้อย = +20 คะแนน
-            elif net_pnl > -50:  # ขาดทุนปานกลาง
-                intelligent_score += 10  # ขาดทุนปานกลาง = +10 คะแนน
-            else:
-                intelligent_score -= 10  # ขาดทุนมาก = -10 คะแนน
-            
-            # Position Reduction Factor
-            if position_reduction > 0:
-                intelligent_score += min(25, position_reduction * 2)  # ลดไม้ = +25 คะแนน
-            
-            # Balance Improvement Factor
-            if balance_improvement > 0:
-                intelligent_score += min(20, balance_improvement * 5)  # ปรับสมดุล = +20 คะแนน
-            
-            # Margin Improvement Factor
-            if margin_improvement > 0:
-                intelligent_score += min(15, margin_improvement * 3)  # ปรับ margin = +15 คะแนน
-            
-            # 3. 🎯 Dynamic Context Analysis
-            margin_level = dynamic_params.get('margin_level', 1000)
-            total_positions = dynamic_params.get('total_positions', 0)
-            imbalance = dynamic_params.get('imbalance', 0)
-            
-            # Margin Context
-            if margin_level < 150:
-                intelligent_score += 20  # Margin ต่ำ = +20 คะแนน
-            elif margin_level < 200:
-                intelligent_score += 10  # Margin ปานกลาง = +10 คะแนน
-            
-            # Position Count Context
-            if total_positions > 50:
-                intelligent_score += 15  # ไม้เยอะ = +15 คะแนน
-            elif total_positions > 20:
-                intelligent_score += 10  # ไม้ปานกลาง = +10 คะแนน
-            
-            # Imbalance Context
-            if imbalance > 70:
-                intelligent_score += 15  # ไม่สมดุล = +15 คะแนน
-            elif imbalance > 50:
-                intelligent_score += 10  # ไม่สมดุลปานกลาง = +10 คะแนน
-            
-            # 4. 🎯 INTELLIGENT DECISION - DYNAMIC MODE
-            # ใช้ Dynamic Thresholds ที่ปรับตามสถานการณ์
-            dynamic_threshold = self._calculate_dynamic_decision_threshold(result, dynamic_params)
-            should_close = intelligent_score > dynamic_threshold
-            
-            if should_close:
-                logger.info(f"🧠 INTELLIGENT DECISION: Score {intelligent_score:.1f} → CLOSE "
-                           f"(P&L: ${net_pnl:.2f}, Positions: {len(positions)}, "
-                           f"Health: {health_impact:.1f}, Balance: {balance_improvement:.1f})")
-            else:
-                logger.debug(f"🧠 INTELLIGENT DECISION: Score {intelligent_score:.1f} → HOLD "
-                           f"(P&L: ${net_pnl:.2f}, Positions: {len(positions)})")
-            
-            return should_close
-            
-        except Exception as e:
-            logger.error(f"❌ Error in intelligent closing decision: {e}")
-            # Fallback: ปิดถ้ามีกำไร
-            return result.get('net_pnl', 0) > 0
+    # 🚫 REMOVED: _intelligent_closing_decision() - Replaced by _enhanced_intelligent_closing_decision()
     
     def _calculate_dynamic_decision_threshold(self, result: Dict, dynamic_params: Dict) -> float:
         """🎯 คำนวณเกณฑ์การตัดสินใจแบบ Dynamic"""
@@ -1965,8 +1845,8 @@ class Dynamic7DSmartCloser:
                                        risk_assessment: Dict) -> List[Tuple[str, int, int, float, str]]:
         """🎯 เลือก Enhanced Dynamic Methods"""
         try:
-            # Get base methods
-            base_methods = self._select_dynamic_methods(portfolio_health, market_conditions, dynamic_params)
+            # Get base methods (using enhanced version)
+            base_methods = self._get_base_dynamic_methods(portfolio_health, market_conditions, dynamic_params)
             
             # Add strategy types and enhance with risk-based selection
             enhanced_methods = []
@@ -2005,8 +1885,8 @@ class Dynamic7DSmartCloser:
             
         except Exception as e:
             logger.error(f"❌ Error selecting enhanced dynamic methods: {e}")
-            # Fallback to base methods
-            base_methods = self._select_dynamic_methods(portfolio_health, market_conditions, dynamic_params)
+            # Fallback to base methods (using enhanced version)
+            base_methods = self._get_base_dynamic_methods(portfolio_health, market_conditions, dynamic_params)
             return [(method[0], method[1], method[2], method[3], "STANDARD") for method in base_methods]
     
     def _get_risk_recommendation(self, risk_level: str, total_risk: float) -> str:
@@ -2107,8 +1987,8 @@ class Dynamic7DSmartCloser:
                                              risk_assessment: Dict, market_intelligence: Dict) -> bool:
         """🧠 Enhanced Intelligent Closing Decision"""
         try:
-            # Use base intelligent decision
-            base_decision = self._intelligent_closing_decision(result, dynamic_params)
+            # Use enhanced intelligent decision (no base decision needed)
+            base_decision = True  # Always proceed to enhanced checks
             
             if not base_decision:
                 return False
@@ -2157,7 +2037,8 @@ class Dynamic7DSmartCloser:
             
         except Exception as e:
             logger.error(f"❌ Error in enhanced intelligent closing decision: {e}")
-            return self._intelligent_closing_decision(result, dynamic_params)
+            # Fallback to simple profit check
+            return result.get('net_pnl', 0) > 0
     
     def _calculate_enhanced_impact_score(self, result: Dict, portfolio_health: PortfolioHealth, 
                                        risk_assessment: Dict, market_intelligence: Dict) -> float:
