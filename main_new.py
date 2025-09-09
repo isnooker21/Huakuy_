@@ -442,28 +442,28 @@ class TradingSystem:
             
             current_price = candle.close
             
-            # 🎯 Single Entry Point - ดึงสัญญาณที่ดีที่สุดจาก SignalManager
-            unified_signal = self.portfolio_manager.get_unified_signal(
+            # 🎯 Generate basic signal for Smart Entry Timing analysis
+            # Create a basic signal from price action
+            signal_direction = "BUY" if candle.close > candle.open else "SELL"
+            basic_signal = Signal(
+                direction=signal_direction,
+                strength=abs(candle.close - candle.open) / (candle.high - candle.low) * 100 if candle.high != candle.low else 50,
+                entry_price=current_price,
+                symbol=self.actual_symbol,
+                timestamp=datetime.now()
+            )
+            
+            # ✅ Smart Entry Timing will analyze and approve/reject this signal
+            decision = self.portfolio_manager.should_enter_trade(
+                signal=basic_signal,
                 candle=candle,
-                current_price=current_price,
-                account_balance=portfolio_state.account_balance,
+                current_state=portfolio_state,
                 volume_history=self.volume_history
             )
             
-            if not unified_signal:
-                logger.debug("⏸️ ไม่พบสัญญาณที่เหมาะสม")
-                # อัพเดทเวลาสัญญาณ (แม้จะไม่มีสัญญาณ)
-                self.portfolio_manager.update_trade_timing(signal_generated=False)
-                return
-            
-            # ตัดสินใจว่าควรเข้าเทรดหรือไม่
-            decision = self.portfolio_manager.should_enter_trade(
-                unified_signal.signal, candle, portfolio_state, self.volume_history
-            )
-            
             if decision['should_enter']:
-                # 🎯 TRADE ENTRY (Trust the system - let Lightning Cleanup handle risk)
-                logger.info(f"🎯 ENTRY: {unified_signal.signal.direction} {decision['lot_size']:.2f} lots @ {unified_signal.signal.price}")
+                # 🎯 TRADE ENTRY (Smart Entry Timing approved)
+                logger.info(f"🎯 ENTRY: {basic_signal.direction} {decision['lot_size']:.2f} lots @ {basic_signal.entry_price}")
                 
                 # ดำเนินการเทรด
                 result = self.portfolio_manager.execute_trade_decision(decision)
