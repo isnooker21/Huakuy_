@@ -833,7 +833,7 @@ class Dynamic7DSmartCloser:
             return None
     
     def _smart_profit_optimized_selection(self, positions: List[Any], size: int) -> List[Any]:
-        """🧠 Smart Profit-Optimized Selection - ZERO LOSS POLICY: เลือกเฉพาะไม้กำไร"""
+        """🧠 Smart Profit-Optimized Selection - หาการรวมไม้ที่ฉลาดที่สุดให้ผลรวมเป็นบวกสูงสุด"""
         try:
             if not positions or size <= 0:
                 return []
@@ -842,26 +842,100 @@ class Dynamic7DSmartCloser:
             profitable_positions = [p for p in positions if getattr(p, 'profit', 0) > 0]
             losing_positions = [p for p in positions if getattr(p, 'profit', 0) < 0]
             
-            logger.info(f"🧠 ZERO LOSS POLICY: ไม้กำไร {len(profitable_positions)} ตัว, ไม้ขาดทุน {len(losing_positions)} ตัว")
+            logger.info(f"🧠 SMART SELECTION: ไม้กำไร {len(profitable_positions)} ตัว, ไม้ขาดทุน {len(losing_positions)} ตัว")
             
-            # ZERO LOSS POLICY: เลือกเฉพาะไม้กำไรเท่านั้น
-            if not profitable_positions:
-                logger.warning("⚠️ ZERO LOSS POLICY: ไม่มีไม้กำไรเลย - ไม่ปิดไม้เลย")
-                return []
-            
-            # เลือกไม้กำไรมากที่สุดตามขนาดที่ต้องการ
+            # เรียงไม้กำไรตาม profit (มากสุดก่อน)
             profitable_sorted = sorted(profitable_positions, 
                                      key=lambda x: getattr(x, 'profit', 0), reverse=True)
             
-            # เลือกไม้กำไรตามขนาดที่ต้องการ (ไม่เกินจำนวนที่มี)
-            selected_count = min(size, len(profitable_positions))
-            selected = profitable_sorted[:selected_count]
+            # เรียงไม้ขาดทุนตาม loss (ขาดทุนน้อยสุดก่อน - ฉลาดในการเลือกไม้แย่)
+            losing_sorted = sorted(losing_positions, 
+                                 key=lambda x: getattr(x, 'profit', 0), reverse=True)
             
-            # คำนวณผลรวม
-            total_profit = sum(getattr(p, 'profit', 0) for p in selected)
+            # 🧠 ENHANCED ALGORITHM: หาการรวมไม้ที่ฉลาดที่สุด
+            best_combination = []
+            best_net_profit = -999999  # เริ่มต้นด้วยค่าติดลบมาก
+            best_strategy = ""
             
-            logger.info(f"🏆 ZERO LOSS SELECTION: {len(selected)} ไม้กำไร, Total Profit ${total_profit:.2f}")
-            return selected
+            # Strategy 1: เลือกเฉพาะไม้กำไรมากที่สุด
+            if profitable_sorted:
+                selected_profits = profitable_sorted[:min(size, len(profitable_sorted))]
+                total_profit = sum(getattr(p, 'profit', 0) for p in selected_profits)
+                
+                if total_profit > best_net_profit:
+                    best_net_profit = total_profit
+                    best_combination = selected_profits
+                    best_strategy = f"PROFIT_ONLY_{len(selected_profits)}"
+                    logger.info(f"🎯 Strategy 1: เลือกเฉพาะไม้กำไร {len(selected_profits)} ตัว = Net ${total_profit:.2f}")
+            
+            # Strategy 2: รวมไม้กำไร + ไม้ขาดทุน (ฉลาดในการเลือกไม้แย่)
+            if profitable_sorted and losing_sorted:
+                # ลองทุกขนาดของไม้กำไร (1 ถึง min(size, len(profitable_positions)))
+                max_profit_count = min(size, len(profitable_sorted))
+                
+                for profit_count in range(1, max_profit_count + 1):
+                    loss_count = size - profit_count
+                    
+                    if loss_count > len(losing_sorted) or loss_count <= 0:
+                        continue
+                    
+                    # เลือกไม้กำไรมากที่สุด
+                    selected_profits = profitable_sorted[:profit_count]
+                    
+                    # เลือกไม้ขาดทุนน้อยที่สุด (ฉลาดในการเลือกไม้แย่)
+                    selected_losses = losing_sorted[:loss_count]
+                    
+                    # คำนวณผลรวม
+                    total_profit = sum(getattr(p, 'profit', 0) for p in selected_profits)
+                    total_loss = sum(getattr(p, 'profit', 0) for p in selected_losses)
+                    net_profit = total_profit + total_loss
+                    
+                    logger.debug(f"🧠 Strategy 2: {profit_count}P+{loss_count}L = Net ${net_profit:.2f} (Profit ${total_profit:.2f} + Loss ${total_loss:.2f})")
+                    
+                    # ถ้าผลรวมเป็นบวกและดีกว่าที่เคยเจอ
+                    if net_profit > best_net_profit:
+                        best_net_profit = net_profit
+                        best_combination = selected_profits + selected_losses
+                        best_strategy = f"MIXED_{profit_count}P+{loss_count}L"
+                        
+                        logger.info(f"🎯 NEW BEST: {profit_count}P+{loss_count}L = Net ${net_profit:.2f} (ฉลาดในการเลือกไม้แย่)")
+            
+            # Strategy 3: ถ้าไม่มีไม้กำไรเลย ให้เลือกไม้ขาดทุนน้อยที่สุด
+            if not profitable_sorted and losing_sorted:
+                selected_losses = losing_sorted[:min(size, len(losing_sorted))]
+                total_loss = sum(getattr(p, 'profit', 0) for p in selected_losses)
+                
+                if total_loss > best_net_profit:
+                    best_net_profit = total_loss
+                    best_combination = selected_losses
+                    best_strategy = f"LOSS_ONLY_{len(selected_losses)}"
+                    logger.warning(f"⚠️ Strategy 3: ไม่มีไม้กำไรเลย - เลือกไม้ขาดทุนน้อยที่สุด {len(selected_losses)} ตัว = Net ${total_loss:.2f}")
+            
+            # ตรวจสอบผลลัพธ์สุดท้าย
+            if best_net_profit <= 0:
+                logger.warning(f"⚠️ ไม่เจอการรวมที่เป็นบวก - Best Net: ${best_net_profit:.2f}")
+                # ถ้าไม่เจอการรวมที่เป็นบวก ให้เลือกไม้กำไรมากที่สุดเท่านั้น
+                if profitable_sorted:
+                    best_combination = profitable_sorted[:min(size, len(profitable_sorted))]
+                    best_net_profit = sum(getattr(p, 'profit', 0) for p in best_combination)
+                    best_strategy = f"FALLBACK_PROFIT_{len(best_combination)}"
+                    logger.info(f"🔄 FALLBACK: เลือกไม้กำไรมากที่สุด {len(best_combination)} ตัว = Net ${best_net_profit:.2f}")
+                else:
+                    logger.error("❌ ไม่มีไม้กำไรเลยและไม่เจอการรวมที่เป็นบวก")
+                    return []
+            
+            logger.info(f"🏆 FINAL SELECTION: {best_strategy} = {len(best_combination)} ไม้, Net Profit ${best_net_profit:.2f}")
+            
+            # แสดงรายละเอียดการเลือกไม้ที่ฉลาด
+            if best_combination:
+                profit_count = len([p for p in best_combination if getattr(p, 'profit', 0) > 0])
+                loss_count = len([p for p in best_combination if getattr(p, 'profit', 0) < 0])
+                logger.info(f"🧠 SMART BREAKDOWN: ไม้กำไร {profit_count} ตัว, ไม้ขาดทุน {loss_count} ตัว")
+                
+                if loss_count > 0:
+                    logger.info(f"🎯 ฉลาดในการเลือกไม้แย่: เลือกไม้ขาดทุน {loss_count} ตัวเพื่อให้ผลรวมเป็นบวก")
+            
+            return best_combination
             
         except Exception as e:
             logger.error(f"❌ Error in smart profit optimized selection: {e}")
@@ -1248,6 +1322,7 @@ class Dynamic7DSmartCloser:
                 profit_sorted = sorted(profit_positions, 
                                      key=lambda x: x.total_score, reverse=True)
                 selected.extend(profit_sorted[:remaining_size])
+                logger.info(f"🧠 Strategy 2: เพิ่มไม้กำไร {len(profit_sorted[:remaining_size])} ตัว (ฉลาดในการเลือกไม้กำไร)")
             
             # 🎯 Strategy 3: Fill remaining with highest scores
             if len(selected) < size:
