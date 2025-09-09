@@ -49,7 +49,8 @@ logging.basicConfig(
 # ปิด debug logs จากระบบอื่นๆ
 logging.getLogger('mt5_connection').setLevel(logging.WARNING)
 logging.getLogger('order_management').setLevel(logging.WARNING)
-logging.getLogger('trading_conditions').setLevel(logging.INFO)
+logging.getLogger('trading_conditions').setLevel(logging.DEBUG)  # Enable DEBUG for entry conditions
+logging.getLogger('smart_entry_timing').setLevel(logging.DEBUG)  # Enable DEBUG for hierarchy check
 logging.getLogger('portfolio_manager').setLevel(logging.WARNING)
 logging.getLogger('calculations').setLevel(logging.WARNING)
 logging.getLogger('signal_manager').setLevel(logging.INFO)
