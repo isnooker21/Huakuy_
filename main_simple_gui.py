@@ -104,6 +104,14 @@ class SimpleBreakoutTradingSystemGUI:
         # GUI
         self.gui = None
         
+        # 🛡️ RANGE-BOUND MARKET PROTECTION
+        self.price_range_history = []  # เก็บราคา high/low ล่าสุด
+        self.range_check_period = 50   # ตรวจสอบ 50 candles ล่าสุด
+        self.max_range_points = 300    # ถ้าราคาวิ่งไม่เกิน 300 จุด
+        self.min_positions_for_range_check = 5  # ต้องมี positions อย่างน้อย 5 ตัว
+        
+        logger.info(f"🛡️ Range-bound Protection: Max Range: {self.max_range_points} points, Min Positions: {self.min_positions_for_range_check}")
+        
         # 🔒 Position Locking
         self.closing_positions = set()
         self.closing_lock = threading.Lock()
@@ -339,6 +347,11 @@ class SimpleBreakoutTradingSystemGUI:
                     reason = f"Breakout SELL: {current_candle.close:.2f} < {previous_candle.low:.2f}"
                 
                 if breakout_signal:
+                    # 🛡️ Check for range-bound market before executing trade
+                    if self._is_range_bound_market():
+                        logger.info(f"⏸️ BREAKOUT SKIPPED: Range-bound market detected for {timeframe}")
+                        continue
+                    
                     # 🚀 Execute breakout trade
                     self._execute_simple_breakout_trade(
                         direction=breakout_signal,
@@ -531,6 +544,75 @@ class SimpleBreakoutTradingSystemGUI:
         """Update candle history"""
         for tf in self.timeframes:
             self.last_candle_data[tf] = candle
+        
+        # 🛡️ Update price range history for range-bound detection
+        self._update_price_range_history(candle)
+    
+    def _update_price_range_history(self, candle: CandleData):
+        """Update price range history for range-bound market detection"""
+        try:
+            # เพิ่มข้อมูลราคาใหม่
+            price_data = {
+                'high': candle.high,
+                'low': candle.low,
+                'close': candle.close,
+                'timestamp': candle.timestamp
+            }
+            
+            self.price_range_history.append(price_data)
+            
+            # เก็บเฉพาะข้อมูลล่าสุด
+            if len(self.price_range_history) > self.range_check_period:
+                self.price_range_history = self.price_range_history[-self.range_check_period:]
+                
+        except Exception as e:
+            logger.error(f"❌ Error updating price range history: {e}")
+    
+    def _is_range_bound_market(self) -> bool:
+        """
+        🛡️ ตรวจสอบว่าตลาดอยู่ในสภาพ Range-bound หรือไม่
+        
+        เงื่อนไข:
+        1. มี positions จำนวนมาก (≥ min_positions_for_range_check)
+        2. ราคาวิ่งขึ้นลงไม่เกิน max_range_points จุด ใน range_check_period candles
+        
+        Returns:
+            bool: True ถ้าเป็น range-bound market
+        """
+        try:
+            # 1. ตรวจสอบจำนวน positions
+            positions = self.order_manager.active_positions
+            if len(positions) < self.min_positions_for_range_check:
+                return False
+            
+            # 2. ตรวจสอบข้อมูลราคา
+            if len(self.price_range_history) < 10:  # ต้องมีข้อมูลอย่างน้อย 10 candles
+                return False
+            
+            # 3. คำนวณ range ของราคา
+            recent_prices = self.price_range_history[-self.range_check_period:]
+            
+            highest_price = max(price_data['high'] for price_data in recent_prices)
+            lowest_price = min(price_data['low'] for price_data in recent_prices)
+            
+            price_range = highest_price - lowest_price
+            
+            # 4. ตรวจสอบว่า range น้อยกว่าที่กำหนดหรือไม่
+            is_range_bound = price_range <= self.max_range_points
+            
+            if is_range_bound:
+                logger.warning(f"🛡️ RANGE-BOUND MARKET DETECTED:")
+                logger.warning(f"   📊 Price Range: {price_range:.1f} points (Max: {self.max_range_points})")
+                logger.warning(f"   📈 Highest: {highest_price:.2f}")
+                logger.warning(f"   📉 Lowest: {lowest_price:.2f}")
+                logger.warning(f"   🎯 Positions: {len(positions)} (Min: {self.min_positions_for_range_check})")
+                logger.warning(f"   ⏸️ TRADING PAUSED - Waiting for trend breakout")
+            
+            return is_range_bound
+            
+        except Exception as e:
+            logger.error(f"❌ Error checking range-bound market: {e}")
+            return False
     
     def _get_portfolio_state(self) -> PortfolioState:
         """Get current portfolio state"""
