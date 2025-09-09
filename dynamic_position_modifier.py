@@ -505,24 +505,27 @@ class DynamicPositionModifier:
             return 0.0
     
     def _log_modification_plan(self, plan: PortfolioModificationPlan):
-        """📊 แสดง log แผนการแก้ไข"""
-        logger.info(f"🔧 DYNAMIC MODIFICATION PLAN:")
-        logger.info(f"   Individual Modifications: {len(plan.individual_modifications)}")
-        logger.info(f"   Group Modifications: {len(plan.group_modifications)}")
-        logger.info(f"   Emergency Actions: {len(plan.emergency_actions)}")
-        logger.info(f"   Expected Improvement: ${plan.expected_portfolio_improvement:.2f}")
-        logger.info(f"   Estimated Cost: ${plan.estimated_cost:.2f}")
-        logger.info(f"   Success Probability: {plan.success_probability:.1%}")
-        logger.info(f"   Risk Level: {plan.risk_level:.1%}")
+        """📊 แสดง log แผนการแก้ไขแบบสั้นกระชับ"""
+        if not plan.individual_modifications and not plan.group_modifications:
+            logger.info("🔧 No modifications needed")
+            return
         
-        # Log high priority modifications
-        high_priority = [mod for mod in plan.individual_modifications 
-                        if mod.priority in [ModifierPriority.CRITICAL, ModifierPriority.HIGH]]
+        # Log แบบบรรทัดเดียว สั้นกระชับ
+        logger.info(f"🔧 MODIFY: {len(plan.individual_modifications)}pos | "
+                   f"Profit:+${plan.expected_portfolio_improvement:.0f} | "
+                   f"Success:{plan.success_probability:.0%}")
         
-        if high_priority:
-            logger.info(f"🚨 HIGH PRIORITY MODIFICATIONS: {len(high_priority)}")
-            for mod in high_priority[:3]:  # Show first 3
-                logger.info(f"   Ticket {mod.position_ticket}: {mod.recommended_action.value} ({mod.priority.value})")
+        # แสดง high priority เฉพาะที่สำคัญ
+        critical_mods = [mod for mod in plan.individual_modifications 
+                        if mod.priority == ModifierPriority.CRITICAL]
+        
+        if critical_mods:
+            for mod in critical_mods[:2]:  # แสดงแค่ 2 อันแรก
+                logger.warning(f"🚨 CRITICAL: Ticket {mod.position_ticket} - {mod.recommended_action.value}")
+        
+        # แสดง emergency actions เฉพาะเมื่อมี
+        if plan.emergency_actions:
+            logger.warning(f"🚨 EMERGENCY: {', '.join(plan.emergency_actions[:2])}")
     
     def _create_safe_modification_plan(self) -> PortfolioModificationPlan:
         """🛡️ สร้างแผนการแก้ไข fallback ที่ปลอดภัย"""
