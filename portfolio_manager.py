@@ -79,6 +79,10 @@ class PortfolioManager:
         # - Zone Position Manager → Dynamic 7D Smart Closer
         # - Signal Manager → Portfolio Manager with Smart Entry Timing
         
+        # 🚫 Initialize old system variables as None to prevent usage
+        self.zone_analyzer = None
+        self.zone_rebalancer = None
+        
         logger.info("🚫 OLD ENTRY SYSTEMS DISABLED - Using Smart Entry Timing only")
         
         # การตั้งค่าความเสี่ยง
@@ -1720,72 +1724,6 @@ class PortfolioManager:
             'zone_score': 100.0,  # Default good score
             'zone_quality': 'EXCELLENT'  # Default good quality
         }
-    
-    def check_and_execute_zone_rebalance_REMOVED(self, current_price: float) -> Dict[str, Any]:
-        """ตรวจสอบและดำเนินการปรับสมดุลโซน"""
-        try:
-            # Initialize zone analyzer if not done
-            if self.zone_analyzer is None:
-                from price_zone_analysis import PriceZoneAnalyzer
-                from zone_rebalancer import ZoneRebalancer
-                # Use a default symbol if we don't have one
-                symbol = getattr(self, 'current_symbol', 'XAUUSD')
-                self.zone_analyzer = PriceZoneAnalyzer(symbol, num_zones=10)
-                self.zone_rebalancer = ZoneRebalancer(self.zone_analyzer)
-            
-            # อัพเดทราคา
-            self.zone_analyzer.update_price_history(current_price)
-            
-            # วิเคราะห์การกระจายปัจจุบัน
-            positions = self.order_manager.active_positions
-            analysis = self.zone_analyzer.analyze_position_distribution(positions)
-            
-            # ตรวจสอบว่าควร rebalance หรือไม่
-            should_rebalance = self.zone_rebalancer.should_trigger_rebalance(analysis)
-            
-            if not should_rebalance:
-                return {
-                    'executed': False,
-                    'reason': 'ยังไม่ถึงเงื่อนไข Rebalance',
-                    'zone_score': analysis.overall_health_score,
-                    'zone_quality': analysis.distribution_quality
-                }
-            
-            # วิเคราะห์ความต้องการ rebalance
-            rebalance_result = self.zone_rebalancer.analyze_rebalance_needs(positions, current_price)
-            
-            logger.info(f"📊 Zone Analysis Result:")
-            logger.info(f"   Overall Score: {analysis.overall_health_score:.1f}/100")
-            logger.info(f"   Quality: {analysis.distribution_quality}")
-            logger.info(f"   Active Zones: {analysis.active_zones}/{analysis.total_zones}")
-            logger.info(f"   Balanced Zones: {analysis.balanced_zones}")
-            logger.info(f"   Critical Zones: {analysis.critical_zones}")
-            
-            # แสดงคำแนะนำ
-            summary = self.zone_rebalancer.get_rebalance_summary(rebalance_result)
-            logger.info(summary)
-            
-            # แสดง Zone Map
-            zone_map = self.zone_analyzer.get_zone_map_display(current_price)
-            logger.info(f"\n{zone_map}")
-            
-            return {
-                'executed': True,
-                'analysis': analysis,
-                'rebalance_result': rebalance_result,
-                'recommendations': rebalance_result.recommendations,
-                'zone_score': analysis.overall_health_score,
-                'zone_quality': analysis.distribution_quality,
-                'summary': summary
-            }
-            
-        except Exception as e:
-            logger.error(f"Error in zone rebalance check: {e}")
-            return {
-                'executed': False,
-                'error': str(e),
-                'reason': f'เกิดข้อผิดพลาด: {str(e)}'
-            }
     
     def check_advanced_breakout_recovery(self, current_price: float) -> Dict[str, Any]:
         """Advanced Breakout Recovery Strategy DISABLED - ใช้ Simple Position Manager แทน"""

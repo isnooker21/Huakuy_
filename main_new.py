@@ -32,6 +32,9 @@ from position_purpose_tracker import create_position_purpose_tracker
 from smart_entry_timing import create_smart_entry_timing
 from strategic_position_manager import create_strategic_position_manager
 
+# 🚀 Enhanced 7D Entry + Position Modifier System
+from enhanced_7d_entry_system import create_enhanced_7d_entry_system
+
 # 📊 Market Analysis Systems
 from market_analysis import MultiTimeframeAnalyzer, MarketSessionAnalyzer
 from price_action_analyzer import PriceActionAnalyzer
@@ -96,6 +99,9 @@ class TradingSystem:
         
         # 🎯 Purpose Tracking System
         self.position_purpose_tracker = None
+        
+        # 🚀 Enhanced 7D Entry + Position Modifier System
+        self.enhanced_7d_entry_system = None
         
         # 📊 Market Analysis Systems
         self.market_analyzer = None
@@ -221,17 +227,29 @@ class TradingSystem:
                 smart_entry_timing=self.smart_entry_timing
             )
             
+            # 🚀 Initialize Enhanced 7D Entry + Position Modifier System
+            logger.info("🚀 Initializing Enhanced 7D Entry + Position Modifier System...")
+            self.enhanced_7d_entry_system = create_enhanced_7d_entry_system(
+                intelligent_manager=self.intelligent_position_manager,
+                purpose_tracker=self.position_purpose_tracker,
+                dynamic_7d_closer=self.dynamic_7d_smart_closer,
+                mt5_connection=self.mt5_connection
+            )
+            logger.info(f"✅ Enhanced 7D Entry System created: {type(self.enhanced_7d_entry_system)}")
+            
             # 🔗 เชื่อมต่อ Smart Systems กับ Trading Conditions
             logger.info("🔗 Connecting Smart Systems to Trading Conditions...")
             self.trading_conditions.intelligent_position_manager = self.intelligent_position_manager
             self.trading_conditions.position_purpose_tracker = self.position_purpose_tracker
             self.trading_conditions.smart_entry_timing = self.smart_entry_timing
             self.trading_conditions.strategic_position_manager = self.strategic_position_manager
+            self.trading_conditions.enhanced_7d_entry_system = self.enhanced_7d_entry_system
             
             # 🔍 Verify connections
             logger.info(f"🔍 VERIFICATION:")
             logger.info(f"   Smart Entry Timing: {type(self.trading_conditions.smart_entry_timing) if self.trading_conditions.smart_entry_timing else 'NULL'}")
             logger.info(f"   Position Purpose Tracker: {type(self.trading_conditions.position_purpose_tracker) if self.trading_conditions.position_purpose_tracker else 'NULL'}")
+            logger.info(f"   Enhanced 7D Entry System: {type(self.trading_conditions.enhanced_7d_entry_system) if self.trading_conditions.enhanced_7d_entry_system else 'NULL'}")
             
             # 🚫 REMOVED: Zone Manager connection to Portfolio Manager
             # ✅ Portfolio Manager now uses only Dynamic 7D Smart Closer
@@ -450,6 +468,39 @@ class TradingSystem:
                 raw_signal_direction, current_price, self.order_manager.active_positions
             )
             
+            # 🚀 Enhanced 7D Entry Analysis
+            account_info = self.mt5_connection.get_account_info() if self.mt5_connection else {}
+            if self.enhanced_7d_entry_system:
+                entry_7d_analysis = self.enhanced_7d_entry_system.analyze_entry_opportunity(
+                    signal_direction=smart_signal_direction,
+                    current_price=current_price,
+                    positions=self.order_manager.active_positions,
+                    account_info=account_info,
+                    candle_data=candle
+                )
+                
+                # 🔧 Position Modifier Analysis
+                position_modifications = self.enhanced_7d_entry_system.analyze_position_modifications(
+                    positions=self.order_manager.active_positions,
+                    account_info=account_info
+                )
+                
+                # 🤝 Integration with Closing System
+                integration_result = self.enhanced_7d_entry_system.integrate_with_closing_system(
+                    entry_analysis=entry_7d_analysis,
+                    position_modifications=position_modifications
+                )
+                
+                # 📊 Override signal if 7D analysis suggests
+                if entry_7d_analysis.total_7d_score < 30.0:  # Very low score
+                    logger.info(f"🚫 7D ENTRY BLOCKED: Low score {entry_7d_analysis.total_7d_score:.1f}")
+                    return  # Skip this entry
+                elif entry_7d_analysis.total_7d_score > 80.0:  # High score
+                    logger.info(f"🚀 7D ENTRY ENHANCED: High score {entry_7d_analysis.total_7d_score:.1f}")
+                
+                # 🔧 Apply Position Modifications if needed
+                self._apply_position_modifications(position_modifications)
+            
             basic_signal = Signal(
                 direction=smart_signal_direction,
                 symbol=self.actual_symbol,
@@ -543,6 +594,32 @@ class TradingSystem:
         except Exception as e:
             logger.error(f"❌ Error in smart signal direction: {e}")
             return raw_direction
+    
+    def _apply_position_modifications(self, modifications):
+        """
+        🔧 Apply Position Modifications
+        """
+        try:
+            if not modifications:
+                return
+            
+            logger.info(f"🔧 APPLYING POSITION MODIFICATIONS: {len(modifications)} positions")
+            
+            for modification in modifications:
+                if modification.expected_improvement > 0.4:  # High improvement expected
+                    logger.info(f"🔧 High Priority Modification: Ticket {modification.position_ticket}")
+                    logger.info(f"   Action: {modification.modifier_action.value}")
+                    logger.info(f"   Expected Improvement: {modification.expected_improvement:.1%}")
+                    
+                    # 📝 Log suggested entry for manual review
+                    suggested_entry = modification.suggested_entry
+                    logger.info(f"   Suggested Entry: {suggested_entry}")
+                    
+                    # Note: Actual implementation would execute the modification
+                    # For now, we just log the recommendations
+                    
+        except Exception as e:
+            logger.error(f"❌ Error applying position modifications: {e}")
     
     def _simplify_reason(self, reason: str) -> str:
         """ทำให้เหตุผลสั้นลงเพื่อ log ที่อ่านง่าย"""
@@ -737,8 +814,8 @@ class TradingSystem:
                 
                 # 🧠 OLD SYSTEMS REMOVED - ใช้ Unified System แทน
                 
-                # 3. Zone Analysis & Rebalancing (silent)
-                zone_result = self.portfolio_manager.check_and_execute_zone_rebalance(current_price)
+                # 🚫 OLD ZONE SYSTEM REMOVED - Using Dynamic 7D Smart Closer only
+                # ✅ All zone analysis now handled by Dynamic 7D Smart Closer
             
             # 🗑️ Emergency Exit REMOVED - All exits handled by Smart Profit Taking System
         except Exception as e:
