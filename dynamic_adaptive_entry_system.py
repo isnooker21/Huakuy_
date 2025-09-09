@@ -453,6 +453,7 @@ class DynamicAdaptiveEntrySystem:
             # Margin call risk - ปรับให้เข้มงวดน้อยลง
             if margin_level < 100:  # เปลี่ยนจาก 150 เป็น 100
                 overrides.append("MARGIN_CALL_RISK")
+                logger.warning(f"🚨 MARGIN_CALL_RISK: {margin_level}% < 100%")
             
             # Equity protection
             if equity < balance * 0.7:
@@ -482,9 +483,11 @@ class DynamicAdaptiveEntrySystem:
                                    portfolio_health: PortfolioHealth) -> bool:
         """🎯 ตัดสินใจเข้าเทรดแบบ Dynamic"""
         try:
-            # Emergency blocks
+            # Emergency blocks - แสดงรายละเอียด
             critical_overrides = ["MARGIN_CALL_RISK", "CRITICAL_PORTFOLIO"]
-            if any(override in emergency_overrides for override in critical_overrides):
+            blocked_overrides = [override for override in critical_overrides if override in emergency_overrides]
+            if blocked_overrides:
+                logger.warning(f"🚨 EMERGENCY BLOCK: {', '.join(blocked_overrides)}")
                 return False
             
             # Dynamic confidence threshold - ลดให้เข้าได้ง่ายขึ้น
