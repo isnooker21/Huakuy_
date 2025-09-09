@@ -1060,8 +1060,13 @@ class IntelligentPositionManager:
                         continue
                     
                     # เลือกตำแหน่งตาม 4D score พร้อม Balance Check
-                    selected_profits = profitable_positions[:profit_count]
-                    selected_losses = losing_positions[:loss_count]
+                    # 🎯 FORCE BUY+SELL BALANCE: ต้องมีทั้ง BUY และ SELL เสมอ
+                    selected_profits, selected_losses = self._select_balanced_positions(
+                        profitable_positions, losing_positions, profit_count, loss_count)
+                    
+                    # ถ้าไม่สามารถหาชุดที่ Balance ได้ ข้ามไป
+                    if not selected_profits or not selected_losses:
+                        continue
                     
                     # 🎯 BALANCE ENFORCEMENT: ตรวจสอบการปิดแบบ Balance
                     all_selected_positions = [pos['position'] for pos in selected_profits + selected_losses]
@@ -1128,6 +1133,53 @@ class IntelligentPositionManager:
         except Exception as e:
             logger.error(f"❌ Error finding intelligent positive combination: {e}")
             return None
+    
+    def _select_balanced_positions(self, profitable_positions: List[Dict], losing_positions: List[Dict], 
+                                 profit_count: int, loss_count: int) -> Tuple[List[Dict], List[Dict]]:
+        """🎯 เลือกตำแหน่งแบบบังคับให้มี BUY+SELL Balance เสมอ"""
+        try:
+            # แยก BUY/SELL จาก profitable positions
+            profit_buys = [pos for pos in profitable_positions if getattr(pos['position'], 'type', 0) == 0]
+            profit_sells = [pos for pos in profitable_positions if getattr(pos['position'], 'type', 0) == 1]
+            
+            # แยก BUY/SELL จาก losing positions  
+            loss_buys = [pos for pos in losing_positions if getattr(pos['position'], 'type', 0) == 0]
+            loss_sells = [pos for pos in losing_positions if getattr(pos['position'], 'type', 0) == 1]
+            
+            # 🎯 BALANCED SELECTION ALGORITHM
+            selected_profits = []
+            selected_losses = []
+            
+            # กลยุทธ์: พยายามให้ BUY+SELL เท่าๆ กันในแต่ละกลุ่ม
+            profit_buy_needed = max(1, profit_count // 2)
+            profit_sell_needed = profit_count - profit_buy_needed
+            
+            loss_buy_needed = max(1, loss_count // 2) 
+            loss_sell_needed = loss_count - loss_buy_needed
+            
+            # เลือก Profitable positions
+            selected_profits.extend(profit_buys[:profit_buy_needed])
+            selected_profits.extend(profit_sells[:profit_sell_needed])
+            
+            # เลือก Losing positions
+            selected_losses.extend(loss_buys[:loss_buy_needed])
+            selected_losses.extend(loss_sells[:loss_sell_needed])
+            
+            # 🚨 ตรวจสอบว่าได้ BUY+SELL ครบ
+            total_buys = len([p for p in selected_profits + selected_losses if getattr(p['position'], 'type', 0) == 0])
+            total_sells = len([p for p in selected_profits + selected_losses if getattr(p['position'], 'type', 0) == 1])
+            
+            # ถ้าไม่มี BUY หรือ SELL เลย → ไม่ Balance
+            if total_buys == 0 or total_sells == 0:
+                logger.debug(f"❌ Cannot create balanced selection: {total_buys}B+{total_sells}S")
+                return [], []  # ส่งกลับว่าหาไม่ได้
+            
+            logger.debug(f"✅ Balanced selection: {total_buys}B+{total_sells}S from {profit_count}P+{loss_count}L")
+            return selected_profits, selected_losses
+            
+        except Exception as e:
+            logger.error(f"❌ Error in balanced position selection: {e}")
+            return [], []
     
     def _check_closing_balance(self, positions_to_close: List[Any], current_balance: Dict) -> Dict[str, Any]:
         """⚖️ ตรวจสอบว่าการปิดตำแหน่งจะทำให้ Balance ดีขึ้นไหม"""
