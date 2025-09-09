@@ -9,7 +9,7 @@ from typing import Dict, List, Optional, Tuple, Any
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from calculations import Position, PercentageCalculator, MarketAnalysisCalculator
-from market_analysis import MarketSessionAnalyzer, MultiTimeframeAnalyzer
+# from market_analysis import MarketSessionAnalyzer, MultiTimeframeAnalyzer  # Removed unused dependency
 
 logger = logging.getLogger(__name__)
 
@@ -342,8 +342,9 @@ class TradingConditions:
         
         # Initialize mtf_analyzer with actual symbol if not done
         if self.mtf_analyzer is None and symbol:
-            from market_analysis import MultiTimeframeAnalyzer
-            self.mtf_analyzer = MultiTimeframeAnalyzer(symbol)
+            # from market_analysis import MultiTimeframeAnalyzer  # Removed unused dependency
+            # self.mtf_analyzer = MultiTimeframeAnalyzer(symbol)  # Disabled - no market_analysis
+            self.mtf_analyzer = None
         
         mtf_result = self.mtf_analyzer.get_multi_timeframe_confirmation(direction) if self.mtf_analyzer else {'decision': 'WEAK'}
         mtf_decision = mtf_result['decision']
