@@ -511,21 +511,21 @@ class TradingSystem:
                 raw_signal_direction, current_price, self.order_manager.active_positions
             )
             
-        # 🚀 DYNAMIC ADAPTIVE ANALYSIS - Ultimate Trading Intelligence
-        account_info = self.mt5_connection.get_account_info() if self.mt5_connection else {}
-        
-        # 🔍 DEBUG: Account Info Analysis
-        if account_info:
-            margin_level = account_info.get('margin_level', 'UNKNOWN')
-            balance = account_info.get('balance', 'UNKNOWN')
-            equity = account_info.get('equity', 'UNKNOWN')
-            free_margin = account_info.get('margin_free', 'UNKNOWN')
-            logger.info(f"📊 ACCOUNT: Balance:{balance} Equity:{equity} Margin:{margin_level}% Free:{free_margin}")
-        else:
-            logger.warning("⚠️ No account info available")
-        
-        # 1. 🎯 Dynamic Entry Analysis
-        if self.dynamic_adaptive_entry:
+            # 🚀 DYNAMIC ADAPTIVE ANALYSIS - Ultimate Trading Intelligence
+            account_info = self.mt5_connection.get_account_info() if self.mt5_connection else {}
+            
+            # 🔍 DEBUG: Account Info Analysis
+            if account_info:
+                margin_level = account_info.get('margin_level', 'UNKNOWN')
+                balance = account_info.get('balance', 'UNKNOWN')
+                equity = account_info.get('equity', 'UNKNOWN')
+                free_margin = account_info.get('margin_free', 'UNKNOWN')
+                logger.info(f"📊 ACCOUNT: Balance:{balance} Equity:{equity} Margin:{margin_level}% Free:{free_margin}")
+            else:
+                logger.warning("⚠️ No account info available")
+            
+            # 1. 🎯 Dynamic Entry Analysis
+            if self.dynamic_adaptive_entry:
                 dynamic_entry_analysis = self.dynamic_adaptive_entry.analyze_dynamic_entry(
                     signal_direction=smart_signal_direction,
                     current_price=current_price,
@@ -534,11 +534,11 @@ class TradingSystem:
                     candle_data=candle
                 )
                 
-            # Override signal based on dynamic analysis
-            if not dynamic_entry_analysis.should_enter:
-                logger.info(f"🚫 DYNAMIC ENTRY BLOCKED: {dynamic_entry_analysis.reason}")
-                return  # Skip this entry
-                
+                # Override signal based on dynamic analysis
+                if not dynamic_entry_analysis.should_enter:
+                    logger.info(f"🚫 DYNAMIC ENTRY BLOCKED: {dynamic_entry_analysis.reason}")
+                    return  # Skip this entry
+                    
                 # Use dynamic direction and lot size
                 smart_signal_direction = dynamic_entry_analysis.direction
                 dynamic_lot_size = dynamic_entry_analysis.lot_size
