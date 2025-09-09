@@ -61,7 +61,7 @@ class ForceTradingMode:
             # คำนวณการเปลี่ยนแปลงราคา
             current_price = rates[-1]['close']
             prev_price = rates[-5]['close']  # 5 แท่งก่อน
-            price_change = (current_price - prev_price) * 10  # แปลงเป็น pips
+            price_change = (current_price - prev_price) * 0.1  # XAUUSD: 1 point = 0.1 pip
             
             # คำนวณ volume ratio
             recent_volumes = [r['tick_volume'] for r in rates[-5:]]
@@ -78,7 +78,7 @@ class ForceTradingMode:
                 high_close_prev = abs(rates[i]['high'] - rates[i-1]['close'])
                 low_close_prev = abs(rates[i]['low'] - rates[i-1]['close'])
                 true_range = max(high_low, high_close_prev, low_close_prev)
-                atr_values.append(true_range * 10)  # แปลงเป็น pips
+                atr_values.append(true_range * 0.1)  # XAUUSD: 1 point = 0.1 pip
             
             volatility = sum(atr_values[-10:]) / 10 if atr_values else 0.0
             

@@ -588,12 +588,12 @@ class AdvancedBreakoutRecovery:
             volume_ratio = avg_recent / avg_older if avg_older > 0 else 1.0
             
             # คำนวณ Momentum
-            price_change = (rates[-1]['close'] - rates[-5]['close']) * 10  # pips
+            price_change = (rates[-1]['close'] - rates[-5]['close']) * 0.1  # XAUUSD: 1 point = 0.1 pip
             momentum_strength = min(100, abs(price_change) * 3)
             
             # คำนวณ ATR Ratio
-            atr_recent = sum([(r['high'] - r['low']) * 10 for r in rates[-3:]]) / 3
-            atr_older = sum([(r['high'] - r['low']) * 10 for r in rates[-10:-3]]) / 7
+            atr_recent = sum([(r['high'] - r['low']) * 0.1 for r in rates[-3:]]) / 3
+            atr_older = sum([(r['high'] - r['low']) * 0.1 for r in rates[-10:-3]]) / 7
             atr_ratio = atr_recent / atr_older if atr_older > 0 else 1.0
             
             return {
