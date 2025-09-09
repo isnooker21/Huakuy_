@@ -66,6 +66,13 @@ class Dynamic7DSmartCloser:
         self.base_max_group_size = 50  # เพิ่มสูงสุดให้ระบบเลือกได้มากขึ้น
         self.min_group_size = 1        # ลดต่ำสุดให้ระบบยืดหยุ่นมากขึ้น
         
+        # 🎯 SMART CLOSING STRATEGY: ปิดเฉพาะไม้กำไร + ไม้เก่า (ไม่ปิดขาดทุนเลย)
+        self.smart_closing_enabled = True
+        self.min_net_profit = 0.1      # กำไรสุทธิขั้นต่ำ $0.1
+        self.max_acceptable_loss = 0.0  # ไม่ยอมรับขาดทุนเลย = $0
+        self.old_position_hours = 24    # ไม้เก่า = ถือเกิน 24 ชั่วโมง
+        self.far_loss_threshold = 0.0   # ไม่ปิดไม้ขาดทุนเลย = $0
+        
         # Dynamic thresholds
         self.emergency_margin_threshold = 150.0  # Margin Level < 150%
         self.critical_margin_threshold = 120.0   # Margin Level < 120%
@@ -1465,11 +1472,50 @@ class Dynamic7DSmartCloser:
             return 'very_far'
     
     def _intelligent_closing_decision(self, result: Dict, dynamic_params: Dict) -> bool:
-        """🧠 การตัดสินใจปิดแบบอัจฉริยะ - ไม่ใช้เกณฑ์คงที่"""
+        """🧠 การตัดสินใจปิดแบบอัจฉริยะ - ปิดไม้กำไร + ไม้ขาดทุนไกล + ไม้เก่า"""
         try:
             net_pnl = result.get('net_pnl', 0)
             positions = result.get('positions', [])
             portfolio_improvement = result.get('portfolio_improvement', {})
+            
+            # 🎯 SMART CLOSING STRATEGY CHECK
+            if self.smart_closing_enabled:
+                # ตรวจสอบว่าการปิดนี้ฉลาดหรือไม่
+                if net_pnl < self.min_net_profit:
+                    logger.debug(f"🚫 SMART CLOSING: Rejecting - Net P&L ${net_pnl:.2f} < ${self.min_net_profit:.2f}")
+                    return False
+                
+                # วิเคราะห์ไม้ที่จะปิด (เฉพาะไม้กำไรและไม้เก่า)
+                profitable_positions = [pos for pos in positions if getattr(pos, 'profit', 0) > 0]
+                old_positions = []
+                
+                current_time = time.time()
+                for pos in positions:
+                    profit = getattr(pos, 'profit', 0)
+                    open_time = getattr(pos, 'time', current_time)
+                    hours_old = (current_time - open_time) / 3600
+                    
+                    # ไม้เก่าที่มีกำไรหรือไม่ขาดทุน
+                    if hours_old > self.old_position_hours and profit >= 0:
+                        old_positions.append(pos)
+                
+                # ตรวจสอบว่ามีไม้ที่ควรปิดหรือไม่ (เฉพาะไม้กำไรและไม้เก่า)
+                has_profitable = len(profitable_positions) > 0
+                has_old_positions = len(old_positions) > 0
+                
+                if not (has_profitable or has_old_positions):
+                    logger.debug(f"🚫 SMART CLOSING: Rejecting - No profitable or old positions (no loss positions allowed)")
+                    return False
+                
+                # ตรวจสอบว่าไม่มีไม้ขาดทุนในชุดที่จะปิด
+                losing_positions = [pos for pos in positions if getattr(pos, 'profit', 0) < 0]
+                if len(losing_positions) > 0:
+                    logger.debug(f"🚫 SMART CLOSING: Rejecting - Contains {len(losing_positions)} losing positions (not allowed)")
+                    return False
+                
+                logger.debug(f"✅ SMART CLOSING: Accepting - Net P&L ${net_pnl:.2f}, "
+                           f"Profitable: {len(profitable_positions)}, "
+                           f"Old: {len(old_positions)} (No loss positions)")
             
             # 🎯 INTELLIGENT FACTORS (ไม่ใช้เกณฑ์กำไรคงที่)
             
