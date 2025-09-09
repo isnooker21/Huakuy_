@@ -967,71 +967,27 @@ class MT5Connection:
         total_profit = 0.0
         results_lock = threading.Lock()
         
-        def close_single_position(ticket):
-            """ปิดตำแหน่งเดียวใน thread แยก"""
-            try:
-                result = self.close_position_direct(ticket)
-                
-                with results_lock:
-                    if result and result.get('retcode') == 10009:
-                        closed_tickets.append(ticket)
-                        if 'profit' in result:
-                            nonlocal total_profit
-                            total_profit += result['profit']
-                        logger.info(f"✅ ปิด Position {ticket} สำเร็จ (Parallel)")
-                        return {'success': True, 'ticket': ticket, 'profit': result.get('profit', 0)}
-                    else:
-                        failed_tickets.append(ticket)
-                        retcode = result.get('retcode', 0) if result else 0
-                        error_msg = self._get_retcode_description(retcode) if result else 'No result'
-                        
-                        # 🎯 Special handling for 10039 (Position already closed)
-                        if retcode == 10039:
-                            logger.warning(f"⚠️ Position {ticket} already closed - skipping")
-                            return {'success': False, 'ticket': ticket, 'error': error_msg, 'already_closed': True}
-                        else:
-                            logger.error(f"❌ ปิด Position {ticket} ล้มเหลว: {error_msg}")
-                            return {'success': False, 'ticket': ticket, 'error': error_msg}
-                        
-            except Exception as e:
-                with results_lock:
-                    failed_tickets.append(ticket)
-                logger.error(f"❌ Error closing position {ticket}: {e}")
-                return {'success': False, 'ticket': ticket, 'error': str(e)}
+        # 🚫 REMOVED: Single position closing - User explicitly prohibited individual position closing
+        # All positions must be closed as groups only to maintain portfolio balance
         
-        # ปิดแบบ Parallel ถ้ามีหลายตัว
-        if len(tickets) > 1:
-            logger.info(f"🚀 เริ่มปิดกลุ่ม Position แบบ Parallel: {len(tickets)} ตัว")
-            
-            # ใช้ ThreadPoolExecutor เพื่อปิดพร้อมกัน
-            max_workers = min(len(tickets), 10)  # ไม่เกิน 10 threads
-            with ThreadPoolExecutor(max_workers=max_workers) as executor:
-                # Submit ทุก position
-                future_to_ticket = {executor.submit(close_single_position, ticket): ticket for ticket in tickets}
-                
-                # รอผลลัพธ์
-                for future in as_completed(future_to_ticket, timeout=30):
-                    ticket = future_to_ticket[future]
-                    try:
-                        result = future.result()
-                    except Exception as e:
-                        logger.error(f"❌ Thread error for ticket {ticket}: {e}")
-                        with results_lock:
-                            failed_tickets.append(ticket)
-        else:
-            # ถ้ามีตัวเดียว ใช้วิธีปกติ
-            logger.info(f"🎯 ปิด Position เดียว: {tickets[0]}")
-            close_single_position(tickets[0])
+        # 🚫 NO SINGLE POSITION CLOSING: ปฏิเสธการปิดแค่ตัวเดียว
+        if len(tickets) < 2:
+            logger.warning(f"🚫 REJECTED: Cannot close single position - minimum 2 positions required")
+            logger.warning(f"🚫 USER POLICY: No individual position closing allowed")
+            return {
+                'success': False,
+                'closed_tickets': [],
+                'failed_tickets': tickets,
+                'rejected_tickets': tickets,
+                'total_profit': 0.0,
+                'message': 'Single position closing prohibited by user policy'
+            }
         
-        success = len(closed_tickets) > 0
-        return {
-            'success': success,
-            'closed_tickets': closed_tickets,
-            'failed_tickets': failed_tickets,
-            'rejected_tickets': [],  # ไม่มี rejection เพราะไม่เช็คอะไร
-            'total_profit': total_profit,
-            'message': f'Closed {len(closed_tickets)}/{len(tickets)} positions'
-        }
+        # ✅ GROUP CLOSING ONLY: ปิดเป็นกลุ่มเท่านั้น
+        logger.info(f"✅ GROUP CLOSING: {len(tickets)} positions - following user policy")
+        
+        # ใช้ close_positions_group_with_spread_check แทน
+        return self.close_positions_group_with_spread_check(tickets)
     
     def close_positions_group_with_spread_check(self, tickets: List[int]) -> Dict:
         """
@@ -1122,20 +1078,17 @@ class MT5Connection:
             'message': message
         }
     
-    def close_position_direct(self, ticket: int) -> Optional[Dict]:
+    # 🚫 REMOVED: close_position_safe() - User explicitly prohibited individual position closing
+    
+    # 🚫 REMOVED: close_position_direct() - User explicitly prohibited individual position closing
+    def close_position_direct_REMOVED(self, ticket: int) -> Optional[Dict]:
         """
         ปิด Position โดยตรง - ⚠️ DEPRECATED: ควรใช้ close_position แทน
+        🚫 WARNING: This method bypasses Zero Loss Policy - use with caution
         """
         try:
-            # 🚫 เพิ่มการเช็ค spread เพื่อป้องกันปิดติดลบ - DISABLED FOR EASIER CLOSING
-            # profit_info = self.calculate_position_profit_with_spread(ticket)
-            # if not profit_info or not profit_info.get('should_close', False):
-            #     logger.warning(f"🚫 Position {ticket} ไม่ผ่านการเช็ค spread - ไม่ปิด")
-            #     return {
-            #         'retcode': 10027,  # TRADE_RETCODE_REJECT
-            #         'error_description': 'ไม่ผ่านการเช็ค spread',
-            #         'profit_info': profit_info
-            #     }
+            # 🚫 ZERO LOSS POLICY: เช็คกำไรก่อนปิด
+            logger.warning(f"🚨 DIRECT CLOSE WARNING: Position {ticket} bypassing Zero Loss Policy!")
             
             # ดึงข้อมูล Position และเช็คว่ายังมีอยู่หรือไม่
             position = mt5.positions_get(ticket=ticket)
