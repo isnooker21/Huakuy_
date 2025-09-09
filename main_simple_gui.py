@@ -269,6 +269,15 @@ class SimpleBreakoutTradingSystemGUI:
                     time.sleep(1)
                     continue
                 
+                # 🕐 Log market status (every 5 minutes)
+                if not hasattr(self, '_last_market_status_log'):
+                    self._last_market_status_log = 0
+                
+                current_time = time.time()
+                if current_time - self._last_market_status_log >= 300:  # 5 minutes
+                    self.mt5_connection.log_market_status(self.actual_symbol or "XAUUSD")
+                    self._last_market_status_log = current_time
+                
                 # Process Simple Breakout for all timeframes
                 self._process_simple_breakout(current_candle)
                 
@@ -276,7 +285,6 @@ class SimpleBreakoutTradingSystemGUI:
                 if not hasattr(self, '_last_position_management_time'):
                     self._last_position_management_time = 0
                 
-                current_time = time.time()
                 if current_time - self._last_position_management_time >= 10:  # Every 10 seconds
                     self._handle_position_management(current_candle)
                     self._last_position_management_time = current_time
@@ -736,6 +744,12 @@ class SimpleBreakoutTradingSystemGUI:
             if not self.dynamic_7d_smart_closer:
                 return
             
+            # 🕐 Check market status before closing
+            market_status = self.mt5_connection.get_market_status(self.actual_symbol or "XAUUSD")
+            if not market_status.get('is_market_open', False):
+                logger.debug(f"💤 Market is closed - skipping closing analysis")
+                return
+            
             account_info = self.mt5_connection.get_account_info()
             positions = self.order_manager.active_positions
             
@@ -746,7 +760,10 @@ class SimpleBreakoutTradingSystemGUI:
             market_conditions = {
                 'current_price': candle.close,
                 'volatility': 'medium',  # Could be enhanced with real volatility calculation
-                'trend': 'neutral'       # Could be enhanced with real trend analysis
+                'trend': 'neutral',      # Could be enhanced with real trend analysis
+                'market_open': market_status.get('is_market_open', False),
+                'active_sessions': market_status.get('active_sessions', []),
+                'london_ny_overlap': market_status.get('london_ny_overlap', False)
             }
             
             closing_result = self.dynamic_7d_smart_closer.find_optimal_closing(
