@@ -632,20 +632,22 @@ class TradingConditions:
             # ตรวจสอบว่าเป็น Breakout Scenario หรือไม่
             gap_pips = (max_buy_price - min_sell_price) * 0.1  # XAUUSD: 1 point = 0.1 pip
             
-            # หลวมขึ้น: อนุญาตถ้า gap ไม่ใหญ่มาก (< 200 pips สำหรับ Recovery System)
-            if gap_pips < 200.0:  # เพิ่มจาก 50 เป็น 200 pips เพื่อให้เหมาะกับ Recovery/Grid System
-                logger.info(f"⚡ Price Hierarchy Override: Gap={gap_pips:.1f} pips ({gap_pips*10:.0f} จุด) - Recovery System")
-                return {'valid': True, 'reason': f'Recovery System - {gap_pips:.1f} pips < 200 pips'}
+            # 🎯 STRICTER RULES: ลด exception cases ให้เข้มงวดขึ้น
             
-            # อนุญาตถ้ามี positions น้อย (< 10 ไม้) - เพิ่มจาก 5 เป็น 10
-            if len(positions) < 10:
-                logger.info(f"⚡ Price Hierarchy Override: Only {len(positions)} positions (Allow flexibility)")
-                return {'valid': True, 'reason': f'Few positions ({len(positions)}) - Allow flexibility'}
+            # อนุญาตเฉพาะ gap เล็กมาก (< 50 pips สำหรับ Recovery System) - ลดจาก 200 เป็น 50
+            if gap_pips < 50.0:
+                logger.info(f"⚡ Price Hierarchy Override: Small gap {gap_pips:.1f} pips - Recovery System")
+                return {'valid': True, 'reason': f'Small gap {gap_pips:.1f} pips < 50 pips'}
             
-            # อนุญาตถ้ามี positions เยอะ (> 8 ไม้) - เพื่อ recovery
-            if len(positions) > 8:  # ลดจาก 15 เป็น 8 เพื่อให้เข้า Recovery mode เร็วขึ้น
-                logger.info(f"⚡ Price Hierarchy Override: Recovery mode ({len(positions)} positions)")
-                return {'valid': True, 'reason': f'Recovery mode ({len(positions)} positions) - Hierarchy relaxed'}
+            # อนุญาตถ้ามี positions น้อยมาก (< 5 ไม้) - ลดจาก 10 เป็น 5
+            if len(positions) < 5:
+                logger.info(f"⚡ Price Hierarchy Override: Very few positions ({len(positions)}) - Allow flexibility")
+                return {'valid': True, 'reason': f'Very few positions ({len(positions)}) - Allow flexibility'}
+            
+            # อนุญาตถ้ามี positions เยอะมาก (> 15 ไม้) - เพิ่มจาก 8 เป็น 15 เพื่อเข้มงวดขึ้น
+            if len(positions) > 15:
+                logger.info(f"⚡ Price Hierarchy Override: Emergency recovery mode ({len(positions)} positions)")
+                return {'valid': True, 'reason': f'Emergency recovery mode ({len(positions)} positions) - Hierarchy relaxed'}
             
             return {
                 'valid': False,
@@ -722,13 +724,43 @@ class TradingConditions:
         return boundaries
     
     def _should_force_counter_trade(self, positions: List[Position], current_price: float, boundaries: Dict[str, float]) -> Dict[str, Any]:
-        """⚡ ตรวจสอบว่าต้อง Force Trade หรือไม่"""
+        """⚡ ตรวจสอบว่าต้อง Force Trade หรือไม่ - Enhanced with Extreme Zone Logic"""
         result = {
             'should_force': False,
             'forced_direction': '',
             'reason': ''
         }
         
+        if not positions:
+            return result
+        
+        # 🎯 NEW: Extreme Zone Detection - ไม้บนสุด/ล่างสุดต้องมี SELL/BUY
+        buy_prices = [pos.price_open for pos in positions if pos.type == 0]
+        sell_prices = [pos.price_open for pos in positions if pos.type == 1]
+        
+        if buy_prices and sell_prices:
+            max_position_price = max(max(buy_prices), max(sell_prices))  # ไม้บนสุด
+            min_position_price = min(min(buy_prices), min(sell_prices))  # ไม้ล่างสุด
+            
+            # 🔝 ตรวจสอบไม้บนสุด - ต้องมี SELL
+            top_sells = [pos for pos in positions if pos.type == 1 and pos.price_open >= max_position_price - 5.0]  # ใกล้บนสุด 5 จุด
+            if not top_sells and current_price >= max_position_price - 10.0:  # ราคาใกล้บนสุด
+                result['should_force'] = True
+                result['forced_direction'] = 'SELL'
+                result['reason'] = f"Force SELL: No SELL at top zone (Max: {max_position_price:.2f}, Current: {current_price:.2f})"
+                logger.info(f"🔝 EXTREME ZONE FORCE: {result['reason']}")
+                return result
+            
+            # 🔻 ตรวจสอบไม้ล่างสุด - ต้องมี BUY  
+            bottom_buys = [pos for pos in positions if pos.type == 0 and pos.price_open <= min_position_price + 5.0]  # ใกล้ล่างสุด 5 จุด
+            if not bottom_buys and current_price <= min_position_price + 10.0:  # ราคาใกล้ล่างสุด
+                result['should_force'] = True
+                result['forced_direction'] = 'BUY'
+                result['reason'] = f"Force BUY: No BUY at bottom zone (Min: {min_position_price:.2f}, Current: {current_price:.2f})"
+                logger.info(f"🔻 EXTREME ZONE FORCE: {result['reason']}")
+                return result
+        
+        # 🎯 ORIGINAL: Zone Boundary Logic (Keep as backup)
         # ตรวจสอบ Upper Zone (ราคาสูงเกินไป → บังคับ SELL)
         if boundaries['upper_zone_start'] > 0 and current_price >= boundaries['upper_zone_start']:
             # เช็คว่ามี SELL ในโซนนี้หรือไม่
