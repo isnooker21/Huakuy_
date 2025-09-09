@@ -390,16 +390,16 @@ class DynamicAdaptiveEntrySystem:
         try:
             base_confidence = 50.0
             
-            # Market condition confidence
+            # Market condition confidence - เพิ่ม confidence ในตลาดเงียบ
             market_confidence = {
                 MarketCondition.TRENDING_UP: 75.0,
                 MarketCondition.TRENDING_DOWN: 75.0,
                 MarketCondition.BREAKOUT: 80.0,
-                MarketCondition.RANGING: 60.0,
-                MarketCondition.VOLATILE: 45.0,
-                MarketCondition.QUIET: 55.0,
-                MarketCondition.REVERSAL: 40.0
-            }.get(market_condition, 50.0)
+                MarketCondition.RANGING: 65.0,    # เพิ่มจาก 60
+                MarketCondition.VOLATILE: 50.0,   # เพิ่มจาก 45
+                MarketCondition.QUIET: 70.0,      # เพิ่มจาก 55 เป็น 70
+                MarketCondition.REVERSAL: 45.0    # เพิ่มจาก 40
+            }.get(market_condition, 55.0)
             
             # Portfolio health confidence
             health_confidence = {
@@ -450,8 +450,8 @@ class DynamicAdaptiveEntrySystem:
             equity = account_info.get('equity', 10000)
             balance = account_info.get('balance', 10000)
             
-            # Margin call risk
-            if margin_level < 150:
+            # Margin call risk - ปรับให้เข้มงวดน้อยลง
+            if margin_level < 100:  # เปลี่ยนจาก 150 เป็น 100
                 overrides.append("MARGIN_CALL_RISK")
             
             # Equity protection
@@ -487,14 +487,14 @@ class DynamicAdaptiveEntrySystem:
             if any(override in emergency_overrides for override in critical_overrides):
                 return False
             
-            # Dynamic confidence threshold
+            # Dynamic confidence threshold - ลดให้เข้าได้ง่ายขึ้น
             health_threshold = {
-                PortfolioHealth.EXCELLENT: 40.0,
-                PortfolioHealth.GOOD: 50.0,
-                PortfolioHealth.MODERATE: 60.0,
-                PortfolioHealth.POOR: 70.0,
-                PortfolioHealth.CRITICAL: 85.0
-            }.get(portfolio_health, 60.0)
+                PortfolioHealth.EXCELLENT: 25.0,  # ลดจาก 40 เป็น 25
+                PortfolioHealth.GOOD: 35.0,       # ลดจาก 50 เป็น 35
+                PortfolioHealth.MODERATE: 45.0,   # ลดจาก 60 เป็น 45
+                PortfolioHealth.POOR: 60.0,       # ลดจาก 70 เป็น 60
+                PortfolioHealth.CRITICAL: 75.0    # ลดจาก 85 เป็น 75
+            }.get(portfolio_health, 45.0)
             
             # Risk-adjusted threshold
             risk_threshold = health_threshold + (risk_analysis['risk_percentage'] * 500)

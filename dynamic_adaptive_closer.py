@@ -73,11 +73,11 @@ class DynamicAdaptiveCloser:
         self.mt5_connection = mt5_connection
         self.symbol = symbol
         
-        # 🎯 Dynamic Closing Parameters
-        self.min_profit_threshold = 5.0     # Dynamic based on volatility
-        self.max_loss_threshold = -200.0    # Dynamic based on balance
-        self.balance_tolerance = 0.2        # 20% imbalance tolerance
-        self.margin_safety_level = 200      # Dynamic margin level
+        # 🎯 Dynamic Closing Parameters - ปรับให้ปิดได้ง่ายขึ้น
+        self.min_profit_threshold = 2.0     # ลดจาก 5 เป็น 2
+        self.max_loss_threshold = -100.0    # ลดจาก -200 เป็น -100
+        self.balance_tolerance = 0.3        # เพิ่มจาก 20% เป็น 30%
+        self.margin_safety_level = 150      # ลดจาก 200 เป็น 150
         
         # 📊 Market Timing Parameters
         self.volatility_window = 14         # periods for volatility calculation
@@ -343,11 +343,11 @@ class DynamicAdaptiveCloser:
             return []
     
     def _select_profitable_positions(self, positions: List[Any], current_price: float) -> List[Any]:
-        """💰 เลือกตำแหน่งที่มีกำไร"""
-        profitable = [pos for pos in positions if getattr(pos, 'profit', 0) > 10]
+        """💰 เลือกตำแหน่งที่มีกำไร - ลดเกณฑ์ให้ปิดได้ง่ายขึ้น"""
+        profitable = [pos for pos in positions if getattr(pos, 'profit', 0) > 1]  # ลดจาก 10 เป็น 1
         # Sort by profit descending
         profitable.sort(key=lambda pos: getattr(pos, 'profit', 0), reverse=True)
-        return profitable[:5]  # Top 5 profitable
+        return profitable[:8]  # เพิ่มจาก 5 เป็น 8
     
     def _select_balance_positions(self, positions: List[Any], current_price: float) -> List[Any]:
         """⚖️ เลือกตำแหน่งเพื่อสมดุล"""
@@ -374,12 +374,12 @@ class DynamicAdaptiveCloser:
         groups = []
         
         try:
-            profitable_positions = [pos for pos in positions if getattr(pos, 'profit', 0) > 10]
+            profitable_positions = [pos for pos in positions if getattr(pos, 'profit', 0) > 1]  # ลดจาก 10 เป็น 1
             
             if profitable_positions:
-                # Group by profit level
-                high_profit = [pos for pos in profitable_positions if getattr(pos, 'profit', 0) > 50]
-                medium_profit = [pos for pos in profitable_positions if 10 < getattr(pos, 'profit', 0) <= 50]
+                # Group by profit level - ลดเกณฑ์ให้ปิดได้ง่ายขึ้น
+                high_profit = [pos for pos in profitable_positions if getattr(pos, 'profit', 0) > 20]  # ลดจาก 50 เป็น 20
+                medium_profit = [pos for pos in profitable_positions if 2 < getattr(pos, 'profit', 0) <= 20]  # ลดจาก 10 เป็น 2
                 
                 if high_profit:
                     groups.append(ClosingGroup(
