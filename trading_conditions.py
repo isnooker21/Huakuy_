@@ -199,8 +199,15 @@ class TradingConditions:
         self.enable_7d_entry_intelligence = True
         self.intelligent_position_manager = None  # จะถูกตั้งค่าจาก main_new.py
         
-        # 🎯 Smart Entry Timing System
-        self.smart_entry_timing = None  # จะถูกตั้งค่าจาก main_new.py
+        # 🎯 Smart Entry Timing System - Initialize directly here
+        try:
+            from smart_entry_timing import create_smart_entry_timing
+            self.smart_entry_timing = create_smart_entry_timing(symbol="XAUUSD")
+            logger.info("✅ Smart Entry Timing initialized in TradingConditions")
+        except Exception as e:
+            logger.error(f"❌ Failed to initialize Smart Entry Timing: {e}")
+            self.smart_entry_timing = None
+            
         self.strategic_position_manager = None  # จะถูกตั้งค่าจาก main_new.py
         
     def check_smart_entry_timing(self, signal_direction: str, current_price: float, 
@@ -208,9 +215,9 @@ class TradingConditions:
         """🎯 เช็คเวลาเข้าที่ฉลาด - ป้องกัน BUY สูง SELL ต่ำ"""
         try:
             if not self.smart_entry_timing:
-                logger.warning(f"⚠️ SMART ENTRY TIMING IS NULL - ALLOWING ALL ENTRIES!")
-                logger.warning(f"   This means Price Hierarchy is NOT being enforced!")
-                return {'approved': True, 'reason': 'Smart Entry Timing not available'}
+                logger.error(f"🚨 CRITICAL: SMART ENTRY TIMING IS NULL - SYSTEM ERROR!")
+                logger.error(f"   Price Hierarchy CANNOT be enforced - BLOCKING ALL ENTRIES!")
+                return {'approved': False, 'reason': 'CRITICAL: Smart Entry Timing failed to initialize'}
             
             logger.info(f"🎯 SMART ENTRY CHECK: {signal_direction} at {current_price:.2f}")
             
