@@ -32,7 +32,7 @@ from gui import TradingGUI
 
 # ✅ KEEP POSITION MANAGEMENT & CLOSING SYSTEMS
 from dynamic_position_modifier import create_dynamic_position_modifier
-from dynamic_adaptive_closer import create_dynamic_adaptive_closer
+# 🚫 REMOVED: dynamic_adaptive_closer - Replaced by Enhanced 7D Smart Closer
 
 # 🚀 SIMPLE & CLEAN LOGGING CONFIGURATION
 logging.basicConfig(
@@ -48,7 +48,7 @@ logging.basicConfig(
 logging.getLogger('mt5_connection').setLevel(logging.WARNING)
 logging.getLogger('order_management').setLevel(logging.INFO)
 logging.getLogger('dynamic_position_modifier').setLevel(logging.INFO)
-logging.getLogger('dynamic_adaptive_closer').setLevel(logging.INFO)
+# 🚫 REMOVED: dynamic_adaptive_closer logging - Replaced by Enhanced 7D Smart Closer
 logging.getLogger('calculations').setLevel(logging.ERROR)
 
 logger = logging.getLogger(__name__)
@@ -80,7 +80,7 @@ class SimpleBreakoutTradingSystemGUI:
         
         # ✅ KEEP POSITION MANAGEMENT & CLOSING SYSTEMS
         self.dynamic_position_modifier = None
-        self.dynamic_adaptive_closer = None
+        # 🚫 REMOVED: dynamic_adaptive_closer - Replaced by Enhanced 7D Smart Closer
         self.dynamic_7d_smart_closer = None
         
         # 🎯 SIMPLE BREAKOUT STATE
@@ -174,10 +174,7 @@ class SimpleBreakoutTradingSystemGUI:
                 symbol=self.actual_symbol
             )
             
-            self.dynamic_adaptive_closer = create_dynamic_adaptive_closer(
-                mt5_connection=self.mt5_connection,
-                symbol=self.actual_symbol
-            )
+            # 🚫 REMOVED: dynamic_adaptive_closer initialization - Replaced by Enhanced 7D Smart Closer
             
             logger.info("✅ SIMPLE BREAKOUT SYSTEM WITH GUI ready!")
             return True
@@ -225,19 +222,13 @@ class SimpleBreakoutTradingSystemGUI:
             # 🚀 Initialize 7D Smart Closer
             try:
                 from dynamic_7d_smart_closer import create_dynamic_7d_smart_closer
-                from intelligent_position_manager import IntelligentPositionManager
+                # 🚫 REMOVED: intelligent_position_manager import - Replaced by internal 7D analysis
                 
                 # Create intelligent manager with required parameters
-                intelligent_manager = IntelligentPositionManager(
-                    mt5_connection=self.mt5_connection,
-                    order_manager=self.order_manager,
-                    symbol=self.base_symbol
-                )
+                # 🚫 REMOVED: Intelligent Position Manager - Replaced by internal 7D analysis
                 
-                # Create 7D Smart Closer
-                self.dynamic_7d_smart_closer = create_dynamic_7d_smart_closer(
-                    intelligent_manager=intelligent_manager
-                )
+                # Create Enhanced 7D Smart Closer (Standalone Mode)
+                self.dynamic_7d_smart_closer = create_dynamic_7d_smart_closer()
                 logger.info("🚀 7D Smart Closer initialized successfully")
             except Exception as e:
                 logger.error(f"❌ Failed to initialize 7D Smart Closer: {e}")
