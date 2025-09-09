@@ -450,10 +450,13 @@ class DynamicAdaptiveEntrySystem:
             equity = account_info.get('equity', 10000)
             balance = account_info.get('balance', 10000)
             
-            # Margin call risk - ปรับให้เข้มงวดน้อยลง
-            if margin_level < 100:  # เปลี่ยนจาก 150 เป็น 100
+            # Margin call risk - แก้ไขการตรวจสอบเมื่อไม่มี positions
+            if len(positions) > 0 and margin_level > 0 and margin_level < 100:
                 overrides.append("MARGIN_CALL_RISK")
                 logger.warning(f"🚨 MARGIN_CALL_RISK: {margin_level}% < 100%")
+            elif len(positions) == 0:
+                # ไม่มี positions = ไม่มีความเสี่ยง margin
+                logger.debug(f"📊 No positions - Margin check skipped (Level: {margin_level}%)")
             
             # Equity protection
             if equity < balance * 0.7:
