@@ -1031,30 +1031,60 @@ class MT5Connection:
             
             def close_single_position(request_data):
                 ticket = request_data['ticket']
-                try:
-                    result = mt5.order_send(request_data)
-                    if result and result.retcode == 10009:
-                        # คำนวณกำไรจาก position ที่ปิด
-                        position = mt5.positions_get(ticket=ticket)
-                        profit = position[0].profit if position and len(position) > 0 else 0.0
-                        return {'ticket': ticket, 'success': True, 'profit': profit}
-                    else:
-                        return {'ticket': ticket, 'success': False, 'profit': 0.0}
-                except Exception as e:
-                    logger.error(f"❌ Error closing {ticket}: {e}")
-                    return {'ticket': ticket, 'success': False, 'profit': 0.0}
+                max_retries = 2
+                
+                for attempt in range(max_retries):
+                    try:
+                        # Add delay before each order (longer for retries)
+                        delay = 0.1 if attempt == 0 else 0.2
+                        time.sleep(delay)
+                        
+                        result = mt5.order_send(request_data)
+                        if result and result.retcode == 10009:
+                            # คำนวณกำไรจาก position ที่ปิด
+                            position = mt5.positions_get(ticket=ticket)
+                            profit = position[0].profit if position and len(position) > 0 else 0.0
+                            logger.debug(f"✅ Order sent successfully: {ticket} (retcode: {result.retcode}, attempt: {attempt+1})")
+                            return {'ticket': ticket, 'success': True, 'profit': profit}
+                        else:
+                            error_msg = result.comment if result else "No result"
+                            retcode = result.retcode if result else 'None'
+                            
+                            # Check if it's a retryable error
+                            if attempt < max_retries - 1 and retcode in [10004, 10006, 10007]:  # Common retryable errors
+                                logger.warning(f"⚠️ Retryable error for {ticket} (attempt {attempt+1}/{max_retries}): {retcode} - {error_msg}")
+                                continue
+                            else:
+                                logger.warning(f"❌ Order failed: {ticket} (retcode: {retcode}, error: {error_msg}, attempt: {attempt+1})")
+                                return {'ticket': ticket, 'success': False, 'profit': 0.0}
+                                
+                    except Exception as e:
+                        if attempt < max_retries - 1:
+                            logger.warning(f"⚠️ Exception for {ticket} (attempt {attempt+1}/{max_retries}): {e}")
+                            time.sleep(0.1)
+                            continue
+                        else:
+                            logger.error(f"❌ Error closing {ticket}: {e}")
+                            return {'ticket': ticket, 'success': False, 'profit': 0.0}
+                
+                return {'ticket': ticket, 'success': False, 'profit': 0.0}
             
-            # Execute all closes concurrently
-            with ThreadPoolExecutor(max_workers=min(len(requests), 10)) as executor:
+            # Execute all closes with controlled timing
+            with ThreadPoolExecutor(max_workers=min(len(requests), 5)) as executor:  # ลด workers
                 # Add ticket to each request
                 for i, request in enumerate(requests):
                     request['ticket'] = tickets[i]
                 
-                # Submit all requests
-                future_to_request = {executor.submit(close_single_position, req): req for req in requests}
+                # Submit requests with small delays
+                futures = []
+                for i, request in enumerate(requests):
+                    if i > 0:  # Add small delay between submissions
+                        time.sleep(0.1)  # 100ms delay
+                    future = executor.submit(close_single_position, request)
+                    futures.append(future)
                 
-                # Collect results
-                for future in as_completed(future_to_request):
+                # Collect results with timeout
+                for future in as_completed(futures, timeout=30):
                     result = future.result()
                     if result['success']:
                         closed_tickets.append(result['ticket'])
