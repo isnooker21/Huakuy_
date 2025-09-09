@@ -525,6 +525,7 @@ class TradingSystem:
                 logger.warning("⚠️ No account info available")
             
             # 1. 🎯 Dynamic Entry Analysis
+            dynamic_lot_size = 0.01  # Default lot size
             if self.dynamic_adaptive_entry:
                 dynamic_entry_analysis = self.dynamic_adaptive_entry.analyze_dynamic_entry(
                     signal_direction=smart_signal_direction,
@@ -536,7 +537,8 @@ class TradingSystem:
                 
                 # Override signal based on dynamic analysis
                 if not dynamic_entry_analysis.should_enter:
-                    logger.info(f"🚫 DYNAMIC ENTRY BLOCKED: {dynamic_entry_analysis.reason}")
+                    reasons = ', '.join(dynamic_entry_analysis.entry_reasons)
+                    logger.info(f"🚫 DYNAMIC ENTRY BLOCKED: {reasons}")
                     return  # Skip this entry
                     
                 # Use dynamic direction and lot size
@@ -587,7 +589,8 @@ class TradingSystem:
                 signal=basic_signal,
                 candle=candle,
                 current_state=portfolio_state,
-                volume_history=self.volume_history
+                volume_history=self.volume_history,
+                dynamic_lot_size=dynamic_lot_size  # ส่ง dynamic lot size จาก Dynamic Entry System
             )
             
             if decision['should_enter']:
