@@ -249,10 +249,20 @@ class DynamicPositionModifier:
             open_time = getattr(position, 'time', datetime.now().timestamp())
             balance = account_info.get('balance', 10000)
             
-            # 1. Heavy Loss Detection
-            loss_threshold = max(self.heavy_loss_threshold, balance * -0.02)
-            if profit < loss_threshold:
+            # 1. 💸 Smart Loss Detection - ปรับตาม Lot Size
+            lot_size = getattr(position, 'volume', 0.01)
+            
+            # Dynamic loss threshold based on lot size and balance
+            base_loss_per_lot = -50.0  # -$50 per 0.01 lot
+            lot_adjusted_loss = base_loss_per_lot * (lot_size / 0.01)
+            balance_adjusted_loss = balance * -0.015  # 1.5% of balance
+            
+            # Use the more restrictive threshold
+            smart_loss_threshold = max(lot_adjusted_loss, balance_adjusted_loss, self.heavy_loss_threshold)
+            
+            if profit < smart_loss_threshold:
                 problems.append(PositionProblem.HEAVY_LOSS)
+                logger.debug(f"💸 Smart Loss: ${profit:.2f} < ${smart_loss_threshold:.2f} (Lot:{lot_size}, Balance%:{balance_adjusted_loss:.2f})")
             
             # 2. Distance Detection
             distance = abs(current_price - open_price)
@@ -263,16 +273,35 @@ class DynamicPositionModifier:
             if distance > dynamic_distance_threshold:
                 problems.append(PositionProblem.DISTANCE_TOO_FAR)
             
-            # 3. Time Detection
+            # 3. ⏰ Smart Time Detection - ปรับตามความผันผวนและระยะห่าง
             current_time = datetime.now().timestamp()
             hours_held = (current_time - open_time) / 3600
             
-            # Dynamic time threshold based on market condition
-            market_speed = self._assess_market_speed()
-            dynamic_time_threshold = self.time_threshold_hours / (1 + market_speed)
+            # Calculate how much price moved during holding period
+            price_movement = abs(current_price - open_price)
+            volatility_factor = self._calculate_current_volatility(current_price)
             
-            if hours_held > dynamic_time_threshold:
+            # Dynamic time threshold based on price movement and volatility
+            # ถ้าราคาเคลื่อนไหวมาก = ตลาดเร็ว = ลดเวลาที่ยอมให้ถือ
+            # ถ้าราคาเคลื่อนไหวน้อย = ตลาดเงียบ = เพิ่มเวลาที่ยอมให้ถือ
+            base_time = self.time_threshold_hours
+            
+            if price_movement > 200:  # ราคาเคลื่อนไหวมาก (>200 points)
+                smart_time_threshold = base_time * 0.5  # ลดเวลาลง 50%
+                reason = "high_volatility"
+            elif price_movement > 100:  # ราคาเคลื่อนไหวปานกลาง
+                smart_time_threshold = base_time * 0.75  # ลดเวลาลง 25%
+                reason = "medium_volatility"
+            elif price_movement < 30:  # ราคาเคลื่อนไหวน้อย (<30 points)
+                smart_time_threshold = base_time * 2.0  # เพิ่มเวลาขึ้น 100%
+                reason = "low_volatility"
+            else:
+                smart_time_threshold = base_time
+                reason = "normal_volatility"
+            
+            if hours_held > smart_time_threshold:
                 problems.append(PositionProblem.TIME_TOO_LONG)
+                logger.debug(f"⏰ Smart Time: {hours_held:.1f}h > {smart_time_threshold:.1f}h (Movement:{price_movement:.1f}, {reason})")
             
             # 4. Margin Pressure Detection
             margin_level = account_info.get('margin_level', 1000)
