@@ -117,6 +117,10 @@ class TradingSystem:
         # GUI
         self.gui = None
         
+        # 🔒 Position Locking - ป้องกันการปิดซ้ำ
+        self.closing_positions = set()  # เก็บ tickets ที่กำลังปิดอยู่
+        self.closing_lock = threading.Lock()
+        
         # Initialize trading system
         
     def initialize_system(self) -> bool:
@@ -723,6 +727,36 @@ class TradingSystem:
         except Exception as e:
             logger.error(f"❌ Error in unified closing decision: {e}")
             return {'should_close': False, 'reason': f'Unified system error: {str(e)}', 'method': 'error'}
+    
+    def _filter_locked_positions(self, positions: List[Any]) -> List[Any]:
+        """🔒 กรองไม้ที่ไม่ได้ถูก lock ออกมา"""
+        with self.closing_lock:
+            filtered = []
+            for pos in positions:
+                ticket = getattr(pos, 'ticket', None)
+                if ticket and ticket not in self.closing_positions:
+                    filtered.append(pos)
+                else:
+                    logger.debug(f"🔒 Position {ticket} is already being closed - skipping")
+            return filtered
+    
+    def _lock_positions(self, positions: List[Any]):
+        """🔒 ล็อคไม้ก่อนปิด"""
+        with self.closing_lock:
+            for pos in positions:
+                ticket = getattr(pos, 'ticket', None)
+                if ticket:
+                    self.closing_positions.add(ticket)
+                    logger.debug(f"🔒 Locked position {ticket}")
+    
+    def _unlock_positions(self, positions: List[Any]):
+        """🔓 ปลดล็อคไม้หลังปิดเสร็จ"""
+        with self.closing_lock:
+            for pos in positions:
+                ticket = getattr(pos, 'ticket', None)
+                if ticket and ticket in self.closing_positions:
+                    self.closing_positions.remove(ticket)
+                    logger.debug(f"🔓 Unlocked position {ticket}")
             
     def check_exit_conditions(self, portfolio_state):
         """ตรวจสอบเงื่อนไขการปิด Position"""
@@ -771,23 +805,37 @@ class TradingSystem:
                 if closing_result.get('should_close', False):
                     positions_to_close = closing_result.get('positions_to_close', [])
                     if positions_to_close:
+                        # 🔒 Check for position locking conflicts
+                        filtered_positions = self._filter_locked_positions(positions_to_close)
+                        
+                        if not filtered_positions:
+                            logger.info("🔒 All selected positions are already being closed - skipping")
+                            return
+                        
                         # 📊 Log unified decision
                         method = closing_result.get('method', 'unified')
-                        count = len(positions_to_close)
+                        count = len(filtered_positions)
                         expected_pnl = closing_result.get('expected_pnl', 0.0)
                         reason = closing_result.get('reason', '')
                         
                         logger.info(f"🤝 UNIFIED DECISION ({method.upper()}): {count} positions")
                         logger.info(f"💰 Expected P&L: ${expected_pnl:.2f} - {reason}")
                         
-                        # 3. 🎯 Execute closing
-                        close_result = self.zone_position_manager.close_positions(positions_to_close)
-                        if close_result.get('success', False):
-                            closed_count = close_result.get('closed_count', 0)
-                            total_profit = close_result.get('total_profit', 0.0)
-                            logger.info(f"✅ UNIFIED SUCCESS: {closed_count} positions closed, ${total_profit:.2f} profit")
-                        else:
-                            logger.warning(f"❌ UNIFIED FAILED: {close_result.get('message', 'Unknown error')}")
+                        # 🔒 Lock positions before closing
+                        self._lock_positions(filtered_positions)
+                        
+                        try:
+                            # 3. 🎯 Execute closing
+                            close_result = self.zone_position_manager.close_positions(filtered_positions)
+                            if close_result.get('success', False):
+                                closed_count = close_result.get('closed_count', 0)
+                                total_profit = close_result.get('total_profit', 0.0)
+                                logger.info(f"✅ UNIFIED SUCCESS: {closed_count} positions closed, ${total_profit:.2f} profit")
+                            else:
+                                logger.warning(f"❌ UNIFIED FAILED: {close_result.get('message', 'Unknown error')}")
+                        finally:
+                            # 🔓 Always unlock positions after attempt
+                            self._unlock_positions(filtered_positions)
                         return
                 
                 # 🧠 OLD SYSTEMS REMOVED - ใช้ Unified System แทน
