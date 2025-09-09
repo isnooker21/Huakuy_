@@ -383,7 +383,7 @@ class DynamicAdaptiveCloser:
             else:
                 return []  # ไม่มีไม้ขาดทุน ไม่ส่ง
         else:
-            return []  # ไม่มีไม้กำไร
+            return []  # ไม่มีไม้กำไรกลุ่ม
     
     def _select_balance_positions(self, positions: List[Any], current_price: float) -> List[Any]:
         """⚖️ เลือกตำแหน่งเพื่อสมดุล"""

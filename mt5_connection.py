@@ -930,33 +930,42 @@ class MT5Connection:
         failed_tickets = []
         total_profit = 0.0
         
-        # 🚀 PRIORITY 1: Try legacy simple close (like old system)
-        # 🔧 FALLBACK: If legacy fails, use smart close
-        for ticket in tickets:
-            try:
-                # Try legacy method first (no filling type issues)
-                result = self._simple_close_legacy(ticket)
+        # 🚀 TRUE GROUP CLOSING: ปิดทั้งหมดพร้อมกัน
+        try:
+            # ใช้ MT5 OrderSendMultiple สำหรับปิดกลุ่ม
+            result = self._execute_true_group_close(tickets)
+            
+            if result and result.get('success', False):
+                closed_tickets = result.get('closed_tickets', [])
+                total_profit = result.get('total_profit', 0.0)
+                failed_tickets = result.get('failed_tickets', [])
                 
-                # If legacy fails, try smart method
-                if not result or result.get('retcode') != 10009:
-                    logger.debug(f"🔄 Legacy failed for {ticket}, trying smart close...")
-                    result = self._execute_group_close_single(ticket)
+                logger.info(f"✅ TRUE GROUP CLOSE: {len(closed_tickets)}/{len(tickets)} positions closed")
+                logger.info(f"💰 Total Profit: ${total_profit:.2f}")
                 
-                if result and result.get('retcode') == 10009:
-                    closed_tickets.append(ticket)
-                    # Get profit directly from result
-                    profit = result.get('profit', 0.0)
-                    total_profit += profit
-                    logger.debug(f"✅ GROUP CLOSE Success: {ticket} (profit: ${profit:.2f})")
-                else:
-                    failed_tickets.append(ticket)
-                    retcode = result.get('retcode', 0) if result else 0
-                    error_desc = self._get_retcode_description(retcode)
-                    logger.warning(f"❌ GROUP CLOSE Failed: {ticket} - {error_desc}")
-                    
-            except Exception as e:
-                failed_tickets.append(ticket)
-                logger.error(f"❌ GROUP CLOSE Error: {ticket} - {e}")
+                if failed_tickets:
+                    logger.warning(f"⚠️ Failed tickets: {failed_tickets}")
+            else:
+                # Fallback to individual closing if group close fails
+                logger.warning(f"⚠️ Group close failed, falling back to individual closing")
+                for ticket in tickets:
+                    try:
+                        result = self._simple_close_legacy(ticket)
+                        if result and result.get('retcode') == 10009:
+                            closed_tickets.append(ticket)
+                            profit = result.get('profit', 0.0)
+                            total_profit += profit
+                            logger.debug(f"✅ INDIVIDUAL CLOSE Success: {ticket} (profit: ${profit:.2f})")
+                        else:
+                            failed_tickets.append(ticket)
+                            logger.warning(f"❌ INDIVIDUAL CLOSE Failed: {ticket}")
+                    except Exception as e:
+                        failed_tickets.append(ticket)
+                        logger.error(f"❌ INDIVIDUAL CLOSE Error: {ticket} - {e}")
+                        
+        except Exception as e:
+            logger.error(f"❌ GROUP CLOSE Error: {e}")
+            failed_tickets = tickets.copy()
         
         success = len(closed_tickets) > 0
         message = f"Group Close: {len(closed_tickets)}/{len(tickets)} closed"
@@ -971,6 +980,82 @@ class MT5Connection:
             'total_profit': total_profit,
             'message': message
         }
+    
+    def _execute_true_group_close(self, tickets: List[int]) -> Dict:
+        """
+        🚀 TRUE GROUP CLOSING: ปิดทั้งหมดพร้อมกันด้วย MT5 OrderSendMultiple
+        """
+        try:
+            import MetaTrader5 as mt5
+            
+            if not mt5.initialize():
+                logger.error("❌ MT5 initialization failed")
+                return {'success': False, 'closed_tickets': [], 'failed_tickets': tickets, 'total_profit': 0.0}
+            
+            # สร้าง requests สำหรับปิดทั้งหมด
+            requests = []
+            for ticket in tickets:
+                # ดึงข้อมูล position
+                position = mt5.positions_get(ticket=ticket)
+                if position and len(position) > 0:
+                    pos = position[0]
+                    request = {
+                        "action": mt5.TRADE_ACTION_DEAL,
+                        "symbol": pos.symbol,
+                        "volume": pos.volume,
+                        "type": mt5.ORDER_TYPE_SELL if pos.type == 0 else mt5.ORDER_TYPE_BUY,
+                        "position": ticket,
+                        "price": mt5.symbol_info_tick(pos.symbol).bid if pos.type == 0 else mt5.symbol_info_tick(pos.symbol).ask,
+                        "deviation": 20,
+                        "magic": 0,
+                        "comment": "Group Close",
+                        "type_time": mt5.ORDER_TIME_GTC,
+                        "type_filling": mt5.ORDER_FILLING_IOC,
+                    }
+                    requests.append(request)
+            
+            if not requests:
+                logger.warning("⚠️ No valid positions found for group close")
+                return {'success': False, 'closed_tickets': [], 'failed_tickets': tickets, 'total_profit': 0.0}
+            
+            # ส่งคำสั่งปิดทั้งหมดพร้อมกัน
+            logger.info(f"🚀 SENDING GROUP CLOSE: {len(requests)} positions")
+            results = mt5.order_send_batch(requests)
+            
+            closed_tickets = []
+            failed_tickets = []
+            total_profit = 0.0
+            
+            if results:
+                for i, result in enumerate(results):
+                    ticket = tickets[i]
+                    if result.retcode == 10009:  # TRADE_RETCODE_DONE
+                        closed_tickets.append(ticket)
+                        # คำนวณกำไรจาก position ที่ปิด
+                        position = mt5.positions_get(ticket=ticket)
+                        if position and len(position) > 0:
+                            total_profit += position[0].profit
+                        logger.debug(f"✅ GROUP CLOSE Success: {ticket}")
+                    else:
+                        failed_tickets.append(ticket)
+                        logger.warning(f"❌ GROUP CLOSE Failed: {ticket} - {result.retcode}")
+            else:
+                logger.error("❌ No results from order_send_batch")
+                failed_tickets = tickets.copy()
+            
+            success = len(closed_tickets) > 0
+            logger.info(f"🎯 TRUE GROUP CLOSE RESULT: {len(closed_tickets)}/{len(tickets)} closed, Profit: ${total_profit:.2f}")
+            
+            return {
+                'success': success,
+                'closed_tickets': closed_tickets,
+                'failed_tickets': failed_tickets,
+                'total_profit': total_profit
+            }
+            
+        except Exception as e:
+            logger.error(f"❌ Error in true group close: {e}")
+            return {'success': False, 'closed_tickets': [], 'failed_tickets': tickets, 'total_profit': 0.0}
     
     def _simple_close_legacy(self, ticket: int) -> Optional[Dict]:
         """🚀 LEGACY SIMPLE CLOSE: Exactly like old system - no filling type"""
