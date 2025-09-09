@@ -61,10 +61,10 @@ class Dynamic7DSmartCloser:
         self.market_analyzer = market_analyzer
         self.price_action_analyzer = price_action_analyzer
         
-        # 🔄 Dynamic Parameters (ปรับตามสถานการณ์)
-        self.base_safety_buffer = 2.0  # Base กำไรขั้นต่ำ
-        self.base_max_group_size = 25  # Base สูงสุด
-        self.min_group_size = 2        # ต่ำสุดคงที่
+        # 🧠 INTELLIGENT Parameters (ไม่ใช้เกณฑ์คงที่ - ให้ระบบตัดสินใจเอง)
+        self.base_safety_buffer = 0.0  # ไม่มีเกณฑ์คงที่ - ให้ระบบตัดสินใจเอง
+        self.base_max_group_size = 50  # เพิ่มสูงสุดให้ระบบเลือกได้มากขึ้น
+        self.min_group_size = 1        # ลดต่ำสุดให้ระบบยืดหยุ่นมากขึ้น
         
         # Dynamic thresholds
         self.emergency_margin_threshold = 150.0  # Margin Level < 150%
@@ -179,7 +179,7 @@ class Dynamic7DSmartCloser:
                     else:
                         result = self._try_fallback_method(method_name, positions, size, portfolio_health)
                     
-                    if result and result['net_pnl'] > dynamic_params['safety_buffer']:  # Dynamic Zero Loss Policy
+                    if result and self._intelligent_closing_decision(result, dynamic_params):  # Intelligent Decision
                         # คำนวณ Total Impact Score
                         impact_score = self._calculate_total_impact_score(result, portfolio_health)
                         final_score = impact_score * priority  # Apply priority multiplier
@@ -1310,10 +1310,13 @@ class Dynamic7DSmartCloser:
         """💰 ดึงราคาปัจจุบัน"""
         try:
             # Try to get current price from MT5
-            import MetaTrader5 as mt5
-            tick = mt5.symbol_info_tick("XAUUSD")
-            if tick:
-                return (tick.bid + tick.ask) / 2
+            try:
+                import MetaTrader5 as mt5
+                tick = mt5.symbol_info_tick("XAUUSD")
+                if tick:
+                    return (tick.bid + tick.ask) / 2
+            except ImportError:
+                pass
         except:
             pass
         
@@ -1443,6 +1446,88 @@ class Dynamic7DSmartCloser:
             return 'far'
         else:                       # > 30 pips = ไกลมาก
             return 'very_far'
+    
+    def _intelligent_closing_decision(self, result: Dict, dynamic_params: Dict) -> bool:
+        """🧠 การตัดสินใจปิดแบบอัจฉริยะ - ไม่ใช้เกณฑ์คงที่"""
+        try:
+            net_pnl = result.get('net_pnl', 0)
+            positions = result.get('positions', [])
+            portfolio_improvement = result.get('portfolio_improvement', {})
+            
+            # 🎯 INTELLIGENT FACTORS (ไม่ใช้เกณฑ์กำไรคงที่)
+            
+            # 1. 📊 Portfolio Health Impact
+            health_impact = portfolio_improvement.get('pnl_improvement', 0)
+            position_reduction = portfolio_improvement.get('position_reduction', 0)
+            balance_improvement = portfolio_improvement.get('balance_improvement', 0)
+            margin_improvement = portfolio_improvement.get('margin_improvement', 0)
+            
+            # 2. 🧠 Intelligent Scoring
+            intelligent_score = 0
+            
+            # P&L Factor (ไม่ใช่เกณฑ์คงที่)
+            if net_pnl > 0:
+                intelligent_score += 30  # กำไร = +30 คะแนน
+            elif net_pnl > -10:  # ขาดทุนเล็กน้อย
+                intelligent_score += 20  # ขาดทุนเล็กน้อย = +20 คะแนน
+            elif net_pnl > -50:  # ขาดทุนปานกลาง
+                intelligent_score += 10  # ขาดทุนปานกลาง = +10 คะแนน
+            else:
+                intelligent_score -= 10  # ขาดทุนมาก = -10 คะแนน
+            
+            # Position Reduction Factor
+            if position_reduction > 0:
+                intelligent_score += min(25, position_reduction * 2)  # ลดไม้ = +25 คะแนน
+            
+            # Balance Improvement Factor
+            if balance_improvement > 0:
+                intelligent_score += min(20, balance_improvement * 5)  # ปรับสมดุล = +20 คะแนน
+            
+            # Margin Improvement Factor
+            if margin_improvement > 0:
+                intelligent_score += min(15, margin_improvement * 3)  # ปรับ margin = +15 คะแนน
+            
+            # 3. 🎯 Dynamic Context Analysis
+            margin_level = dynamic_params.get('margin_level', 1000)
+            total_positions = dynamic_params.get('total_positions', 0)
+            imbalance = dynamic_params.get('imbalance', 0)
+            
+            # Margin Context
+            if margin_level < 150:
+                intelligent_score += 20  # Margin ต่ำ = +20 คะแนน
+            elif margin_level < 200:
+                intelligent_score += 10  # Margin ปานกลาง = +10 คะแนน
+            
+            # Position Count Context
+            if total_positions > 50:
+                intelligent_score += 15  # ไม้เยอะ = +15 คะแนน
+            elif total_positions > 20:
+                intelligent_score += 10  # ไม้ปานกลาง = +10 คะแนน
+            
+            # Imbalance Context
+            if imbalance > 70:
+                intelligent_score += 15  # ไม่สมดุล = +15 คะแนน
+            elif imbalance > 50:
+                intelligent_score += 10  # ไม่สมดุลปานกลาง = +10 คะแนน
+            
+            # 4. 🎯 INTELLIGENT DECISION
+            # ตัดสินใจปิดถ้าคะแนนรวม > 50 (ไม่ใช่เกณฑ์กำไรคงที่)
+            should_close = intelligent_score > 50
+            
+            if should_close:
+                logger.info(f"🧠 INTELLIGENT DECISION: Score {intelligent_score:.1f} → CLOSE "
+                           f"(P&L: ${net_pnl:.2f}, Positions: {len(positions)}, "
+                           f"Health: {health_impact:.1f}, Balance: {balance_improvement:.1f})")
+            else:
+                logger.debug(f"🧠 INTELLIGENT DECISION: Score {intelligent_score:.1f} → HOLD "
+                           f"(P&L: ${net_pnl:.2f}, Positions: {len(positions)})")
+            
+            return should_close
+            
+        except Exception as e:
+            logger.error(f"❌ Error in intelligent closing decision: {e}")
+            # Fallback: ปิดถ้ามีกำไร
+            return result.get('net_pnl', 0) > 0
 
 
 def create_dynamic_7d_smart_closer(intelligent_manager=None, purpose_tracker=None, 

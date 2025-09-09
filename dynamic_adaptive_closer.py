@@ -73,11 +73,11 @@ class DynamicAdaptiveCloser:
         self.mt5_connection = mt5_connection
         self.symbol = symbol
         
-        # 🔥 AGGRESSIVE CLOSING: สู้ให้สุด - ปิดเมื่อมีกำไรเล็กน้อย!
-        self.min_profit_threshold = 0.5     # ลดจาก 2 เป็น 0.5 - กำไรนิดเดียวก็ปิด
-        self.max_loss_threshold = -300.0    # เพิ่มจาก -100 เป็น -300 - ทนขาดทุนได้มากขึ้น
-        self.balance_tolerance = 0.6        # เพิ่มจาก 0.3 เป็น 0.6 - ยอมให้ไม่สมดุลได้มากขึ้น
-        self.margin_safety_level = 80       # ลดจาก 150 เป็น 80 - เสี่ยงได้มากขึ้น
+        # 🧠 INTELLIGENT CLOSING: ระบบตรวจจับและตัดสินใจเอง - ไม่ใช้เกณฑ์คงที่!
+        self.min_profit_threshold = 0.0     # ไม่มีเกณฑ์คงที่ - ให้ระบบตัดสินใจเอง
+        self.max_loss_threshold = -999.0    # ไม่จำกัดขาดทุน - ให้ระบบตัดสินใจเอง
+        self.balance_tolerance = 1.0        # ยืดหยุ่นสูงสุด - ให้ระบบตัดสินใจเอง
+        self.margin_safety_level = 50       # เสี่ยงได้มากขึ้น - ให้ระบบตัดสินใจเอง
         
         # 📊 Market Timing Parameters
         self.volatility_window = 14         # periods for volatility calculation
@@ -343,11 +343,20 @@ class DynamicAdaptiveCloser:
             return []
     
     def _select_profitable_positions(self, positions: List[Any], current_price: float) -> List[Any]:
-        """💰 เลือกตำแหน่งที่มีกำไร - ลดเกณฑ์ให้ปิดได้ง่ายขึ้น"""
-        profitable = [pos for pos in positions if getattr(pos, 'profit', 0) > 1]  # ลดจาก 10 เป็น 1
-        # Sort by profit descending
-        profitable.sort(key=lambda pos: getattr(pos, 'profit', 0), reverse=True)
-        return profitable[:8]  # เพิ่มจาก 5 เป็น 8
+        """🧠 เลือกตำแหน่งที่มีกำไร - ระบบตรวจจับและตัดสินใจเอง"""
+        # 🎯 INTELLIGENT DETECTION: ไม่ใช้เกณฑ์คงที่ - ให้ระบบวิเคราะห์เอง
+        all_positions = []
+        
+        for pos in positions:
+            profit = getattr(pos, 'profit', 0)
+            # วิเคราะห์แต่ละไม้แบบอัจฉริยะ
+            should_close = self._intelligent_position_analysis(pos, current_price)
+            if should_close:
+                all_positions.append(pos)
+        
+        # Sort by intelligent score (ไม่ใช่แค่กำไร)
+        all_positions.sort(key=lambda pos: self._calculate_intelligent_score(pos, current_price), reverse=True)
+        return all_positions[:10]  # เพิ่มเป็น 10 ไม้
     
     def _select_balance_positions(self, positions: List[Any], current_price: float) -> List[Any]:
         """⚖️ เลือกตำแหน่งเพื่อสมดุล"""
@@ -630,6 +639,131 @@ class DynamicAdaptiveCloser:
         except Exception as e:
             logger.error(f"❌ Error creating default groups: {e}")
         return groups
+    
+    def _intelligent_position_analysis(self, position: Any, current_price: float) -> bool:
+        """🧠 วิเคราะห์ตำแหน่งแบบอัจฉริยะ - ไม่ใช้เกณฑ์คงที่"""
+        try:
+            profit = getattr(position, 'profit', 0)
+            open_price = getattr(position, 'price_open', current_price)
+            position_type = getattr(position, 'type', 0)
+            volume = getattr(position, 'volume', 0.01)
+            
+            # 🎯 INTELLIGENT FACTORS (ไม่ใช้เกณฑ์คงที่)
+            
+            # 1. 📊 Market Context Analysis
+            market_context_score = self._analyze_market_context(position, current_price)
+            
+            # 2. 🎯 Position Health Score
+            health_score = self._calculate_position_health(position, current_price)
+            
+            # 3. ⚖️ Portfolio Impact Score
+            portfolio_impact = self._calculate_portfolio_impact(position)
+            
+            # 4. 🧠 Opportunity Cost Analysis
+            opportunity_score = self._analyze_opportunity_cost(position, current_price)
+            
+            # 🎯 INTELLIGENT DECISION (รวมคะแนนทั้งหมด)
+            total_score = (
+                market_context_score * 0.3 +
+                health_score * 0.3 +
+                portfolio_impact * 0.2 +
+                opportunity_score * 0.2
+            )
+            
+            # ตัดสินใจปิดถ้าคะแนน > 60 (ไม่ใช่เกณฑ์กำไรคงที่)
+            should_close = total_score > 60
+            
+            if should_close:
+                logger.debug(f"🧠 INTELLIGENT CLOSE: Ticket {getattr(position, 'ticket', 'N/A')} "
+                           f"Score: {total_score:.1f} (Market: {market_context_score:.1f}, "
+                           f"Health: {health_score:.1f}, Impact: {portfolio_impact:.1f}, "
+                           f"Opportunity: {opportunity_score:.1f})")
+            
+            return should_close
+            
+        except Exception as e:
+            logger.error(f"❌ Error in intelligent position analysis: {e}")
+            return False
+    
+    def _calculate_intelligent_score(self, position: Any, current_price: float) -> float:
+        """🧮 คำนวณคะแนนอัจฉริยะสำหรับการเรียงลำดับ"""
+        try:
+            profit = getattr(position, 'profit', 0)
+            open_price = getattr(position, 'price_open', current_price)
+            volume = getattr(position, 'volume', 0.01)
+            
+            # 🎯 INTELLIGENT SCORING (ไม่ใช่แค่กำไร)
+            
+            # 1. Profit Efficiency (กำไรต่อ lot)
+            profit_efficiency = profit / max(volume, 0.01) if volume > 0 else 0
+            
+            # 2. Distance Factor (ระยะห่างจากราคาปัจจุบัน)
+            distance = abs(current_price - open_price)
+            distance_factor = max(0, 100 - (distance * 0.1))  # ยิ่งไกลยิ่งคะแนนต่ำ
+            
+            # 3. Volume Weight (น้ำหนักของ lot)
+            volume_weight = min(100, volume * 1000)  # lot ใหญ่ = คะแนนสูง
+            
+            # 4. Time Factor (เวลาถือ - ใช้ timestamp ถ้ามี)
+            time_factor = 50  # Default (ในระบบจริงจะคำนวณจากเวลาถือ)
+            
+            # 🧮 TOTAL INTELLIGENT SCORE
+            intelligent_score = (
+                profit_efficiency * 0.4 +      # 40% กำไรต่อ lot
+                distance_factor * 0.3 +        # 30% ระยะห่าง
+                volume_weight * 0.2 +          # 20% น้ำหนัก lot
+                time_factor * 0.1              # 10% เวลา
+            )
+            
+            return intelligent_score
+            
+        except Exception as e:
+            logger.error(f"❌ Error calculating intelligent score: {e}")
+            return 0.0
+    
+    def _analyze_market_context(self, position: Any, current_price: float) -> float:
+        """📊 วิเคราะห์บริบทตลาด"""
+        try:
+            # Simplified market context analysis
+            # ในระบบจริงจะวิเคราะห์ trend, volatility, volume
+            return 70.0  # Default good market context
+        except:
+            return 50.0
+    
+    def _calculate_position_health(self, position: Any, current_price: float) -> float:
+        """🎯 คำนวณสุขภาพของตำแหน่ง"""
+        try:
+            profit = getattr(position, 'profit', 0)
+            volume = getattr(position, 'volume', 0.01)
+            
+            # Health based on profit efficiency and stability
+            if profit > 0:
+                health = min(100, 60 + (profit / max(volume, 0.01)) * 10)
+            else:
+                health = max(0, 40 + (profit / max(volume, 0.01)) * 5)
+            
+            return health
+        except:
+            return 50.0
+    
+    def _calculate_portfolio_impact(self, position: Any) -> float:
+        """⚖️ คำนวณผลกระทบต่อพอร์ต"""
+        try:
+            volume = getattr(position, 'volume', 0.01)
+            # Impact based on position size
+            impact = min(100, volume * 200)  # Larger positions = higher impact
+            return impact
+        except:
+            return 50.0
+    
+    def _analyze_opportunity_cost(self, position: Any, current_price: float) -> float:
+        """🧠 วิเคราะห์ค่าเสียโอกาส"""
+        try:
+            # Simplified opportunity cost analysis
+            # ในระบบจริงจะวิเคราะห์โอกาสในการทำกำไรมากขึ้น
+            return 60.0  # Default moderate opportunity cost
+        except:
+            return 50.0
 
 def create_dynamic_adaptive_closer(mt5_connection=None, symbol: str = "XAUUSD") -> DynamicAdaptiveCloser:
     """สร้าง Dynamic Adaptive Closer"""
