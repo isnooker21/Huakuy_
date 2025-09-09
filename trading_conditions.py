@@ -224,6 +224,16 @@ class TradingConditions:
                 logger.info(f"✅ SMART ENTRY APPROVED: {entry_analysis.quality.value}")
                 logger.info(f"   Score: {entry_analysis.score:.1f}, Hierarchy OK: {entry_analysis.price_hierarchy_ok}")
                 
+                # 🚨 CRITICAL CHECK: Price Hierarchy must be OK
+                if not entry_analysis.price_hierarchy_ok:
+                    logger.error(f"🚨 CRITICAL ERROR: Entry approved but Price Hierarchy violated!")
+                    logger.error(f"   This should never happen - blocking entry for safety")
+                    return {
+                        'approved': False,
+                        'reason': 'CRITICAL: Price hierarchy violated despite approval',
+                        'hierarchy_ok': False
+                    }
+                
                 return {
                     'approved': True,
                     'quality': entry_analysis.quality.value,
@@ -258,7 +268,8 @@ class TradingConditions:
                 
         except Exception as e:
             logger.error(f"❌ Error in smart entry timing check: {e}")
-            return {'approved': True, 'reason': 'Smart entry check failed - allowing entry'}
+            logger.error(f"🚫 BLOCKING ENTRY due to Smart Entry Timing error - Safety First!")
+            return {'approved': False, 'reason': f'Smart entry check failed: {str(e)} - BLOCKED for safety'}
         
     def check_entry_conditions(self, candle: CandleData, positions: List[Position], 
                              account_balance: float, volume_history: List[float] = None, 

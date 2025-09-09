@@ -239,35 +239,49 @@ class SmartEntryTiming:
         """
         try:
             if not existing_positions:
+                logger.debug(f"🔄 Price Hierarchy: No existing positions - allowing {signal_direction}")
                 return {'ok': True, 'reason': 'No existing positions'}
             
             # แยกประเภท positions
             buy_positions = [p for p in existing_positions if getattr(p, 'type', 0) == 0]  # MT5 BUY = 0
             sell_positions = [p for p in existing_positions if getattr(p, 'type', 1) == 1]  # MT5 SELL = 1
             
+            logger.debug(f"🔄 Price Hierarchy Check: {signal_direction} at {current_price:.2f}")
+            logger.debug(f"   Existing: {len(buy_positions)} BUYs, {len(sell_positions)} SELLs")
+            
             if signal_direction == "BUY":
                 # BUY ใหม่ต้องต่ำกว่า SELL ที่มีอยู่ทั้งหมด
                 if sell_positions:
                     min_sell_price = min(getattr(p, 'price_open', current_price) for p in sell_positions)
+                    logger.debug(f"   BUY Check: Current {current_price:.2f} vs Min SELL {min_sell_price:.2f}")
+                    
                     if current_price >= (min_sell_price - self.hierarchy_buffer):
+                        logger.warning(f"🚫 HIERARCHY VIOLATION: BUY {current_price:.2f} >= SELL {min_sell_price:.2f}")
                         return {
                             'ok': False,
                             'reason': f'BUY {current_price:.2f} too close to SELL {min_sell_price:.2f}',
                             'suggested_price': min_sell_price - self.min_buy_sell_distance,
                             'min_sell_price': min_sell_price
                         }
+                    else:
+                        logger.debug(f"   ✅ BUY OK: {current_price:.2f} < {min_sell_price:.2f}")
             
             elif signal_direction == "SELL":
                 # SELL ใหม่ต้องสูงกว่า BUY ที่มีอยู่ทั้งหมด
                 if buy_positions:
                     max_buy_price = max(getattr(p, 'price_open', current_price) for p in buy_positions)
+                    logger.debug(f"   SELL Check: Current {current_price:.2f} vs Max BUY {max_buy_price:.2f}")
+                    
                     if current_price <= (max_buy_price + self.hierarchy_buffer):
+                        logger.warning(f"🚫 HIERARCHY VIOLATION: SELL {current_price:.2f} <= BUY {max_buy_price:.2f}")
                         return {
                             'ok': False,
                             'reason': f'SELL {current_price:.2f} too close to BUY {max_buy_price:.2f}',
                             'suggested_price': max_buy_price + self.min_buy_sell_distance,
                             'max_buy_price': max_buy_price
                         }
+                    else:
+                        logger.debug(f"   ✅ SELL OK: {current_price:.2f} > {max_buy_price:.2f}")
             
             return {'ok': True, 'reason': 'Price hierarchy maintained'}
             
