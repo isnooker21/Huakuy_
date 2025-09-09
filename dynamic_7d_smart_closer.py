@@ -126,6 +126,17 @@ class Dynamic7DSmartCloser:
                     logger.info(f"🧠 Purpose Analysis completed for {len(position_purposes)} positions")
                     purpose_summary = self.purpose_tracker.get_purpose_summary()
                     logger.info(f"📊 Purpose Summary: {purpose_summary}")
+                    
+                    # 🔍 Debug: แสดงรายละเอียด Problem positions
+                    problem_positions = [ticket for ticket, purpose in position_purposes.items() 
+                                       if purpose.purpose.value == 'PROBLEM_POSITION']
+                    if problem_positions:
+                        logger.info(f"🚨 Found {len(problem_positions)} PROBLEM_POSITION(s):")
+                        for ticket in problem_positions:
+                            purpose = position_purposes[ticket]
+                            logger.info(f"   {ticket}: {purpose.sub_purpose}")
+                    else:
+                        logger.info("🔍 No PROBLEM_POSITION detected - investigating why...")
                 except Exception as e:
                     logger.warning(f"⚠️ Purpose Analysis failed: {e}")
             

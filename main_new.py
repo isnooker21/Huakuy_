@@ -62,6 +62,8 @@ logging.getLogger('zone_manager').setLevel(logging.INFO)  # เปิด Zone He
 logging.getLogger('zone_analyzer').setLevel(logging.WARNING)  # ปิด INFO logs
 logging.getLogger('zone_coordinator').setLevel(logging.WARNING)  # ปิด INFO logs
 logging.getLogger('intelligent_position_manager').setLevel(logging.WARNING)  # ปิด DEBUG logs ที่เยอะมาก
+logging.getLogger('position_purpose_tracker').setLevel(logging.INFO)  # เปิด Purpose Analysis logs
+logging.getLogger('dynamic_7d_smart_closer').setLevel(logging.INFO)  # เปิด Purpose-Aware Closing logs
 logging.getLogger('__main__').setLevel(logging.INFO)
 
 logger = logging.getLogger(__name__)

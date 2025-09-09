@@ -332,6 +332,10 @@ class PositionPurposeTracker:
             distance_pips = abs(current_price - open_price) * 10000  # สำหรับ XAUUSD
             profit_percentage = (profit / max(volume * 1000, 100)) * 100  # ประมาณการ
             
+            # 🔍 Debug logging เพื่อดูการคำนวณ
+            logger.debug(f"🔍 Position {position_ticket}: Price {open_price:.2f}→{current_price:.2f}, "
+                        f"Distance {distance_pips:.0f} pips, Profit ${profit:.2f}")
+            
             # 🎯 Base Purpose Logic
             purpose = PurposeType.BALANCE_KEEPER  # Default
             sub_purpose = "Standard Position"
@@ -373,6 +377,11 @@ class PositionPurposeTracker:
                     sub_purpose = f"Light Problem (${profit:.1f}, {distance_pips:.0f} pips)"
                     priority = PurposePriority.MEDIUM
                     confidence = 75.0
+                
+                # 🔍 Debug logging สำหรับ Problem positions
+                logger.info(f"🚨 PROBLEM DETECTED: {position_ticket} → {sub_purpose}")
+                logger.info(f"   Conditions met: Loss=${profit:.1f} (threshold: {self.config['problem_loss_threshold']:.1f}), "
+                          f"Distance={distance_pips:.0f} pips")
             
             # 💰 PROFIT_TAKER Detection
             elif profit > self.config['profit_take_threshold']:
