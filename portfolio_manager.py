@@ -813,52 +813,13 @@ class PortfolioManager:
             logger.error(f"เกิดข้อผิดพลาดในการรีเซ็ตเมตริกรายวัน: {str(e)}")
     
     def _get_zone_smart_entry(self, signal: Signal, current_price: float) -> Optional[Dict[str, Any]]:
-        """ดึงคำแนะนำการเข้าจาก Zone Analysis"""
-        try:
-            # Initialize zone analyzer if not done
-            if self.zone_analyzer is None:
-                from price_zone_analysis import PriceZoneAnalyzer
-                from zone_rebalancer import ZoneRebalancer
-                self.zone_analyzer = PriceZoneAnalyzer(signal.symbol, num_zones=10)
-                self.zone_rebalancer = ZoneRebalancer(self.zone_analyzer)
-            
-            # อัพเดทราคาปัจจุบัน
-            self.zone_analyzer.update_price_history(current_price)
-            
-            # ถ้ายังไม่มีโซน ให้สร้างขึ้นมา
-            if not self.zone_analyzer.zones:
-                self.zone_analyzer.initialize_zones(current_price)
-            
-            # ดึงคำแนะนำ
-            recommendation = self.zone_analyzer.get_smart_entry_recommendation(
-                signal.direction, current_price, self.order_manager.active_positions
-            )
-            
-            if recommendation.recommended_action == "WAIT":
-                logger.info(f"🚫 Zone Analysis: {recommendation.reason}")
-                return None
-            
-            logger.info(f"🎯 Zone Analysis Recommendation:")
-            logger.info(f"   Action: {recommendation.recommended_action}")
-            logger.info(f"   Target Zone: {recommendation.target_zone_id}")
-            logger.info(f"   Price Range: {recommendation.target_price_range[0]:.2f} - {recommendation.target_price_range[1]:.2f}")
-            logger.info(f"   Confidence: {recommendation.confidence_score:.1f}%")
-            logger.info(f"   Lot Multiplier: {recommendation.lot_size_multiplier:.2f}x")
-            logger.info(f"   Reason: {recommendation.reason}")
-            
-            return {
-                'action': recommendation.recommended_action,
-                'zone_id': recommendation.target_zone_id,
-                'price_range': recommendation.target_price_range,
-                'confidence': recommendation.confidence_score,
-                'lot_multiplier': recommendation.lot_size_multiplier,
-                'reason': recommendation.reason,
-                'alternatives': recommendation.alternative_zones
-            }
-            
-        except Exception as e:
-            logger.error(f"Error getting zone smart entry: {e}")
-            return None
+        """🚫 REMOVED: Zone Analysis - Replaced by Smart Entry Timing System"""
+        # ✅ Smart Entry Timing System handles all entry analysis
+        return {
+            'should_modify': False,
+            'reason': 'Zone analysis replaced by Smart Entry Timing System',
+            'confidence': 0.0
+        }
     
     def _get_zone_based_entry_analysis(self, signal: Signal, current_price: float) -> Optional[Dict[str, Any]]:
         """
@@ -1755,6 +1716,16 @@ class PortfolioManager:
             return original_direction
     
     def check_and_execute_zone_rebalance(self, current_price: float) -> Dict[str, Any]:
+        """🚫 REMOVED: Zone Rebalance - Replaced by Dynamic 7D Smart Closer"""
+        # ✅ Dynamic 7D Smart Closer handles all position rebalancing
+        return {
+            'executed': False,
+            'reason': 'Zone rebalance replaced by Dynamic 7D Smart Closer',
+            'zone_score': 100.0,  # Default good score
+            'zone_quality': 'EXCELLENT'  # Default good quality
+        }
+    
+    def check_and_execute_zone_rebalance_REMOVED(self, current_price: float) -> Dict[str, Any]:
         """ตรวจสอบและดำเนินการปรับสมดุลโซน"""
         try:
             # Initialize zone analyzer if not done
