@@ -298,9 +298,14 @@ class DynamicAdaptiveCloser:
                 else:
                     return ClosingStrategy.EMERGENCY_EXIT
             
-            # Profit opportunities - ลดเกณฑ์ให้ปิดได้ง่ายขึ้น
-            profitable_positions = [pos for pos in positions if getattr(pos, 'profit', 0) > 1]  # ลดจาก 10 เป็น 1
-            if len(profitable_positions) > 1 and market_timing in [MarketTiming.PERFECT, MarketTiming.GOOD, MarketTiming.ACCEPTABLE]:  # ลดจาก 3 เป็น 1 และเพิ่ม ACCEPTABLE
+            # Profit opportunities - ใช้ Dynamic Thresholds
+            dynamic_thresholds = self._calculate_dynamic_thresholds(account_info, 0, 0)
+            profit_threshold = dynamic_thresholds['profit_threshold']
+            profitable_positions = [pos for pos in positions if getattr(pos, 'profit', 0) > profit_threshold]
+            
+            # Dynamic position count requirement
+            min_positions = 1 if market_timing in [MarketTiming.PERFECT, MarketTiming.GOOD] else 2
+            if len(profitable_positions) >= min_positions and market_timing in [MarketTiming.PERFECT, MarketTiming.GOOD, MarketTiming.ACCEPTABLE]:
                 return ClosingStrategy.PROFIT_TAKING
             
             # Balance issues
@@ -383,12 +388,18 @@ class DynamicAdaptiveCloser:
         groups = []
         
         try:
-            profitable_positions = [pos for pos in positions if getattr(pos, 'profit', 0) > 0.5]  # ลดจาก 1 เป็น 0.5
+            # ใช้ Dynamic Thresholds
+            dynamic_thresholds = self._calculate_dynamic_thresholds({}, 0, 0)
+            profit_threshold = dynamic_thresholds['profit_threshold']
+            opportunity_threshold = dynamic_thresholds['opportunity_threshold']
+            
+            profitable_positions = [pos for pos in positions if getattr(pos, 'profit', 0) > profit_threshold]
             
             if profitable_positions:
-                # Group by profit level - ลดเกณฑ์ให้ปิดได้ง่ายขึ้น
-                high_profit = [pos for pos in profitable_positions if getattr(pos, 'profit', 0) > 5]  # ลดจาก 20 เป็น 5
-                medium_profit = [pos for pos in profitable_positions if 0.5 < getattr(pos, 'profit', 0) <= 5]  # ลดจาก 2 เป็น 0.5
+                # Group by profit level - ใช้ Dynamic Thresholds
+                high_profit_threshold = max(5.0, profit_threshold * 10)  # 10x ของ base threshold
+                high_profit = [pos for pos in profitable_positions if getattr(pos, 'profit', 0) > high_profit_threshold]
+                medium_profit = [pos for pos in profitable_positions if profit_threshold < getattr(pos, 'profit', 0) <= high_profit_threshold]
                 
                 if high_profit:
                     groups.append(ClosingGroup(
@@ -477,19 +488,215 @@ class DynamicAdaptiveCloser:
     
     def _make_final_closing_decision(self, confidence: float, urgency: ClosingUrgency,
                                    expected_profit: float, risk_reduction: float, account_info: Dict) -> bool:
-        """🧠 การตัดสินใจปิดแบบอัจฉริยะ - ไม่ใช้เกณฑ์กำไรคงที่"""
+        """🧠 การตัดสินใจปิดแบบ Dynamic - ปรับเกณฑ์ตามสถานการณ์"""
         if urgency == ClosingUrgency.IMMEDIATE:
             return True
         
-        # 🎯 INTELLIGENT DECISION: ใช้ confidence และ profit efficiency
-        if confidence > 60 and expected_profit > 0:  # ลดเกณฑ์จาก 70 เป็น 60 และจาก 20 เป็น 0
+        # 🎯 DYNAMIC THRESHOLDS: คำนวณเกณฑ์แบบยืดหยุ่น
+        dynamic_thresholds = self._calculate_dynamic_thresholds(account_info, expected_profit, risk_reduction)
+        
+        # 🎯 ADAPTIVE DECISION: ใช้เกณฑ์ที่ปรับตัวได้
+        if confidence > dynamic_thresholds['confidence_threshold'] and expected_profit > dynamic_thresholds['profit_threshold']:
             return True
         
-        # 🎯 AGGRESSIVE MODE: ปิดถ้ามีกำไรเล็กน้อย
-        if expected_profit > 1 and confidence > 50:  # กำไร > $1 และ confidence > 50%
+        # 🎯 OPPORTUNITY MODE: ปิดถ้ามีโอกาสดี
+        if expected_profit > dynamic_thresholds['opportunity_threshold'] and confidence > dynamic_thresholds['opportunity_confidence']:
             return True
             
         return False
+    
+    def _calculate_dynamic_thresholds(self, account_info: Dict, expected_profit: float, risk_reduction: float) -> Dict[str, float]:
+        """🎯 คำนวณเกณฑ์แบบ Dynamic ตามสถานการณ์"""
+        try:
+            balance = account_info.get('balance', 10000)
+            margin_level = account_info.get('margin_level', 1000)
+            equity = account_info.get('equity', balance)
+            
+            # 📊 MARKET CONDITIONS ANALYSIS
+            market_volatility = self._assess_market_volatility()
+            market_trend = self._assess_market_trend()
+            
+            # 💰 PORTFOLIO HEALTH ANALYSIS
+            portfolio_health = self._assess_portfolio_health(account_info)
+            
+            # 🎯 BASE THRESHOLDS (ปรับตามสถานการณ์)
+            base_confidence = 50.0
+            base_profit = 0.5
+            base_opportunity_confidence = 40.0
+            base_opportunity_profit = 0.2
+            
+            # 📈 MARKET VOLATILITY ADJUSTMENT
+            if market_volatility == 'HIGH':
+                # ตลาดผันผวน → เกณฑ์ต่ำลง (ปิดเร็วขึ้น)
+                confidence_adjustment = -15.0
+                profit_adjustment = -0.3
+            elif market_volatility == 'LOW':
+                # ตลาดนิ่ง → เกณฑ์สูงขึ้น (รอโอกาสดี)
+                confidence_adjustment = +10.0
+                profit_adjustment = +0.5
+            else:  # MEDIUM
+                confidence_adjustment = 0.0
+                profit_adjustment = 0.0
+            
+            # 📊 MARKET TREND ADJUSTMENT
+            if market_trend == 'STRONG_UP':
+                # ตลาดขึ้นแรง → เกณฑ์ต่ำลง (ปิดเร็วขึ้น)
+                confidence_adjustment -= 10.0
+                profit_adjustment -= 0.2
+            elif market_trend == 'STRONG_DOWN':
+                # ตลาดลงแรง → เกณฑ์ต่ำลง (ปิดเร็วขึ้น)
+                confidence_adjustment -= 10.0
+                profit_adjustment -= 0.2
+            elif market_trend == 'SIDEWAYS':
+                # ตลาดนิ่ง → เกณฑ์สูงขึ้น (รอโอกาสดี)
+                confidence_adjustment += 5.0
+                profit_adjustment += 0.3
+            
+            # 💰 PORTFOLIO HEALTH ADJUSTMENT
+            if portfolio_health == 'EXCELLENT':
+                # พอร์ตดี → เกณฑ์สูงขึ้น (รอโอกาสดี)
+                confidence_adjustment += 5.0
+                profit_adjustment += 0.2
+            elif portfolio_health == 'POOR':
+                # พอร์ตแย่ → เกณฑ์ต่ำลง (ปิดเร็วขึ้น)
+                confidence_adjustment -= 20.0
+                profit_adjustment -= 0.5
+            elif portfolio_health == 'CRITICAL':
+                # พอร์ตวิกฤต → เกณฑ์ต่ำมาก (ปิดทันที)
+                confidence_adjustment -= 30.0
+                profit_adjustment -= 1.0
+            
+            # 🎯 MARGIN LEVEL ADJUSTMENT
+            if margin_level < 200:
+                # Margin ต่ำ → เกณฑ์ต่ำลง (ปิดเร็วขึ้น)
+                confidence_adjustment -= 15.0
+                profit_adjustment -= 0.4
+            elif margin_level > 1000:
+                # Margin สูง → เกณฑ์สูงขึ้น (รอโอกาสดี)
+                confidence_adjustment += 5.0
+                profit_adjustment += 0.1
+            
+            # 🎯 PROFIT SIZE ADJUSTMENT
+            if expected_profit > 50:
+                # กำไรใหญ่ → เกณฑ์ต่ำลง (ปิดเร็วขึ้น)
+                confidence_adjustment -= 10.0
+                profit_adjustment -= 0.3
+            elif expected_profit < 2:
+                # กำไรเล็ก → เกณฑ์สูงขึ้น (รอโอกาสดี)
+                confidence_adjustment += 10.0
+                profit_adjustment += 0.2
+            
+            # 🎯 CALCULATE FINAL THRESHOLDS
+            final_confidence = max(20.0, min(80.0, base_confidence + confidence_adjustment))
+            final_profit = max(0.1, min(5.0, base_profit + profit_adjustment))
+            final_opportunity_confidence = max(15.0, min(70.0, base_opportunity_confidence + confidence_adjustment * 0.8))
+            final_opportunity_profit = max(0.05, min(2.0, base_opportunity_profit + profit_adjustment * 0.5))
+            
+            thresholds = {
+                'confidence_threshold': final_confidence,
+                'profit_threshold': final_profit,
+                'opportunity_confidence': final_opportunity_confidence,
+                'opportunity_threshold': final_opportunity_profit,
+                'market_volatility': market_volatility,
+                'market_trend': market_trend,
+                'portfolio_health': portfolio_health,
+                'adjustments': {
+                    'confidence': confidence_adjustment,
+                    'profit': profit_adjustment
+                }
+            }
+            
+            logger.debug(f"🎯 DYNAMIC THRESHOLDS: Conf={final_confidence:.1f}%, "
+                        f"Profit=${final_profit:.2f}, Opp_Conf={final_opportunity_confidence:.1f}%, "
+                        f"Opp_Profit=${final_opportunity_profit:.2f} | "
+                        f"Vol={market_volatility}, Trend={market_trend}, Health={portfolio_health}")
+            
+            return thresholds
+            
+        except Exception as e:
+            logger.error(f"❌ Error calculating dynamic thresholds: {e}")
+            # Fallback to safe thresholds
+            return {
+                'confidence_threshold': 60.0,
+                'profit_threshold': 1.0,
+                'opportunity_confidence': 50.0,
+                'opportunity_threshold': 0.5,
+                'market_volatility': 'MEDIUM',
+                'market_trend': 'NEUTRAL',
+                'portfolio_health': 'GOOD',
+                'adjustments': {'confidence': 0.0, 'profit': 0.0}
+            }
+    
+    def _assess_market_volatility(self) -> str:
+        """📊 ประเมินความผันผวนของตลาด"""
+        try:
+            # TODO: Implement real market volatility analysis
+            # For now, return random assessment
+            import random
+            volatility_levels = ['LOW', 'MEDIUM', 'HIGH']
+            return random.choice(volatility_levels)
+        except:
+            return 'MEDIUM'
+    
+    def _assess_market_trend(self) -> str:
+        """📈 ประเมินแนวโน้มตลาด"""
+        try:
+            # TODO: Implement real market trend analysis
+            # For now, return random assessment
+            import random
+            trend_levels = ['STRONG_UP', 'UP', 'NEUTRAL', 'DOWN', 'STRONG_DOWN', 'SIDEWAYS']
+            return random.choice(trend_levels)
+        except:
+            return 'NEUTRAL'
+    
+    def _assess_portfolio_health(self, account_info: Dict) -> str:
+        """💰 ประเมินสุขภาพพอร์ต"""
+        try:
+            balance = account_info.get('balance', 10000)
+            equity = account_info.get('equity', balance)
+            margin_level = account_info.get('margin_level', 1000)
+            
+            # Calculate health score
+            health_score = 0
+            
+            # Balance vs Equity
+            if equity >= balance * 1.1:
+                health_score += 30
+            elif equity >= balance * 1.05:
+                health_score += 20
+            elif equity >= balance * 0.95:
+                health_score += 10
+            elif equity >= balance * 0.9:
+                health_score -= 10
+            else:
+                health_score -= 30
+            
+            # Margin Level
+            if margin_level > 1000:
+                health_score += 20
+            elif margin_level > 500:
+                health_score += 10
+            elif margin_level > 200:
+                health_score += 0
+            elif margin_level > 100:
+                health_score -= 20
+            else:
+                health_score -= 40
+            
+            # Determine health level
+            if health_score >= 40:
+                return 'EXCELLENT'
+            elif health_score >= 20:
+                return 'GOOD'
+            elif health_score >= 0:
+                return 'FAIR'
+            elif health_score >= -20:
+                return 'POOR'
+            else:
+                return 'CRITICAL'
+                
+        except:
+            return 'GOOD'
     
     # Additional placeholder methods for position selection
     def _select_margin_relief_positions(self, positions: List[Any], account_info: Dict) -> List[Any]:
@@ -678,8 +885,12 @@ class DynamicAdaptiveCloser:
                 opportunity_score * 0.2
             )
             
-            # ตัดสินใจปิดถ้าคะแนน > 50 (ลดจาก 60 เป็น 50 เพื่อปิดได้ง่ายขึ้น)
-            should_close = total_score > 50
+            # ใช้ Dynamic Thresholds สำหรับการตัดสินใจ
+            dynamic_thresholds = self._calculate_dynamic_thresholds({}, 0, 0)
+            score_threshold = 100 - dynamic_thresholds['confidence_threshold']  # แปลง confidence เป็น score threshold
+            
+            # ตัดสินใจปิดถ้าคะแนน > Dynamic Threshold
+            should_close = total_score > score_threshold
             
             if should_close:
                 logger.debug(f"🧠 INTELLIGENT CLOSE: Ticket {getattr(position, 'ticket', 'N/A')} "

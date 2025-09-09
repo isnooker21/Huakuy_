@@ -1510,9 +1510,10 @@ class Dynamic7DSmartCloser:
             elif imbalance > 50:
                 intelligent_score += 10  # ไม่สมดุลปานกลาง = +10 คะแนน
             
-            # 4. 🎯 INTELLIGENT DECISION - AGGRESSIVE MODE
-            # ตัดสินใจปิดถ้าคะแนนรวม > 40 (ลดจาก 50 เป็น 40 เพื่อปิดได้ง่ายขึ้น)
-            should_close = intelligent_score > 40
+            # 4. 🎯 INTELLIGENT DECISION - DYNAMIC MODE
+            # ใช้ Dynamic Thresholds ที่ปรับตามสถานการณ์
+            dynamic_threshold = self._calculate_dynamic_decision_threshold(result, dynamic_params)
+            should_close = intelligent_score > dynamic_threshold
             
             if should_close:
                 logger.info(f"🧠 INTELLIGENT DECISION: Score {intelligent_score:.1f} → CLOSE "
@@ -1528,6 +1529,65 @@ class Dynamic7DSmartCloser:
             logger.error(f"❌ Error in intelligent closing decision: {e}")
             # Fallback: ปิดถ้ามีกำไร
             return result.get('net_pnl', 0) > 0
+    
+    def _calculate_dynamic_decision_threshold(self, result: Dict, dynamic_params: Dict) -> float:
+        """🎯 คำนวณเกณฑ์การตัดสินใจแบบ Dynamic"""
+        try:
+            net_pnl = result.get('net_pnl', 0)
+            positions_count = len(result.get('positions', []))
+            health_impact = result.get('health_impact', 0)
+            balance_improvement = result.get('balance_improvement', 0)
+            
+            # Base threshold
+            base_threshold = 40.0
+            
+            # Adjust based on profit size
+            if net_pnl > 50:
+                threshold_adjustment = -15.0  # กำไรใหญ่ → เกณฑ์ต่ำลง
+            elif net_pnl > 20:
+                threshold_adjustment = -10.0  # กำไรปานกลาง → เกณฑ์ต่ำลง
+            elif net_pnl > 5:
+                threshold_adjustment = -5.0   # กำไรเล็ก → เกณฑ์ต่ำลง
+            elif net_pnl > 0:
+                threshold_adjustment = 0.0    # กำไรเล็กน้อย → เกณฑ์ปกติ
+            else:
+                threshold_adjustment = +10.0  # ไม่มีกำไร → เกณฑ์สูงขึ้น
+            
+            # Adjust based on position count
+            if positions_count > 10:
+                threshold_adjustment -= 5.0   # ไม้เยอะ → เกณฑ์ต่ำลง
+            elif positions_count > 5:
+                threshold_adjustment -= 2.0   # ไม้ปานกลาง → เกณฑ์ต่ำลง
+            elif positions_count < 3:
+                threshold_adjustment += 5.0   # ไม้น้อย → เกณฑ์สูงขึ้น
+            
+            # Adjust based on health impact
+            if health_impact > 20:
+                threshold_adjustment -= 10.0  # สุขภาพดีขึ้นมาก → เกณฑ์ต่ำลง
+            elif health_impact > 10:
+                threshold_adjustment -= 5.0   # สุขภาพดีขึ้น → เกณฑ์ต่ำลง
+            elif health_impact < -10:
+                threshold_adjustment += 10.0  # สุขภาพแย่ลง → เกณฑ์สูงขึ้น
+            
+            # Adjust based on balance improvement
+            if balance_improvement > 5:
+                threshold_adjustment -= 5.0   # ยอดเงินดีขึ้น → เกณฑ์ต่ำลง
+            elif balance_improvement < -5:
+                threshold_adjustment += 5.0   # ยอดเงินแย่ลง → เกณฑ์สูงขึ้น
+            
+            # Calculate final threshold
+            final_threshold = max(20.0, min(70.0, base_threshold + threshold_adjustment))
+            
+            logger.debug(f"🎯 DYNAMIC THRESHOLD: {final_threshold:.1f} "
+                        f"(Base: {base_threshold:.1f}, Adj: {threshold_adjustment:+.1f}, "
+                        f"P&L: \${net_pnl:.2f}, Positions: {positions_count}, "
+                        f"Health: {health_impact:.1f}, Balance: {balance_improvement:.1f})")
+            
+            return final_threshold
+            
+        except Exception as e:
+            logger.error(f"❌ Error calculating dynamic decision threshold: {e}")
+            return 40.0  # Fallback to safe threshold
 
 
 def create_dynamic_7d_smart_closer(intelligent_manager=None, purpose_tracker=None, 
