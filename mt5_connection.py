@@ -1260,20 +1260,35 @@ class MT5Connection:
                 order_type = mt5.ORDER_TYPE_BUY
                 price = mt5.symbol_info_tick(pos.symbol).ask
             
-            # 🔧 Smart Filling Type Selection
+            # 🔧 Smart Filling Type Selection - Fixed MT5 Constants
             symbol_info = mt5.symbol_info(pos.symbol)
             filling_mode = mt5.ORDER_FILLING_FOK  # Default
             
-            if symbol_info:
-                # เช็ค filling modes ที่รองรับ
-                if symbol_info.filling_mode & mt5.SYMBOL_FILLING_FOK:
-                    filling_mode = mt5.ORDER_FILLING_FOK  # Fill or Kill
-                elif symbol_info.filling_mode & mt5.SYMBOL_FILLING_IOC:
-                    filling_mode = mt5.ORDER_FILLING_IOC  # Immediate or Cancel  
-                elif symbol_info.filling_mode & mt5.SYMBOL_FILLING_RETURN:
-                    filling_mode = mt5.ORDER_FILLING_RETURN  # Return
-                else:
-                    logger.warning(f"⚠️ No supported filling mode for {pos.symbol}")
+            if symbol_info and hasattr(symbol_info, 'filling_mode'):
+                # เช็ค filling modes ที่รองรับ - ใช้ constants ที่ถูกต้อง
+                try:
+                    # Check FOK (Fill or Kill)
+                    if hasattr(mt5, 'SYMBOL_FILLING_FOK') and (symbol_info.filling_mode & mt5.SYMBOL_FILLING_FOK):
+                        filling_mode = mt5.ORDER_FILLING_FOK
+                        logger.debug(f"🔧 Using FOK filling for {pos.symbol}")
+                    # Check IOC (Immediate or Cancel)
+                    elif hasattr(mt5, 'SYMBOL_FILLING_IOC') and (symbol_info.filling_mode & mt5.SYMBOL_FILLING_IOC):
+                        filling_mode = mt5.ORDER_FILLING_IOC
+                        logger.debug(f"🔧 Using IOC filling for {pos.symbol}")
+                    # Check RETURN
+                    elif hasattr(mt5, 'SYMBOL_FILLING_RETURN') and (symbol_info.filling_mode & mt5.SYMBOL_FILLING_RETURN):
+                        filling_mode = mt5.ORDER_FILLING_RETURN
+                        logger.debug(f"🔧 Using RETURN filling for {pos.symbol}")
+                    else:
+                        # Fallback: try different filling modes
+                        logger.warning(f"⚠️ Symbol filling check failed, trying fallback modes for {pos.symbol}")
+                        filling_mode = mt5.ORDER_FILLING_IOC  # Most common fallback
+                except Exception as e:
+                    logger.warning(f"⚠️ Filling mode detection error: {e}, using IOC fallback")
+                    filling_mode = mt5.ORDER_FILLING_IOC
+            else:
+                logger.warning(f"⚠️ No symbol info available, using IOC filling for {pos.symbol}")
+                filling_mode = mt5.ORDER_FILLING_IOC
             
             # เตรียมข้อมูล request
             request = {
@@ -1292,25 +1307,59 @@ class MT5Connection:
             
             logger.debug(f"🔧 Close request for {ticket}: filling={filling_mode}")
             
-            # ส่ง Order
-            result = mt5.order_send(request)
+            # 🔄 Smart Retry with Different Filling Modes
+            filling_modes_to_try = [
+                filling_mode,  # ที่เลือกไว้จาก symbol info
+                mt5.ORDER_FILLING_IOC,     # Immediate or Cancel (most common)
+                mt5.ORDER_FILLING_FOK,     # Fill or Kill  
+                mt5.ORDER_FILLING_RETURN   # Return
+            ]
             
-            if result and result.retcode == 10009:  # TRADE_RETCODE_DONE
-                return {
-                    'retcode': result.retcode,
-                    'ticket': ticket,
-                    'profit': current_profit,
-                    'comment': 'Position closed successfully'
-                }
-            else:
-                return {
-                    'retcode': result.retcode if result else 0,
-                    'comment': self._get_retcode_description(result.retcode if result else 0),
-                    'ticket': ticket
-                }
+            # ลบ duplicate filling modes
+            filling_modes_to_try = list(dict.fromkeys(filling_modes_to_try))
+            
+            result = None
+            for i, fill_mode in enumerate(filling_modes_to_try):
+                try:
+                    request["type_filling"] = fill_mode
+                    logger.debug(f"🔧 Attempt {i+1}/{len(filling_modes_to_try)}: trying filling mode {fill_mode}")
+                    
+                    result = mt5.order_send(request)
+                    
+                    if result and result.retcode == 10009:  # TRADE_RETCODE_DONE
+                        logger.debug(f"✅ Close success with filling mode {fill_mode}")
+                        return {
+                            'retcode': result.retcode,
+                            'ticket': ticket,
+                            'profit': current_profit,
+                            'comment': f'Position closed successfully (filling: {fill_mode})'
+                        }
+                    elif result and result.retcode == 10013:  # TRADE_RETCODE_INVALID_FILL
+                        logger.debug(f"⚠️ Filling mode {fill_mode} not supported, trying next...")
+                        continue
+                    else:
+                        # Other error - might not be filling related
+                        error_desc = self._get_retcode_description(result.retcode if result else 0)
+                        logger.warning(f"⚠️ Close failed with {fill_mode}: {error_desc}")
+                        if i == len(filling_modes_to_try) - 1:  # Last attempt
+                            break
+                        continue
+                        
+                except Exception as e:
+                    logger.warning(f"⚠️ Exception with filling mode {fill_mode}: {e}")
+                    if i == len(filling_modes_to_try) - 1:  # Last attempt
+                        raise e
+                    continue
+            
+            # All attempts failed
+            return {
+                'retcode': result.retcode if result else 0,
+                'comment': self._get_retcode_description(result.retcode if result else 0),
+                'ticket': ticket
+            }
                 
         except Exception as e:
-            logger.error(f"❌ Raw close error for {ticket}: {e}")
+            logger.error(f"❌ Group close execution error for {ticket}: {e}")
             return {
                 'retcode': 0,
                 'comment': f'Exception: {str(e)}',
