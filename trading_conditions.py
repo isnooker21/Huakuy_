@@ -191,22 +191,25 @@ class TradingConditions:
         self.orders_per_candle = {}  # เก็บจำนวน order ต่อแท่งเทียน
         self.previous_candle_close = None  # เก็บราคาปิดแท่งก่อนหน้า
         
-        # เพิ่ม Market Analysis
-        self.session_analyzer = MarketSessionAnalyzer()
+        # เพิ่ม Market Analysis - Disabled (no market_analysis module)
+        # self.session_analyzer = MarketSessionAnalyzer()  # Disabled - no market_analysis
+        self.session_analyzer = None
         self.mtf_analyzer = None  # จะถูกตั้งค่าเมื่อใช้งาน
         
         # 🧠 7D Entry Intelligence System
         self.enable_7d_entry_intelligence = True
         self.intelligent_position_manager = None  # จะถูกตั้งค่าจาก main_new.py
         
-        # 🎯 Smart Entry Timing System - Initialize directly here
-        try:
-            from smart_entry_timing import create_smart_entry_timing
-            self.smart_entry_timing = create_smart_entry_timing(symbol="XAUUSD")
-            logger.info("✅ Smart Entry Timing initialized in TradingConditions")
-        except Exception as e:
-            logger.error(f"❌ Failed to initialize Smart Entry Timing: {e}")
-            self.smart_entry_timing = None
+        # 🎯 Smart Entry Timing System - Disabled (no smart_entry_timing module)
+        # try:
+        #     from smart_entry_timing import create_smart_entry_timing
+        #     self.smart_entry_timing = create_smart_entry_timing(symbol="XAUUSD")
+        #     logger.info("✅ Smart Entry Timing initialized in TradingConditions")
+        # except Exception as e:
+        #     logger.error(f"❌ Failed to initialize Smart Entry Timing: {e}")
+        #     self.smart_entry_timing = None
+        self.smart_entry_timing = None
+        logger.info("✅ Smart Entry Timing disabled - no module available")
             
         self.strategic_position_manager = None  # จะถูกตั้งค่าจาก main_new.py
         
@@ -215,9 +218,9 @@ class TradingConditions:
         """🎯 เช็คเวลาเข้าที่ฉลาด - ป้องกัน BUY สูง SELL ต่ำ"""
         try:
             if not self.smart_entry_timing:
-                logger.error(f"🚨 CRITICAL: SMART ENTRY TIMING IS NULL - SYSTEM ERROR!")
-                logger.error(f"   Price Hierarchy CANNOT be enforced - BLOCKING ALL ENTRIES!")
-                return {'approved': False, 'reason': 'CRITICAL: Smart Entry Timing failed to initialize'}
+                # Smart Entry Timing disabled - allow all entries
+                logger.debug(f"🎯 SMART ENTRY: Disabled - allowing {signal_direction} at {current_price:.2f}")
+                return {'approved': True, 'reason': 'Smart Entry Timing disabled'}
             
             logger.info(f"🎯 SMART ENTRY CHECK: {signal_direction} at {current_price:.2f}")
             
@@ -326,12 +329,15 @@ class TradingConditions:
         
         logger.info(f"✅ High-Frequency OK: {orders_this_minute}/{max_entries_per_minute} entries this minute")
             
-        # 2. Market Session Analysis
-        session_params = self.session_analyzer.adjust_trading_parameters({
+        # 2. Market Session Analysis - Disabled (no market_analysis module)
+        # session_params = self.session_analyzer.adjust_trading_parameters({
+        #     'base_strength_threshold': 20.0,
+        #     'base_max_positions': 4,
+        session_params = {
             'base_strength_threshold': 20.0,
             'base_max_positions': 4,
             'base_lot_multiplier': 1.0
-        })
+        }
         
         # 3. Multi-Timeframe Confirmation  
         # 🎯 FIXED: Counter-trend logic - ซื้อถูก ขายแพง
