@@ -104,11 +104,11 @@ class SimpleBreakoutTradingSystemGUI:
         # GUI
         self.gui = None
         
-        # 🛡️ RANGE-BOUND MARKET PROTECTION
+        # 🛡️ RANGE-BOUND MARKET PROTECTION (ปรับให้ยืดหยุ่นขึ้น)
         self.price_range_history = []  # เก็บราคา high/low ล่าสุด
-        self.range_check_period = 50   # ตรวจสอบ 50 candles ล่าสุด
-        self.max_range_points = 300    # ถ้าราคาวิ่งไม่เกิน 300 จุด
-        self.min_positions_for_range_check = 5  # ต้องมี positions อย่างน้อย 5 ตัว
+        self.range_check_period = 30   # ลดเป็น 30 candles (เร็วขึ้น)
+        self.max_range_points = 200    # ลดเป็น 200 จุด (เข้มงวดขึ้น)
+        self.min_positions_for_range_check = 10  # เพิ่มเป็น 10 positions (เริ่มทำงานเมื่อมี positions เยอะมาก)
         
         logger.info(f"🛡️ Range-bound Protection: Max Range: {self.max_range_points} points, Min Positions: {self.min_positions_for_range_check}")
         
@@ -349,8 +349,11 @@ class SimpleBreakoutTradingSystemGUI:
                 if breakout_signal:
                     # 🛡️ Check for range-bound market before executing trade
                     if self._is_range_bound_market():
-                        logger.info(f"⏸️ BREAKOUT SKIPPED: Range-bound market detected for {timeframe}")
+                        logger.warning(f"⏸️ BREAKOUT SKIPPED: Range-bound market detected for {timeframe}")
+                        logger.warning(f"   Current positions: {len(self.order_manager.active_positions)}")
                         continue
+                    else:
+                        logger.debug(f"✅ Market OK for trading: {timeframe}")
                     
                     # 🚀 Execute breakout trade
                     self._execute_simple_breakout_trade(
@@ -722,12 +725,19 @@ class SimpleBreakoutTradingSystemGUI:
             )
             
             if hasattr(closing_analysis, 'should_close') and closing_analysis.should_close:
+                logger.info(f"💰 CLOSING RECOMMENDED by Dynamic Closer")
                 if hasattr(closing_analysis, 'closing_groups') and closing_analysis.closing_groups:
                     for group in closing_analysis.closing_groups:
                         logger.info(f"💰 CLOSING GROUP: {len(group)} positions")
                         result = self.order_manager.close_positions_group(group)
                         if result:
                             logger.info(f"✅ GROUP CLOSED successfully")
+                        else:
+                            logger.warning(f"❌ GROUP CLOSE FAILED")
+                else:
+                    logger.warning(f"⚠️ No closing groups provided")
+            else:
+                logger.debug(f"💤 No closing recommended - waiting for better opportunity")
                             
         except Exception as e:
             logger.error(f"❌ Error in dynamic closing: {e}")

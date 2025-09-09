@@ -243,13 +243,20 @@ class OrderManager:
             # 🚨 STRICT ZERO LOSS CHECK
             if net_profit_before_close < safety_buffer:
                 logger.warning(f"🚫 ZERO LOSS POLICY: Rejecting close - would result in loss")
-                logger.warning(f"   Required: ${safety_buffer:.2f}, Available: ${net_profit_before_close:.2f}")
+                logger.warning(f"   💰 Current Profit: ${net_profit_before_close:.2f}")
+                logger.warning(f"   🛡️ Required Buffer: ${safety_buffer:.2f}")
+                logger.warning(f"   📊 Positions: {len(valid_positions)}")
+                logger.warning(f"   📈 Total Volume: {sum(getattr(pos, 'volume', 0.01) for pos in valid_positions):.2f}")
                 return CloseResult(
                     success=False,
                     closed_tickets=[],
                     total_profit=0.0,
                     error_message=f"Zero Loss Policy: Insufficient profit (${net_profit_before_close:.2f} < ${safety_buffer:.2f})"
                 )
+            else:
+                logger.info(f"✅ ZERO LOSS POLICY: APPROVED for closing")
+                logger.info(f"   💰 Profit: ${net_profit_before_close:.2f} > Buffer: ${safety_buffer:.2f}")
+                logger.info(f"   🎯 Net Expected: ${net_profit_before_close - safety_buffer:.2f}")
             
             logger.info(f"✅ ZERO LOSS POLICY: Safe to close - profit margin OK")
             
@@ -683,17 +690,17 @@ class OrderManager:
             total_volume = sum(getattr(pos, 'volume', 0.01) for pos in positions)
             position_count = len(positions)
             
-            # 🔧 REALISTIC COSTS สำหรับ XAUUSD
-            spread_cost = total_volume * 2.0   # ลดลง: ~$2 per lot (realistic spread)
-            commission_cost = total_volume * 0.5  # ลดลง: ~$0.5 per lot (typical commission)
-            slippage_cost = position_count * 0.5  # ลดลง: ~$0.5 per position
+            # 🔧 ULTRA LOW COSTS สำหรับ XAUUSD - FIGHT MODE!
+            spread_cost = total_volume * 0.5   # ลดมาก: ~$0.5 per lot
+            commission_cost = total_volume * 0.2  # ลดมาก: ~$0.2 per lot  
+            slippage_cost = position_count * 0.2  # ลดมาก: ~$0.2 per position
             
-            # Safety buffer = ต้นทุนรวม + buffer 10% (ลดจาก 20%)
+            # Safety buffer = ต้นทุนรวม + buffer 5% เท่านั้น!
             total_cost = spread_cost + commission_cost + slippage_cost
-            safety_buffer = total_cost * 1.1  # เพิ่ม 10% buffer
+            safety_buffer = total_cost * 1.05  # เพิ่ม 5% buffer เท่านั้น
             
-            # 🔧 ขั้นต่ำ $1 per position (ลดจาก $3)
-            minimum_buffer = position_count * 1.0
+            # 🔧 ขั้นต่ำ $0.5 per position - FIGHT MODE!
+            minimum_buffer = position_count * 0.5
             
             final_buffer = max(safety_buffer, minimum_buffer)
             
@@ -706,4 +713,4 @@ class OrderManager:
             
         except Exception as e:
             logger.error(f"❌ Error calculating safety buffer: {e}")
-            return len(positions) * 2.0  # Fallback: $2 per position (ลดจาก $5)
+            return len(positions) * 0.5  # Fallback: $0.5 per position - FIGHT MODE!
