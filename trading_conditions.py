@@ -744,7 +744,16 @@ class TradingConditions:
             
             # 🔝 ตรวจสอบไม้บนสุด - ต้องมี SELL
             top_sells = [pos for pos in positions if pos.type == 1 and pos.price_open >= max_position_price - 5.0]  # ใกล้บนสุด 5 จุด
-            if not top_sells and current_price >= max_position_price - 10.0:  # ราคาใกล้บนสุด
+            
+            # 🚀 BREAKOUT LOGIC: ราคาทะลุขึ้นบนสุด → ออก SELL
+            if current_price > max_position_price + 5.0:  # ทะลุขึ้นเหนือไม้บนสุด 5 จุด
+                result['should_force'] = True
+                result['forced_direction'] = 'SELL'
+                result['reason'] = f"BREAKOUT SELL: Price broke above top positions (Max: {max_position_price:.2f}, Current: {current_price:.2f})"
+                logger.info(f"🚀 BREAKOUT FORCE SELL: {result['reason']}")
+                return result
+            # 🔝 ZONE LOGIC: ใกล้บนสุดแต่ไม่มี SELL
+            elif not top_sells and current_price >= max_position_price - 10.0:  # ราคาใกล้บนสุด
                 result['should_force'] = True
                 result['forced_direction'] = 'SELL'
                 result['reason'] = f"Force SELL: No SELL at top zone (Max: {max_position_price:.2f}, Current: {current_price:.2f})"
@@ -753,7 +762,16 @@ class TradingConditions:
             
             # 🔻 ตรวจสอบไม้ล่างสุด - ต้องมี BUY  
             bottom_buys = [pos for pos in positions if pos.type == 0 and pos.price_open <= min_position_price + 5.0]  # ใกล้ล่างสุด 5 จุด
-            if not bottom_buys and current_price <= min_position_price + 10.0:  # ราคาใกล้ล่างสุด
+            
+            # 🚀 BREAKOUT LOGIC: ราคาทะลุลงล่างสุด → ออก BUY
+            if current_price < min_position_price - 5.0:  # ทะลุลงใต้ไม้ล่างสุด 5 จุด
+                result['should_force'] = True
+                result['forced_direction'] = 'BUY'
+                result['reason'] = f"BREAKOUT BUY: Price broke below bottom positions (Min: {min_position_price:.2f}, Current: {current_price:.2f})"
+                logger.info(f"🚀 BREAKOUT FORCE BUY: {result['reason']}")
+                return result
+            # 🔻 ZONE LOGIC: ใกล้ล่างสุดแต่ไม่มี BUY
+            elif not bottom_buys and current_price <= min_position_price + 10.0:  # ราคาใกล้ล่างสุด
                 result['should_force'] = True
                 result['forced_direction'] = 'BUY'
                 result['reason'] = f"Force BUY: No BUY at bottom zone (Min: {min_position_price:.2f}, Current: {current_price:.2f})"
