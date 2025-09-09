@@ -580,7 +580,8 @@ class TradingSystem:
                 price=current_price
             )
             
-            # แสดงการปรับ signal
+            # แสดงการปรับ signal และ FINAL DECISION
+            logger.info(f"📊 RAW SIGNAL: {raw_signal_direction} | FINAL SIGNAL: {smart_signal_direction}")
             if raw_signal_direction != smart_signal_direction:
                 logger.info(f"🔄 SIGNAL REVERSAL: {raw_signal_direction} → {smart_signal_direction} (Price Hierarchy)")
             
@@ -594,8 +595,9 @@ class TradingSystem:
             )
             
             if decision['should_enter']:
-                # 🎯 เข้าไม้
-                logger.info(f"🎯 {basic_signal.direction} {decision['lot_size']:.2f} lots @ {basic_signal.price:.2f}")
+                # 🎯 เข้าไม้ - แสดงให้ชัดเจนว่าเข้าอะไร
+                logger.info(f"🚀 EXECUTING TRADE: {basic_signal.direction} {decision['lot_size']:.2f} lots @ {basic_signal.price:.2f}")
+                logger.info(f"🎯 FINAL ENTRY: {basic_signal.direction} (Lot: {decision['lot_size']:.3f})")
                 
                 # ดำเนินการเทรด
                 result = self.portfolio_manager.execute_trade_decision(decision)
