@@ -182,7 +182,7 @@ class PositionPurposeTracker:
             base_purpose = self._analyze_base_purpose(position, all_positions, current_price, portfolio_context)
             
             # 4. 🌊 Apply Market Intelligence
-            market_enhanced_purpose = self._apply_market_intelligence(base_purpose, position, market_context)
+            market_enhanced_purpose = self._apply_market_intelligence(base_purpose, position, market_context, portfolio_context)
             
             # 5. 🔄 Apply Dynamic Adjustments
             final_purpose = self._apply_dynamic_adjustments(
@@ -466,7 +466,7 @@ class PositionPurposeTracker:
             return self._default_purpose_analysis(position)
     
     def _apply_market_intelligence(self, base_purpose: PurposeAnalysis, position: Any, 
-                                 market_context: MarketContext) -> PurposeAnalysis:
+                                 market_context: MarketContext, portfolio_context: PortfolioContext) -> PurposeAnalysis:
         """🌊 Apply Market Intelligence"""
         try:
             position_type = getattr(position, 'type', 0)  # 0=BUY, 1=SELL
