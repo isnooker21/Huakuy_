@@ -519,11 +519,11 @@ class DynamicAdaptiveCloser:
             # 💰 PORTFOLIO HEALTH ANALYSIS
             portfolio_health = self._assess_portfolio_health(account_info)
             
-            # 🎯 BASE THRESHOLDS (ปรับตามสถานการณ์)
-            base_confidence = 50.0
-            base_profit = 0.5
-            base_opportunity_confidence = 40.0
-            base_opportunity_profit = 0.2
+            # 🎯 BASE THRESHOLDS (ปรับตามสถานการณ์) - ลดเกณฑ์ให้ปิดได้ง่ายขึ้น
+            base_confidence = 40.0  # ลดจาก 50 เป็น 40
+            base_profit = 0.1       # ลดจาก 0.5 เป็น 0.1
+            base_opportunity_confidence = 30.0  # ลดจาก 40 เป็น 30
+            base_opportunity_profit = 0.05      # ลดจาก 0.2 เป็น 0.05
             
             # 📈 MARKET VOLATILITY ADJUSTMENT
             if market_volatility == 'HIGH':

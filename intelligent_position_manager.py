@@ -91,9 +91,9 @@ class IntelligentPositionManager:
                 logger.info(f"🧠 SKIP: No positions to analyze")
                 return {'should_close': False, 'reason': 'No positions to analyze'}
             
-            if len(positions) < 2:
-                logger.info(f"🧠 SKIP: Need at least 2 positions (has {len(positions)})")
-                return {'should_close': False, 'reason': 'Need at least 2 positions'}
+            if len(positions) < 1:
+                logger.info(f"🧠 SKIP: Need at least 1 position (has {len(positions)})")
+                return {'should_close': False, 'reason': 'Need at least 1 position'}
             
             # 1. 📊 วิเคราะห์สุขภาพ Margin
             margin_health = self._analyze_margin_health(account_info)
