@@ -757,9 +757,9 @@ class TradingSystem:
                 margin_health = None
                 position_scores = None
                 
-                if hasattr(self, 'intelligent_manager') and self.intelligent_manager:
-                    margin_health = self.intelligent_manager._analyze_margin_health(account_info)
-                    position_scores = self.intelligent_manager._score_all_positions(positions, account_info, margin_health)
+                if hasattr(self, 'intelligent_position_manager') and self.intelligent_position_manager:
+                    margin_health = self.intelligent_position_manager._analyze_margin_health(account_info)
+                    position_scores = self.intelligent_position_manager._score_all_positions(positions, account_info, margin_health)
                     logger.info(f"🧠 7D Analysis Complete: {len(position_scores)} positions scored")
                     logger.info(f"💊 Margin Health: {margin_health.risk_level} - {margin_health.recommendation}")
                 
