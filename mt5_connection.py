@@ -1017,11 +1017,17 @@ class MT5Connection:
         failed_tickets = []
         total_profit = 0.0
         
-        # 🚫 ERROR: close_position() was removed - Group closing only policy
-        # ✅ SOLUTION: Use direct MT5 group closing without individual methods
+        # 🚀 PRIORITY 1: Try legacy simple close (like old system)
+        # 🔧 FALLBACK: If legacy fails, use smart close
         for ticket in tickets:
             try:
-                result = self._execute_group_close_single(ticket)
+                # Try legacy method first (no filling type issues)
+                result = self._simple_close_legacy(ticket)
+                
+                # If legacy fails, try smart method
+                if not result or result.get('retcode') != 10009:
+                    logger.debug(f"🔄 Legacy failed for {ticket}, trying smart close...")
+                    result = self._execute_group_close_single(ticket)
                 
                 if result and result.get('retcode') == 10009:
                     closed_tickets.append(ticket)
@@ -1053,6 +1059,74 @@ class MT5Connection:
             'message': message
         }
     
+    def _simple_close_legacy(self, ticket: int) -> Optional[Dict]:
+        """🚀 LEGACY SIMPLE CLOSE: Exactly like old system - no filling type"""
+        try:
+            import MetaTrader5 as mt5
+            
+            # ดึงข้อมูล Position
+            position = mt5.positions_get(ticket=ticket)
+            if not position:
+                return {
+                    'retcode': 10039,
+                    'comment': 'Position not found',
+                    'ticket': ticket
+                }
+                
+            pos = position[0]
+            current_profit = getattr(pos, 'profit', 0.0)
+            
+            # กำหนดประเภท Order สำหรับปิด Position
+            if pos.type == mt5.POSITION_TYPE_BUY:
+                order_type = mt5.ORDER_TYPE_SELL
+                price = mt5.symbol_info_tick(pos.symbol).bid
+            else:
+                order_type = mt5.ORDER_TYPE_BUY
+                price = mt5.symbol_info_tick(pos.symbol).ask
+            
+            # 🚀 SIMPLE REQUEST: ไม่ระบุ type_filling (เหมือนระบบเก่า)
+            request = {
+                "action": mt5.TRADE_ACTION_DEAL,
+                "symbol": pos.symbol,
+                "volume": pos.volume,
+                "type": order_type,
+                "position": ticket,
+                "price": price,
+                "deviation": 20,
+                "magic": getattr(pos, 'magic', 0),
+                "comment": f"Legacy close {ticket}",
+                "type_time": mt5.ORDER_TIME_GTC,
+                # ⚠️ NO type_filling - let MT5 use default
+            }
+            
+            logger.info(f"🚀 LEGACY CLOSE: {ticket} (no filling type specified)")
+            result = mt5.order_send(request)
+            
+            if result and result.retcode == 10009:  # TRADE_RETCODE_DONE
+                logger.info(f"✅ LEGACY SUCCESS: {ticket} closed")
+                return {
+                    'retcode': result.retcode,
+                    'ticket': ticket,
+                    'profit': current_profit,
+                    'comment': 'Legacy close successful'
+                }
+            else:
+                error_desc = self._get_retcode_description(result.retcode if result else 0)
+                logger.warning(f"❌ LEGACY FAILED: {ticket} - {error_desc}")
+                return {
+                    'retcode': result.retcode if result else 0,
+                    'comment': error_desc,
+                    'ticket': ticket
+                }
+                
+        except Exception as e:
+            logger.error(f"❌ Legacy close error for {ticket}: {e}")
+            return {
+                'retcode': 0,
+                'comment': f'Exception: {str(e)}',
+                'ticket': ticket
+            }
+
     def _execute_group_close_single(self, ticket: int) -> Optional[Dict]:
         """
         🎯 GROUP CLOSE EXECUTION: Execute single position close as part of group
