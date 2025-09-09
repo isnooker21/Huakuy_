@@ -201,26 +201,21 @@ class TradingSystem:
                 price_action_analyzer=self.price_action_analyzer
             )
             
-            # 🎯 Initialize Zone-Based Position Management System
-            logger.info("🎯 Initializing Zone-Based Position Management System...")
-            self.zone_position_manager = create_zone_position_manager(
-                mt5_connection=self.mt5_connection,
-                order_manager=self.order_manager,
-                zone_size_pips=30.0,  # 30 pips per zone
-                symbol=self.actual_symbol  # ใช้ symbol ที่ auto-detect ได้
-            )
+            # 🚫 REMOVED: Zone-Based Position Management System
+            # ✅ REASON: Redundant with Dynamic 7D Smart Closer
+            # - Distance-based logic covered by Dynamic 7D
+            # - Cross-zone analysis covered by Intelligent Manager
+            # - Removing redundant systems improves closing intelligence
+            logger.info("🚫 Zone Manager DISABLED - Using Dynamic 7D Smart Closer only")
+            self.zone_position_manager = None  # Disabled
             
             # 🔗 เชื่อมต่อ Purpose-Aware Systems กับ Trading Conditions
             logger.info("🔗 Connecting Purpose-Aware Intelligence to Trading Conditions...")
             self.trading_conditions.intelligent_position_manager = self.intelligent_position_manager
             self.trading_conditions.position_purpose_tracker = self.position_purpose_tracker
             
-            # เชื่อมต่อกับ Portfolio Manager
-            if hasattr(self.portfolio_manager, 'position_manager'):
-                self.portfolio_manager.position_manager = self.zone_position_manager
-                logger.info("✅ Zone-Based System integrated with Portfolio Manager")
-            else:
-                logger.warning("⚠️ Portfolio Manager doesn't support Zone integration - using direct integration")
+            # 🚫 REMOVED: Zone Manager connection to Portfolio Manager
+            # ✅ Portfolio Manager now uses only Dynamic 7D Smart Closer
             
             logger.info("✅ SYSTEM READY")
             return True
@@ -705,28 +700,25 @@ class TradingSystem:
                         'portfolio_improvement': dynamic_result.portfolio_improvement
                     }
             
-            # 🧠 Priority 2: Intelligent Manager (Fallback)
+            # 🧠 Priority 2: Intelligent Manager (Fallback only if Dynamic 7D fails)
             if hasattr(self, 'intelligent_position_manager') and self.intelligent_position_manager and position_scores:
-                logger.info(f"🧠 INTELLIGENT FALLBACK: Using 7D intelligent manager")
+                logger.info(f"🧠 INTELLIGENT BACKUP: Using 7D intelligent manager")
                 intelligent_decision = self.intelligent_position_manager.analyze_closing_decision(positions, account_info)
                 if intelligent_decision.get('should_close', False):
-                    intelligent_decision['method'] = 'intelligent_7d_fallback'
+                    intelligent_decision['method'] = 'intelligent_7d_backup'
                     logger.info(f"✅ INTELLIGENT DECISION: {intelligent_decision.get('positions_count', 0)} positions selected")
                     return intelligent_decision
             
-            # 🎯 Priority 3: Zone-Based (Last Resort)
-            if self.zone_position_manager:
-                logger.info(f"🎯 ZONE FALLBACK: Using zone-based analysis")
-                close_decision = self.zone_position_manager.should_close_positions(positions, current_price)
-                
-                if close_decision.get('should_close', False):
-                    close_decision['method'] = 'zone_fallback'
-                    logger.info(f"✅ ZONE DECISION: {len(close_decision.get('positions_to_close', []))} positions selected")
-                    return close_decision
+            # 🚫 REMOVED Priority 3 & 4: Zone Manager and Portfolio Manager 
+            # ✅ REASON: Priority 1 & 2 already cover all functionality:
+            #    - Dynamic 7D handles distance-based (zone logic)
+            #    - Intelligent Manager handles cross-zone analysis
+            #    - Portfolio health covered by both systems
+            #    - Redundant fallbacks slow down smart closing
             
-            # 📊 No closing decision made
-            logger.info(f"⏸️ NO CLOSING: No system found suitable positions to close")
-            return {'should_close': False, 'reason': 'No suitable closing opportunities found', 'method': 'none'}
+            # 📊 Only 2 priorities now - cleaner and smarter
+            logger.info(f"⏸️ NO CLOSING: Smart systems found no suitable positions to close")
+            return {'should_close': False, 'reason': 'Smart analysis found no profitable closing opportunities', 'method': 'none'}
             
         except Exception as e:
             logger.error(f"❌ Error in unified closing decision: {e}")
