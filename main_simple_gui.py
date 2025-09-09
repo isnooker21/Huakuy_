@@ -27,7 +27,7 @@ from mt5_connection import MT5Connection
 from calculations import Position, PercentageCalculator, LotSizeCalculator
 from trading_conditions import TradingConditions, Signal, CandleData
 from order_management import OrderManager
-from portfolio_manager import PortfolioManager
+from portfolio_manager import PortfolioManager, PortfolioState
 from gui import TradingGUI
 
 # ✅ KEEP POSITION MANAGEMENT & CLOSING SYSTEMS
@@ -519,19 +519,67 @@ class SimpleBreakoutTradingSystemGUI:
         for tf in self.timeframes:
             self.last_candle_data[tf] = candle
     
-    def _get_portfolio_state(self) -> Dict[str, Any]:
+    def _get_portfolio_state(self) -> PortfolioState:
         """Get current portfolio state"""
         try:
             positions = self.order_manager.active_positions
-            return {
-                'total_positions': len(positions),
-                'buy_positions': len([p for p in positions if getattr(p, 'type', 0) == 0]),
-                'sell_positions': len([p for p in positions if getattr(p, 'type', 1) == 1]),
-                'total_profit': sum(getattr(p, 'profit', 0) for p in positions)
+            account_info = self.mt5_connection.get_account_info() if self.mt5_connection else {}
+            
+            # Calculate portfolio metrics
+            total_positions = len(positions)
+            buy_positions = len([p for p in positions if getattr(p, 'type', 0) == 0])
+            sell_positions = len([p for p in positions if getattr(p, 'type', 1) == 1])
+            total_profit = sum(getattr(p, 'profit', 0) for p in positions)
+            
+            # Get account info
+            account_balance = account_info.get('balance', self.initial_balance) if account_info else self.initial_balance
+            equity = account_info.get('equity', account_balance) if account_info else account_balance
+            margin = account_info.get('margin', 0) if account_info else 0
+            margin_level = account_info.get('margin_level', 1000) if account_info else 1000
+            
+            # Calculate percentages
+            total_profit_percentage = (total_profit / account_balance * 100) if account_balance > 0 else 0
+            exposure_percentage = (margin / account_balance * 100) if account_balance > 0 else 0
+            risk_percentage = exposure_percentage  # Simplified
+            
+            # Buy/sell ratio
+            buy_sell_ratio = {
+                'buy_ratio': (buy_positions / total_positions * 100) if total_positions > 0 else 50,
+                'sell_ratio': (sell_positions / total_positions * 100) if total_positions > 0 else 50
             }
+            
+            return PortfolioState(
+                account_balance=account_balance,
+                equity=equity,
+                margin=margin,
+                margin_level=margin_level,
+                total_positions=total_positions,
+                buy_positions=buy_positions,
+                sell_positions=sell_positions,
+                total_profit=total_profit,
+                total_profit_percentage=total_profit_percentage,
+                exposure_percentage=exposure_percentage,
+                risk_percentage=risk_percentage,
+                buy_sell_ratio=buy_sell_ratio
+            )
+            
         except Exception as e:
             logger.error(f"❌ Error getting portfolio state: {e}")
-            return {}
+            # Return default PortfolioState
+            return PortfolioState(
+                account_balance=self.initial_balance,
+                equity=self.initial_balance,
+                margin=0,
+                margin_level=1000,
+                total_positions=0,
+                buy_positions=0,
+                sell_positions=0,
+                total_profit=0,
+                total_profit_percentage=0,
+                exposure_percentage=0,
+                risk_percentage=0,
+                buy_sell_ratio={'buy_ratio': 50, 'sell_ratio': 50}
+            )
     
     def _handle_position_management(self, candle: CandleData):
         """Handle position management (Keep original logic)"""
