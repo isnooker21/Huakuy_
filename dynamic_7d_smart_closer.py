@@ -591,11 +591,10 @@ class Dynamic7DSmartCloser:
                     sells = len([s for s in selected if getattr(s.position, 'type', 0) == 1])
                     logger.debug(f"🔝 Top Edge Balance: {buys}B+{sells}S = {len(selected)} total")
                 else:
-                    # 🎯 UNBALANCED TOP EDGE: ปิดแค่ที่มี
-                    all_edge = top_buys + top_sells
-                    all_edge.sort(key=lambda x: getattr(x.position, 'price_open', 0), reverse=True)
-                    selected = all_edge[:min(size, len(all_edge))]
-                    logger.info(f"🔄 Top Edge Unbalanced: {len(selected)} positions from top edge")
+                    # 🎯 UNBALANCED TOP EDGE: ใช้ positions ที่มี เรียงตามราคาสูงสุด
+                    position_scores.sort(key=lambda x: getattr(x.position, 'price_open', 0), reverse=True)
+                    selected = position_scores[:min(size, len(position_scores))]
+                    logger.info(f"🔄 Top Edge Unbalanced: {len(selected)} positions from highest prices")
                 
             elif method_name == 'bottom_edge_7d':
                 # ขอบล่าง + 7D Score + BALANCED
@@ -616,11 +615,10 @@ class Dynamic7DSmartCloser:
                     sells = len([s for s in selected if getattr(s.position, 'type', 0) == 1])
                     logger.info(f"🔻 Bottom Edge Balance: {buys}B+{sells}S = {len(selected)} total")
                 else:
-                    # 🎯 UNBALANCED BOTTOM EDGE: ปิดแค่ที่มี
-                    all_edge = bottom_buys + bottom_sells
-                    all_edge.sort(key=lambda x: getattr(x.position, 'price_open', 0))
-                    selected = all_edge[:min(size, len(all_edge))]
-                    logger.info(f"🔄 Bottom Edge Unbalanced: {len(selected)} positions from bottom edge")
+                    # 🎯 UNBALANCED BOTTOM EDGE: ใช้ positions ที่มี เรียงตามราคาต่ำสุด
+                    position_scores.sort(key=lambda x: getattr(x.position, 'price_open', 0))
+                    selected = position_scores[:min(size, len(position_scores))]
+                    logger.info(f"🔄 Bottom Edge Unbalanced: {len(selected)} positions from lowest prices")
                 
             elif method_name == 'mixed_edge_7d':
                 # ขอบผสม + 7D Score + BALANCED
@@ -641,11 +639,10 @@ class Dynamic7DSmartCloser:
                     sells = len([s for s in selected if getattr(s.position, 'type', 0) == 1])
                     logger.info(f"🔀 Mixed Edge Balance: {buys}B+{sells}S = {len(selected)} total")
                 else:
-                    # 🎯 UNBALANCED MIXED EDGE: ปิดแค่ที่มี
-                    all_edge = edge_buys + edge_sells
-                    all_edge.sort(key=lambda x: x.total_score, reverse=True)
-                    selected = all_edge[:min(size, len(all_edge))]
-                    logger.info(f"🔄 Mixed Edge Unbalanced: {len(selected)} positions from edges")
+                    # 🎯 UNBALANCED MIXED EDGE: ใช้ positions ที่มี เรียงตาม 7D score
+                    position_scores.sort(key=lambda x: x.total_score, reverse=True)
+                    selected = position_scores[:min(size, len(position_scores))]
+                    logger.info(f"🔄 Mixed Edge Unbalanced: {len(selected)} positions by 7D score")
                     
             elif method_name == 'force_balance_7d':
                 # บังคับ Balance + 7D Score
