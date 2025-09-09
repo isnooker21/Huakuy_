@@ -199,6 +199,67 @@ class TradingConditions:
         self.enable_7d_entry_intelligence = True
         self.intelligent_position_manager = None  # จะถูกตั้งค่าจาก main_new.py
         
+        # 🎯 Smart Entry Timing System
+        self.smart_entry_timing = None  # จะถูกตั้งค่าจาก main_new.py
+        self.strategic_position_manager = None  # จะถูกตั้งค่าจาก main_new.py
+        
+    def check_smart_entry_timing(self, signal_direction: str, current_price: float, 
+                                positions: List[Position]) -> Dict[str, Any]:
+        """🎯 เช็คเวลาเข้าที่ฉลาด - ป้องกัน BUY สูง SELL ต่ำ"""
+        try:
+            if not self.smart_entry_timing:
+                return {'approved': True, 'reason': 'Smart Entry Timing not available'}
+            
+            logger.info(f"🎯 SMART ENTRY CHECK: {signal_direction} at {current_price:.2f}")
+            
+            # วิเคราะห์จุดเข้า
+            entry_analysis = self.smart_entry_timing.analyze_entry_opportunity(
+                signal_direction=signal_direction,
+                current_price=current_price,
+                existing_positions=positions
+            )
+            
+            # ตัดสินใจ
+            if entry_analysis.timing.value == "ENTER_NOW":
+                logger.info(f"✅ SMART ENTRY APPROVED: {entry_analysis.quality.value}")
+                logger.info(f"   Score: {entry_analysis.score:.1f}, Hierarchy OK: {entry_analysis.price_hierarchy_ok}")
+                
+                return {
+                    'approved': True,
+                    'quality': entry_analysis.quality.value,
+                    'score': entry_analysis.score,
+                    'confidence': entry_analysis.confidence,
+                    'strategic_value': entry_analysis.strategic_value,
+                    'entry_analysis': entry_analysis,
+                    'reason': f'Smart entry approved: {entry_analysis.quality.value}'
+                }
+            
+            elif entry_analysis.timing.value in ["WAIT_PULLBACK", "WAIT_BREAKOUT"]:
+                logger.info(f"⏳ SMART ENTRY WAIT: {entry_analysis.wait_reason}")
+                logger.info(f"   Current: {current_price:.2f}, Suggested: {entry_analysis.suggested_price:.2f}")
+                
+                return {
+                    'approved': False,
+                    'reason': f'Wait for better price: {entry_analysis.wait_reason}',
+                    'suggested_price': entry_analysis.suggested_price,
+                    'current_price': current_price,
+                    'wait_type': entry_analysis.timing.value
+                }
+            
+            else:  # SKIP_SIGNAL
+                logger.warning(f"🚫 SMART ENTRY REJECTED: {entry_analysis.wait_reason}")
+                
+                return {
+                    'approved': False,
+                    'reason': f'Entry rejected: {entry_analysis.wait_reason}',
+                    'quality': entry_analysis.quality.value,
+                    'hierarchy_ok': entry_analysis.price_hierarchy_ok
+                }
+                
+        except Exception as e:
+            logger.error(f"❌ Error in smart entry timing check: {e}")
+            return {'approved': True, 'reason': 'Smart entry check failed - allowing entry'}
+        
     def check_entry_conditions(self, candle: CandleData, positions: List[Position], 
                              account_balance: float, volume_history: List[float] = None, 
                              symbol: str = None) -> Dict[str, Any]:

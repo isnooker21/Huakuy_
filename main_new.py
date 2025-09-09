@@ -28,6 +28,10 @@ from dynamic_7d_smart_closer import create_dynamic_7d_smart_closer
 # 🎯 Position Purpose Tracking System
 from position_purpose_tracker import create_position_purpose_tracker
 
+# 🎯 Smart Entry Timing System
+from smart_entry_timing import create_smart_entry_timing
+from strategic_position_manager import create_strategic_position_manager
+
 # 📊 Market Analysis Systems
 from market_analysis import MultiTimeframeAnalyzer, MarketSessionAnalyzer
 from price_action_analyzer import PriceActionAnalyzer
@@ -209,10 +213,25 @@ class TradingSystem:
             logger.info("🚫 Zone Manager DISABLED - Using Dynamic 7D Smart Closer only")
             self.zone_position_manager = None  # Disabled
             
-            # 🔗 เชื่อมต่อ Purpose-Aware Systems กับ Trading Conditions
-            logger.info("🔗 Connecting Purpose-Aware Intelligence to Trading Conditions...")
+            # 🎯 Initialize Smart Entry Timing System
+            logger.info("🎯 Initializing Smart Entry Timing System...")
+            self.smart_entry_timing = create_smart_entry_timing(
+                mt5_connection=self.mt5_connection,
+                symbol=self.actual_symbol
+            )
+            
+            # 🛡️ Initialize Strategic Position Manager
+            logger.info("🛡️ Initializing Strategic Position Manager...")
+            self.strategic_position_manager = create_strategic_position_manager(
+                smart_entry_timing=self.smart_entry_timing
+            )
+            
+            # 🔗 เชื่อมต่อ Smart Systems กับ Trading Conditions
+            logger.info("🔗 Connecting Smart Systems to Trading Conditions...")
             self.trading_conditions.intelligent_position_manager = self.intelligent_position_manager
             self.trading_conditions.position_purpose_tracker = self.position_purpose_tracker
+            self.trading_conditions.smart_entry_timing = self.smart_entry_timing
+            self.trading_conditions.strategic_position_manager = self.strategic_position_manager
             
             # 🚫 REMOVED: Zone Manager connection to Portfolio Manager
             # ✅ Portfolio Manager now uses only Dynamic 7D Smart Closer
