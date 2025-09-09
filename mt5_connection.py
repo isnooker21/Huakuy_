@@ -1018,30 +1018,51 @@ class MT5Connection:
                 logger.warning("⚠️ No valid positions found for group close")
                 return {'success': False, 'closed_tickets': [], 'failed_tickets': tickets, 'total_profit': 0.0}
             
-            # ส่งคำสั่งปิดทั้งหมดพร้อมกัน
+            # ส่งคำสั่งปิดทั้งหมดพร้อมกัน (ใช้ order_send แบบเร็ว)
             logger.info(f"🚀 SENDING GROUP CLOSE: {len(requests)} positions")
-            results = mt5.order_send_batch(requests)
             
             closed_tickets = []
             failed_tickets = []
             total_profit = 0.0
             
-            if results:
-                for i, result in enumerate(results):
-                    ticket = tickets[i]
-                    if result.retcode == 10009:  # TRADE_RETCODE_DONE
-                        closed_tickets.append(ticket)
+            # ปิดทีละตัวแต่เร็ว (concurrent execution)
+            import threading
+            from concurrent.futures import ThreadPoolExecutor, as_completed
+            
+            def close_single_position(request_data):
+                ticket = request_data['ticket']
+                try:
+                    result = mt5.order_send(request_data)
+                    if result and result.retcode == 10009:
                         # คำนวณกำไรจาก position ที่ปิด
                         position = mt5.positions_get(ticket=ticket)
-                        if position and len(position) > 0:
-                            total_profit += position[0].profit
-                        logger.debug(f"✅ GROUP CLOSE Success: {ticket}")
+                        profit = position[0].profit if position and len(position) > 0 else 0.0
+                        return {'ticket': ticket, 'success': True, 'profit': profit}
                     else:
-                        failed_tickets.append(ticket)
-                        logger.warning(f"❌ GROUP CLOSE Failed: {ticket} - {result.retcode}")
-            else:
-                logger.error("❌ No results from order_send_batch")
-                failed_tickets = tickets.copy()
+                        return {'ticket': ticket, 'success': False, 'profit': 0.0}
+                except Exception as e:
+                    logger.error(f"❌ Error closing {ticket}: {e}")
+                    return {'ticket': ticket, 'success': False, 'profit': 0.0}
+            
+            # Execute all closes concurrently
+            with ThreadPoolExecutor(max_workers=min(len(requests), 10)) as executor:
+                # Add ticket to each request
+                for i, request in enumerate(requests):
+                    request['ticket'] = tickets[i]
+                
+                # Submit all requests
+                future_to_request = {executor.submit(close_single_position, req): req for req in requests}
+                
+                # Collect results
+                for future in as_completed(future_to_request):
+                    result = future.result()
+                    if result['success']:
+                        closed_tickets.append(result['ticket'])
+                        total_profit += result['profit']
+                        logger.debug(f"✅ GROUP CLOSE Success: {result['ticket']} (profit: ${result['profit']:.2f})")
+                    else:
+                        failed_tickets.append(result['ticket'])
+                        logger.warning(f"❌ GROUP CLOSE Failed: {result['ticket']}")
             
             success = len(closed_tickets) > 0
             logger.info(f"🎯 TRUE GROUP CLOSE RESULT: {len(closed_tickets)}/{len(tickets)} closed, Profit: ${total_profit:.2f}")
