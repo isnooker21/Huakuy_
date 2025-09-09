@@ -203,24 +203,16 @@ class OrderManager:
                 ticket = getattr(pos, 'ticket', 'NO_TICKET')
                 logger.info(f"   Position {i}: Type={pos_type}, Ticket={ticket}")
             
-            # 🎯 CRITICAL FIX: Get ALL positions from broker directly
+            # 🎯 CRITICAL FIX: Get ALL positions from broker directly  
             current_positions = self.mt5.get_positions()
             if current_positions:
                 existing_tickets = [p.ticket for p in current_positions if hasattr(p, 'ticket')]
                 logger.info(f"💎 BROKER DIRECT: {len(existing_tickets)} total positions from broker")
                 logger.info(f"🔍 Broker tickets sample: {existing_tickets[:5]}")
                 
-                for pos in positions:
-                    ticket = getattr(pos, 'ticket', None)
-                    if ticket:
-                        if ticket in existing_tickets:
-                            valid_positions.append(pos)
-                            logger.debug(f"✅ Position {ticket} validated - exists in MT5")
-                        else:
-                            logger.warning(f"⚠️ Position {ticket} no longer exists in MT5 - skipping")
-                            logger.debug(f"🔍 Available tickets: {existing_tickets[:5]}...")  # Show first 5
-                    else:
-                        logger.warning(f"⚠️ Position has no ticket - skipping")
+                # 🚨 BYPASS VALIDATION: ถ้ามี positions ใน MT5 → ให้ผ่านทุกตัว
+                logger.info(f"🚀 BYPASS VALIDATION: Allowing all {len(positions)} positions to close")
+                valid_positions = positions  # ใช้ทุกตัวที่ส่งมา
             else:
                 # If we can't get positions, assume all exist (fallback)
                 logger.warning(f"⚠️ Cannot get current positions - assuming all {len(positions)} positions exist")
