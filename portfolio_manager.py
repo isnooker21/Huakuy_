@@ -264,21 +264,8 @@ class PortfolioManager:
             # 🎯 ปรับตามแรงแท่งเทียน (Candle Strength Adjustment)
             candle_strength_adj = lot_calculator.calculate_candle_strength_multiplier(candle)
             
-            # ปรับ lot size ตาม Zone Recommendation
-            if zone_recommendation:
-                if zone_recommendation.get('should_enter', True):
-                    zone_multiplier = zone_recommendation.get('lot_multiplier', 1.0)
-                else:
-                    # ถ้า Zone Analysis แนะนำไม่ให้เข้า
-                    logger.warning(f"🚫 Zone Analysis blocks entry: {zone_recommendation.get('reason', 'Unknown')}")
-                    return {
-                        'should_enter': False,
-                        'reasons': [f"Zone Analysis: {zone_recommendation.get('reason', 'Not suitable for zone distribution')}"],
-                        'signal': None,
-                        'lot_size': 0.0
-                    }
-            else:
-                zone_multiplier = 1.0
+            # ✅ Smart Entry Timing already handled zone analysis - use default multiplier
+            zone_multiplier = 1.0  # Default multiplier since Smart Entry Timing approved the trade
             
             # รวมทุกปัจจัย (เพิ่มการจำกัดขนาด)
             multiplier_total = zone_multiplier * candle_strength_adj
@@ -293,8 +280,7 @@ class PortfolioManager:
             logger.info(f"   Traditional Lot: {traditional_lot:.3f}")
             logger.info(f"   Selected Base Lot: {base_lot_size:.3f}")
             logger.info(f"   Candle Strength Adj: {candle_strength_adj:.2f}x")
-            if zone_recommendation:
-                logger.info(f"   Zone Multiplier: {zone_multiplier:.2f}x ({zone_recommendation.get('reason', 'N/A')})")
+            logger.info(f"   Zone Multiplier: {zone_multiplier:.2f}x (Smart Entry Timing approved)")
             logger.info(f"   Total Multiplier: {multiplier_total:.2f}x (capped at 1.5x)")
             logger.info(f"   Final Lot Size: {lot_size:.3f}")
             
@@ -903,6 +889,11 @@ class PortfolioManager:
             return None
     
     def _create_initial_zone_recommendation(self, signal: Signal, current_price: float) -> Dict[str, Any]:
+        """🚫 REMOVED: Zone Recommendation - Replaced by Smart Entry Timing System"""
+        # ✅ Smart Entry Timing System handles all initial entry analysis
+        return None
+    
+    def _create_initial_zone_recommendation_REMOVED(self, signal: Signal, current_price: float) -> Dict[str, Any]:
         """สร้างคำแนะนำสำหรับการเข้าไม้ครั้งแรก"""
         return {
             'should_enter': True,
