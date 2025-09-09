@@ -152,7 +152,7 @@ class PositionPurposeTracker:
             'market_strength_threshold': 60,   # Market strength ที่มีผล
             'problem_loss_threshold': -5,      # ขาดทุนเท่าไหร่ถือว่า Problem (ลดจาก -20 เป็น -5)
             'profit_take_threshold': 5,        # กำไรเท่าไหร่ถือว่า Ready to close (ลดจาก 15 เป็น 5)
-            'helper_distance_max': 200,        # Helper ห่างจาก Problem ได้สูงสุดกี่ pips (เพิ่มจาก 50 เป็น 200)
+            'helper_distance_max': 100,        # Helper ห่างจาก Problem ได้สูงสุดกี่ pips (ปรับสำหรับทองคำ)
             'balance_tolerance': 0.3,          # ความไม่สมดุลที่ยอมรับได้
             'trend_follow_min_strength': 65,   # Trend strength ขั้นต่ำสำหรับ TREND_FOLLOWER
             'heavy_loss_threshold': -50,       # ขาดทุนหนักมาก (เพิ่มใหม่)
@@ -345,27 +345,27 @@ class PositionPurposeTracker:
             if profit < self.config['problem_loss_threshold']:
                 is_problem = True
             
-            # เงื่อนไขที่ 2: ระยะห่างไกลมาก + ขาดทุน (แม้น้อย)
-            elif distance_pips > 500 and profit < 0:  # ห่าง > 500 pips + ขาดทุน
+            # เงื่อนไขที่ 2: ระยะห่างไกลมาก + ขาดทุน (ปรับสำหรับทองคำ)
+            elif distance_pips > 200 and profit < 0:  # ห่าง > 200 pips + ขาดทุน
                 is_problem = True
             
-            # เงื่อนไขที่ 3: ระยะห่างไกลมหาศาล (แม้ไม่ขาดทุน)
-            elif distance_pips > 1000:  # ห่าง > 1000 pips
+            # เงื่อนไขที่ 3: ระยะห่างไกลมหาศาล (ปรับสำหรับทองคำ)
+            elif distance_pips > 400:  # ห่าง > 400 pips
                 is_problem = True
             
             if is_problem:
                 purpose = PurposeType.PROBLEM_POSITION
                 
-                # จัดระดับตามความรุนแรง
-                if profit < self.config['heavy_loss_threshold'] or distance_pips > 1000:
+                # จัดระดับตามความรุนแรง (ปรับสำหรับทองคำ)
+                if profit < self.config['heavy_loss_threshold'] or distance_pips > 500:
                     sub_purpose = f"Critical Problem (${profit:.1f}, {distance_pips:.0f} pips)"
                     priority = PurposePriority.CRITICAL
                     confidence = 95.0
-                elif profit < -20 or distance_pips > 700:
+                elif profit < -20 or distance_pips > 300:
                     sub_purpose = f"Heavy Problem (${profit:.1f}, {distance_pips:.0f} pips)"
                     priority = PurposePriority.HIGH
                     confidence = 90.0
-                elif profit < -10 or distance_pips > 400:
+                elif profit < -10 or distance_pips > 150:
                     sub_purpose = f"Moderate Problem (${profit:.1f}, {distance_pips:.0f} pips)"
                     priority = PurposePriority.HIGH
                     confidence = 85.0
