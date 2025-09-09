@@ -683,7 +683,8 @@ class MT5Connection:
             logger.error(f"เกิดข้อผิดพลาดในการคำนวณกำไร Position {ticket}: {e}")
             return None
 
-    def close_position(self, ticket: int) -> Optional[Dict]:
+    # 🚫 REMOVED: close_position() - User policy: Group closing only
+    def close_position_REMOVED(self, ticket: int) -> Optional[Dict]:
         """
         ปิด Position (ตรวจสอบ spread ก่อน)
         
@@ -1016,40 +1017,125 @@ class MT5Connection:
         failed_tickets = []
         total_profit = 0.0
         
-        # 🔧 RAW MT5 EXECUTION: Close each position via MT5
+        # 🚫 ERROR: close_position() was removed - Group closing only policy
+        # ✅ SOLUTION: Use direct MT5 group closing without individual methods
         for ticket in tickets:
             try:
-                result = self._close_position_raw(ticket)
+                result = self._execute_group_close_single(ticket)
                 
                 if result and result.get('retcode') == 10009:
                     closed_tickets.append(ticket)
-                    total_profit += result.get('profit', 0.0)
-                    logger.debug(f"🔧 MT5 Close Success: {ticket}")
+                    # Get profit directly from result
+                    profit = result.get('profit', 0.0)
+                    total_profit += profit
+                    logger.debug(f"✅ GROUP CLOSE Success: {ticket} (profit: ${profit:.2f})")
                 else:
                     failed_tickets.append(ticket)
                     retcode = result.get('retcode', 0) if result else 0
                     error_desc = self._get_retcode_description(retcode)
-                    logger.warning(f"🔧 MT5 Close Failed: {ticket} - {error_desc}")
+                    logger.warning(f"❌ GROUP CLOSE Failed: {ticket} - {error_desc}")
                     
             except Exception as e:
                 failed_tickets.append(ticket)
-                logger.error(f"🔧 MT5 Raw Error: {ticket} - {e}")
+                logger.error(f"❌ GROUP CLOSE Error: {ticket} - {e}")
         
         success = len(closed_tickets) > 0
-        message = f"Raw MT5: {len(closed_tickets)}/{len(tickets)} closed"
+        message = f"Group Close: {len(closed_tickets)}/{len(tickets)} closed"
         
-        logger.info(f"🔧 RAW MT5 RESULT: {message}")
+        logger.info(f"✅ GROUP CLOSE RESULT: {message}")
         
         return {
             'success': success,
             'closed_tickets': closed_tickets,
-            'rejected_tickets': [],  # Raw MT5 doesn't reject, only succeeds or fails
+            'rejected_tickets': [],  # Group closing handles rejections at business logic layer
             'failed_tickets': failed_tickets,
             'total_profit': total_profit,
             'message': message
         }
     
-    def close_positions_group_with_spread_check(self, tickets: List[int]) -> Dict:
+    def _execute_group_close_single(self, ticket: int) -> Optional[Dict]:
+        """
+        🎯 GROUP CLOSE EXECUTION: Execute single position close as part of group
+        ⚠️ Internal use only - part of group closing process
+        """
+        try:
+            import MetaTrader5 as mt5
+            
+            # ดึงข้อมูล Position
+            position = mt5.positions_get(ticket=ticket)
+            if not position:
+                return {
+                    'retcode': 10039,
+                    'comment': 'Position not found',
+                    'ticket': ticket
+                }
+                
+            pos = position[0]
+            current_profit = getattr(pos, 'profit', 0.0)
+            
+            # กำหนดประเภท Order สำหรับปิด Position
+            if pos.type == mt5.POSITION_TYPE_BUY:
+                order_type = mt5.ORDER_TYPE_SELL
+                price = mt5.symbol_info_tick(pos.symbol).bid
+            else:
+                order_type = mt5.ORDER_TYPE_BUY
+                price = mt5.symbol_info_tick(pos.symbol).ask
+            
+            # 🔧 Smart Filling Type Selection (same as before)
+            symbol_info = mt5.symbol_info(pos.symbol)
+            filling_mode = mt5.ORDER_FILLING_FOK  # Default
+            
+            if symbol_info:
+                if symbol_info.filling_mode & mt5.SYMBOL_FILLING_FOK:
+                    filling_mode = mt5.ORDER_FILLING_FOK
+                elif symbol_info.filling_mode & mt5.SYMBOL_FILLING_IOC:
+                    filling_mode = mt5.ORDER_FILLING_IOC
+                elif symbol_info.filling_mode & mt5.SYMBOL_FILLING_RETURN:
+                    filling_mode = mt5.ORDER_FILLING_RETURN
+            
+            # เตรียมข้อมูล request
+            request = {
+                "action": mt5.TRADE_ACTION_DEAL,
+                "symbol": pos.symbol,
+                "volume": pos.volume,
+                "type": order_type,
+                "position": ticket,
+                "price": price,
+                "deviation": 20,
+                "magic": getattr(pos, 'magic', 0),
+                "comment": f"Group close {ticket}",
+                "type_time": mt5.ORDER_TIME_GTC,
+                "type_filling": filling_mode,
+            }
+            
+            # ส่ง Order
+            result = mt5.order_send(request)
+            
+            if result and result.retcode == 10009:
+                return {
+                    'retcode': result.retcode,
+                    'ticket': ticket,
+                    'deal': result.deal,
+                    'profit': current_profit,
+                    'comment': 'Position closed successfully'
+                }
+            else:
+                return {
+                    'retcode': result.retcode if result else 0,
+                    'comment': self._get_retcode_description(result.retcode if result else 0),
+                    'ticket': ticket
+                }
+                
+        except Exception as e:
+            logger.error(f"❌ Group close execution error for {ticket}: {e}")
+            return {
+                'retcode': 0,
+                'comment': f'Exception: {str(e)}',
+                'ticket': ticket
+            }
+    
+    # 🚫 REMOVED: close_positions_group_with_spread_check() - Redundant with group closing
+    def close_positions_group_with_spread_check_REMOVED(self, tickets: List[int]) -> Dict:
         """
         ปิด Position หลายตัวพร้อมกัน โดยเช็ค spread ก่อน
         
@@ -1145,7 +1231,8 @@ class MT5Connection:
     
     # 🚫 REMOVED: close_position_safe() - User explicitly prohibited individual position closing
     
-    def _close_position_raw(self, ticket: int) -> Optional[Dict]:
+    # 🚫 REMOVED: _close_position_raw() - Replaced by _execute_group_close_single()
+    def _close_position_raw_REMOVED(self, ticket: int) -> Optional[Dict]:
         """
         🚨 EMERGENCY RAW CLOSE: Only for internal group closing
         ⚠️ This violates user policy but needed for group operations
@@ -1173,6 +1260,21 @@ class MT5Connection:
                 order_type = mt5.ORDER_TYPE_BUY
                 price = mt5.symbol_info_tick(pos.symbol).ask
             
+            # 🔧 Smart Filling Type Selection
+            symbol_info = mt5.symbol_info(pos.symbol)
+            filling_mode = mt5.ORDER_FILLING_FOK  # Default
+            
+            if symbol_info:
+                # เช็ค filling modes ที่รองรับ
+                if symbol_info.filling_mode & mt5.SYMBOL_FILLING_FOK:
+                    filling_mode = mt5.ORDER_FILLING_FOK  # Fill or Kill
+                elif symbol_info.filling_mode & mt5.SYMBOL_FILLING_IOC:
+                    filling_mode = mt5.ORDER_FILLING_IOC  # Immediate or Cancel  
+                elif symbol_info.filling_mode & mt5.SYMBOL_FILLING_RETURN:
+                    filling_mode = mt5.ORDER_FILLING_RETURN  # Return
+                else:
+                    logger.warning(f"⚠️ No supported filling mode for {pos.symbol}")
+            
             # เตรียมข้อมูล request
             request = {
                 "action": mt5.TRADE_ACTION_DEAL,
@@ -1185,8 +1287,10 @@ class MT5Connection:
                 "magic": getattr(pos, 'magic', 0),
                 "comment": f"Group close {ticket}",
                 "type_time": mt5.ORDER_TIME_GTC,
-                "type_filling": mt5.ORDER_FILLING_IOC,
+                "type_filling": filling_mode,
             }
+            
+            logger.debug(f"🔧 Close request for {ticket}: filling={filling_mode}")
             
             # ส่ง Order
             result = mt5.order_send(request)
