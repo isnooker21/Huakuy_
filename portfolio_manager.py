@@ -168,7 +168,8 @@ class PortfolioManager:
             )
             
     def should_enter_trade(self, signal: Signal, candle: CandleData, 
-                          current_state: PortfolioState, volume_history: List[float] = None) -> Dict[str, Any]:
+                          current_state: PortfolioState, volume_history: List[float] = None,
+                          dynamic_lot_size: float = None) -> Dict[str, Any]:
         """
         ตัดสินใจว่าควรเข้าเทรดหรือไม่
         
@@ -294,14 +295,19 @@ class PortfolioManager:
                 lot_size = lot_size * 0.9  # เปลี่ยนจาก 0.8 เป็น 0.9
                 logger.info(f"   XAUUSD Adjustment: ×0.9 (was {lot_size/0.9:.3f})")
             
-            # ปรับขนาด Lot ตามสถานะพอร์ต
-            adjusted_lot = self._adjust_lot_size_by_portfolio_state(lot_size, current_state)
+            # 🚀 ใช้ Dynamic Lot Size จาก Dynamic Entry System (ถ้ามี)
+            if dynamic_lot_size is not None:
+                logger.info(f"🎯 Using Dynamic Lot Size: {dynamic_lot_size:.3f} (override calculated: {lot_size:.3f})")
+                final_lot_size = dynamic_lot_size
+            else:
+                # ปรับขนาด Lot ตามสถานะพอร์ต (fallback)
+                final_lot_size = self._adjust_lot_size_by_portfolio_state(lot_size, current_state)
             
             return {
                 'should_enter': True,
                 'reasons': ['ผ่านเงื่อนไขการเข้าทั้งหมด'],
                 'signal': signal,
-                'lot_size': adjusted_lot,
+                'lot_size': final_lot_size,
                 'market_strength': market_strength,
                 'volatility': volatility
             }
