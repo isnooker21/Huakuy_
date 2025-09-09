@@ -613,26 +613,16 @@ class Dynamic7DSmartCloser:
                 selected = sorted_positions[:size]
                 
             elif base_method == 'top_edge':
-                # ขอบบน
-                sorted_by_price = sorted(positions, 
-                                       key=lambda x: getattr(x, 'open_price', 0), reverse=True)
-                selected = sorted_by_price[:size]
+                # ขอบบน - 🎯 FORCE BUY+SELL BALANCE
+                selected = self._select_top_edge_balanced(positions, size)
                 
             elif base_method == 'bottom_edge':
-                # ขอบล่าง
-                sorted_by_price = sorted(positions, 
-                                       key=lambda x: getattr(x, 'open_price', 0))
-                selected = selected[:size]
+                # ขอบล่าง - 🎯 FORCE BUY+SELL BALANCE  
+                selected = self._select_bottom_edge_balanced(positions, size)
                 
             elif base_method == 'mixed_edge':
-                # ขอบผสม
-                sorted_by_price_high = sorted(positions, 
-                                            key=lambda x: getattr(x, 'open_price', 0), reverse=True)
-                sorted_by_price_low = sorted(positions, 
-                                           key=lambda x: getattr(x, 'open_price', 0))
-                top_half = sorted_by_price_high[:size//2]
-                bottom_half = sorted_by_price_low[:size//2]
-                selected = top_half + bottom_half
+                # ขอบผสม - 🎯 FORCE BUY+SELL BALANCE
+                selected = self._select_mixed_edge_balanced(positions, size)
                 
             else:
                 # Default: เรียงตาม profit
@@ -1221,6 +1211,119 @@ class Dynamic7DSmartCloser:
         
         # Fallback price
         return 2000.0
+    
+    def _select_top_edge_balanced(self, positions: List[Any], size: int) -> List[Any]:
+        """🔝 เลือก positions ขอบบนแบบ BUY+SELL Balance"""
+        try:
+            # แยก BUY/SELL
+            buy_positions = [p for p in positions if getattr(p, 'type', 0) == 0]
+            sell_positions = [p for p in positions if getattr(p, 'type', 0) == 1]
+            
+            # เรียงตามราคา (สูง→ต่ำ)
+            buy_positions.sort(key=lambda x: getattr(x, 'open_price', 0), reverse=True)
+            sell_positions.sort(key=lambda x: getattr(x, 'open_price', 0), reverse=True)
+            
+            # เลือกแบบ Balance
+            selected = []
+            buy_needed = max(1, size // 2)
+            sell_needed = size - buy_needed
+            
+            selected.extend(buy_positions[:buy_needed])
+            selected.extend(sell_positions[:sell_needed])
+            
+            # ตรวจสอบ Balance
+            final_buys = len([p for p in selected if getattr(p, 'type', 0) == 0])
+            final_sells = len([p for p in selected if getattr(p, 'type', 0) == 1])
+            
+            if final_buys == 0 or final_sells == 0:
+                logger.debug(f"❌ Top edge cannot create balance: {final_buys}B+{final_sells}S")
+                return []
+                
+            logger.debug(f"🔝 Top edge balanced: {final_buys}B+{final_sells}S")
+            return selected
+            
+        except Exception as e:
+            logger.error(f"❌ Error in top edge balanced selection: {e}")
+            return []
+    
+    def _select_bottom_edge_balanced(self, positions: List[Any], size: int) -> List[Any]:
+        """🔻 เลือก positions ขอบล่างแบบ BUY+SELL Balance"""
+        try:
+            # แยก BUY/SELL
+            buy_positions = [p for p in positions if getattr(p, 'type', 0) == 0]
+            sell_positions = [p for p in positions if getattr(p, 'type', 0) == 1]
+            
+            # เรียงตามราคา (ต่ำ→สูง)
+            buy_positions.sort(key=lambda x: getattr(x, 'open_price', 0))
+            sell_positions.sort(key=lambda x: getattr(x, 'open_price', 0))
+            
+            # เลือกแบบ Balance
+            selected = []
+            buy_needed = max(1, size // 2)
+            sell_needed = size - buy_needed
+            
+            selected.extend(buy_positions[:buy_needed])
+            selected.extend(sell_positions[:sell_needed])
+            
+            # ตรวจสอบ Balance
+            final_buys = len([p for p in selected if getattr(p, 'type', 0) == 0])
+            final_sells = len([p for p in selected if getattr(p, 'type', 0) == 1])
+            
+            if final_buys == 0 or final_sells == 0:
+                logger.debug(f"❌ Bottom edge cannot create balance: {final_buys}B+{final_sells}S")
+                return []
+                
+            logger.debug(f"🔻 Bottom edge balanced: {final_buys}B+{final_sells}S")
+            return selected
+            
+        except Exception as e:
+            logger.error(f"❌ Error in bottom edge balanced selection: {e}")
+            return []
+    
+    def _select_mixed_edge_balanced(self, positions: List[Any], size: int) -> List[Any]:
+        """🔄 เลือก positions ขอบผสมแบบ BUY+SELL Balance"""
+        try:
+            # แยก BUY/SELL
+            buy_positions = [p for p in positions if getattr(p, 'type', 0) == 0]
+            sell_positions = [p for p in positions if getattr(p, 'type', 0) == 1]
+            
+            # เรียงตามราคา
+            buy_high = sorted(buy_positions, key=lambda x: getattr(x, 'open_price', 0), reverse=True)
+            buy_low = sorted(buy_positions, key=lambda x: getattr(x, 'open_price', 0))
+            sell_high = sorted(sell_positions, key=lambda x: getattr(x, 'open_price', 0), reverse=True)  
+            sell_low = sorted(sell_positions, key=lambda x: getattr(x, 'open_price', 0))
+            
+            # เลือกแบบ Mixed Edge + Balance
+            selected = []
+            target_per_type = size // 4  # แบ่ง 4 ส่วน: BUY-high, BUY-low, SELL-high, SELL-low
+            
+            if target_per_type < 1:
+                target_per_type = 1
+            
+            # เลือกจากแต่ละขอบ
+            selected.extend(buy_high[:target_per_type])    # BUY ขอบบน
+            selected.extend(buy_low[:target_per_type])     # BUY ขอบล่าง
+            selected.extend(sell_high[:target_per_type])   # SELL ขอบบน
+            selected.extend(sell_low[:target_per_type])    # SELL ขอบล่าง
+            
+            # ปรับให้ได้ขนาดที่ต้องการ
+            if len(selected) > size:
+                selected = selected[:size]
+            
+            # ตรวจสอบ Balance
+            final_buys = len([p for p in selected if getattr(p, 'type', 0) == 0])
+            final_sells = len([p for p in selected if getattr(p, 'type', 0) == 1])
+            
+            if final_buys == 0 or final_sells == 0:
+                logger.debug(f"❌ Mixed edge cannot create balance: {final_buys}B+{final_sells}S")
+                return []
+                
+            logger.debug(f"🔄 Mixed edge balanced: {final_buys}B+{final_sells}S")
+            return selected
+            
+        except Exception as e:
+            logger.error(f"❌ Error in mixed edge balanced selection: {e}")
+            return []
     
     def _get_distance_category(self, distance_pips: float) -> str:
         """📏 จัดหมวดหมู่ระยะห่าง - ปรับสำหรับทองคำ"""
