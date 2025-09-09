@@ -319,6 +319,23 @@ class Dynamic7DSmartCloser:
             # 📊 Market Conditions Adjustment
             if market_conditions:
                 volatility = market_conditions.get('volatility', 0.5)
+                
+                # Convert string volatility to numeric value
+                if isinstance(volatility, str):
+                    volatility_map = {
+                        'low': 0.2,
+                        'medium': 0.5,
+                        'high': 0.8,
+                        'very_high': 1.0
+                    }
+                    volatility = volatility_map.get(volatility.lower(), 0.5)
+                
+                # Ensure volatility is numeric
+                try:
+                    volatility = float(volatility)
+                except (ValueError, TypeError):
+                    volatility = 0.5  # Default to medium
+                
                 if volatility > 0.8:  # ตลาดผันผวนมาก
                     max_size = int(max_size * 0.8)  # ลดขนาด 20%
                     safety_buffer *= 1.2  # เพิ่มเกณฑ์ 20%
