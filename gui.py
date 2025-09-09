@@ -29,7 +29,7 @@ class TradingGUI:
         # สร้าง main window
         self.root = tk.Tk()
         self.root.title("🚀 Enhanced 7D Smart Trading System")
-        self.root.geometry("1600x1000")
+        self.root.geometry("1200x800")
         self.root.configure(bg='#1a1a1a')
         
         # ตั้งค่า icon และ style
@@ -58,19 +58,13 @@ class TradingGUI:
         try:
             # สร้าง main frame
             main_frame = tk.Frame(self.root, bg='#1a1a1a')
-            main_frame.pack(fill=tk.BOTH, expand=True, padx=15, pady=15)
+            main_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
             
             # สร้าง top frame สำหรับการเชื่อมต่อและควบคุม
             self.create_control_panel(main_frame)
             
-            # สร้าง market status panel
-            self.create_market_status_panel(main_frame)
-            
             # สร้าง middle frame สำหรับข้อมูลหลัก
             self.create_main_info_panel(main_frame)
-            
-            # สร้าง 7D analysis panel
-            self.create_7d_analysis_panel(main_frame)
             
             # สร้าง bottom frame สำหรับ positions และ log
             self.create_bottom_panel(main_frame)
@@ -81,33 +75,33 @@ class TradingGUI:
     def create_control_panel(self, parent):
         """สร้างแผงควบคุม"""
         control_frame = tk.Frame(parent, bg='#1a1a1a')
-        control_frame.pack(fill=tk.X, pady=(0, 15))
+        control_frame.pack(fill=tk.X, pady=(0, 10))
         
         # Connection Status
         conn_frame = tk.Frame(control_frame, bg='#2d2d2d', relief=tk.RAISED, bd=2)
-        conn_frame.pack(side=tk.LEFT, padx=(0, 15), pady=5, fill=tk.Y)
+        conn_frame.pack(side=tk.LEFT, padx=(0, 10), pady=3, fill=tk.Y)
         
         tk.Label(conn_frame, text="🔗 MT5 Connection", bg='#2d2d2d', fg='#00ff88', 
-                font=('Segoe UI', 11, 'bold')).pack(pady=8)
+                                                    font=('Segoe UI', 8, 'bold')).pack(pady=4)
         
         self.connection_status = tk.Label(conn_frame, text="Disconnected", 
-                                        bg='#2d2d2d', fg='#ff4444', font=('Segoe UI', 10, 'bold'))
-        self.connection_status.pack(pady=3)
+                                        bg='#2d2d2d', fg='#ff4444', font=('Segoe UI', 9, 'bold'))
+        self.connection_status.pack(pady=2)
         
         self.connect_btn = tk.Button(conn_frame, text="Connect MT5", 
                                    command=self.connect_mt5, bg='#4a4a4a', fg='white',
                                    font=('Segoe UI', 9), relief=tk.RAISED, bd=2)
-        self.connect_btn.pack(pady=8)
+        self.connect_btn.pack(pady=4)
         
         # Trading Controls
         trading_frame = tk.Frame(control_frame, bg='#2d2d2d', relief=tk.RAISED, bd=2)
-        trading_frame.pack(side=tk.LEFT, padx=(0, 15), pady=5, fill=tk.Y)
+        trading_frame.pack(side=tk.LEFT, padx=(0, 10), pady=3, fill=tk.Y)
         
         tk.Label(trading_frame, text="🎯 Trading Control", bg='#2d2d2d', fg='#00ff88', 
-                font=('Segoe UI', 11, 'bold')).pack(pady=8)
+                                                    font=('Segoe UI', 8, 'bold')).pack(pady=4)
         
         self.trading_status = tk.Label(trading_frame, text="Stopped", 
-                                     bg='#2d2d2d', fg='#ff4444', font=('Segoe UI', 10, 'bold'))
+                                     bg='#2d2d2d', fg='#ff4444', font=('Segoe UI', 9, 'bold'))
         self.trading_status.pack(pady=3)
         
         btn_frame = tk.Frame(trading_frame, bg='#2d2d2d')
@@ -125,10 +119,10 @@ class TradingGUI:
         
         # Emergency Controls
         emergency_frame = tk.Frame(control_frame, bg='#2d2d2d', relief=tk.RAISED, bd=2)
-        emergency_frame.pack(side=tk.LEFT, padx=(0, 15), pady=5, fill=tk.Y)
+        emergency_frame.pack(side=tk.LEFT, padx=(0, 10), pady=3, fill=tk.Y)
         
         tk.Label(emergency_frame, text="🚨 Emergency", bg='#2d2d2d', fg='#ff4444', 
-                font=('Segoe UI', 11, 'bold')).pack(pady=8)
+                                                    font=('Segoe UI', 8, 'bold')).pack(pady=4)
         
         self.close_all_btn = tk.Button(emergency_frame, text="🛑 Close All Positions", 
                                      command=self.close_all_positions, bg='#d32f2f', fg='white',
@@ -145,11 +139,11 @@ class TradingGUI:
         status_card.pack(fill=tk.X, pady=5)
         
         tk.Label(status_card, text="🕐 Market Status", bg='#2d2d2d', fg='#00ff88', 
-                font=('Segoe UI', 12, 'bold')).pack(pady=8)
+                font=('Segoe UI', 10, 'bold')).pack(pady=4)
         
         # Market status info
         status_info_frame = tk.Frame(status_card, bg='#2d2d2d')
-        status_info_frame.pack(fill=tk.X, padx=15, pady=5)
+        status_info_frame.pack(fill=tk.X, padx=10, pady=3)
         
         # Market status labels
         self.market_status_labels = {}
@@ -169,11 +163,11 @@ class TradingGUI:
             field_frame.grid(row=row, column=col, padx=10, pady=5, sticky='ew')
             
             tk.Label(field_frame, text=f"{label}:", bg='#2d2d2d', fg='#cccccc', 
-                    font=('Segoe UI', 9)).pack(anchor='w')
+                    font=('Segoe UI', 8)).pack(anchor='w')
             
             self.market_status_labels[key] = tk.Label(field_frame, text=default, 
                                                     bg='#2d2d2d', fg='#00ff88', 
-                                                    font=('Segoe UI', 9, 'bold'))
+                                                    font=('Segoe UI', 8, 'bold'))
             self.market_status_labels[key].pack(anchor='w')
         
         # Configure grid weights
@@ -183,7 +177,7 @@ class TradingGUI:
     def create_main_info_panel(self, parent):
         """สร้างแผงข้อมูลหลัก"""
         info_frame = tk.Frame(parent, bg='#1a1a1a')
-        info_frame.pack(fill=tk.X, pady=(0, 15))
+        info_frame.pack(fill=tk.X, pady=(0, 10))
         
         # Account Info (จำเป็น)
         self.create_account_info_card(info_frame)
@@ -204,11 +198,11 @@ class TradingGUI:
         analysis_card.pack(fill=tk.X, pady=5)
         
         tk.Label(analysis_card, text="🧠 7D Smart Analysis", bg='#2d2d2d', fg='#00ff88', 
-                font=('Segoe UI', 12, 'bold')).pack(pady=8)
+                font=('Segoe UI', 10, 'bold')).pack(pady=4)
         
         # 7D Analysis info
         analysis_info_frame = tk.Frame(analysis_card, bg='#2d2d2d')
-        analysis_info_frame.pack(fill=tk.X, padx=15, pady=5)
+        analysis_info_frame.pack(fill=tk.X, padx=10, pady=3)
         
         # 7D Analysis labels
         self.analysis_labels = {}
@@ -229,11 +223,11 @@ class TradingGUI:
             field_frame.grid(row=row, column=col, padx=10, pady=5, sticky='ew')
             
             tk.Label(field_frame, text=f"{label}:", bg='#2d2d2d', fg='#cccccc', 
-                    font=('Segoe UI', 9)).pack(anchor='w')
+                    font=('Segoe UI', 8)).pack(anchor='w')
             
             self.analysis_labels[key] = tk.Label(field_frame, text=default, 
                                                bg='#2d2d2d', fg='#00ff88', 
-                                               font=('Segoe UI', 9, 'bold'))
+                                               font=('Segoe UI', 8, 'bold'))
             self.analysis_labels[key].pack(anchor='w')
         
         # Configure grid weights
@@ -243,14 +237,14 @@ class TradingGUI:
     def create_account_info_card(self, parent):
         """สร้างการ์ดข้อมูลบัญชี"""
         card = tk.Frame(parent, bg='#2d2d2d', relief=tk.RAISED, bd=2)
-        card.pack(side=tk.LEFT, padx=(0, 15), pady=5, fill=tk.BOTH, expand=True)
+        card.pack(side=tk.LEFT, padx=(0, 10), pady=3, fill=tk.BOTH, expand=True)
         
         tk.Label(card, text="💰 Account Information", bg='#2d2d2d', fg='#00ff88', 
-                font=('Segoe UI', 12, 'bold')).pack(pady=8)
+                font=('Segoe UI', 10, 'bold')).pack(pady=4)
         
         # Account details
         details_frame = tk.Frame(card, bg='#2d2d2d')
-        details_frame.pack(fill=tk.BOTH, expand=True, padx=15, pady=8)
+        details_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=5)
         
         self.account_labels = {}
         account_fields = [
@@ -263,10 +257,10 @@ class TradingGUI:
         
         for i, (label, key, icon) in enumerate(account_fields):
             tk.Label(details_frame, text=f"{icon} {label}:", bg='#2d2d2d', fg='#cccccc', 
-                    font=('Segoe UI', 9)).grid(row=i, column=0, sticky='w', pady=3)
+                    font=('Segoe UI', 8)).grid(row=i, column=0, sticky='w', pady=2)
             
             self.account_labels[key] = tk.Label(details_frame, text="0.00", bg='#2d2d2d', 
-                                              fg='#00ff88', font=('Segoe UI', 10, 'bold'))
+                                              fg='#00ff88', font=('Segoe UI', 9, 'bold'))
             self.account_labels[key].grid(row=i, column=1, sticky='e', pady=3)
             
         details_frame.columnconfigure(1, weight=1)
@@ -274,14 +268,14 @@ class TradingGUI:
     def create_trading_status_card(self, parent):
         """สร้างการ์ดสถานะการเทรด"""
         card = tk.Frame(parent, bg='#2d2d2d', relief=tk.RAISED, bd=2)
-        card.pack(side=tk.LEFT, padx=(0, 15), pady=5, fill=tk.BOTH, expand=True)
+        card.pack(side=tk.LEFT, padx=(0, 10), pady=3, fill=tk.BOTH, expand=True)
         
         tk.Label(card, text="📈 Trading Status", bg='#2d2d2d', fg='#00ff88', 
-                font=('Segoe UI', 12, 'bold')).pack(pady=8)
+                font=('Segoe UI', 10, 'bold')).pack(pady=4)
         
         # Trading status details
         details_frame = tk.Frame(card, bg='#2d2d2d')
-        details_frame.pack(fill=tk.BOTH, expand=True, padx=15, pady=8)
+        details_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=5)
         
         self.trading_status_labels = {}
         trading_fields = [
@@ -294,10 +288,10 @@ class TradingGUI:
         
         for i, (key, label, default, icon) in enumerate(trading_fields):
             tk.Label(details_frame, text=f"{icon} {label}:", bg='#2d2d2d', fg='#cccccc', 
-                    font=('Segoe UI', 9)).grid(row=i, column=0, sticky='w', pady=3)
+                    font=('Segoe UI', 8)).grid(row=i, column=0, sticky='w', pady=2)
             
             self.trading_status_labels[key] = tk.Label(details_frame, text=default, bg='#2d2d2d', 
-                                              fg='#00ff88', font=('Segoe UI', 10, 'bold'))
+                                              fg='#00ff88', font=('Segoe UI', 9, 'bold'))
             self.trading_status_labels[key].grid(row=i, column=1, sticky='e', pady=3)
             
         details_frame.columnconfigure(1, weight=1)
@@ -305,14 +299,14 @@ class TradingGUI:
     def create_7d_closer_status_card(self, parent):
         """สร้างการ์ดสถานะ 7D Smart Closer"""
         card = tk.Frame(parent, bg='#2d2d2d', relief=tk.RAISED, bd=2)
-        card.pack(side=tk.LEFT, padx=(0, 15), pady=5, fill=tk.BOTH, expand=True)
+        card.pack(side=tk.LEFT, padx=(0, 10), pady=3, fill=tk.BOTH, expand=True)
         
         tk.Label(card, text="🧠 7D Smart Closer", bg='#2d2d2d', fg='#00ff88', 
-                font=('Segoe UI', 12, 'bold')).pack(pady=8)
+                font=('Segoe UI', 10, 'bold')).pack(pady=4)
         
         # 7D Closer status details
         details_frame = tk.Frame(card, bg='#2d2d2d')
-        details_frame.pack(fill=tk.BOTH, expand=True, padx=15, pady=8)
+        details_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=5)
         
         self.closer_status_labels = {}
         closer_fields = [
@@ -325,10 +319,10 @@ class TradingGUI:
         
         for i, (key, label, default, icon) in enumerate(closer_fields):
             tk.Label(details_frame, text=f"{icon} {label}:", bg='#2d2d2d', fg='#cccccc', 
-                    font=('Segoe UI', 9)).grid(row=i, column=0, sticky='w', pady=3)
+                    font=('Segoe UI', 8)).grid(row=i, column=0, sticky='w', pady=2)
             
             self.closer_status_labels[key] = tk.Label(details_frame, text=default, bg='#2d2d2d', 
-                                              fg='#00ff88', font=('Segoe UI', 10, 'bold'))
+                                              fg='#00ff88', font=('Segoe UI', 9, 'bold'))
             self.closer_status_labels[key].grid(row=i, column=1, sticky='e', pady=3)
             
         details_frame.columnconfigure(1, weight=1)
@@ -337,7 +331,7 @@ class TradingGUI:
     def create_bottom_panel(self, parent):
         """สร้างแผงด้านล่าง"""
         bottom_frame = tk.Frame(parent, bg='#2b2b2b')
-        bottom_frame.pack(fill=tk.BOTH, expand=True)
+        bottom_frame.pack(fill=tk.BOTH, expand=True, pady=(10, 0))
         
         # สร้าง notebook สำหรับแท็บ
         notebook = ttk.Notebook(bottom_frame)
@@ -390,7 +384,7 @@ class TradingGUI:
         
         # Main container
         main_container = tk.Frame(recovery_frame, bg='#2b2b2b')
-        main_container.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
+        main_container.pack(fill=tk.BOTH, expand=True, padx=3, pady=3)
         
         # Top section - System Status
         self.create_system_status_section(main_container)
@@ -403,41 +397,41 @@ class TradingGUI:
         
     def create_system_status_section(self, parent):
         """สร้างส่วนแสดงสถานะระบบ"""
-        status_frame = tk.LabelFrame(parent, text="System Status", bg='#2b2b2b', fg='white', font=('Arial', 10, 'bold'))
+        status_frame = tk.LabelFrame(parent, text="System Status", bg='#2b2b2b', fg='white', font=('Arial', 9, 'bold'))
         status_frame.pack(fill=tk.X, pady=(0, 5))
         
         # Grid layout for status items
         status_grid = tk.Frame(status_frame, bg='#2b2b2b')
-        status_grid.pack(fill=tk.X, padx=5, pady=5)
+        status_grid.pack(fill=tk.X, padx=3, pady=3)
         
         # Smart Recovery Status
-        tk.Label(status_grid, text="Smart Recovery:", bg='#2b2b2b', fg='white', font=('Arial', 9)).grid(row=0, column=0, sticky='w', padx=(0, 10))
-        self.smart_recovery_status = tk.Label(status_grid, text="Checking...", bg='#2b2b2b', fg='yellow', font=('Arial', 9, 'bold'))
+        tk.Label(status_grid, text="Smart Recovery:", bg='#2b2b2b', fg='white', font=('Arial', 1)).grid(row=0, column=0, sticky='w', padx=(0, 10))
+        self.smart_recovery_status = tk.Label(status_grid, text="Checking...", bg='#2b2b2b', fg='yellow', font=('Arial', 1, 'bold'))
         self.smart_recovery_status.grid(row=0, column=1, sticky='w')
         
         # Advanced Recovery Status
-        tk.Label(status_grid, text="Advanced Recovery:", bg='#2b2b2b', fg='white', font=('Arial', 9)).grid(row=0, column=2, sticky='w', padx=(20, 10))
-        self.advanced_recovery_status = tk.Label(status_grid, text="Checking...", bg='#2b2b2b', fg='yellow', font=('Arial', 9, 'bold'))
+        tk.Label(status_grid, text="Advanced Recovery:", bg='#2b2b2b', fg='white', font=('Arial', 1)).grid(row=0, column=2, sticky='w', padx=(20, 10))
+        self.advanced_recovery_status = tk.Label(status_grid, text="Checking...", bg='#2b2b2b', fg='yellow', font=('Arial', 1, 'bold'))
         self.advanced_recovery_status.grid(row=0, column=3, sticky='w')
         
         # Zone Analysis Status
-        tk.Label(status_grid, text="Zone Analysis:", bg='#2b2b2b', fg='white', font=('Arial', 9)).grid(row=1, column=0, sticky='w', padx=(0, 10))
-        self.zone_analysis_status = tk.Label(status_grid, text="Checking...", bg='#2b2b2b', fg='yellow', font=('Arial', 9, 'bold'))
+        tk.Label(status_grid, text="Zone Analysis:", bg='#2b2b2b', fg='white', font=('Arial', 1)).grid(row=1, column=0, sticky='w', padx=(0, 10))
+        self.zone_analysis_status = tk.Label(status_grid, text="Checking...", bg='#2b2b2b', fg='yellow', font=('Arial', 1, 'bold'))
         self.zone_analysis_status.grid(row=1, column=1, sticky='w')
         
         # Portfolio Balance Status
-        tk.Label(status_grid, text="Portfolio Balance:", bg='#2b2b2b', fg='white', font=('Arial', 9)).grid(row=1, column=2, sticky='w', padx=(20, 10))
-        self.portfolio_balance_status = tk.Label(status_grid, text="Checking...", bg='#2b2b2b', fg='yellow', font=('Arial', 9, 'bold'))
+        tk.Label(status_grid, text="Portfolio Balance:", bg='#2b2b2b', fg='white', font=('Arial', 1)).grid(row=1, column=2, sticky='w', padx=(20, 10))
+        self.portfolio_balance_status = tk.Label(status_grid, text="Checking...", bg='#2b2b2b', fg='yellow', font=('Arial', 1, 'bold'))
         self.portfolio_balance_status.grid(row=1, column=3, sticky='w')
         
         # Next Action
-        tk.Label(status_grid, text="Next Action:", bg='#2b2b2b', fg='white', font=('Arial', 10, 'bold')).grid(row=2, column=0, sticky='w', padx=(0, 10), pady=(10, 0))
-        self.next_action_label = tk.Label(status_grid, text="Analyzing...", bg='#2b2b2b', fg='cyan', font=('Arial', 10, 'bold'), wraplength=600)
+        tk.Label(status_grid, text="Next Action:", bg='#2b2b2b', fg='white', font=('Arial', 1, 'bold')).grid(row=2, column=0, sticky='w', padx=(0, 10), pady=(10, 0))
+        self.next_action_label = tk.Label(status_grid, text="Analyzing...", bg='#2b2b2b', fg='cyan', font=('Arial', 1, 'bold'), wraplength=600)
         self.next_action_label.grid(row=2, column=1, columnspan=3, sticky='w', pady=(10, 0))
         
     def create_recovery_groups_section(self, parent):
         """สร้างส่วนแสดง Active Recovery Groups"""
-        groups_frame = tk.LabelFrame(parent, text="Active Recovery Groups", bg='#2b2b2b', fg='white', font=('Arial', 10, 'bold'))
+        groups_frame = tk.LabelFrame(parent, text="Active Recovery Groups", bg='#2b2b2b', fg='white', font=('Arial', 1, 'bold'))
         groups_frame.pack(fill=tk.BOTH, expand=True, pady=(5, 5))
         
         # Treeview for recovery groups
@@ -472,7 +466,7 @@ class TradingGUI:
         
     def create_recovery_candidates_section(self, parent):
         """สร้างส่วนแสดง Recovery Candidates"""
-        candidates_frame = tk.LabelFrame(parent, text="Recovery Candidates (Ready to Close)", bg='#2b2b2b', fg='white', font=('Arial', 10, 'bold'))
+        candidates_frame = tk.LabelFrame(parent, text="Recovery Candidates (Ready to Close)", bg='#2b2b2b', fg='white', font=('Arial', 1, 'bold'))
         candidates_frame.pack(fill=tk.BOTH, expand=True, pady=(5, 0))
         
         # Treeview for recovery candidates
@@ -533,8 +527,8 @@ class TradingGUI:
         
         # สร้าง ScrolledText สำหรับ log
         self.log_text = scrolledtext.ScrolledText(log_frame, bg='#1a1a1a', fg='lightgreen', 
-                                                font=('Consolas', 9), wrap=tk.WORD)
-        self.log_text.pack(fill=tk.BOTH, expand=True, padx=5, pady=5)
+                                                font=('Consolas', 8), wrap=tk.WORD)
+        self.log_text.pack(fill=tk.BOTH, expand=True, padx=3, pady=3)
         
         # เพิ่ม handler สำหรับ logging
         self.setup_log_handler()
@@ -546,8 +540,8 @@ class TradingGUI:
         
         # Risk Settings
         risk_settings_frame = tk.LabelFrame(settings_frame, text="Risk Settings (%)", 
-                                          bg='#3a3a3a', fg='white', font=('Arial', 10, 'bold'))
-        risk_settings_frame.pack(fill=tk.X, padx=10, pady=5)
+                                          bg='#3a3a3a', fg='white', font=('Arial', 1, 'bold'))
+        risk_settings_frame.pack(fill=tk.X, padx=8, pady=3)
         
         self.risk_settings = {}
         risk_settings_fields = [
@@ -560,7 +554,7 @@ class TradingGUI:
         
         for i, (label, key, default_value) in enumerate(risk_settings_fields):
             tk.Label(risk_settings_frame, text=label, bg='#3a3a3a', fg='lightgray', 
-                    font=('Arial', 9)).grid(row=i, column=0, sticky='w', padx=5, pady=2)
+                    font=('Arial', 1)).grid(row=i, column=0, sticky='w', padx=5, pady=2)
             
             var = tk.DoubleVar(value=default_value)
             entry = tk.Entry(risk_settings_frame, textvariable=var, width=10)
@@ -570,8 +564,8 @@ class TradingGUI:
             
         # Balance Settings
         balance_settings_frame = tk.LabelFrame(settings_frame, text="Balance Settings (%)", 
-                                             bg='#3a3a3a', fg='white', font=('Arial', 10, 'bold'))
-        balance_settings_frame.pack(fill=tk.X, padx=10, pady=5)
+                                             bg='#3a3a3a', fg='white', font=('Arial', 1, 'bold'))
+        balance_settings_frame.pack(fill=tk.X, padx=8, pady=3)
         
         self.balance_settings = {}
         balance_settings_fields = [
@@ -583,7 +577,7 @@ class TradingGUI:
         
         for i, (label, key, default_value) in enumerate(balance_settings_fields):
             tk.Label(balance_settings_frame, text=label, bg='#3a3a3a', fg='lightgray', 
-                    font=('Arial', 9)).grid(row=i, column=0, sticky='w', padx=5, pady=2)
+                    font=('Arial', 1)).grid(row=i, column=0, sticky='w', padx=5, pady=2)
             
             var = tk.DoubleVar(value=default_value)
             entry = tk.Entry(balance_settings_frame, textvariable=var, width=10)
@@ -593,7 +587,7 @@ class TradingGUI:
             
         # Save Settings Button
         save_btn = tk.Button(settings_frame, text="Save Settings", command=self.save_settings, 
-                           bg='#4caf50', fg='white', font=('Arial', 10, 'bold'))
+                           bg='#4caf50', fg='white', font=('Arial', 1, 'bold'))
         save_btn.pack(pady=10)
         
     def setup_styles(self):
@@ -603,9 +597,9 @@ class TradingGUI:
         
         # กำหนดสีสำหรับ Treeview
         style.configure("Treeview", background='#1a1a1a', foreground='white', 
-                       fieldbackground='#1a1a1a', font=('Segoe UI', 9))
+                       fieldbackground='#1a1a1a', font=('Segoe UI', 8))
         style.configure("Treeview.Heading", background='#2d2d2d', foreground='#00ff88',
-                       font=('Segoe UI', 9, 'bold'))
+                                                    font=('Segoe UI', 8, 'bold'))
         
         # กำหนดสีสำหรับ Progressbar
         style.configure("TProgressbar", background='#00ff88', troughcolor='#2d2d2d')
@@ -613,7 +607,7 @@ class TradingGUI:
         # กำหนดสีสำหรับ Notebook tabs
         style.configure("TNotebook", background='#1a1a1a')
         style.configure("TNotebook.Tab", background='#2d2d2d', foreground='white',
-                       padding=[20, 10], font=('Segoe UI', 9))
+                       padding=[15, 8], font=('Segoe UI', 8))
         style.map("TNotebook.Tab", background=[('selected', '#00ff88'), ('active', '#3d3d3d')],
                  foreground=[('selected', '#1a1a1a'), ('active', 'white')])
         
@@ -677,18 +671,25 @@ class TradingGUI:
             
     def light_update_loop(self):
         """Loop อัพเดทแบบเบา"""
+        update_counter = 0
         while not self.stop_update:
             try:
                 if not self.stop_update:
+                    # อัพเดท connection status ทุกครั้ง
                     self.root.after_idle(self.update_connection_status_light)
-                    self.root.after_idle(self.update_market_status)
-                    self.root.after_idle(self.update_7d_analysis)
-                    self.root.after_idle(self.update_trading_status)
-                    self.root.after_idle(self.update_7d_closer_status)
-                time.sleep(5)  # อัพเดททุก 5 วินาที
+                    
+                    # อัพเดทข้อมูลอื่นๆ แบบสลับกัน
+                    if update_counter % 2 == 0:  # ทุก 20 วินาที
+                        self.root.after_idle(self.update_trading_status)
+                    
+                    if update_counter % 3 == 0:  # ทุก 30 วินาที
+                        self.root.after_idle(self.update_7d_closer_status)
+                    
+                    update_counter += 1
+                time.sleep(10)  # อัพเดททุก 10 วินาที
             except Exception as e:
                 logger.debug(f"Light update error: {str(e)}")
-                time.sleep(20)
+                time.sleep(30)
             
     def update_data_loop(self):
         """Loop สำหรับอัพเดทข้อมูล"""
@@ -1055,191 +1056,6 @@ class TradingGUI:
         except Exception as e:
             logger.error(f"เกิดข้อผิดพลาดในการอัพเดทข้อมูลบัญชี: {str(e)}")
     
-    def update_market_status(self):
-        """อัพเดทสถานะตลาด"""
-        try:
-            current_time = time.time()
-            if current_time - self._last_market_status_update < 30:  # อัพเดททุก 30 วินาที
-                return
-            
-            self._last_market_status_update = current_time
-            
-            if self.mt5_connection and self.mt5_connection.is_connected:
-                market_status = self.mt5_connection.get_market_status("XAUUSD")
-                
-                # อัพเดท market status labels
-                if market_status:
-                    is_open = market_status.get('is_market_open', False)
-                    self.market_status_labels['status'].config(
-                        text="🟢 OPEN" if is_open else "🔴 CLOSED",
-                        fg='#00ff88' if is_open else '#ff4444'
-                    )
-                    
-                    self.market_status_labels['current_time'].config(
-                        text=market_status.get('current_time', '00:00:00')
-                    )
-                    
-                    active_sessions = market_status.get('active_sessions', [])
-                    if active_sessions:
-                        session_names = [s['name'].upper() for s in active_sessions]
-                        self.market_status_labels['active_sessions'].config(
-                            text=f"{len(active_sessions)} Sessions: {', '.join(session_names)}"
-                        )
-                    else:
-                        self.market_status_labels['active_sessions'].config(text="None")
-                    
-                    next_session = market_status.get('next_session')
-                    if next_session:
-                        self.market_status_labels['next_session'].config(
-                            text=f"{next_session['name'].upper()} in {next_session['time_to_open']:.1f}h"
-                        )
-                    else:
-                        self.market_status_labels['next_session'].config(text="Unknown")
-                    
-                    london_ny_overlap = market_status.get('london_ny_overlap', False)
-                    self.market_status_labels['london_ny_overlap'].config(
-                        text="✅ ACTIVE" if london_ny_overlap else "❌ INACTIVE",
-                        fg='#00ff88' if london_ny_overlap else '#ff4444'
-                    )
-        except Exception as e:
-            logger.error(f"เกิดข้อผิดพลาดในการอัพเดทสถานะตลาด: {str(e)}")
-    
-    def update_7d_analysis(self):
-        """อัพเดทการวิเคราะห์ 7D"""
-        try:
-            current_time = time.time()
-            if current_time - self._last_7d_analysis_update < 10:  # อัพเดททุก 10 วินาที
-                return
-            
-            self._last_7d_analysis_update = current_time
-            
-            if (self.trading_system and 
-                hasattr(self.trading_system, 'dynamic_7d_smart_closer') and 
-                self.trading_system.dynamic_7d_smart_closer):
-                
-                # ตรวจสอบ positions
-                positions = self.trading_system.order_manager.active_positions
-                self.analysis_labels['active_positions'].config(text=str(len(positions)))
-                
-                if positions:
-                    # วิเคราะห์ portfolio health
-                    account_info = self.mt5_connection.get_account_info() or {}
-                    market_conditions = {
-                        'current_price': 0,  # จะได้จาก candle data
-                        'volatility': 'medium',
-                        'trend': 'neutral'
-                    }
-                    
-                    # เรียกใช้ 7D analysis
-                    closing_result = self.trading_system.dynamic_7d_smart_closer.find_optimal_closing(
-                        positions=positions,
-                        account_info=account_info,
-                        market_conditions=market_conditions
-                    )
-                    
-                    if closing_result:
-                        # อัพเดท closing recommendation
-                        if closing_result.should_close:
-                            self.analysis_labels['closing_recommendation'].config(
-                                text="🚀 CLOSE",
-                                fg='#00ff88'
-                            )
-                            self.analysis_labels['closing_confidence'].config(
-                                text=f"{closing_result.confidence_score:.1f}%",
-                                fg='#00ff88'
-                            )
-                        else:
-                            self.analysis_labels['closing_recommendation'].config(
-                                text="💤 HOLD",
-                                fg='#ffaa00'
-                            )
-                            self.analysis_labels['closing_confidence'].config(
-                                text="0%",
-                                fg='#ffaa00'
-                            )
-                        
-                        # อัพเดท portfolio health
-                        portfolio_health = getattr(closing_result, 'portfolio_health', None)
-                        if portfolio_health:
-                            health_score = getattr(portfolio_health, 'health_score', 0)
-                            if health_score >= 80:
-                                health_text = "🟢 EXCELLENT"
-                                health_color = '#00ff88'
-                            elif health_score >= 60:
-                                health_text = "🟡 GOOD"
-                                health_color = '#ffaa00'
-                            elif health_score >= 40:
-                                health_text = "🟠 FAIR"
-                                health_color = '#ff8800'
-                            else:
-                                health_text = "🔴 POOR"
-                                health_color = '#ff4444'
-                            
-                            self.analysis_labels['portfolio_health'].config(
-                                text=health_text,
-                                fg=health_color
-                            )
-                        
-                        # อัพเดท risk level
-                        risk_level = getattr(closing_result, 'risk_level', 'LOW')
-                        if risk_level == 'LOW':
-                            risk_text = "🟢 LOW"
-                            risk_color = '#00ff88'
-                        elif risk_level == 'MEDIUM':
-                            risk_text = "🟡 MEDIUM"
-                            risk_color = '#ffaa00'
-                        else:
-                            risk_text = "🔴 HIGH"
-                            risk_color = '#ff4444'
-                        
-                        self.analysis_labels['risk_level'].config(
-                            text=risk_text,
-                            fg=risk_color
-                        )
-                        
-                        # อัพเดท market timing
-                        market_timing = getattr(closing_result, 'market_timing', 'NEUTRAL')
-                        if market_timing == 'EXCELLENT':
-                            timing_text = "🟢 EXCELLENT"
-                            timing_color = '#00ff88'
-                        elif market_timing == 'GOOD':
-                            timing_text = "🟡 GOOD"
-                            timing_color = '#ffaa00'
-                        elif market_timing == 'POOR':
-                            timing_text = "🔴 POOR"
-                            timing_color = '#ff4444'
-                        else:
-                            timing_text = "⚪ NEUTRAL"
-                            timing_color = '#cccccc'
-                        
-                        self.analysis_labels['market_timing'].config(
-                            text=timing_text,
-                            fg=timing_color
-                        )
-                else:
-                    # ไม่มี positions
-                    self.analysis_labels['closing_recommendation'].config(
-                        text="💤 NO POSITIONS",
-                        fg='#cccccc'
-                    )
-                    self.analysis_labels['closing_confidence'].config(
-                        text="0%",
-                        fg='#cccccc'
-                    )
-                    self.analysis_labels['portfolio_health'].config(
-                        text="⚪ NO DATA",
-                        fg='#cccccc'
-                    )
-                    self.analysis_labels['risk_level'].config(
-                        text="⚪ NO DATA",
-                        fg='#cccccc'
-                    )
-                    self.analysis_labels['market_timing'].config(
-                        text="⚪ NO DATA",
-                        fg='#cccccc'
-                    )
-        except Exception as e:
-            logger.error(f"เกิดข้อผิดพลาดในการอัพเดทการวิเคราะห์ 7D: {str(e)}")
     
     def update_trading_status(self):
         """อัพเดทสถานะการเทรด"""
@@ -1251,32 +1067,42 @@ class TradingGUI:
                 self.trading_status_labels['active_positions'].config(text=str(len(positions)))
                 
                 if positions:
-                    # คำนวณ Total P&L
-                    total_pnl = sum(getattr(pos, 'profit', 0) for pos in positions)
+                    # คำนวณ Total P&L จาก positions จริง
+                    total_pnl = 0
+                    profitable_count = 0
+                    total_profit = 0
+                    total_loss = 0
+                    
+                    for pos in positions:
+                        profit = getattr(pos, 'profit', 0)
+                        total_pnl += profit
+                        if profit > 0:
+                            profitable_count += 1
+                            total_profit += profit
+                        else:
+                            total_loss += abs(profit)
+                    
+                    # อัพเดท Total P&L
                     self.trading_status_labels['total_pnl'].config(
                         text=f"{total_pnl:.2f}",
                         fg='#00ff88' if total_pnl >= 0 else '#ff4444'
                     )
                     
-                    # คำนวณ Daily P&L (ประมาณการ)
-                    daily_pnl = total_pnl * 0.1  # ตัวอย่าง
+                    # อัพเดท Daily P&L (ใช้ Total P&L เป็นฐาน)
                     self.trading_status_labels['daily_pnl'].config(
-                        text=f"{daily_pnl:.2f}",
-                        fg='#00ff88' if daily_pnl >= 0 else '#ff4444'
+                        text=f"{total_pnl:.2f}",
+                        fg='#00ff88' if total_pnl >= 0 else '#ff4444'
                     )
                     
                     # คำนวณ Win Rate
-                    profitable_positions = sum(1 for pos in positions if getattr(pos, 'profit', 0) > 0)
-                    win_rate = (profitable_positions / len(positions)) * 100 if positions else 0
+                    win_rate = (profitable_count / len(positions)) * 100 if positions else 0
                     self.trading_status_labels['win_rate'].config(
                         text=f"{win_rate:.1f}%",
                         fg='#00ff88' if win_rate >= 50 else '#ff4444'
                     )
                     
                     # คำนวณ Profit Factor
-                    total_profit = sum(getattr(pos, 'profit', 0) for pos in positions if getattr(pos, 'profit', 0) > 0)
-                    total_loss = abs(sum(getattr(pos, 'profit', 0) for pos in positions if getattr(pos, 'profit', 0) < 0))
-                    profit_factor = total_profit / total_loss if total_loss > 0 else 0
+                    profit_factor = total_profit / total_loss if total_loss > 0 else (total_profit if total_profit > 0 else 0)
                     self.trading_status_labels['profit_factor'].config(
                         text=f"{profit_factor:.2f}",
                         fg='#00ff88' if profit_factor >= 1.0 else '#ff4444'
@@ -1288,7 +1114,7 @@ class TradingGUI:
                     self.trading_status_labels['win_rate'].config(text="0%", fg='#cccccc')
                     self.trading_status_labels['profit_factor'].config(text="0.00", fg='#cccccc')
         except Exception as e:
-            logger.error(f"เกิดข้อผิดพลาดในการอัพเดทสถานะการเทรด: {str(e)}")
+            logger.debug(f"Trading status update error: {str(e)}")
     
     def update_7d_closer_status(self):
         """อัพเดทสถานะ 7D Smart Closer"""
@@ -1303,57 +1129,25 @@ class TradingGUI:
                 self.closer_status_labels['positions_analyzed'].config(text=str(len(positions)))
                 
                 if positions:
-                    # ตรวจสอบสถานะ closer
-                    self.closer_status_labels['closer_status'].config(
-                        text="🔄 ANALYZING",
-                        fg='#ffaa00'
-                    )
-                    
                     # อัพเดทเวลาล่าสุด
                     current_time = datetime.now().strftime('%H:%M:%S')
                     self.closer_status_labels['last_analysis'].config(text=current_time)
                     
-                    # วิเคราะห์ closing recommendation
-                    account_info = self.mt5_connection.get_account_info() or {}
-                    market_conditions = {
-                        'current_price': 0,
-                        'volatility': 'medium',
-                        'trend': 'neutral'
-                    }
-                    
-                    closing_result = self.trading_system.dynamic_7d_smart_closer.find_optimal_closing(
-                        positions=positions,
-                        account_info=account_info,
-                        market_conditions=market_conditions
+                    # ตรวจสอบสถานะ closer แบบง่าย (ไม่เรียก 7D analysis เพื่อลด load)
+                    self.closer_status_labels['closer_status'].config(
+                        text="🔄 MONITORING",
+                        fg='#ffaa00'
                     )
                     
-                    if closing_result:
-                        if closing_result.should_close:
-                            self.closer_status_labels['closer_status'].config(
-                                text="🚀 READY TO CLOSE",
-                                fg='#00ff88'
-                            )
-                            self.closer_status_labels['recommendation'].config(
-                                text="CLOSE",
-                                fg='#00ff88'
-                            )
-                            self.closer_status_labels['closing_confidence'].config(
-                                text=f"{closing_result.confidence_score:.1f}%",
-                                fg='#00ff88'
-                            )
-                        else:
-                            self.closer_status_labels['closer_status'].config(
-                                text="💤 HOLDING",
-                                fg='#ffaa00'
-                            )
-                            self.closer_status_labels['recommendation'].config(
-                                text="HOLD",
-                                fg='#ffaa00'
-                            )
-                            self.closer_status_labels['closing_confidence'].config(
-                                text="0%",
-                                fg='#ffaa00'
-                            )
+                    # แสดงสถานะพื้นฐาน
+                    self.closer_status_labels['recommendation'].config(
+                        text="MONITORING",
+                        fg='#ffaa00'
+                    )
+                    self.closer_status_labels['closing_confidence'].config(
+                        text="--",
+                        fg='#ffaa00'
+                    )
                 else:
                     # ไม่มี positions
                     self.closer_status_labels['closer_status'].config(
@@ -1369,7 +1163,7 @@ class TradingGUI:
                         fg='#cccccc'
                     )
         except Exception as e:
-            logger.error(f"เกิดข้อผิดพลาดในการอัพเดทสถานะ 7D Closer: {str(e)}")
+            logger.debug(f"7D closer status update error: {str(e)}")
             
     def update_portfolio_info(self):
         """อัพเดทข้อมูลพอร์ต"""
