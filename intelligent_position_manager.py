@@ -1038,9 +1038,9 @@ class IntelligentPositionManager:
                 logger.info("🚫 No profitable positions for intelligent combination")
                 return None
             
-            # เรียงตาม 4D total_score
-            profitable_positions.sort(key=lambda x: x['total_score'], reverse=True)
-            losing_positions.sort(key=lambda x: x['total_score'], reverse=True)  # ขาดทุนที่มีโอกาสฟื้นตัวสูงสุดก่อน
+            # เรียงตาม strategy ที่เหมาะสม
+            profitable_positions.sort(key=lambda x: x['total_score'], reverse=True)  # BEST profitable first
+            losing_positions.sort(key=lambda x: x['profit'])  # WORST losing first (most negative profit)
             
             best_combination = None
             best_net_profit = 0
@@ -1157,13 +1157,17 @@ class IntelligentPositionManager:
             loss_buy_needed = max(1, loss_count // 2) 
             loss_sell_needed = loss_count - loss_buy_needed
             
-            # เลือก Profitable positions
+            # เลือก Profitable positions - เลือก BEST (highest profit/score)
             selected_profits.extend(profit_buys[:profit_buy_needed])
             selected_profits.extend(profit_sells[:profit_sell_needed])
             
-            # เลือก Losing positions
-            selected_losses.extend(loss_buys[:loss_buy_needed])
-            selected_losses.extend(loss_sells[:loss_sell_needed])
+            # เลือก Losing positions - เลือก WORST (lowest profit = most loss)
+            # 🎯 CRITICAL FIX: เรียงใหม่ตาม profit (worst first) แทน total_score
+            loss_buys_by_profit = sorted(loss_buys, key=lambda x: getattr(x['position'], 'profit', 0))
+            loss_sells_by_profit = sorted(loss_sells, key=lambda x: getattr(x['position'], 'profit', 0))
+            
+            selected_losses.extend(loss_buys_by_profit[:loss_buy_needed])
+            selected_losses.extend(loss_sells_by_profit[:loss_sell_needed])
             
             # 🚨 ตรวจสอบว่าได้ BUY+SELL ครบ
             total_buys = len([p for p in selected_profits + selected_losses if getattr(p['position'], 'type', 0) == 0])
