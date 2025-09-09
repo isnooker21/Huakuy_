@@ -13,14 +13,13 @@ from calculations import (
     RiskCalculator, MarketAnalysisCalculator, ProfitTargetCalculator
 )
 from trading_conditions import Signal, TradingConditions, CandleData
-# Smart Recovery System removed - replaced by Smart Profit Taking System
-from price_zone_analysis import PriceZoneAnalyzer
-from zone_rebalancer import ZoneRebalancer
-# from advanced_breakout_recovery import AdvancedBreakoutRecovery  # DISABLED - ใช้ Simple Position Manager
-from smart_gap_filler import SmartGapFiller
-from force_trading_mode import ForceTradingMode
-from zone_position_manager import ZonePositionManager, create_zone_position_manager
-from signal_manager import SignalManager, RankedSignal
+# 🚫 OLD ENTRY SYSTEMS REMOVED - Using Smart Entry Timing System only
+# from price_zone_analysis import PriceZoneAnalyzer  # → Smart Entry Timing
+# from zone_rebalancer import ZoneRebalancer  # → Smart Entry Timing  
+# from smart_gap_filler import SmartGapFiller  # → Smart Entry Timing
+# from force_trading_mode import ForceTradingMode  # → Smart Entry Timing
+# from zone_position_manager import ZonePositionManager, create_zone_position_manager  # → Dynamic 7D Smart Closer
+# from signal_manager import SignalManager, RankedSignal  # → Portfolio Manager direct
 from order_management import OrderManager, OrderResult, CloseResult
 
 logger = logging.getLogger(__name__)
@@ -72,30 +71,15 @@ class PortfolioManager:
         self.trading_conditions = TradingConditions()
         # Smart Recovery System removed - functionality moved to Smart Profit Taking System
         
-        # เพิ่ม Zone Analysis System (จะถูกตั้งค่าภายหลัง)
-        self.zone_analyzer = None
-        self.zone_rebalancer = None
+        # 🚫 OLD SYSTEMS REMOVED - Using Smart Entry Timing System only
+        # ✅ Replaced by Smart Entry Timing System + Strategic Position Manager
+        # - Zone Analysis → Smart Entry Timing (Support/Resistance detection)
+        # - Gap Filler → Smart Entry Timing (Entry quality analysis)  
+        # - Force Trading → Smart Entry Timing (Price hierarchy enforcement)
+        # - Zone Position Manager → Dynamic 7D Smart Closer
+        # - Signal Manager → Portfolio Manager with Smart Entry Timing
         
-        # Advanced Breakout Recovery System DISABLED - ใช้ Simple Position Manager แทน
-        # self.advanced_recovery = AdvancedBreakoutRecovery(order_manager.mt5)
-        self.advanced_recovery = None
-        
-        # เพิ่ม Continuous Trading Systems
-        self.gap_filler = SmartGapFiller(order_manager.mt5)
-        self.force_trading = ForceTradingMode(order_manager.mt5)
-        
-        # 🎯 Zone Position Manager - ระบบจัดการไม้แบบ Zone-Based
-        self.position_manager = create_zone_position_manager(
-            mt5_connection=order_manager.mt5,
-            order_manager=order_manager,
-            zone_size_pips=30.0
-        )
-        
-        # 🎯 Zone-Based System ได้ถูก integrate ใน position_manager แล้ว
-        # ไม่จำเป็นต้องมี separate recovery manager
-        
-        # 🎯 Signal Manager - จัดการสัญญาณจากทุกระบบในจุดเดียว
-        self.signal_manager = SignalManager(order_manager.mt5)
+        logger.info("🚫 OLD ENTRY SYSTEMS DISABLED - Using Smart Entry Timing only")
         
         # การตั้งค่าความเสี่ยง
         self.max_risk_per_trade = 2.0  # เปอร์เซ็นต์ความเสี่ยงต่อ Trade
@@ -2034,83 +2018,6 @@ class PortfolioManager:
             logger.error(f"Error getting unified signal: {e}")
             return None
     
-    # 🗑️ DEPRECATED - ใช้ get_unified_signal() แทน
-    def check_continuous_trading_opportunities(self, current_price: float, 
-                                             current_candle: Optional[CandleData] = None) -> Dict[str, Any]:
-        """ตรวจสอบโอกาสการเทรดแบบต่เนื่อง"""
-        try:
-            positions = self.order_manager.active_positions
-            now = datetime.now()
-            
-            result = {
-                'gap_filler_active': False,
-                'force_trading_active': False,
-                'recommended_signal': None,
-                'activation_reason': '',
-                'continuous_stats': {}
-            }
-            
-            # 1. ตรวจสอบ Smart Gap Filler
-            gap_result = self.gap_filler.should_activate_gap_filling(
-                positions, current_price, self.last_trade_time
-            )
-            
-            if gap_result['should_activate']:
-                gap_signal = self.gap_filler.create_synthetic_signal(
-                    gap_result['recommended_action']
-                )
-                
-                if gap_signal:
-                    result.update({
-                        'gap_filler_active': True,
-                        'recommended_signal': gap_signal,
-                        'activation_reason': f"Gap Filling: {gap_result['activation_reason']}",
-                        'gap_analysis': gap_result['gap_analysis']
-                    })
-                    
-                    logger.info(f"🔧 Gap Filler Activated: {result['activation_reason']}")
-                    return result
-            
-            # 2. ตรวจสอบ Force Trading Mode (ถ้า Gap Filler ไม่ทำงาน)
-            force_result = self.force_trading.should_activate_force_mode(
-                self.last_trade_time, positions
-            )
-            
-            if force_result['should_activate']:
-                force_signal = self.force_trading.create_force_signal(
-                    force_result['recommended_action'], current_price
-                )
-                
-                if force_signal:
-                    result.update({
-                        'force_trading_active': True,
-                        'recommended_signal': force_signal,
-                        'activation_reason': f"Force Trading: {force_result['reason']}",
-                        'momentum_analysis': force_result['momentum_analysis']
-                    })
-                    
-                    logger.info(f"🚨 Force Trading Activated: {result['activation_reason']}")
-                    return result
-            
-            # 3. รวบรวมสถิติ
-            result['continuous_stats'] = {
-                'gap_filler_stats': self.gap_filler.get_fill_statistics(),
-                'force_trading_stats': self.force_trading.get_force_statistics(),
-                'last_trade_time': self.last_trade_time,
-                'time_since_last_trade': (now - self.last_trade_time).total_seconds() / 60 if self.last_trade_time else None
-            }
-            
-            return result
-            
-        except Exception as e:
-            logger.error(f"Error checking continuous trading opportunities: {e}")
-            return {
-                'gap_filler_active': False,
-                'force_trading_active': False,
-                'recommended_signal': None,
-                'activation_reason': f'Error: {e}',
-                'continuous_stats': {}
-            }
     
     def update_trade_timing(self, trade_executed: bool = False, signal_generated: bool = False):
         """อัพเดทเวลาการเทรดและสัญญาณ"""

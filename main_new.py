@@ -18,8 +18,8 @@ from order_management import OrderManager
 from portfolio_manager import PortfolioManager
 from gui import TradingGUI
 
-# 🎯 Zone-Based Position Management System
-from zone_position_manager import ZonePositionManager, create_zone_position_manager
+# 🚫 OLD ZONE-BASED SYSTEM REMOVED - Using Dynamic 7D Smart Closer only
+# from zone_position_manager import ZonePositionManager, create_zone_position_manager
 
 # 🧠 Intelligent Position Management System
 from intelligent_position_manager import IntelligentPositionManager, create_intelligent_position_manager
@@ -411,43 +411,17 @@ class TradingSystem:
         except Exception as e:
             logger.error(f"เกิดข้อผิดพลาดในการอัพเดทข้อมูลตลาด: {str(e)}")
             
-    # 🗑️ DEPRECATED - Signal generation moved to SignalManager
     def process_new_candle(self, candle: CandleData):
-        """ประมวลผลแท่งเทียนใหม่ (เหลือไว้เฉพาะ logging)"""
+        """ประมวลผลแท่งเทียนใหม่ - ใช้ Smart Entry Timing System"""
         try:
             # แสดงเฉพาะราคาปิด
             logger.info(f"📊 PRICE: {candle.close}")
-                
-            # Signal generation ย้ายไป SignalManager แล้ว
+            # ✅ Signal generation now handled by Smart Entry Timing in Portfolio Manager
             
         except Exception as e:
             logger.error(f"เกิดข้อผิดพลาดในการประมวลผลแท่งเทียน: {str(e)}")
             
-    def calculate_signal_strength(self, candle: CandleData) -> float:
-        """คำนวณแรงของสัญญาณ"""
-        try:
-            # คำนวณแรงจากขนาดตัวเทียน
-            body_strength = candle.body_size_percentage * 10  # แปลงเป็น 0-100
-            
-            # คำนวณแรงจาก Volume
-            volume_strength = 0.0
-            if len(self.volume_history) > 1:
-                avg_volume = sum(self.volume_history[:-1]) / len(self.volume_history[:-1])
-                if avg_volume > 0:
-                    volume_ratio = candle.volume / avg_volume
-                    volume_strength = min(100, volume_ratio * 50)
-                    
-            # คำนวณแรงจากช่วงราคา
-            range_strength = min(100, candle.range_percentage * 20)
-            
-            # รวมแรงทั้งหมด
-            total_strength = (body_strength * 0.4 + volume_strength * 0.4 + range_strength * 0.2)
-            
-            return min(100, total_strength)
-            
-        except Exception as e:
-            logger.error(f"เกิดข้อผิดพลาดในการคำนวณแรงสัญญาณ: {str(e)}")
-            return 0.0
+    # 🚫 REMOVED: calculate_signal_strength - Signal analysis moved to Smart Entry Timing System
             
     def check_entry_conditions(self, portfolio_state):
         """🎯 ตรวจสอบเงื่อนไขการเข้าเทรด (Single Entry Point)"""
