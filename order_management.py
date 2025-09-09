@@ -378,11 +378,29 @@ class OrderManager:
             # ดึงข้อมูล Position จาก MT5
             mt5_positions = self.mt5.get_positions()
             
+            # 🔍 DEBUG: Show all MT5 positions with magic numbers
+            logger.info(f"🔍 MT5 RAW POSITIONS: {len(mt5_positions)} total positions")
+            if mt5_positions:
+                magic_numbers = {}
+                for pos in mt5_positions[:5]:  # Show first 5
+                    magic = pos.get('magic', 'NO_MAGIC')
+                    ticket = pos.get('ticket', 'NO_TICKET')
+                    magic_numbers[magic] = magic_numbers.get(magic, 0) + 1
+                    logger.info(f"   Ticket {ticket}: Magic={magic}")
+                
+                logger.info(f"🔍 Magic Number Summary: {magic_numbers}")
+                logger.info(f"🔍 System Magic Number: {self.magic_number}")
+            
             # กรองเฉพาะ Position ของระบบ (ตาม Magic Number)
             system_positions = [
                 pos for pos in mt5_positions 
                 if pos.get('magic') == self.magic_number
             ]
+            
+            # 🚨 CRITICAL: If no system positions, try without magic filter
+            if not system_positions and mt5_positions:
+                logger.warning(f"⚠️ NO POSITIONS with magic {self.magic_number} - using ALL positions")
+                system_positions = mt5_positions
             
             # แปลงเป็น Position objects
             synced_positions = []
