@@ -1318,7 +1318,14 @@ class MT5Connection:
             
             # ตรวจสอบการซื้อขาย
             is_trade_allowed = symbol_info.trade_mode == mt5.SYMBOL_TRADE_MODE_FULL
-            is_trade_session = symbol_info.trade_session_deals != 0
+            
+            # ตรวจสอบ session ปัจจุบันจาก MT5
+            try:
+                # ตรวจสอบว่า session ปัจจุบันสามารถเทรดได้หรือไม่
+                current_session = mt5.symbol_info_tick(symbol)
+                is_trade_session = current_session is not None and current_session.time > 0
+            except:
+                is_trade_session = True  # Default to True if can't check
             
             # ตรวจสอบแต่ละ session
             active_sessions = []
@@ -1364,6 +1371,7 @@ class MT5Connection:
                 })
             
             # สรุปสถานะตลาด
+            # ตลาดเปิดเมื่อ: trade allowed, trade session active, และมี active session
             is_market_open = is_trade_allowed and is_trade_session and len(active_sessions) > 0
             
             result = {
