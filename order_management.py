@@ -192,13 +192,39 @@ class OrderManager:
                     closed_tickets=[],
                     error_message="ไม่สามารถเชื่อมต่อ MT5 ได้"
                 )
+            
+            # 🔍 Pre-validate positions exist before attempting to close
+            valid_positions = []
+            for pos in positions:
+                ticket = getattr(pos, 'ticket', None)
+                if ticket:
+                    # Check if position still exists
+                    current_positions = self.mt5.get_positions()
+                    if current_positions:
+                        existing_tickets = [p.ticket for p in current_positions if hasattr(p, 'ticket')]
+                        if ticket in existing_tickets:
+                            valid_positions.append(pos)
+                        else:
+                            logger.info(f"⚠️ Position {ticket} no longer exists - skipping")
+                    else:
+                        # If we can't get positions, assume it exists
+                        valid_positions.append(pos)
+            
+            if not valid_positions:
+                return CloseResult(
+                    success=False,
+                    closed_tickets=[],
+                    error_message="No valid positions to close"
+                )
+                
+            logger.info(f"🔍 Position validation: {len(valid_positions)}/{len(positions)} positions still exist")
                 
             closed_tickets = []
             total_profit = 0.0
             errors = []
             
             # 🚫 เปลี่ยนเป็นปิดแบบเช็ค spread เพื่อป้องกันปิดติดลบ
-            tickets = [pos.ticket for pos in positions]
+            tickets = [pos.ticket for pos in valid_positions]  # Use validated positions
             group_result = self.mt5.close_positions_group_with_spread_check(tickets)
             
             # ประมวลผลลัพธ์
