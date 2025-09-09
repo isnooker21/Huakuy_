@@ -1262,21 +1262,30 @@ class MT5Connection:
             
             # 🔧 Smart Filling Type Selection - Fixed MT5 Constants
             symbol_info = mt5.symbol_info(pos.symbol)
-            filling_mode = mt5.ORDER_FILLING_FOK  # Default
+            filling_mode = mt5.ORDER_FILLING_IOC  # Safe default - most widely supported
             
             if symbol_info and hasattr(symbol_info, 'filling_mode'):
                 # เช็ค filling modes ที่รองรับ - ใช้ constants ที่ถูกต้อง
                 try:
+                    # 🛡️ Safe constant checking - ป้องกัน AttributeError
+                    fok_constant = getattr(mt5, 'SYMBOL_FILLING_FOK', None)
+                    ioc_constant = getattr(mt5, 'SYMBOL_FILLING_IOC', None)  
+                    return_constant = getattr(mt5, 'SYMBOL_FILLING_RETURN', None)
+                    
+                    # 🔍 Debug: Show available constants
+                    logger.debug(f"🔍 MT5 Constants - FOK: {fok_constant}, IOC: {ioc_constant}, RETURN: {return_constant}")
+                    logger.debug(f"🔍 Symbol {pos.symbol} filling_mode: {symbol_info.filling_mode if symbol_info else 'None'}")
+                    
                     # Check FOK (Fill or Kill)
-                    if hasattr(mt5, 'SYMBOL_FILLING_FOK') and (symbol_info.filling_mode & mt5.SYMBOL_FILLING_FOK):
+                    if fok_constant and (symbol_info.filling_mode & fok_constant):
                         filling_mode = mt5.ORDER_FILLING_FOK
                         logger.debug(f"🔧 Using FOK filling for {pos.symbol}")
                     # Check IOC (Immediate or Cancel)
-                    elif hasattr(mt5, 'SYMBOL_FILLING_IOC') and (symbol_info.filling_mode & mt5.SYMBOL_FILLING_IOC):
+                    elif ioc_constant and (symbol_info.filling_mode & ioc_constant):
                         filling_mode = mt5.ORDER_FILLING_IOC
                         logger.debug(f"🔧 Using IOC filling for {pos.symbol}")
                     # Check RETURN
-                    elif hasattr(mt5, 'SYMBOL_FILLING_RETURN') and (symbol_info.filling_mode & mt5.SYMBOL_FILLING_RETURN):
+                    elif return_constant and (symbol_info.filling_mode & return_constant):
                         filling_mode = mt5.ORDER_FILLING_RETURN
                         logger.debug(f"🔧 Using RETURN filling for {pos.symbol}")
                     else:
