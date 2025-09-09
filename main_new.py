@@ -49,9 +49,9 @@ logging.basicConfig(
 # 🎯 CLEAN LOGGING - แสดงแค่สิ่งสำคัญ
 logging.getLogger('mt5_connection').setLevel(logging.ERROR)
 logging.getLogger('order_management').setLevel(logging.WARNING)
-logging.getLogger('trading_conditions').setLevel(logging.WARNING)
-logging.getLogger('smart_entry_timing').setLevel(logging.WARNING)
-logging.getLogger('portfolio_manager').setLevel(logging.WARNING)
+logging.getLogger('trading_conditions').setLevel(logging.INFO)  # เปิดดู Smart Entry
+logging.getLogger('smart_entry_timing').setLevel(logging.INFO)  # เปิดดู Price Hierarchy
+logging.getLogger('portfolio_manager').setLevel(logging.INFO)   # เปิดดู Entry decisions
 logging.getLogger('calculations').setLevel(logging.ERROR)
 logging.getLogger('intelligent_position_manager').setLevel(logging.ERROR)
 logging.getLogger('position_purpose_tracker').setLevel(logging.ERROR)
@@ -213,6 +213,7 @@ class TradingSystem:
                 mt5_connection=self.mt5_connection,
                 symbol=self.actual_symbol
             )
+            logger.info(f"✅ Smart Entry Timing created: {type(self.smart_entry_timing)}")
             
             # 🛡️ Initialize Strategic Position Manager
             logger.info("🛡️ Initializing Strategic Position Manager...")
@@ -226,6 +227,11 @@ class TradingSystem:
             self.trading_conditions.position_purpose_tracker = self.position_purpose_tracker
             self.trading_conditions.smart_entry_timing = self.smart_entry_timing
             self.trading_conditions.strategic_position_manager = self.strategic_position_manager
+            
+            # 🔍 Verify connections
+            logger.info(f"🔍 VERIFICATION:")
+            logger.info(f"   Smart Entry Timing: {type(self.trading_conditions.smart_entry_timing) if self.trading_conditions.smart_entry_timing else 'NULL'}")
+            logger.info(f"   Position Purpose Tracker: {type(self.trading_conditions.position_purpose_tracker) if self.trading_conditions.position_purpose_tracker else 'NULL'}")
             
             # 🚫 REMOVED: Zone Manager connection to Portfolio Manager
             # ✅ Portfolio Manager now uses only Dynamic 7D Smart Closer

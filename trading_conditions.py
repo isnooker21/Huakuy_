@@ -208,6 +208,8 @@ class TradingConditions:
         """🎯 เช็คเวลาเข้าที่ฉลาด - ป้องกัน BUY สูง SELL ต่ำ"""
         try:
             if not self.smart_entry_timing:
+                logger.warning(f"⚠️ SMART ENTRY TIMING IS NULL - ALLOWING ALL ENTRIES!")
+                logger.warning(f"   This means Price Hierarchy is NOT being enforced!")
                 return {'approved': True, 'reason': 'Smart Entry Timing not available'}
             
             logger.info(f"🎯 SMART ENTRY CHECK: {signal_direction} at {current_price:.2f}")
