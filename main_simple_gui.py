@@ -444,22 +444,22 @@ class SimpleBreakoutTradingSystemGUI:
                 confidence=80.0,  # High confidence for breakouts
                 timestamp=datetime.now(),
                 price=current_candle.close,
-                comment=comment  # Add comment to signal
+                comment=comment,  # Add comment to signal
+                stop_loss=0.0,   # No stop loss for breakout system
+                take_profit=0.0  # No take profit for breakout system
             )
             
             # 🚀 DIRECT ORDER EXECUTION - Bypass all complex blocking systems
-            if direction == "BUY":
-                result = self.order_manager.open_buy_position(
-                    symbol=self.actual_symbol,
-                    lot_size=lot_size,
-                    comment=comment
-                )
-            else:  # SELL
-                result = self.order_manager.open_sell_position(
-                    symbol=self.actual_symbol,
-                    lot_size=lot_size,
-                    comment=comment
-                )
+            # Get account balance for order placement
+            account_info = self.mt5_connection.get_account_info() if self.mt5_connection else {}
+            account_balance = account_info.get('balance', self.initial_balance) if account_info else self.initial_balance
+            
+            # Place order using OrderManager
+            result = self.order_manager.place_order_from_signal(
+                signal=signal,
+                lot_size=lot_size,
+                account_balance=account_balance
+            )
             
             if result and hasattr(result, 'success') and result.success:
                 logger.info(f"✅ BREAKOUT TRADE EXECUTED: Order #{getattr(result, 'ticket', 'N/A')}")
