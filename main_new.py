@@ -761,8 +761,11 @@ class TradingSystem:
     def check_exit_conditions(self, portfolio_state):
         """ตรวจสอบเงื่อนไขการปิด Position"""
         try:
+            # 🎯 CRITICAL FIX: Sync positions from MT5 FIRST
+            logger.debug(f"🔄 Syncing positions from MT5 before closing analysis...")
+            synced_positions = self.portfolio_manager.order_manager.sync_positions_from_mt5()
             positions = self.portfolio_manager.order_manager.active_positions
-            logger.debug(f"🔍 Check Exit Conditions: {len(positions)} positions active")
+            logger.info(f"🔄 SYNC COMPLETE: {len(positions)} positions active (synced: {len(synced_positions)})")
             
             # 1. ตรวจสอบ Breakout Strategy ก่อน
             breakout_info = None
