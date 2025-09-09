@@ -1088,7 +1088,7 @@ class Dynamic7DSmartCloser:
                         position_price = getattr(score.position, 'open_price', current_price)
                         distance = abs(current_price - position_price) * 10000
                         
-                        if distance > 400:  # ไกลกว่า 400 pips
+                        if distance > 150:  # ไกลกว่า 150 pips (ปรับสำหรับทองคำ)
                             distant_problems.append({
                                 'score': score,
                                 'distance': distance,
@@ -1212,14 +1212,14 @@ class Dynamic7DSmartCloser:
         return 2000.0
     
     def _get_distance_category(self, distance_pips: float) -> str:
-        """📏 จัดหมวดหมู่ระยะห่าง"""
-        if distance_pips < 100:
+        """📏 จัดหมวดหมู่ระยะห่าง - ปรับสำหรับทองคำ"""
+        if distance_pips < 30:      # < 30 pips = ใกล้มาก
             return 'near'
-        elif distance_pips < 300:
+        elif distance_pips < 100:   # 30-100 pips = ปานกลาง
             return 'medium'
-        elif distance_pips < 800:
+        elif distance_pips < 300:   # 100-300 pips = ไกล
             return 'far'
-        else:
+        else:                       # > 300 pips = ไกลมาก
             return 'very_far'
 
 
