@@ -447,28 +447,27 @@ class SimpleBreakoutTradingSystemGUI:
                 comment=comment  # Add comment to signal
             )
             
-            # Use portfolio manager to execute (keeps all original logic)
-            decision = self.portfolio_manager.should_enter_trade(
-                signal=signal,
-                candle=current_candle,
-                current_state=self._get_portfolio_state(),
-                dynamic_lot_size=lot_size
-            )
+            # 🚀 DIRECT ORDER EXECUTION - Bypass all complex blocking systems
+            if direction == "BUY":
+                result = self.order_manager.open_buy_position(
+                    symbol=self.actual_symbol,
+                    lot_size=lot_size,
+                    comment=comment
+                )
+            else:  # SELL
+                result = self.order_manager.open_sell_position(
+                    symbol=self.actual_symbol,
+                    lot_size=lot_size,
+                    comment=comment
+                )
             
-            if decision['should_enter']:
-                result = self.portfolio_manager.execute_trade_decision(decision)
-                
-                if result and hasattr(result, 'success') and result.success:
-                    logger.info(f"✅ BREAKOUT TRADE EXECUTED: Order #{getattr(result, 'ticket', 'N/A')}")
-                    # Update last trade time
-                    self.last_trade_time[timeframe] = datetime.now()
-                else:
-                    error_msg = getattr(result, 'error_message', 'Unknown error') if result else 'No result'
-                    logger.error(f"❌ BREAKOUT TRADE FAILED: {error_msg}")
+            if result and hasattr(result, 'success') and result.success:
+                logger.info(f"✅ BREAKOUT TRADE EXECUTED: Order #{getattr(result, 'ticket', 'N/A')}")
+                # Update last trade time
+                self.last_trade_time[timeframe] = datetime.now()
             else:
-                reasons = decision.get('reasons', [])
-                if reasons:
-                    logger.info(f"🚫 BREAKOUT BLOCKED: {reasons[0]}")
+                error_msg = getattr(result, 'error_message', 'Unknown error') if result else 'No result'
+                logger.error(f"❌ BREAKOUT TRADE FAILED: {error_msg}")
                     
         except Exception as e:
             logger.error(f"❌ Error executing breakout trade: {e}")
