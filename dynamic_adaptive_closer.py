@@ -487,24 +487,149 @@ class DynamicAdaptiveCloser:
     def _select_optimal_positions(self, positions: List[Any], current_price: float, account_info: Dict) -> List[Any]:
         return positions[:2]  # Conservative selection
     
-    # Additional placeholder methods for group creation
+    # Implement actual group creation methods
     def _create_balance_groups(self, positions: List[Any], current_price: float) -> List[ClosingGroup]:
-        return []
+        """⚖️ สร้างกลุ่มเพื่อปรับสมดุล"""
+        groups = []
+        try:
+            buy_positions = [pos for pos in positions if getattr(pos, 'type', 0) == 0]
+            sell_positions = [pos for pos in positions if getattr(pos, 'type', 1) == 1]
+            
+            if abs(len(buy_positions) - len(sell_positions)) > 2:
+                # เลือกตำแหน่งที่มีกำไรจากฝั่งที่เยอะกว่า
+                if len(buy_positions) > len(sell_positions):
+                    profitable_buys = [pos for pos in buy_positions if getattr(pos, 'profit', 0) > 0]
+                    if profitable_buys:
+                        groups.append(ClosingGroup(
+                            group_id="BALANCE_BUYS",
+                            positions=profitable_buys[:3],
+                            total_profit=sum(getattr(pos, 'profit', 0) for pos in profitable_buys[:3]),
+                            total_volume=sum(getattr(pos, 'volume', 0) for pos in profitable_buys[:3]),
+                            closing_reason="Balance recovery - reduce BUYs",
+                            priority=8,
+                            estimated_execution_time=2.0
+                        ))
+                else:
+                    profitable_sells = [pos for pos in sell_positions if getattr(pos, 'profit', 0) > 0]
+                    if profitable_sells:
+                        groups.append(ClosingGroup(
+                            group_id="BALANCE_SELLS",
+                            positions=profitable_sells[:3],
+                            total_profit=sum(getattr(pos, 'profit', 0) for pos in profitable_sells[:3]),
+                            total_volume=sum(getattr(pos, 'volume', 0) for pos in profitable_sells[:3]),
+                            closing_reason="Balance recovery - reduce SELLs",
+                            priority=8,
+                            estimated_execution_time=2.0
+                        ))
+        except Exception as e:
+            logger.error(f"❌ Error creating balance groups: {e}")
+        return groups
     
     def _create_margin_relief_groups(self, positions: List[Any], current_price: float) -> List[ClosingGroup]:
-        return []
+        """🚨 สร้างกลุ่มเพื่อบรรเทา margin"""
+        groups = []
+        try:
+            # เลือกตำแหน่งที่มีกำไรมากที่สุด
+            profitable = [pos for pos in positions if getattr(pos, 'profit', 0) > 0]
+            profitable.sort(key=lambda pos: getattr(pos, 'profit', 0), reverse=True)
+            
+            if profitable:
+                groups.append(ClosingGroup(
+                    group_id="MARGIN_RELIEF",
+                    positions=profitable[:5],  # ปิด 5 ตัวที่กำไรดีที่สุด
+                    total_profit=sum(getattr(pos, 'profit', 0) for pos in profitable[:5]),
+                    total_volume=sum(getattr(pos, 'volume', 0) for pos in profitable[:5]),
+                    closing_reason="Margin relief - urgent closing",
+                    priority=10,
+                    estimated_execution_time=1.0
+                ))
+        except Exception as e:
+            logger.error(f"❌ Error creating margin relief groups: {e}")
+        return groups
     
     def _create_risk_reduction_groups(self, positions: List[Any], current_price: float) -> List[ClosingGroup]:
-        return []
+        """⚖️ สร้างกลุ่มเพื่อลดความเสี่ยง"""
+        groups = []
+        try:
+            # เลือกตำแหน่งที่มีกำไรเล็กน้อย
+            small_profit = [pos for pos in positions if 0 < getattr(pos, 'profit', 0) < 20]
+            
+            if small_profit:
+                groups.append(ClosingGroup(
+                    group_id="RISK_REDUCTION",
+                    positions=small_profit[:4],
+                    total_profit=sum(getattr(pos, 'profit', 0) for pos in small_profit[:4]),
+                    total_volume=sum(getattr(pos, 'volume', 0) for pos in small_profit[:4]),
+                    closing_reason="Risk reduction - small profits",
+                    priority=6,
+                    estimated_execution_time=2.5
+                ))
+        except Exception as e:
+            logger.error(f"❌ Error creating risk reduction groups: {e}")
+        return groups
     
     def _create_optimization_groups(self, positions: List[Any], current_price: float) -> List[ClosingGroup]:
-        return []
+        """📊 สร้างกลุ่มเพื่อเพิ่มประสิทธิภาพ"""
+        groups = []
+        try:
+            # เลือกตำแหน่งที่มีกำไรปานกลาง
+            medium_profit = [pos for pos in positions if 5 < getattr(pos, 'profit', 0) < 50]
+            
+            if medium_profit:
+                groups.append(ClosingGroup(
+                    group_id="OPTIMIZATION",
+                    positions=medium_profit[:3],
+                    total_profit=sum(getattr(pos, 'profit', 0) for pos in medium_profit[:3]),
+                    total_volume=sum(getattr(pos, 'volume', 0) for pos in medium_profit[:3]),
+                    closing_reason="Portfolio optimization",
+                    priority=5,
+                    estimated_execution_time=3.0
+                ))
+        except Exception as e:
+            logger.error(f"❌ Error creating optimization groups: {e}")
+        return groups
     
     def _create_emergency_groups(self, positions: List[Any], current_price: float) -> List[ClosingGroup]:
-        return []
+        """🚨 สร้างกลุ่มฉุกเฉิน"""
+        groups = []
+        try:
+            # เลือกตำแหน่งใดๆ ที่มีกำไร
+            any_profit = [pos for pos in positions if getattr(pos, 'profit', 0) > -5]  # รวมขาดทุนเล็กน้อย
+            
+            if any_profit:
+                groups.append(ClosingGroup(
+                    group_id="EMERGENCY",
+                    positions=any_profit[:6],
+                    total_profit=sum(getattr(pos, 'profit', 0) for pos in any_profit[:6]),
+                    total_volume=sum(getattr(pos, 'volume', 0) for pos in any_profit[:6]),
+                    closing_reason="Emergency exit - any available",
+                    priority=9,
+                    estimated_execution_time=1.5
+                ))
+        except Exception as e:
+            logger.error(f"❌ Error creating emergency groups: {e}")
+        return groups
     
     def _create_default_groups(self, positions: List[Any], current_price: float) -> List[ClosingGroup]:
-        return []
+        """🔄 สร้างกลุ่มเริ่มต้น"""
+        groups = []
+        try:
+            # เลือกตำแหน่งที่มีกำไรเล็กน้อย
+            any_positive = [pos for pos in positions if getattr(pos, 'profit', 0) > 0]
+            
+            if any_positive:
+                groups.append(ClosingGroup(
+                    group_id="DEFAULT",
+                    positions=any_positive[:2],
+                    total_profit=sum(getattr(pos, 'profit', 0) for pos in any_positive[:2]),
+                    total_volume=sum(getattr(pos, 'volume', 0) for pos in any_positive[:2]),
+                    closing_reason="Default closing",
+                    priority=4,
+                    estimated_execution_time=2.0
+                ))
+        except Exception as e:
+            logger.error(f"❌ Error creating default groups: {e}")
+        return groups
 
 def create_dynamic_adaptive_closer(mt5_connection=None, symbol: str = "XAUUSD") -> DynamicAdaptiveCloser:
     """สร้าง Dynamic Adaptive Closer"""
