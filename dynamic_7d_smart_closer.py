@@ -102,11 +102,6 @@ class Dynamic7DSmartCloser:
     
     def find_optimal_closing(self, positions: List[Any], account_info: Dict, 
                            market_conditions: Optional[Dict] = None) -> Optional[ClosingResult]:
-        """🧠 หาการปิดไม้ที่ดีที่สุดแบบอัจฉริยะ - Enhanced Intelligence (เรียกใช้ มั)"""
-        return self.มั(positions, account_info, market_conditions)
-    
-    def มั(self, positions: List[Any], account_info: Dict, 
-                           market_conditions: Optional[Dict] = None) -> Optional[ClosingResult]:
         """
         🧠 หาการปิดไม้ที่ดีที่สุดแบบอัจฉริยะ - Enhanced Intelligence
         Features:
