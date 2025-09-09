@@ -561,6 +561,7 @@ class MT5Connection:
             10023: "TRADE_RETCODE_ORDER_CHANGED - คำสั่งเปลี่ยนแปลง",
             10024: "TRADE_RETCODE_TOO_MANY_REQUESTS - คำสั่งมากเกินไป",
             10025: "TRADE_RETCODE_NO_CHANGES - ไม่มีการเปลี่ยนแปลง",
+            10039: "TRADE_RETCODE_POSITION_CLOSED - Position ถูกปิดแล้ว หรือไม่มีอยู่",
             10026: "TRADE_RETCODE_SERVER_DISABLES_AT - Server ปิดการทำงาน",
             10027: "TRADE_RETCODE_CLIENT_DISABLES_AT - Client ปิดการทำงาน",
             10028: "TRADE_RETCODE_LOCKED - ถูกล็อค",
@@ -981,9 +982,16 @@ class MT5Connection:
                         return {'success': True, 'ticket': ticket, 'profit': result.get('profit', 0)}
                     else:
                         failed_tickets.append(ticket)
-                        error_msg = result.get('comment', 'Unknown error') if result else 'No result'
-                        logger.error(f"❌ ปิด Position {ticket} ล้มเหลว: {error_msg}")
-                        return {'success': False, 'ticket': ticket, 'error': error_msg}
+                        retcode = result.get('retcode', 0) if result else 0
+                        error_msg = self._get_retcode_description(retcode) if result else 'No result'
+                        
+                        # 🎯 Special handling for 10039 (Position already closed)
+                        if retcode == 10039:
+                            logger.warning(f"⚠️ Position {ticket} already closed - skipping")
+                            return {'success': False, 'ticket': ticket, 'error': error_msg, 'already_closed': True}
+                        else:
+                            logger.error(f"❌ ปิด Position {ticket} ล้มเหลว: {error_msg}")
+                            return {'success': False, 'ticket': ticket, 'error': error_msg}
                         
             except Exception as e:
                 with results_lock:
@@ -1129,10 +1137,15 @@ class MT5Connection:
             #         'profit_info': profit_info
             #     }
             
-            # ดึงข้อมูล Position
+            # ดึงข้อมูล Position และเช็คว่ายังมีอยู่หรือไม่
             position = mt5.positions_get(ticket=ticket)
             if not position:
-                return None
+                logger.warning(f"⚠️ Position {ticket} not found - may already be closed")
+                return {
+                    'retcode': 10039,
+                    'comment': 'Position not found or already closed',
+                    'ticket': ticket
+                }
                 
             pos = position[0]
             current_profit = getattr(pos, 'profit', 0.0)  # เก็บ profit ปัจจุบันก่อนปิด
