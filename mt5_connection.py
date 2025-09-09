@@ -7,7 +7,7 @@ MT5 Connection Module
 import logging
 import time
 from typing import Optional, Dict, List, Any
-from datetime import datetime
+from datetime import datetime, timedelta
 
 # Safe import for MT5
 try:
@@ -30,6 +30,17 @@ class MT5Connection:
         self.last_connection_check = None
         self.broker_symbols = {}  # เก็บสัญลักษณ์ของโบรกเกอร์
         self.filling_types = {}   # เก็บ filling type ที่ใช้ได้สำหรับแต่ละสัญลักษณ์
+        
+        # 🕐 Market Session Tracking
+        self.market_sessions = {
+            'sydney': {'open': '21:00', 'close': '06:00', 'timezone': 'UTC+10'},
+            'tokyo': {'open': '00:00', 'close': '09:00', 'timezone': 'UTC+9'},
+            'london': {'open': '08:00', 'close': '17:00', 'timezone': 'UTC+0'},
+            'new_york': {'open': '13:00', 'close': '22:00', 'timezone': 'UTC-5'},
+            'overlap_london_ny': {'open': '13:00', 'close': '17:00', 'timezone': 'UTC+0'}
+        }
+        self.last_market_status = None
+        self.market_status_cache = {}
         
     def connect_mt5(self, max_retries: int = 3, retry_delay: float = 2.0) -> bool:
         """
@@ -1257,3 +1268,260 @@ class MT5Connection:
                 'ticket': ticket
             }
         # 🚫 ALL _REMOVED METHODS CLEANED UP - Using only group closing with Zero Loss Policy
+    
+    def get_market_status(self, symbol: str = "XAUUSD") -> Dict[str, Any]:
+        """
+        🕐 ตรวจสอบสถานะตลาด (เปิด/ปิด)
+        
+        Args:
+            symbol: สัญลักษณ์ที่ต้องการตรวจสอบ
+            
+        Returns:
+            Dict: สถานะตลาดและข้อมูลเพิ่มเติม
+        """
+        try:
+            if not MT5_AVAILABLE or not self.is_connected:
+                return {
+                    'is_market_open': False,
+                    'reason': 'MT5 not available or not connected',
+                    'current_time': datetime.now().strftime('%H:%M:%S'),
+                    'active_sessions': [],
+                    'next_session': None,
+                    'time_to_next_session': None
+                }
+            
+            # ตรวจสอบจาก cache ก่อน (cache 1 นาที)
+            cache_key = f"{symbol}_{datetime.now().strftime('%Y%m%d%H%M')}"
+            if cache_key in self.market_status_cache:
+                return self.market_status_cache[cache_key]
+            
+            # ตรวจสอบสถานะตลาดจาก MT5
+            symbol_info = mt5.symbol_info(symbol)
+            if symbol_info is None:
+                return {
+                    'is_market_open': False,
+                    'reason': f'Symbol {symbol} not found',
+                    'current_time': datetime.now().strftime('%H:%M:%S'),
+                    'active_sessions': [],
+                    'next_session': None,
+                    'time_to_next_session': None
+                }
+            
+            # ตรวจสอบการซื้อขาย
+            is_trade_allowed = symbol_info.trade_mode == mt5.SYMBOL_TRADE_MODE_FULL
+            is_trade_session = symbol_info.trade_session_deals != 0
+            
+            # ตรวจสอบเวลาปัจจุบัน
+            current_time = datetime.now()
+            current_utc = datetime.utcnow()
+            
+            # ตรวจสอบแต่ละ session
+            active_sessions = []
+            next_session = None
+            min_time_to_next = float('inf')
+            
+            for session_name, session_info in self.market_sessions.items():
+                if session_name == 'overlap_london_ny':
+                    continue  # Skip overlap for now
+                    
+                session_open = self._parse_session_time(session_info['open'], current_utc)
+                session_close = self._parse_session_time(session_info['close'], current_utc)
+                
+                # ตรวจสอบว่า session เปิดอยู่หรือไม่
+                if self._is_session_active(session_open, session_close, current_utc):
+                    active_sessions.append({
+                        'name': session_name,
+                        'open': session_info['open'],
+                        'close': session_info['close'],
+                        'timezone': session_info['timezone']
+                    })
+                
+                # หา session ถัดไป
+                time_to_next = self._get_time_to_next_session(session_open, current_utc)
+                if time_to_next < min_time_to_next:
+                    min_time_to_next = time_to_next
+                    next_session = {
+                        'name': session_name,
+                        'open': session_info['open'],
+                        'timezone': session_info['timezone'],
+                        'time_to_open': time_to_next
+                    }
+            
+            # ตรวจสอบ London-NY Overlap
+            london_ny_overlap = self._check_london_ny_overlap(current_utc)
+            if london_ny_overlap:
+                active_sessions.append({
+                    'name': 'london_ny_overlap',
+                    'open': '13:00',
+                    'close': '17:00',
+                    'timezone': 'UTC+0',
+                    'description': 'High Volume Period'
+                })
+            
+            # สรุปสถานะตลาด
+            is_market_open = is_trade_allowed and is_trade_session and len(active_sessions) > 0
+            
+            result = {
+                'is_market_open': is_market_open,
+                'reason': 'Market is open' if is_market_open else 'Market is closed',
+                'current_time': current_time.strftime('%H:%M:%S'),
+                'current_utc': current_utc.strftime('%H:%M:%S'),
+                'active_sessions': active_sessions,
+                'next_session': next_session,
+                'time_to_next_session': min_time_to_next if min_time_to_next != float('inf') else None,
+                'trade_allowed': is_trade_allowed,
+                'trade_session': is_trade_session,
+                'symbol': symbol,
+                'london_ny_overlap': london_ny_overlap
+            }
+            
+            # เก็บใน cache
+            self.market_status_cache[cache_key] = result
+            
+            return result
+            
+        except Exception as e:
+            logger.error(f"❌ Error checking market status: {e}")
+            return {
+                'is_market_open': False,
+                'reason': f'Error: {str(e)}',
+                'current_time': datetime.now().strftime('%H:%M:%S'),
+                'active_sessions': [],
+                'next_session': None,
+                'time_to_next_session': None
+            }
+    
+    def _parse_session_time(self, time_str: str, current_utc: datetime) -> datetime:
+        """แปลงเวลาของ session เป็น datetime object"""
+        try:
+            hour, minute = map(int, time_str.split(':'))
+            session_time = current_utc.replace(hour=hour, minute=minute, second=0, microsecond=0)
+            
+            # ถ้าเวลาผ่านไปแล้ว ให้เป็นวันถัดไป
+            if session_time <= current_utc:
+                session_time += timedelta(days=1)
+                
+            return session_time
+        except Exception as e:
+            logger.error(f"❌ Error parsing session time {time_str}: {e}")
+            return current_utc + timedelta(hours=1)
+    
+    def _is_session_active(self, session_open: datetime, session_close: datetime, current_utc: datetime) -> bool:
+        """ตรวจสอบว่า session เปิดอยู่หรือไม่"""
+        try:
+            # ถ้า session_close < session_open แสดงว่า session ข้ามวัน
+            if session_close < session_open:
+                return current_utc >= session_open or current_utc <= session_close
+            else:
+                return session_open <= current_utc <= session_close
+        except Exception as e:
+            logger.error(f"❌ Error checking session active: {e}")
+            return False
+    
+    def _get_time_to_next_session(self, session_open: datetime, current_utc: datetime) -> float:
+        """คำนวณเวลาที่เหลือจนถึง session ถัดไป (เป็นชั่วโมง)"""
+        try:
+            time_diff = session_open - current_utc
+            return time_diff.total_seconds() / 3600.0
+        except Exception as e:
+            logger.error(f"❌ Error calculating time to next session: {e}")
+            return 24.0
+    
+    def _check_london_ny_overlap(self, current_utc: datetime) -> bool:
+        """ตรวจสอบ London-NY Overlap (13:00-17:00 UTC)"""
+        try:
+            current_hour = current_utc.hour
+            return 13 <= current_hour < 17
+        except Exception as e:
+            logger.error(f"❌ Error checking London-NY overlap: {e}")
+            return False
+    
+    def is_market_open(self, symbol: str = "XAUUSD") -> bool:
+        """
+        🕐 ตรวจสอบว่าตลาดเปิดหรือไม่ (ฟังก์ชันง่าย)
+        
+        Args:
+            symbol: สัญลักษณ์ที่ต้องการตรวจสอบ
+            
+        Returns:
+            bool: True ถ้าตลาดเปิด, False ถ้าตลาดปิด
+        """
+        try:
+            market_status = self.get_market_status(symbol)
+            return market_status.get('is_market_open', False)
+        except Exception as e:
+            logger.error(f"❌ Error checking if market is open: {e}")
+            return False
+    
+    def get_next_market_open(self, symbol: str = "XAUUSD") -> Dict[str, Any]:
+        """
+        🕐 ตรวจสอบเวลาที่ตลาดจะเปิดครั้งถัดไป
+        
+        Args:
+            symbol: สัญลักษณ์ที่ต้องการตรวจสอบ
+            
+        Returns:
+            Dict: ข้อมูลเวลาที่ตลาดจะเปิดครั้งถัดไป
+        """
+        try:
+            market_status = self.get_market_status(symbol)
+            next_session = market_status.get('next_session')
+            
+            if next_session:
+                return {
+                    'session_name': next_session['name'],
+                    'open_time': next_session['open'],
+                    'timezone': next_session['timezone'],
+                    'hours_until_open': next_session['time_to_open'],
+                    'minutes_until_open': next_session['time_to_open'] * 60
+                }
+            else:
+                return {
+                    'session_name': 'Unknown',
+                    'open_time': 'Unknown',
+                    'timezone': 'Unknown',
+                    'hours_until_open': None,
+                    'minutes_until_open': None
+                }
+        except Exception as e:
+            logger.error(f"❌ Error getting next market open: {e}")
+            return {
+                'session_name': 'Error',
+                'open_time': 'Error',
+                'timezone': 'Error',
+                'hours_until_open': None,
+                'minutes_until_open': None
+            }
+    
+    def log_market_status(self, symbol: str = "XAUUSD"):
+        """
+        📊 Log สถานะตลาด (สำหรับ debug)
+        
+        Args:
+            symbol: สัญลักษณ์ที่ต้องการตรวจสอบ
+        """
+        try:
+            market_status = self.get_market_status(symbol)
+            
+            logger.info(f"🕐 MARKET STATUS for {symbol}:")
+            logger.info(f"   Status: {'🟢 OPEN' if market_status['is_market_open'] else '🔴 CLOSED'}")
+            logger.info(f"   Reason: {market_status['reason']}")
+            logger.info(f"   Current Time: {market_status['current_time']} (UTC: {market_status['current_utc']})")
+            
+            if market_status['active_sessions']:
+                logger.info(f"   Active Sessions: {len(market_status['active_sessions'])}")
+                for session in market_status['active_sessions']:
+                    logger.info(f"     • {session['name'].upper()}: {session['open']}-{session['close']} ({session['timezone']})")
+            else:
+                logger.info(f"   Active Sessions: None")
+            
+            if market_status['next_session']:
+                next_session = market_status['next_session']
+                logger.info(f"   Next Session: {next_session['name'].upper()} at {next_session['open']} ({next_session['timezone']})")
+                logger.info(f"   Time to Next: {next_session['time_to_open']:.1f} hours")
+            
+            if market_status.get('london_ny_overlap'):
+                logger.info(f"   🚀 London-NY Overlap: ACTIVE (High Volume Period)")
+            
+        except Exception as e:
+            logger.error(f"❌ Error logging market status: {e}")
