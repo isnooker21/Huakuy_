@@ -670,14 +670,17 @@ class TradingSystem:
                         self._lock_positions(filtered_positions)
                         
                         try:
-                            # 3. 🎯 Execute closing
-                            close_result = self.zone_position_manager.close_positions(filtered_positions)
-                            if close_result.get('success', False):
-                                closed_count = close_result.get('closed_count', 0)
-                                total_profit = close_result.get('total_profit', 0.0)
+                            # 3. 🎯 Execute closing via Order Manager (Zero Loss Policy enforced)
+                            close_result = self.order_manager.close_positions_group(
+                                filtered_positions, 
+                                reason=f"Unified Decision: {method}"
+                            )
+                            if close_result.success:
+                                closed_count = len(close_result.closed_tickets)
+                                total_profit = close_result.total_profit
                                 logger.info(f"✅ UNIFIED SUCCESS: {closed_count} positions closed, ${total_profit:.2f} profit")
                             else:
-                                logger.warning(f"❌ UNIFIED FAILED: {close_result.get('message', 'Unknown error')}")
+                                logger.warning(f"❌ UNIFIED FAILED: {close_result.error_message}")
                         finally:
                             # 🔓 Always unlock positions after attempt
                             self._unlock_positions(filtered_positions)
