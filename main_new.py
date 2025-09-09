@@ -10,39 +10,19 @@ import threading
 from datetime import datetime, timedelta
 from typing import Dict, List, Optional, Any
 
-# Import modules
+# 🚀 NEW SIMPLE TRADING SYSTEM
 from mt5_connection import MT5Connection
 from calculations import Position, PercentageCalculator, LotSizeCalculator
 from trading_conditions import TradingConditions, Signal, CandleData
 from order_management import OrderManager
-from portfolio_manager import PortfolioManager
-from gui import TradingGUI
 
-# 🚫 OLD ZONE-BASED SYSTEM REMOVED - Using Dynamic 7D Smart Closer only
-# from zone_position_manager import ZonePositionManager, create_zone_position_manager
+# 🚀 NEW BREAKOUT TRADING ENGINE
+from simple_breakout_engine import create_simple_breakout_engine, CandleData as BreakoutCandle, TimeFrame
+from sr_detection_engine import create_sr_detection_engine
 
-# 🧠 Intelligent Position Management System
-from intelligent_position_manager import IntelligentPositionManager, create_intelligent_position_manager
-from dynamic_7d_smart_closer import create_dynamic_7d_smart_closer
-
-# 🎯 Position Purpose Tracking System
-from position_purpose_tracker import create_position_purpose_tracker
-
-# 🎯 Smart Entry Timing System
-from smart_entry_timing import create_smart_entry_timing
-from strategic_position_manager import create_strategic_position_manager
-
-# 🚀 Enhanced 7D Entry + Position Modifier System
-from enhanced_7d_entry_system import create_enhanced_7d_entry_system
-
-# 🚀 Dynamic Adaptive Systems - Full Dynamic Trading Ecosystem
-from dynamic_adaptive_entry_system import create_dynamic_adaptive_entry_system
+# ✅ KEEP POSITION MANAGEMENT & CLOSING SYSTEMS
 from dynamic_position_modifier import create_dynamic_position_modifier
 from dynamic_adaptive_closer import create_dynamic_adaptive_closer
-
-# 📊 Market Analysis Systems
-from market_analysis import MultiTimeframeAnalyzer, MarketSessionAnalyzer
-from price_action_analyzer import PriceActionAnalyzer
 
 # 🎯 SIMPLE & CLEAN LOGGING CONFIGURATION
 logging.basicConfig(
@@ -54,23 +34,14 @@ logging.basicConfig(
     ]
 )
 
-# 🎯 CLEAN LOGGING - แสดงแค่สิ่งสำคัญ
-logging.getLogger('mt5_connection').setLevel(logging.ERROR)
-logging.getLogger('order_management').setLevel(logging.WARNING)
-logging.getLogger('trading_conditions').setLevel(logging.INFO)  # เปิดดู Smart Entry
-logging.getLogger('smart_entry_timing').setLevel(logging.INFO)  # เปิดดู Price Hierarchy
-logging.getLogger('portfolio_manager').setLevel(logging.INFO)   # เปิดดู Entry decisions
+# 🚀 NEW SYSTEM LOGGING - Clean & Simple
+logging.getLogger('mt5_connection').setLevel(logging.WARNING)
+logging.getLogger('order_management').setLevel(logging.INFO)
+logging.getLogger('simple_breakout_engine').setLevel(logging.INFO)
+logging.getLogger('sr_detection_engine').setLevel(logging.INFO)
+logging.getLogger('dynamic_position_modifier').setLevel(logging.INFO)
+logging.getLogger('dynamic_adaptive_closer').setLevel(logging.INFO)
 logging.getLogger('calculations').setLevel(logging.ERROR)
-logging.getLogger('intelligent_position_manager').setLevel(logging.ERROR)
-logging.getLogger('position_purpose_tracker').setLevel(logging.ERROR)
-logging.getLogger('dynamic_7d_smart_closer').setLevel(logging.WARNING)
-logging.getLogger('market_analysis').setLevel(logging.ERROR)
-
-# ปิด logs ที่ไม่จำเป็น
-for module in ['signal_manager', 'smart_gap_filler', 'force_trading_mode', 
-               'advanced_breakout_recovery', 'price_zone_analysis', 'zone_rebalancer',
-               'zone_position_manager', 'zone_manager', 'zone_analyzer', 'zone_coordinator']:
-    logging.getLogger(module).setLevel(logging.ERROR)
 
 logger = logging.getLogger(__name__)
 
@@ -79,7 +50,7 @@ class TradingSystem:
     
     def __init__(self, initial_balance: float = 10000.0, symbol: str = "XAUUSD"):
         """
-        เริ่มต้นระบบเทรด
+        🚀 NEW SIMPLE BREAKOUT TRADING SYSTEM
         
         Args:
             initial_balance: เงินทุนเริ่มต้น
@@ -89,47 +60,32 @@ class TradingSystem:
         self.actual_symbol = None  # สัญลักษณ์จริงที่ใช้ในโบรกเกอร์
         self.initial_balance = initial_balance
         
-        # เริ่มต้น components
+        # 🚀 NEW CORE SYSTEMS
         self.mt5_connection = MT5Connection()
         self.order_manager = OrderManager(self.mt5_connection)
-        self.portfolio_manager = PortfolioManager(self.order_manager, initial_balance)
         self.trading_conditions = TradingConditions()
         
-        # 🎯 Zone-Based Position Management System (จะถูก initialize หลังจาก MT5 connect)
-        self.zone_position_manager = None
+        # 🚀 NEW BREAKOUT TRADING ENGINE
+        self.breakout_engine = None
+        self.sr_detector = None
         
-        # 🧠 Intelligent Systems (จะถูก initialize หลังจาก MT5 connect)
-        self.intelligent_position_manager = None
-        self.dynamic_7d_smart_closer = None
-        
-        # 🎯 Purpose Tracking System
-        self.position_purpose_tracker = None
-        
-        # 🚀 Enhanced 7D Entry + Position Modifier System
-        self.enhanced_7d_entry_system = None
-        
-        # 🚀 Dynamic Adaptive Systems - Full Dynamic Trading Ecosystem
-        self.dynamic_adaptive_entry = None
+        # ✅ KEEP POSITION MANAGEMENT & CLOSING SYSTEMS
         self.dynamic_position_modifier = None
         self.dynamic_adaptive_closer = None
         
-        # 📊 Market Analysis Systems
-        self.market_analyzer = None
-        self.price_action_analyzer = None
-        
-        # สถานะการทำงาน
+        # 🎯 Trading State - NEW SYSTEM
         self.is_running = False
         self.trading_thread = None
-        self.last_candle_time = None
-        self.is_trading_started_from_gui = False  # ตัวแปรเช็คว่าเริ่มจาก GUI แล้วหรือยัง
+        self.last_candle_time = {}  # {timeframe: last_time}
         
-        # ข้อมูลตลาด
-        self.current_prices = {}
-        self.volume_history = []
-        self.price_history = []
+        # 📊 Multi-Timeframe Candle Storage
+        self.candle_history = {}  # {timeframe: [candles]}
+        self.timeframes = [TimeFrame.M5, TimeFrame.M15, TimeFrame.M30, TimeFrame.H1]
         
-        # GUI
-        self.gui = None
+        # Initialize candle history for each timeframe
+        for tf in self.timeframes:
+            self.candle_history[tf] = []
+            self.last_candle_time[tf] = None
         
         # 🔒 Position Locking - ป้องกันการปิดซ้ำ
         self.closing_positions = set()  # เก็บ tickets ที่กำลังปิดอยู่
@@ -173,89 +129,25 @@ class TradingSystem:
             logger.info(f"ใช้สัญลักษณ์: {self.base_symbol} -> {self.actual_symbol}")
             logger.info(f"ข้อมูลสัญลักษณ์: {symbol_info}")
             
-            # ส่ง symbol ที่ถูกต้องไปยัง portfolio_manager
-            self.portfolio_manager.current_symbol = self.actual_symbol
-            
             # ซิงค์ข้อมูล Position
             positions = self.order_manager.sync_positions_from_mt5()
             logger.info(f"พบ Position ที่เปิดอยู่: {len(positions)} ตัว")
             
-            # โหลดข้อมูลราคาเริ่มต้น
-            self.load_initial_market_data()
-            
-            # 📊 Initialize Market Analysis Systems
-            logger.info("📊 Initializing Market Analysis Systems...")
-            self.market_analyzer = MultiTimeframeAnalyzer(symbol=self.actual_symbol)
-            self.price_action_analyzer = PriceActionAnalyzer(
+            # 🚀 Initialize NEW Breakout Trading Engine
+            logger.info("🚀 Initializing Simple Breakout Engine...")
+            self.breakout_engine = create_simple_breakout_engine(
                 mt5_connection=self.mt5_connection,
                 symbol=self.actual_symbol
             )
+            logger.info(f"✅ Breakout Engine created: {type(self.breakout_engine)}")
             
-            # 🎯 Initialize Position Purpose Tracking System
-            logger.info("🎯 Initializing Position Purpose Tracking System...")
-            self.position_purpose_tracker = create_position_purpose_tracker(
-                market_analyzer=self.market_analyzer,
-                price_action_analyzer=self.price_action_analyzer
-            )
+            # 🛡️ Initialize Support/Resistance Detection Engine
+            logger.info("🛡️ Initializing S/R Detection Engine...")
+            self.sr_detector = create_sr_detection_engine(symbol=self.actual_symbol)
+            logger.info(f"✅ S/R Detector created: {type(self.sr_detector)}")
             
-            # 🧠 Initialize Intelligent Position Management System
-            logger.info("🧠 Initializing Intelligent Position Management System...")
-            self.intelligent_position_manager = create_intelligent_position_manager(
-                mt5_connection=self.mt5_connection,
-                order_manager=self.order_manager,
-                symbol=self.actual_symbol
-            )
-            
-            # 🚀 Initialize Dynamic 7D Smart Closer with Purpose Intelligence
-            logger.info("🚀 Initializing Dynamic 7D Smart Closer...")
-            self.dynamic_7d_smart_closer = create_dynamic_7d_smart_closer(
-                intelligent_manager=self.intelligent_position_manager,
-                purpose_tracker=self.position_purpose_tracker,
-                market_analyzer=self.market_analyzer,
-                price_action_analyzer=self.price_action_analyzer
-            )
-            
-            # 🚫 REMOVED: Zone-Based Position Management System
-            # ✅ REASON: Redundant with Dynamic 7D Smart Closer
-            # - Distance-based logic covered by Dynamic 7D
-            # - Cross-zone analysis covered by Intelligent Manager
-            # - Removing redundant systems improves closing intelligence
-            logger.info("🚫 Zone Manager DISABLED - Using Dynamic 7D Smart Closer only")
-            self.zone_position_manager = None  # Disabled
-            
-            # 🎯 Initialize Smart Entry Timing System
-            logger.info("🎯 Initializing Smart Entry Timing System...")
-            self.smart_entry_timing = create_smart_entry_timing(
-                mt5_connection=self.mt5_connection,
-                symbol=self.actual_symbol
-            )
-            logger.info(f"✅ Smart Entry Timing created: {type(self.smart_entry_timing)}")
-            
-            # 🛡️ Initialize Strategic Position Manager
-            logger.info("🛡️ Initializing Strategic Position Manager...")
-            self.strategic_position_manager = create_strategic_position_manager(
-                smart_entry_timing=self.smart_entry_timing
-            )
-            
-            # 🚀 Initialize Enhanced 7D Entry + Position Modifier System
-            logger.info("🚀 Initializing Enhanced 7D Entry + Position Modifier System...")
-            self.enhanced_7d_entry_system = create_enhanced_7d_entry_system(
-                intelligent_manager=self.intelligent_position_manager,
-                purpose_tracker=self.position_purpose_tracker,
-                dynamic_7d_closer=self.dynamic_7d_smart_closer,
-                mt5_connection=self.mt5_connection
-            )
-            logger.info(f"✅ Enhanced 7D Entry System created: {type(self.enhanced_7d_entry_system)}")
-            
-            # 🚀 Initialize Dynamic Adaptive Systems - Full Dynamic Trading Ecosystem
-            logger.info("🚀 Initializing Dynamic Adaptive Trading Systems...")
-            
-            # Dynamic Entry System
-            self.dynamic_adaptive_entry = create_dynamic_adaptive_entry_system(
-                mt5_connection=self.mt5_connection,
-                symbol=self.actual_symbol
-            )
-            logger.info(f"✅ Dynamic Adaptive Entry created: {type(self.dynamic_adaptive_entry)}")
+            # ✅ Initialize Position Management & Closing Systems (KEEP)
+            logger.info("✅ Initializing Position Management Systems...")
             
             # Dynamic Position Modifier
             self.dynamic_position_modifier = create_dynamic_position_modifier(
@@ -271,32 +163,7 @@ class TradingSystem:
             )
             logger.info(f"✅ Dynamic Adaptive Closer created: {type(self.dynamic_adaptive_closer)}")
             
-            # 🔗 เชื่อมต่อ Smart Systems กับ Trading Conditions
-            logger.info("🔗 Connecting Smart Systems to Trading Conditions...")
-            self.trading_conditions.intelligent_position_manager = self.intelligent_position_manager
-            self.trading_conditions.position_purpose_tracker = self.position_purpose_tracker
-            self.trading_conditions.smart_entry_timing = self.smart_entry_timing
-            self.trading_conditions.strategic_position_manager = self.strategic_position_manager
-            self.trading_conditions.enhanced_7d_entry_system = self.enhanced_7d_entry_system
-            
-            # Connect Dynamic Adaptive Systems
-            self.trading_conditions.dynamic_adaptive_entry = self.dynamic_adaptive_entry
-            self.trading_conditions.dynamic_position_modifier = self.dynamic_position_modifier
-            self.trading_conditions.dynamic_adaptive_closer = self.dynamic_adaptive_closer
-            
-            # 🔍 Verify connections
-            logger.info(f"🔍 VERIFICATION:")
-            logger.info(f"   Smart Entry Timing: {type(self.trading_conditions.smart_entry_timing) if self.trading_conditions.smart_entry_timing else 'NULL'}")
-            logger.info(f"   Position Purpose Tracker: {type(self.trading_conditions.position_purpose_tracker) if self.trading_conditions.position_purpose_tracker else 'NULL'}")
-            logger.info(f"   Enhanced 7D Entry System: {type(self.trading_conditions.enhanced_7d_entry_system) if self.trading_conditions.enhanced_7d_entry_system else 'NULL'}")
-            logger.info(f"   Dynamic Adaptive Entry: {type(self.trading_conditions.dynamic_adaptive_entry) if self.trading_conditions.dynamic_adaptive_entry else 'NULL'}")
-            logger.info(f"   Dynamic Position Modifier: {type(self.trading_conditions.dynamic_position_modifier) if self.trading_conditions.dynamic_position_modifier else 'NULL'}")
-            logger.info(f"   Dynamic Adaptive Closer: {type(self.trading_conditions.dynamic_adaptive_closer) if self.trading_conditions.dynamic_adaptive_closer else 'NULL'}")
-            
-            # 🚫 REMOVED: Zone Manager connection to Portfolio Manager
-            # ✅ Portfolio Manager now uses only Dynamic 7D Smart Closer
-            
-            logger.info("✅ SYSTEM READY")
+            logger.info("✅ NEW SIMPLE BREAKOUT SYSTEM initialized successfully")
             return True
             
         except Exception as e:
