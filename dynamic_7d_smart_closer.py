@@ -54,9 +54,8 @@ class ClosingResult:
 class Dynamic7DSmartCloser:
     """🚀 Dynamic 7D Smart Closing System"""
     
-    def __init__(self, intelligent_manager=None, purpose_tracker=None, 
-                 market_analyzer=None, price_action_analyzer=None):
-        self.intelligent_manager = intelligent_manager
+    def __init__(self, purpose_tracker=None, market_analyzer=None, price_action_analyzer=None):
+        # 🚫 REMOVED: intelligent_manager - Replaced by internal 7D analysis
         self.purpose_tracker = purpose_tracker
         self.market_analyzer = market_analyzer
         self.price_action_analyzer = price_action_analyzer
@@ -96,9 +95,10 @@ class Dynamic7DSmartCloser:
             'very_far': 2.0   # ไกลมาก - เพิ่มความสำคัญมาก
         }
         
-        logger.info("🚀 Dynamic 7D Smart Closer initialized - Purpose-Aware Mode")
+        logger.info("🚀 Enhanced 7D Smart Closer initialized - Standalone Mode")
         logger.info(f"   🧠 Purpose Tracker: {'✅' if purpose_tracker else '❌'}")
         logger.info(f"   📊 Market Analyzer: {'✅' if market_analyzer else '❌'}")
+        logger.info("   🚫 Intelligent Manager: ❌ (Replaced by internal 7D analysis)")
     
     def find_optimal_closing(self, positions: List[Any], account_info: Dict, 
                            market_conditions: Optional[Dict] = None) -> Optional[ClosingResult]:
@@ -162,18 +162,12 @@ class Dynamic7DSmartCloser:
                 except Exception as e:
                     logger.warning(f"⚠️ Purpose Analysis failed: {e}")
             
-            # 4. 🧠 Enhanced 7D Analysis with Risk Weighting
-            position_scores = None
-            if self.intelligent_manager:
-                try:
-                    margin_health = self.intelligent_manager._analyze_margin_health(account_info)
-                    position_scores = self.intelligent_manager._score_all_positions(positions, account_info, margin_health)
-                    
-                    # Apply risk-based weighting to scores
-                    position_scores = self._apply_risk_weighting(position_scores, risk_assessment, market_intelligence)
-                    logger.info(f"🧠 Enhanced 7D Scores calculated for {len(position_scores)} positions")
-                except Exception as e:
-                    logger.warning(f"⚠️ 7D Analysis failed: {e}, using fallback")
+            # 4. 🧠 Internal 7D Analysis with Risk Weighting
+            position_scores = self._calculate_internal_7d_scores(positions, account_info, risk_assessment, market_intelligence)
+            if position_scores:
+                logger.info(f"🧠 Internal 7D Scores calculated for {len(position_scores)} positions")
+            else:
+                logger.warning(f"⚠️ Internal 7D Analysis failed, using fallback")
             
             # 5. 🔄 Enhanced Dynamic Parameters with Market Intelligence
             dynamic_params = self._calculate_enhanced_dynamic_parameters(
@@ -2199,12 +2193,69 @@ class Dynamic7DSmartCloser:
         except Exception as e:
             logger.error(f"❌ Error calculating enhanced impact score: {e}")
             return self._calculate_total_impact_score(result, portfolio_health)
+    
+    def _calculate_internal_7d_scores(self, positions: List[Any], account_info: Dict, 
+                                    risk_assessment: Dict, market_intelligence: Dict) -> List[Any]:
+        """Calculate internal 7D scores without external intelligent_manager"""
+        try:
+            if not positions:
+                return []
+            
+            # Simple 7D scoring based on position characteristics
+            position_scores = []
+            
+            for pos in positions:
+                try:
+                    profit = getattr(pos, 'profit', 0)
+                    volume = getattr(pos, 'volume', 0)
+                    open_time = getattr(pos, 'time', 0)
+                    current_time = time.time()
+                    hours_old = (current_time - open_time) / 3600 if open_time > 0 else 0
+                    
+                    # Simple 7D scoring
+                    profit_score = min(100, max(0, profit * 10))  # Profit component
+                    volume_score = min(100, max(0, volume * 100))  # Volume component
+                    time_score = min(100, max(0, hours_old * 2))  # Time component
+                    risk_score = 100 - (abs(profit) * 5)  # Risk component (inverse of loss)
+                    balance_score = 50  # Neutral balance component
+                    margin_score = 50   # Neutral margin component
+                    recovery_score = max(0, 100 - abs(profit) * 3)  # Recovery component
+                    
+                    total_score = (profit_score + volume_score + time_score + 
+                                 risk_score + balance_score + margin_score + recovery_score) / 7
+                    
+                    # Create simple position score object
+                    position_score = type('PositionScore', (), {
+                        'position': pos,
+                        'total_score': total_score,
+                        'profit_score': profit_score,
+                        'volume_score': volume_score,
+                        'time_score': time_score,
+                        'risk_score': risk_score,
+                        'balance_score': balance_score,
+                        'margin_score': margin_score,
+                        'recovery_score': recovery_score
+                    })()
+                    
+                    position_scores.append(position_score)
+                    
+                except Exception as e:
+                    logger.warning(f"⚠️ Error scoring position: {e}")
+                    continue
+            
+            # Apply risk-based weighting
+            position_scores = self._apply_risk_weighting(position_scores, risk_assessment, market_intelligence)
+            
+            return position_scores
+            
+        except Exception as e:
+            logger.error(f"❌ Error calculating internal 7D scores: {e}")
+            return []
 
 
-def create_dynamic_7d_smart_closer(intelligent_manager=None, purpose_tracker=None, 
-                                 market_analyzer=None, price_action_analyzer=None):
-    """🏭 Factory function สำหรับสร้าง Dynamic 7D Smart Closer"""
-    return Dynamic7DSmartCloser(intelligent_manager, purpose_tracker, market_analyzer, price_action_analyzer)
+def create_dynamic_7d_smart_closer(purpose_tracker=None, market_analyzer=None, price_action_analyzer=None):
+    """🏭 Factory function สำหรับสร้าง Enhanced 7D Smart Closer"""
+    return Dynamic7DSmartCloser(purpose_tracker, market_analyzer, price_action_analyzer)
 
 
 if __name__ == "__main__":
