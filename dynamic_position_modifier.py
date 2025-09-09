@@ -526,7 +526,13 @@ class DynamicPositionModifier:
             
             # 📊 MARKET CONDITIONS ADJUSTMENT
             price_distance = abs(current_price - open_price)
-            price_distance_pct = (price_distance / open_price) * 100
+            
+            # ป้องกันการหารด้วยศูนย์
+            if open_price > 0:
+                price_distance_pct = (price_distance / open_price) * 100
+            else:
+                # ถ้า open_price = 0 ให้ใช้ current_price แทน
+                price_distance_pct = (price_distance / current_price) * 100 if current_price > 0 else 0.0
             
             # ปรับ factor ตามระยะห่างราคา
             if price_distance_pct > 2.0:  # ห่างมาก
