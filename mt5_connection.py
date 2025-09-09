@@ -1295,25 +1295,30 @@ class MT5Connection:
             if cache_key in self.market_status_cache:
                 return self.market_status_cache[cache_key]
             
+            # ตรวจสอบเวลาปัจจุบันก่อน
+            current_time = datetime.now()
+            current_utc = datetime.utcnow()
+            
             # ตรวจสอบสถานะตลาดจาก MT5
             symbol_info = mt5.symbol_info(symbol)
             if symbol_info is None:
                 return {
                     'is_market_open': False,
                     'reason': f'Symbol {symbol} not found',
-                    'current_time': datetime.now().strftime('%H:%M:%S'),
+                    'current_time': current_time.strftime('%H:%M:%S'),
+                    'current_utc': current_utc.strftime('%H:%M:%S'),
                     'active_sessions': [],
                     'next_session': None,
-                    'time_to_next_session': None
+                    'time_to_next_session': None,
+                    'trade_allowed': False,
+                    'trade_session': False,
+                    'symbol': symbol,
+                    'london_ny_overlap': False
                 }
             
             # ตรวจสอบการซื้อขาย
             is_trade_allowed = symbol_info.trade_mode == mt5.SYMBOL_TRADE_MODE_FULL
             is_trade_session = symbol_info.trade_session_deals != 0
-            
-            # ตรวจสอบเวลาปัจจุบัน
-            current_time = datetime.now()
-            current_utc = datetime.utcnow()
             
             # ตรวจสอบแต่ละ session
             active_sessions = []
@@ -1382,13 +1387,20 @@ class MT5Connection:
             
         except Exception as e:
             logger.error(f"❌ Error checking market status: {e}")
+            current_time = datetime.now()
+            current_utc = datetime.utcnow()
             return {
                 'is_market_open': False,
                 'reason': f'Error: {str(e)}',
-                'current_time': datetime.now().strftime('%H:%M:%S'),
+                'current_time': current_time.strftime('%H:%M:%S'),
+                'current_utc': current_utc.strftime('%H:%M:%S'),
                 'active_sessions': [],
                 'next_session': None,
-                'time_to_next_session': None
+                'time_to_next_session': None,
+                'trade_allowed': False,
+                'trade_session': False,
+                'symbol': symbol,
+                'london_ny_overlap': False
             }
     
     def _parse_session_time(self, time_str: str, current_utc: datetime) -> datetime:
@@ -1506,16 +1518,16 @@ class MT5Connection:
             logger.info(f"🕐 MARKET STATUS for {symbol}:")
             logger.info(f"   Status: {'🟢 OPEN' if market_status['is_market_open'] else '🔴 CLOSED'}")
             logger.info(f"   Reason: {market_status['reason']}")
-            logger.info(f"   Current Time: {market_status['current_time']} (UTC: {market_status['current_utc']})")
+            logger.info(f"   Current Time: {market_status['current_time']} (UTC: {market_status.get('current_utc', 'N/A')})")
             
-            if market_status['active_sessions']:
+            if market_status.get('active_sessions'):
                 logger.info(f"   Active Sessions: {len(market_status['active_sessions'])}")
                 for session in market_status['active_sessions']:
                     logger.info(f"     • {session['name'].upper()}: {session['open']}-{session['close']} ({session['timezone']})")
             else:
                 logger.info(f"   Active Sessions: None")
             
-            if market_status['next_session']:
+            if market_status.get('next_session'):
                 next_session = market_status['next_session']
                 logger.info(f"   Next Session: {next_session['name'].upper()} at {next_session['open']} ({next_session['timezone']})")
                 logger.info(f"   Time to Next: {next_session['time_to_open']:.1f} hours")
