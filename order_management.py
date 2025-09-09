@@ -231,6 +231,28 @@ class OrderManager:
             total_profit = 0.0
             errors = []
             
+            # 🚫 ZERO LOSS POLICY: คำนวณกำไรสุทธิก่อนปิด
+            net_profit_before_close = self._calculate_group_net_profit(valid_positions)
+            safety_buffer = self._calculate_safety_buffer(valid_positions)
+            
+            logger.info(f"💰 PRE-CLOSE ANALYSIS:")
+            logger.info(f"   Net P&L: ${net_profit_before_close:.2f}")
+            logger.info(f"   Safety Buffer: ${safety_buffer:.2f}")
+            logger.info(f"   Final Expected: ${net_profit_before_close - safety_buffer:.2f}")
+            
+            # 🚨 STRICT ZERO LOSS CHECK
+            if net_profit_before_close < safety_buffer:
+                logger.warning(f"🚫 ZERO LOSS POLICY: Rejecting close - would result in loss")
+                logger.warning(f"   Required: ${safety_buffer:.2f}, Available: ${net_profit_before_close:.2f}")
+                return CloseResult(
+                    success=False,
+                    closed_tickets=[],
+                    total_profit=0.0,
+                    error_message=f"Zero Loss Policy: Insufficient profit (${net_profit_before_close:.2f} < ${safety_buffer:.2f})"
+                )
+            
+            logger.info(f"✅ ZERO LOSS POLICY: Safe to close - profit margin OK")
+            
             # 🚫 เปลี่ยนเป็นปิดแบบเช็ค spread เพื่อป้องกันปิดติดลบ
             tickets = [pos.ticket for pos in valid_positions]  # Use validated positions
             group_result = self.mt5.close_positions_group_with_spread_check(tickets)
@@ -588,3 +610,46 @@ class OrderManager:
             'losing_positions_count': risk_info['losing_positions_count'],
             'max_position_risk': risk_info['max_position_risk']
         }
+    
+    def _calculate_group_net_profit(self, positions: List[Position]) -> float:
+        """🧮 คำนวณกำไรสุทธิของกลุ่ม positions"""
+        try:
+            total_profit = 0.0
+            for pos in positions:
+                # รวม profit + swap + commission
+                pos_profit = getattr(pos, 'profit', 0.0)
+                pos_swap = getattr(pos, 'swap', 0.0)
+                pos_commission = getattr(pos, 'commission', 0.0)
+                
+                net_pos_profit = pos_profit + pos_swap + pos_commission
+                total_profit += net_pos_profit
+                
+            return total_profit
+            
+        except Exception as e:
+            logger.error(f"❌ Error calculating group profit: {e}")
+            return 0.0
+    
+    def _calculate_safety_buffer(self, positions: List[Position]) -> float:
+        """🛡️ คำนวณ Safety Buffer ตามต้นทุนการปิด"""
+        try:
+            total_volume = sum(getattr(pos, 'volume', 0.01) for pos in positions)
+            position_count = len(positions)
+            
+            # คำนวณต้นทุนต่างๆ
+            spread_cost = total_volume * 10.0  # ประมาณ spread cost
+            commission_cost = total_volume * 2.0  # ประมาณ commission
+            slippage_cost = position_count * 1.0  # ประมาณ slippage per position
+            
+            # Safety buffer = ต้นทุนรวม + buffer 20%
+            total_cost = spread_cost + commission_cost + slippage_cost
+            safety_buffer = total_cost * 1.2  # เพิ่ม 20% buffer
+            
+            # ขั้นต่ำ $3 per position
+            minimum_buffer = position_count * 3.0
+            
+            return max(safety_buffer, minimum_buffer)
+            
+        except Exception as e:
+            logger.error(f"❌ Error calculating safety buffer: {e}")
+            return len(positions) * 5.0  # Fallback: $5 per position
