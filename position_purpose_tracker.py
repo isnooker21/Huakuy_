@@ -328,8 +328,9 @@ class PositionPurposeTracker:
             profit = getattr(position, 'profit', 0)
             volume = getattr(position, 'volume', 0.01)
             
-            # 📊 Calculate metrics
-            distance_pips = abs(current_price - open_price) * 10000  # สำหรับ XAUUSD
+            # 📊 Calculate metrics - แก้ไข pip calculation สำหรับ XAUUSD (ถูกต้อง)
+            distance_points = abs(current_price - open_price)  # ระยะห่างเป็น points
+            distance_pips = distance_points * 0.1  # XAUUSD: 100 points = 10 pips → 1 point = 0.1 pip
             profit_percentage = (profit / max(volume * 1000, 100)) * 100  # ประมาณการ
             
             # 🔍 Debug logging เพื่อดูการคำนวณ
@@ -349,13 +350,18 @@ class PositionPurposeTracker:
             if profit < self.config['problem_loss_threshold']:
                 is_problem = True
             
-            # เงื่อนไขที่ 2: ระยะห่างไกลมาก + ขาดทุน (ปรับสำหรับทองคำ)
-            elif distance_pips > 200 and profit < 0:  # ห่าง > 200 pips + ขาดทุน
+            # เงื่อนไขที่ 2: ระยะห่างไกลมาก + ขาดทุน (ปรับสำหรับ pip ที่ถูกต้อง)
+            elif distance_pips > 5 and profit < 0:  # ห่าง > 5 pips + ขาดทุน
                 is_problem = True
             
-            # เงื่อนไขที่ 3: ระยะห่างไกลมหาศาล (ปรับสำหรับทองคำ)
-            elif distance_pips > 400:  # ห่าง > 400 pips
+            # เงื่อนไขที่ 3: ระยะห่างไกลมาก (ปรับสำหรับ pip ที่ถูกต้อง) 
+            elif distance_pips > 10:  # ห่าง > 10 pips
                 is_problem = True
+            
+            # เงื่อนไขที่ 4: ระยะห่างสุดโต่ง (สำหรับกรณี ~100 pips)
+            elif distance_pips > 50:  # ห่าง > 50 pips = CRITICAL
+                is_problem = True
+                logger.warning(f"🚨 EXTREME DISTANCE: {position_ticket} at {distance_pips:.1f} pips!")
             
             if is_problem:
                 purpose = PurposeType.PROBLEM_POSITION

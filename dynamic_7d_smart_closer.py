@@ -867,7 +867,7 @@ class Dynamic7DSmartCloser:
                     # 🎯 Distance-based Priority
                     current_price = self._get_current_price()
                     position_price = getattr(score_obj.position, 'open_price', current_price)
-                    distance_pips = abs(current_price - position_price) * 10000
+                    distance_pips = abs(current_price - position_price) * 0.1  # XAUUSD: 1 point = 0.1 pip
                     
                     distance_category = self._get_distance_category(distance_pips)
                     distance_multiplier = self.distance_priority_multiplier.get(distance_category, 1.0)
@@ -1097,7 +1097,7 @@ class Dynamic7DSmartCloser:
                     purpose = score.purpose_analysis.purpose.value
                     if purpose == 'PROBLEM_POSITION':
                         position_price = getattr(score.position, 'open_price', current_price)
-                        distance = abs(current_price - position_price) * 10000
+                        distance = abs(current_price - position_price) * 0.1  # XAUUSD: 1 point = 0.1 pip
                         
                         if distance > 150:  # ไกลกว่า 150 pips (ปรับสำหรับทองคำ)
                             distant_problems.append({
