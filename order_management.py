@@ -195,20 +195,28 @@ class OrderManager:
             
             # 🔍 Pre-validate positions exist before attempting to close
             valid_positions = []
-            for pos in positions:
-                ticket = getattr(pos, 'ticket', None)
-                if ticket:
-                    # Check if position still exists
-                    current_positions = self.mt5.get_positions()
-                    if current_positions:
-                        existing_tickets = [p.ticket for p in current_positions if hasattr(p, 'ticket')]
+            
+            # 🎯 CRITICAL FIX: Get positions ONCE, not in loop
+            current_positions = self.mt5.get_positions()
+            if current_positions:
+                existing_tickets = [p.ticket for p in current_positions if hasattr(p, 'ticket')]
+                logger.info(f"🔍 Current MT5 positions: {len(existing_tickets)} tickets")
+                
+                for pos in positions:
+                    ticket = getattr(pos, 'ticket', None)
+                    if ticket:
                         if ticket in existing_tickets:
                             valid_positions.append(pos)
+                            logger.debug(f"✅ Position {ticket} validated - exists in MT5")
                         else:
-                            logger.info(f"⚠️ Position {ticket} no longer exists - skipping")
+                            logger.warning(f"⚠️ Position {ticket} no longer exists in MT5 - skipping")
+                            logger.debug(f"🔍 Available tickets: {existing_tickets[:5]}...")  # Show first 5
                     else:
-                        # If we can't get positions, assume it exists
-                        valid_positions.append(pos)
+                        logger.warning(f"⚠️ Position has no ticket - skipping")
+            else:
+                # If we can't get positions, assume all exist (fallback)
+                logger.warning(f"⚠️ Cannot get current positions - assuming all {len(positions)} positions exist")
+                valid_positions = positions
             
             if not valid_positions:
                 return CloseResult(
