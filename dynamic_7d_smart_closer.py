@@ -67,9 +67,9 @@ class Dynamic7DSmartCloser:
         
         # 🎯 SMART CLOSING STRATEGY: ปิดเฉพาะไม้กำไร + ไม้เก่า (ไม่ปิดขาดทุนเลย)
         self.smart_closing_enabled = True
-        self.min_net_profit = 0.1      # กำไรสุทธิขั้นต่ำ $0.1
+        self.min_net_profit = 0.01     # ลดเกณฑ์กำไรสุทธิขั้นต่ำเป็น $0.01
         self.max_acceptable_loss = 0.0  # ไม่ยอมรับขาดทุนเลย = $0
-        self.old_position_hours = 24    # ไม้เก่า = ถือเกิน 24 ชั่วโมง
+        self.old_position_hours = 12    # ลดเวลาไม้เก่าเป็น 12 ชั่วโมง
         self.far_loss_threshold = 0.0   # ไม่ปิดไม้ขาดทุนเลย = $0
         
         # Dynamic thresholds
@@ -216,28 +216,38 @@ class Dynamic7DSmartCloser:
                             method_name, positions, size, portfolio_health, risk_assessment
                         )
                     
-                    if result and self._enhanced_intelligent_closing_decision(
-                        result, dynamic_params, risk_assessment, market_intelligence
-                    ):
-                        # Enhanced scoring with multiple factors
-                        impact_score = self._calculate_enhanced_impact_score(
-                            result, portfolio_health, risk_assessment, market_intelligence
-                        )
-                        final_score = impact_score * priority * dynamic_params['risk_factor']
+                    if result:
+                        logger.info(f"🔍 DEBUG: {method_name}_{size} - Net P&L: ${result['net_pnl']:.2f}")
+                        logger.info(f"🔍 DEBUG: min_net_profit: ${self.min_net_profit:.2f}")
                         
-                        logger.debug(f"💰 {method_name}_{size}: Net ${result['net_pnl']:.2f}, "
-                                   f"Impact {impact_score:.1f}, Final {final_score:.1f}")
-                        
-                        if final_score > best_score:
-                            best_score = final_score
-                            best_result = result
-                            best_result['method'] = f"{method_name}_{size}"
-                            best_result['priority'] = priority
-                            best_result['impact_score'] = impact_score
-                            best_result['final_score'] = final_score
-                            best_result['strategy_type'] = strategy_type
-                            best_result['risk_assessment'] = risk_assessment
-                            best_result['market_intelligence'] = market_intelligence
+                        # ตรวจสอบเกณฑ์พื้นฐานก่อน
+                        if result['net_pnl'] >= self.min_net_profit:
+                            logger.info(f"✅ BASIC CHECK PASSED: Net P&L ${result['net_pnl']:.2f} >= min_net_profit ${self.min_net_profit:.2f}")
+                            
+                            if self._enhanced_intelligent_closing_decision(
+                                result, dynamic_params, risk_assessment, market_intelligence
+                            ):
+                                # Enhanced scoring with multiple factors
+                                impact_score = self._calculate_enhanced_impact_score(
+                                    result, portfolio_health, risk_assessment, market_intelligence
+                                )
+                                final_score = impact_score * priority * dynamic_params['risk_factor']
+                                
+                                logger.debug(f"💰 {method_name}_{size}: Net ${result['net_pnl']:.2f}, "
+                                           f"Impact {impact_score:.1f}, Final {final_score:.1f}")
+                                
+                                if final_score > best_score:
+                                    best_score = final_score
+                                    best_result = result
+                                    best_result['method'] = f"{method_name}_{size}"
+                                    best_result['priority'] = priority
+                                    best_result['impact_score'] = impact_score
+                                    best_result['final_score'] = final_score
+                                    best_result['strategy_type'] = strategy_type
+                                    best_result['risk_assessment'] = risk_assessment
+                                    best_result['market_intelligence'] = market_intelligence
+                        else:
+                            logger.info(f"🚫 BASIC CHECK FAILED: Net P&L ${result['net_pnl']:.2f} < min_net_profit ${self.min_net_profit:.2f}")
                         
                         # Early termination for excellent results
                         if final_score > 1000:  # Excellent score threshold
@@ -276,6 +286,8 @@ class Dynamic7DSmartCloser:
                 return closing_result
             
             logger.info("⏸️ No profitable closing opportunities found with enhanced analysis")
+            logger.info(f"🔍 DEBUG: min_net_profit={self.min_net_profit}, max_acceptable_loss={self.max_acceptable_loss}")
+            logger.info(f"🔍 DEBUG: old_position_hours={self.old_position_hours}, far_loss_threshold={self.far_loss_threshold}")
             return None
             
         except Exception as e:
@@ -2002,8 +2014,8 @@ class Dynamic7DSmartCloser:
             elif risk_assessment['risk_level'] == 'VERY_LOW':
                 # In very low risk, be more selective
                 net_pnl = result.get('net_pnl', 0)
-                if net_pnl < 5.0:  # Require higher profit in low risk
-                    logger.debug(f"🚫 ENHANCED DECISION: Rejecting - Low risk requires higher profit (${net_pnl:.2f} < $5.0)")
+                if net_pnl < 0.5:  # ลดจาก 5.0 เป็น 0.5
+                    logger.debug(f"🚫 ENHANCED DECISION: Rejecting - Low risk requires higher profit (${net_pnl:.2f} < $0.5)")
                     return False
             
             # 2. Market timing decision
@@ -2022,9 +2034,9 @@ class Dynamic7DSmartCloser:
             timing_factor = market_intelligence['timing_score'] / 100.0
             
             # Dynamic threshold based on risk and timing
-            base_threshold = dynamic_params.get('safety_buffer', 0.1)
-            risk_adjustment = risk_factor * 2.0  # Higher risk = higher threshold
-            timing_adjustment = (1.0 - timing_factor) * 1.0  # Poor timing = higher threshold
+            base_threshold = dynamic_params.get('safety_buffer', 0.01)  # ลดจาก 0.1 เป็น 0.01
+            risk_adjustment = risk_factor * 0.5  # ลดจาก 2.0 เป็น 0.5
+            timing_adjustment = (1.0 - timing_factor) * 0.3  # ลดจาก 1.0 เป็น 0.3
             
             enhanced_threshold = base_threshold + risk_adjustment + timing_adjustment
             
