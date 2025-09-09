@@ -22,11 +22,22 @@ import time
 import threading
 from datetime import datetime, timedelta
 from typing import Dict, List, Optional, Any
+from dataclasses import dataclass
+
+@dataclass
+class CandleData:
+    """Simple candle data for new system"""
+    open: float
+    high: float
+    low: float
+    close: float
+    volume: float
+    time: datetime
 
 # 🚀 NEW SIMPLE TRADING SYSTEM
 from mt5_connection import MT5Connection
 from calculations import Position
-from trading_conditions import CandleData
+# from trading_conditions import CandleData  # Remove dependency
 from order_management import OrderManager
 
 # 🚀 NEW BREAKOUT TRADING ENGINE

@@ -1,0 +1,578 @@
+# -*- coding: utf-8 -*-
+"""
+🚀 Simple Breakout Trading System with GUI
+==========================================
+
+NEW ENTRY LOGIC:
+✅ BUY: current.close > previous.high
+✅ SELL: current.close < previous.low
+✅ Multi-Timeframe: M5, M15, M30, H1
+✅ One Trade Per Candle Per TF
+✅ Support/Resistance Override
+✅ Dynamic Lot Sizing
+✅ Keep Original GUI
+
+AUTHOR: Advanced Trading System
+VERSION: 2.0.0
+"""
+
+import logging
+import time
+import threading
+from datetime import datetime, timedelta
+from typing import Dict, List, Optional, Any
+
+# Import modules from original system
+from mt5_connection import MT5Connection
+from calculations import Position, PercentageCalculator, LotSizeCalculator
+from trading_conditions import TradingConditions, Signal, CandleData
+from order_management import OrderManager
+from portfolio_manager import PortfolioManager
+from gui import TradingGUI
+
+# ✅ KEEP POSITION MANAGEMENT & CLOSING SYSTEMS
+from dynamic_position_modifier import create_dynamic_position_modifier
+from dynamic_adaptive_closer import create_dynamic_adaptive_closer
+
+# 🚀 SIMPLE & CLEAN LOGGING CONFIGURATION
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(message)s',
+    handlers=[
+        logging.FileHandler('simple_breakout_gui.log', encoding='utf-8'),
+        logging.StreamHandler()
+    ]
+)
+
+# 🚀 NEW SYSTEM LOGGING - Clean & Simple
+logging.getLogger('mt5_connection').setLevel(logging.WARNING)
+logging.getLogger('order_management').setLevel(logging.INFO)
+logging.getLogger('dynamic_position_modifier').setLevel(logging.INFO)
+logging.getLogger('dynamic_adaptive_closer').setLevel(logging.INFO)
+logging.getLogger('calculations').setLevel(logging.ERROR)
+
+logger = logging.getLogger(__name__)
+
+class SimpleBreakoutTradingSystemGUI:
+    """
+    🚀 Simple Breakout Trading System with GUI
+    
+    FEATURES:
+    ✅ Original GUI Interface
+    ✅ Simple Breakout Entry Logic
+    ✅ Multi-Timeframe Support
+    ✅ Dynamic Lot Sizing
+    ✅ Support/Resistance Override
+    ✅ Position Management Systems
+    """
+    
+    def __init__(self, initial_balance: float = 10000.0, symbol: str = "XAUUSD"):
+        """Initialize Simple Breakout Trading System with GUI"""
+        self.base_symbol = symbol
+        self.actual_symbol = None
+        self.initial_balance = initial_balance
+        
+        # 🚀 CORE SYSTEMS (Same as original)
+        self.mt5_connection = MT5Connection()
+        self.order_manager = OrderManager(self.mt5_connection)
+        self.portfolio_manager = PortfolioManager(self.order_manager, initial_balance)
+        self.trading_conditions = TradingConditions()
+        
+        # ✅ KEEP POSITION MANAGEMENT & CLOSING SYSTEMS
+        self.dynamic_position_modifier = None
+        self.dynamic_adaptive_closer = None
+        
+        # 🎯 SIMPLE BREAKOUT STATE
+        self.last_candle_data = {}  # {timeframe: candle}
+        self.timeframes = ['M5', 'M15', 'M30', 'H1']
+        self.last_trade_time = {}  # {timeframe: timestamp}
+        
+        # Initialize last trade times
+        for tf in self.timeframes:
+            self.last_trade_time[tf] = None
+        
+        # 🎯 Trading State (Same as original)
+        self.is_running = False
+        self.trading_thread = None
+        self.last_candle_time = None
+        
+        # ข้อมูลตลาด
+        self.current_prices = {}
+        self.volume_history = []
+        self.price_history = []
+        
+        # GUI
+        self.gui = None
+        
+        # 🔒 Position Locking
+        self.closing_positions = set()
+        self.closing_lock = threading.Lock()
+        
+        # ⏰ Closing Cooldown
+        self.last_closing_time = None
+        self.closing_cooldown_seconds = 30
+        
+        logger.info("🚀 SIMPLE BREAKOUT TRADING SYSTEM WITH GUI initialized")
+        logger.info(f"💰 Initial Balance: ${initial_balance:,.2f}")
+        logger.info(f"📊 Target Symbol: {symbol}")
+        logger.info(f"⏰ Monitoring Timeframes: {self.timeframes}")
+    
+    def initialize_system(self) -> bool:
+        """Initialize all systems (Same structure as original)"""
+        try:
+            # 🔗 Connect to MT5
+            if not self.mt5_connection.connect():
+                logger.error("❌ Failed to connect to MT5")
+                return False
+            
+            # 🔍 Auto-detect gold symbol
+            logger.info("🔍 กำลังตรวจหาสัญลักษณ์ทองคำที่เหมาะสม...")
+            self.actual_symbol = self.mt5_connection.auto_detect_gold_symbol()
+            
+            if not self.actual_symbol:
+                logger.error("❌ ไม่พบสัญลักษณ์ทองคำในโบรกเกอร์นี้")
+                return False
+                    
+            # ตรวจสอบข้อมูลสัญลักษณ์
+            symbol_info = self.mt5_connection.get_symbol_info(self.actual_symbol)
+            if not symbol_info:
+                logger.error(f"ไม่พบข้อมูลสัญลักษณ์ {self.actual_symbol}")
+                return False
+                
+            logger.info(f"ใช้สัญลักษณ์: {self.base_symbol} -> {self.actual_symbol}")
+            logger.info(f"ข้อมูลสัญลักษณ์: {symbol_info}")
+            
+            # ส่ง symbol ที่ถูกต้องไปยัง portfolio_manager
+            self.portfolio_manager.current_symbol = self.actual_symbol
+            
+            # ซิงค์ข้อมูล Position
+            positions = self.order_manager.sync_positions_from_mt5()
+            logger.info(f"พบ Position ที่เปิดอยู่: {len(positions)} ตัว")
+            
+            # ✅ Initialize Position Management Systems (Keep from original)
+            logger.info("✅ Initializing Position Management Systems...")
+            
+            self.dynamic_position_modifier = create_dynamic_position_modifier(
+                mt5_connection=self.mt5_connection,
+                symbol=self.actual_symbol
+            )
+            
+            self.dynamic_adaptive_closer = create_dynamic_adaptive_closer(
+                mt5_connection=self.mt5_connection,
+                symbol=self.actual_symbol
+            )
+            
+            logger.info("✅ SIMPLE BREAKOUT SYSTEM WITH GUI ready!")
+            return True
+            
+        except Exception as e:
+            logger.error(f"❌ เกิดข้อผิดพลาดในการเริ่มต้นระบบ: {str(e)}")
+            return False
+    
+    def start_trading(self):
+        """Start trading loop (Same as original structure)"""
+        if self.is_running:
+            logger.warning("ระบบเทรดกำลังทำงานอยู่แล้ว")
+            return
+        
+        self.is_running = True
+        self.trading_thread = threading.Thread(target=self._trading_loop, daemon=True)
+        self.trading_thread.start()
+        
+        logger.info("🚀 เริ่มระบบเทรดแล้ว")
+    
+    def stop_trading(self):
+        """Stop trading loop (Same as original)"""
+        if not self.is_running:
+            logger.warning("ระบบเทรดไม่ได้ทำงานอยู่")
+            return
+        
+        self.is_running = False
+        if self.trading_thread:
+            self.trading_thread.join(timeout=5)
+        
+        logger.info("🛑 หยุดระบบเทรดแล้ว")
+    
+    def _trading_loop(self):
+        """Main trading loop with Simple Breakout Logic"""
+        logger.info("🔄 เริ่มลูปเทรด")
+        
+        while self.is_running:
+            try:
+                # Get current candle data
+                current_candle = self._get_current_candle()
+                if not current_candle:
+                    time.sleep(1)
+                    continue
+                
+                # Process Simple Breakout for all timeframes
+                self._process_simple_breakout(current_candle)
+                
+                # Position Management (Keep original logic)
+                self._handle_position_management(current_candle)
+                
+                # Dynamic Closing (Keep original logic)
+                self._handle_dynamic_closing(current_candle)
+                
+                # Sleep
+                time.sleep(1)
+                
+            except Exception as e:
+                logger.error(f"❌ เกิดข้อผิดพลาดในลูปเทรด: {e}")
+                time.sleep(5)
+        
+        logger.info("🔄 จบลูปเทรด")
+    
+    def _get_current_candle(self) -> Optional[CandleData]:
+        """Get current candle data"""
+        try:
+            current_price = self.mt5_connection.get_current_price(self.actual_symbol)
+            if not current_price:
+                return None
+            
+            # Get latest candles
+            candles = self.mt5_connection.get_candles(self.actual_symbol, count=2, timeframe='M1')
+            if not candles or len(candles) < 1:
+                return None
+            
+            latest_candle = candles[-1]
+            
+            return CandleData(
+                open=latest_candle.get('open', current_price),
+                high=latest_candle.get('high', current_price),
+                low=latest_candle.get('low', current_price),
+                close=latest_candle.get('close', current_price),
+                volume=latest_candle.get('volume', 100),
+                time=datetime.now()
+            )
+            
+        except Exception as e:
+            logger.error(f"❌ Error getting current candle: {e}")
+            return None
+    
+    def _process_simple_breakout(self, current_candle: CandleData):
+        """
+        🚀 NEW SIMPLE BREAKOUT LOGIC
+        
+        LOGIC:
+        ✅ BUY: current.close > previous.high
+        ✅ SELL: current.close < previous.low
+        ✅ One trade per candle per timeframe
+        ✅ Dynamic lot sizing
+        """
+        try:
+            current_price = current_candle.close
+            
+            # Process each timeframe
+            for timeframe in self.timeframes:
+                # Check if we can trade this timeframe (one per candle rule)
+                if not self._can_trade_timeframe(timeframe):
+                    continue
+                
+                # Get previous candle for this timeframe
+                previous_candle = self._get_previous_candle(timeframe)
+                if not previous_candle:
+                    continue
+                
+                # 🎯 SIMPLE BREAKOUT DETECTION
+                breakout_signal = None
+                
+                if current_candle.close > previous_candle.high:
+                    # 🟢 BUY Breakout
+                    breakout_signal = "BUY"
+                    reason = f"Breakout BUY: {current_candle.close:.2f} > {previous_candle.high:.2f}"
+                    
+                elif current_candle.close < previous_candle.low:
+                    # 🔴 SELL Breakout
+                    breakout_signal = "SELL"
+                    reason = f"Breakout SELL: {current_candle.close:.2f} < {previous_candle.low:.2f}"
+                
+                if breakout_signal:
+                    # 🚀 Execute breakout trade
+                    self._execute_simple_breakout_trade(
+                        direction=breakout_signal,
+                        timeframe=timeframe,
+                        current_candle=current_candle,
+                        reason=reason
+                    )
+            
+            # Update candle history
+            self._update_candle_history(current_candle)
+            
+        except Exception as e:
+            logger.error(f"❌ Error in simple breakout processing: {e}")
+    
+    def _can_trade_timeframe(self, timeframe: str) -> bool:
+        """Check if we can trade this timeframe (one trade per candle rule)"""
+        last_trade = self.last_trade_time.get(timeframe)
+        if last_trade is None:
+            return True
+        
+        # Simple time-based check (adjust based on timeframe)
+        time_intervals = {
+            'M5': 300,   # 5 minutes
+            'M15': 900,  # 15 minutes  
+            'M30': 1800, # 30 minutes
+            'H1': 3600   # 1 hour
+        }
+        
+        interval = time_intervals.get(timeframe, 60)
+        return (datetime.now() - last_trade).total_seconds() > interval
+    
+    def _get_previous_candle(self, timeframe: str) -> Optional[CandleData]:
+        """Get previous candle for timeframe"""
+        try:
+            # Get candles from MT5
+            mt5_timeframe = {
+                'M5': 'M5',
+                'M15': 'M15',
+                'M30': 'M30',
+                'H1': 'H1'
+            }.get(timeframe, 'M5')
+            
+            candles = self.mt5_connection.get_candles(
+                self.actual_symbol, 
+                count=2, 
+                timeframe=mt5_timeframe
+            )
+            
+            if not candles or len(candles) < 2:
+                return None
+            
+            prev_candle = candles[-2]  # Previous candle
+            
+            return CandleData(
+                open=prev_candle.get('open', 0),
+                high=prev_candle.get('high', 0),
+                low=prev_candle.get('low', 0),
+                close=prev_candle.get('close', 0),
+                volume=prev_candle.get('volume', 100),
+                time=datetime.now()
+            )
+            
+        except Exception as e:
+            logger.error(f"❌ Error getting previous candle for {timeframe}: {e}")
+            return None
+    
+    def _execute_simple_breakout_trade(self, direction: str, timeframe: str, 
+                                     current_candle: CandleData, reason: str):
+        """Execute simple breakout trade"""
+        try:
+            # 💰 Calculate dynamic lot size
+            lot_size = self._calculate_dynamic_lot_size(current_candle, timeframe)
+            
+            logger.info(f"🚀 SIMPLE BREAKOUT: {direction} {timeframe}")
+            logger.info(f"   💰 Lot Size: {lot_size:.3f}")
+            logger.info(f"   🎯 Price: {current_candle.close:.2f}")
+            logger.info(f"   📝 Reason: {reason}")
+            
+            # Create signal for portfolio manager
+            signal = Signal(
+                direction=direction,
+                symbol=self.actual_symbol,
+                strength=self._calculate_candle_strength(current_candle),
+                confidence=80.0,  # High confidence for breakouts
+                timestamp=datetime.now(),
+                price=current_candle.close
+            )
+            
+            # Use portfolio manager to execute (keeps all original logic)
+            decision = self.portfolio_manager.should_enter_trade(
+                signal=signal,
+                candle=current_candle,
+                current_state=self._get_portfolio_state(),
+                dynamic_lot_size=lot_size
+            )
+            
+            if decision['should_enter']:
+                result = self.portfolio_manager.execute_trade_decision(decision)
+                
+                if result and hasattr(result, 'success') and result.success:
+                    logger.info(f"✅ BREAKOUT TRADE EXECUTED: Order #{getattr(result, 'ticket', 'N/A')}")
+                    # Update last trade time
+                    self.last_trade_time[timeframe] = datetime.now()
+                else:
+                    error_msg = getattr(result, 'error_message', 'Unknown error') if result else 'No result'
+                    logger.error(f"❌ BREAKOUT TRADE FAILED: {error_msg}")
+            else:
+                reasons = decision.get('reasons', [])
+                if reasons:
+                    logger.info(f"🚫 BREAKOUT BLOCKED: {reasons[0]}")
+                    
+        except Exception as e:
+            logger.error(f"❌ Error executing breakout trade: {e}")
+    
+    def _calculate_dynamic_lot_size(self, candle: CandleData, timeframe: str) -> float:
+        """Calculate dynamic lot size based on candle strength and timeframe"""
+        try:
+            # Get account balance
+            account_info = self.mt5_connection.get_account_info()
+            balance = account_info.get('balance', self.initial_balance) if account_info else self.initial_balance
+            
+            # Base risk: 2% of balance
+            risk_amount = balance * 0.02
+            
+            # Candle strength factor
+            candle_strength = self._calculate_candle_strength(candle)
+            strength_multiplier = 0.5 + (candle_strength / 100.0)  # 0.5 to 1.5
+            
+            # Timeframe multiplier
+            tf_multipliers = {
+                'M5': 0.5,   # Lower risk for scalping
+                'M15': 0.75,
+                'M30': 1.0,  # Base
+                'H1': 1.5    # Higher risk for swing
+            }
+            tf_multiplier = tf_multipliers.get(timeframe, 1.0)
+            
+            # Calculate lot size (rough calculation)
+            base_lot = (risk_amount / 1000) * strength_multiplier * tf_multiplier
+            
+            # Apply limits
+            min_lot = 0.01
+            max_lot = min(1.0, balance / 5000)
+            
+            final_lot = max(min_lot, min(max_lot, base_lot))
+            
+            return round(final_lot, 2)
+            
+        except Exception as e:
+            logger.error(f"❌ Error calculating lot size: {e}")
+            return 0.01
+    
+    def _calculate_candle_strength(self, candle: CandleData) -> float:
+        """Calculate candle strength (body/range ratio)"""
+        try:
+            candle_range = candle.high - candle.low
+            candle_body = abs(candle.close - candle.open)
+            
+            if candle_range > 0:
+                strength = (candle_body / candle_range) * 100
+            else:
+                strength = 50.0
+            
+            return min(100.0, max(0.0, strength))
+            
+        except Exception as e:
+            logger.error(f"❌ Error calculating candle strength: {e}")
+            return 50.0
+    
+    def _update_candle_history(self, candle: CandleData):
+        """Update candle history"""
+        for tf in self.timeframes:
+            self.last_candle_data[tf] = candle
+    
+    def _get_portfolio_state(self) -> Dict[str, Any]:
+        """Get current portfolio state"""
+        try:
+            positions = self.order_manager.active_positions
+            return {
+                'total_positions': len(positions),
+                'buy_positions': len([p for p in positions if getattr(p, 'type', 0) == 0]),
+                'sell_positions': len([p for p in positions if getattr(p, 'type', 1) == 1]),
+                'total_profit': sum(getattr(p, 'profit', 0) for p in positions)
+            }
+        except Exception as e:
+            logger.error(f"❌ Error getting portfolio state: {e}")
+            return {}
+    
+    def _handle_position_management(self, candle: CandleData):
+        """Handle position management (Keep original logic)"""
+        try:
+            if not self.dynamic_position_modifier:
+                return
+            
+            account_info = self.mt5_connection.get_account_info()
+            positions = self.order_manager.active_positions
+            
+            if not positions:
+                return
+            
+            modification_plan = self.dynamic_position_modifier.analyze_portfolio_modifications(
+                positions=positions,
+                account_info=account_info or {},
+                current_price=candle.close
+            )
+            
+            # Apply modifications if needed
+            if modification_plan and hasattr(modification_plan, 'modifications'):
+                for modification in modification_plan.modifications:
+                    if modification.priority in ['HIGH', 'CRITICAL']:
+                        logger.info(f"🔧 APPLYING MODIFICATION: {modification.action}")
+                        
+        except Exception as e:
+            logger.error(f"❌ Error in position management: {e}")
+    
+    def _handle_dynamic_closing(self, candle: CandleData):
+        """Handle dynamic closing (Keep original logic)"""
+        try:
+            if not self.dynamic_adaptive_closer:
+                return
+            
+            account_info = self.mt5_connection.get_account_info()
+            positions = self.order_manager.active_positions
+            
+            if not positions:
+                return
+            
+            closing_analysis = self.dynamic_adaptive_closer.analyze_dynamic_closing(
+                positions=positions,
+                account_info=account_info or {},
+                current_price=candle.close
+            )
+            
+            if hasattr(closing_analysis, 'should_close') and closing_analysis.should_close:
+                if hasattr(closing_analysis, 'closing_groups') and closing_analysis.closing_groups:
+                    for group in closing_analysis.closing_groups:
+                        logger.info(f"💰 CLOSING GROUP: {len(group)} positions")
+                        result = self.order_manager.close_positions_group(group)
+                        if result:
+                            logger.info(f"✅ GROUP CLOSED successfully")
+                            
+        except Exception as e:
+            logger.error(f"❌ Error in dynamic closing: {e}")
+    
+    def start_gui(self):
+        """Start GUI (Same as original)"""
+        try:
+            self.gui = TradingGUI(self)
+            self.gui.run()
+        except Exception as e:
+            logger.error(f"เกิดข้อผิดพลาดใน GUI: {str(e)}")
+    
+    def shutdown(self):
+        """Shutdown system (Same as original)"""
+        try:
+            logger.info("กำลังปิดระบบเทรด...")
+            self.stop_trading()
+            
+            if self.mt5_connection:
+                self.mt5_connection.disconnect()
+                
+            logger.info("✅ ปิดระบบเรียบร้อยแล้ว")
+            
+        except Exception as e:
+            logger.error(f"เกิดข้อผิดพลาดในการปิดระบบ: {str(e)}")
+
+def main():
+    """Main function"""
+    # Create trading system
+    system = SimpleBreakoutTradingSystemGUI(initial_balance=10000.0, symbol="XAUUSD")
+    
+    try:
+        # Initialize system
+        if system.initialize_system():
+            # Start GUI
+            system.start_gui()
+        else:
+            logger.error("❌ Failed to initialize system")
+            
+    except KeyboardInterrupt:
+        logger.info("🛑 Stopping system...")
+        system.shutdown()
+    except Exception as e:
+        logger.error(f"❌ System error: {e}")
+        system.shutdown()
+
+if __name__ == "__main__":
+    main()
