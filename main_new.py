@@ -121,6 +121,10 @@ class TradingSystem:
         self.closing_positions = set()  # เก็บ tickets ที่กำลังปิดอยู่
         self.closing_lock = threading.Lock()
         
+        # ⏰ Closing Cooldown - ป้องกันการปิดบ่อยเกินไป
+        self.last_closing_time = None
+        self.closing_cooldown_seconds = 30  # รอ 30 วินาทีระหว่างการปิด
+        
         # Initialize trading system
         
     def initialize_system(self) -> bool:
