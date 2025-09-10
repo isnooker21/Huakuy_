@@ -504,29 +504,52 @@ class HedgePairingCloser:
             return []
     
     def _has_hedge_pair(self, positions: List[Any], position: Any) -> bool:
-        """ตรวจสอบว่าไม้นี้มี Hedge กับคู่อื่นหรือไม่"""
+        """ตรวจสอบว่าไม้นี้มี Hedge กับคู่อื่นหรือไม่ (ตรวจสอบจาก used_positions)"""
         try:
-            pos_type = getattr(position, 'type', 0)
-            pos_profit = getattr(position, 'profit', 0)
+            # หา used_positions จาก hedge pairs ที่สร้างแล้ว
+            used_positions = set()
             
-            # หาไม้ตรงข้ามที่สามารถจับคู่ Hedge ได้
-            for other_pos in positions:
-                if other_pos == position:
-                    continue
-                
-                other_type = getattr(other_pos, 'type', 0)
-                other_profit = getattr(other_pos, 'profit', 0)
-                
-                # ตรวจสอบการจับคู่ Hedge ที่เป็นไปได้
-                if pos_type != other_type:  # ไม้ตรงข้าม
-                    # กรณี 1: ไม้นี้ติดลบ + ไม้ตรงข้ามกำไร
-                    if pos_profit < 0 and other_profit > 0:
-                        return True
-                    # กรณี 2: ไม้นี้กำไร + ไม้ตรงข้ามติดลบ
-                    elif pos_profit > 0 and other_profit < 0:
-                        return True
+            # หา hedge pairs ที่สร้างแล้ว
+            buy_positions = [p for p in positions if getattr(p, 'type', 0) == 0]
+            sell_positions = [p for p in positions if getattr(p, 'type', 0) == 1]
             
-            return False
+            # หา Buy ติดลบ + Sell กำไร
+            for buy_pos in buy_positions:
+                if getattr(buy_pos, 'profit', 0) < 0:
+                    buy_ticket = getattr(buy_pos, 'ticket', 'N/A')
+                    if buy_ticket in used_positions:
+                        continue
+                    
+                    for sell_pos in sell_positions:
+                        if getattr(sell_pos, 'profit', 0) > 0:
+                            sell_ticket = getattr(sell_pos, 'ticket', 'N/A')
+                            if sell_ticket in used_positions:
+                                continue
+                            
+                            used_positions.add(buy_ticket)
+                            used_positions.add(sell_ticket)
+                            break
+            
+            # หา Sell ติดลบ + Buy กำไร
+            for sell_pos in sell_positions:
+                if getattr(sell_pos, 'profit', 0) < 0:
+                    sell_ticket = getattr(sell_pos, 'ticket', 'N/A')
+                    if sell_ticket in used_positions:
+                        continue
+                    
+                    for buy_pos in buy_positions:
+                        if getattr(buy_pos, 'profit', 0) > 0:
+                            buy_ticket = getattr(buy_pos, 'ticket', 'N/A')
+                            if buy_ticket in used_positions:
+                                continue
+                            
+                            used_positions.add(sell_ticket)
+                            used_positions.add(buy_ticket)
+                            break
+            
+            # ตรวจสอบว่าไม้นี้อยู่ใน used_positions หรือไม่
+            pos_ticket = getattr(position, 'ticket', 'N/A')
+            return pos_ticket in used_positions
             
         except Exception as e:
             logger.error(f"❌ Error checking hedge pair: {e}")
