@@ -412,6 +412,11 @@ class TradingGUI:
                                           bg='#2b2b2b', fg='#cccccc', font=('Segoe UI', 9))
         self.hedge_status_label.pack(side=tk.RIGHT, padx=10)
         
+        # เพิ่มปุ่มอัพเดทสถานะการจับคู่
+        tk.Button(hedge_frame, text="🔄 Update Hedge Status", 
+                 command=self.update_hedge_status, bg='#FF9800', fg='white',
+                 font=('Segoe UI', 9, 'bold')).pack(side=tk.LEFT, padx=5)
+        
     def show_positions_menu(self, event):
         """แสดงเมนูคลิกขวา"""
         try:
@@ -684,6 +689,8 @@ class TradingGUI:
             # อัพเดทเฉพาะเมื่อจำนวน position เปลี่ยน
             if len(positions) != current_count:
                 self.update_positions_display()
+                # อัพเดทสถานะ Hedge ด้วย
+                self.update_hedge_status()
                 
         except Exception as e:
             logger.debug(f"Position display update error: {str(e)}")
@@ -1044,25 +1051,110 @@ class TradingGUI:
             return []
     
     def _get_hedge_info(self, ticket, positions):
-        """หาข้อมูลการจับคู่ของไม้"""
+        """หาข้อมูลการจับคู่ Hedge ของไม้"""
         try:
             if not positions:
                 return "No positions"
             
-            # หาการจับคู่ที่เกี่ยวข้องกับไม้นี้
-            for pos1 in positions:
-                if getattr(pos1, 'ticket', 'N/A') == ticket:
-                    for pos2 in positions:
-                        if pos1 != pos2:
-                            profit1 = getattr(pos1, 'profit', 0)
-                            profit2 = getattr(pos2, 'profit', 0)
-                            total_profit = profit1 + profit2
-                            
-                            if total_profit > 0.1:
-                                pair_ticket = getattr(pos2, 'ticket', 'N/A')
-                                return f"Paired with {pair_ticket} (+${total_profit:.2f})"
+            # หาไม้ที่ตรงกับ ticket
+            current_pos = None
+            for pos in positions:
+                if getattr(pos, 'ticket', 'N/A') == ticket:
+                    current_pos = pos
+                    break
             
-            return "No pair found"
+            if not current_pos:
+                return "Position not found"
+            
+            current_type = getattr(current_pos, 'type', 0)
+            current_profit = getattr(current_pos, 'profit', 0)
+            
+            # หาไม้ตรงข้ามที่จับคู่ได้
+            hedge_pairs = []
+            
+            for pos in positions:
+                if pos == current_pos:
+                    continue
+                
+                other_type = getattr(pos, 'type', 0)
+                other_profit = getattr(pos, 'profit', 0)
+                other_ticket = getattr(pos, 'ticket', 'N/A')
+                
+                # ตรวจสอบว่าเป็นไม้ตรงข้ามหรือไม่
+                if current_type != other_type:
+                    # จับคู่ Hedge (ไม่สนใจผลรวม)
+                    if (current_type == 0 and current_profit < 0 and other_profit > 0) or \
+                       (current_type == 1 and current_profit < 0 and other_profit > 0):
+                        # Hedge Pair: ติดลบ + กำไร
+                        total_profit = current_profit + other_profit
+                        hedge_pairs.append({
+                            'ticket': other_ticket,
+                            'profit': other_profit,
+                            'total_profit': total_profit,
+                            'type': 'HEDGE'
+                        })
+                    elif (current_type == 0 and current_profit > 0 and other_profit < 0) or \
+                         (current_type == 1 and current_profit > 0 and other_profit < 0):
+                        # Hedge Pair: กำไร + ติดลบ
+                        total_profit = current_profit + other_profit
+                        hedge_pairs.append({
+                            'ticket': other_ticket,
+                            'profit': other_profit,
+                            'total_profit': total_profit,
+                            'type': 'HEDGE'
+                        })
+            
+            # แสดงข้อมูลการจับคู่
+            if hedge_pairs:
+                # เรียงตามผลรวมกำไร (มากสุดก่อน)
+                hedge_pairs.sort(key=lambda x: x['total_profit'], reverse=True)
+                
+                best_pair = hedge_pairs[0]
+                pair_ticket = best_pair['ticket']
+                total_profit = best_pair['total_profit']
+                
+                if total_profit >= 0.1:
+                    return f"🔗 Hedge: {pair_ticket} (+${total_profit:.2f})"
+                elif total_profit >= -0.1:
+                    return f"🔗 Hedge: {pair_ticket} (${total_profit:.2f})"
+                else:
+                    return f"🔗 Hedge: {pair_ticket} (${total_profit:.2f})"
+            else:
+                # หาไม้อื่นๆ ที่กำไรและไม่มี Hedge
+                additional_positions = []
+                for pos in positions:
+                    if pos == current_pos:
+                        continue
+                    
+                    other_profit = getattr(pos, 'profit', 0)
+                    other_ticket = getattr(pos, 'ticket', 'N/A')
+                    
+                    if other_profit > 0:
+                        # ตรวจสอบว่าไม้นี้ไม่มี Hedge กับคู่อื่น
+                        has_hedge = False
+                        for other_pos in positions:
+                            if other_pos == pos or other_pos == current_pos:
+                                continue
+                            
+                            other_type = getattr(other_pos, 'type', 0)
+                            other_profit2 = getattr(other_pos, 'profit', 0)
+                            
+                            if getattr(pos, 'type', 0) != other_type and other_profit2 > 0:
+                                has_hedge = True
+                                break
+                        
+                        if not has_hedge:
+                            additional_positions.append({
+                                'ticket': other_ticket,
+                                'profit': other_profit
+                            })
+                
+                if additional_positions:
+                    # แสดงไม้อื่นๆ ที่กำไร
+                    additional_tickets = [p['ticket'] for p in additional_positions[:2]]  # แสดงแค่ 2 ตัว
+                    return f"➕ Additional: {', '.join(additional_tickets)}"
+                else:
+                    return "💤 No hedge pair"
             
         except Exception as e:
             logger.error(f"Error getting hedge info: {e}")
@@ -1108,10 +1200,58 @@ class TradingGUI:
         """รีเฟรชการจับคู่ไม้"""
         try:
             self.update_positions_display()
-            self.hedge_status_label.config(text="🔄 Refreshed")
+            self.hedge_status_label.config(text="🔄 Refreshed", fg='#00ff88')
         except Exception as e:
             logger.error(f"Error refreshing hedge pairs: {e}")
-            messagebox.showerror("Error", f"Error refreshing: {e}")
+            self.hedge_status_label.config(text="❌ Error", fg='#ff4444')
+    
+    def update_hedge_status(self):
+        """อัพเดทสถานะการจับคู่ Hedge"""
+        try:
+            if not self.trading_system or not hasattr(self.trading_system, 'order_manager'):
+                self.hedge_status_label.config(text="❌ No trading system", fg='#ff4444')
+                return
+            
+            positions = self.trading_system.order_manager.active_positions
+            if not positions:
+                self.hedge_status_label.config(text="💤 No positions", fg='#cccccc')
+                return
+            
+            # วิเคราะห์การจับคู่ Hedge
+            hedge_pairs = self._analyze_hedge_pairs(positions)
+            
+            if hedge_pairs:
+                # นับจำนวน Hedge Pairs
+                hedge_count = len(hedge_pairs)
+                total_profit = sum(pair['total_profit'] for pair in hedge_pairs)
+                
+                # แสดงสถานะ
+                if total_profit >= 0.1:
+                    status_text = f"✅ {hedge_count} Hedge Pairs (+${total_profit:.2f})"
+                    status_color = '#00ff88'
+                elif total_profit >= -0.1:
+                    status_text = f"⚠️ {hedge_count} Hedge Pairs (${total_profit:.2f})"
+                    status_color = '#ffaa00'
+                else:
+                    status_text = f"❌ {hedge_count} Hedge Pairs (${total_profit:.2f})"
+                    status_color = '#ff4444'
+                
+                self.hedge_status_label.config(text=status_text, fg=status_color)
+                
+                # แสดงรายละเอียดใน log
+                logger.info(f"🔍 Hedge Status: {hedge_count} pairs, Total P&L: ${total_profit:.2f}")
+                for i, pair in enumerate(hedge_pairs[:3]):  # แสดงแค่ 3 คู่แรก
+                    ticket1, ticket2 = pair['tickets']
+                    profit = pair['total_profit']
+                    logger.info(f"   Pair {i+1}: {ticket1} + {ticket2} = ${profit:.2f}")
+                
+            else:
+                self.hedge_status_label.config(text="💤 No hedge pairs found", fg='#cccccc')
+                logger.info("🔍 No hedge pairs found")
+            
+        except Exception as e:
+            logger.error(f"Error updating hedge status: {e}")
+            self.hedge_status_label.config(text="❌ Error", fg='#ff4444')
             
     # Event handlers
     def connect_mt5(self):
