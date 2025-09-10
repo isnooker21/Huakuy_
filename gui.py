@@ -353,14 +353,17 @@ class TradingGUI:
         
         # สร้าง Treeview สำหรับแสดง Positions
         columns = ('Ticket', 'Symbol', 'Type', 'Volume', 'Open Price', 
-                  'Current Price', 'Profit', 'Profit %', 'Swap', 'Comment')
+                  'Current Price', 'Profit', 'Profit %', 'Swap', 'Comment', 'Hedge Pair')
         
         self.positions_tree = ttk.Treeview(positions_frame, columns=columns, show='headings')
         
         # กำหนดหัวข้อ
         for col in columns:
             self.positions_tree.heading(col, text=col)
-            self.positions_tree.column(col, width=100)
+            if col == 'Hedge Pair':
+                self.positions_tree.column(col, width=150)  # กว้างขึ้นสำหรับแสดงการจับคู่
+            else:
+                self.positions_tree.column(col, width=100)
             
         # เพิ่ม scrollbar
         positions_scroll = ttk.Scrollbar(positions_frame, orient=tk.VERTICAL, 
@@ -391,6 +394,23 @@ class TradingGUI:
         
         # ผูกเมนูกับ Treeview
         self.positions_tree.bind("<Button-3>", self.show_positions_menu)  # Right click
+        
+        # เพิ่มปุ่มวิเคราะห์การจับคู่
+        hedge_frame = tk.Frame(positions_frame, bg='#2b2b2b')
+        hedge_frame.pack(fill=tk.X, padx=10, pady=5)
+        
+        tk.Button(hedge_frame, text="🔍 Analyze Hedge Pairs", 
+                 command=self.analyze_hedge_pairs, bg='#4CAF50', fg='white',
+                 font=('Segoe UI', 9, 'bold')).pack(side=tk.LEFT, padx=5)
+        
+        tk.Button(hedge_frame, text="🔄 Refresh Pairs", 
+                 command=self.refresh_hedge_pairs, bg='#2196F3', fg='white',
+                 font=('Segoe UI', 9, 'bold')).pack(side=tk.LEFT, padx=5)
+        
+        # แสดงสถานะการจับคู่
+        self.hedge_status_label = tk.Label(hedge_frame, text="💤 No hedge analysis", 
+                                          bg='#2b2b2b', fg='#cccccc', font=('Segoe UI', 9))
+        self.hedge_status_label.pack(side=tk.RIGHT, padx=10)
         
     def show_positions_menu(self, event):
         """แสดงเมนูคลิกขวา"""
@@ -954,6 +974,9 @@ class TradingGUI:
                                 else:  # SELL
                                     profit_pct = ((pos.price_open - pos.price_current) / pos.price_open) * 100
                         
+                        # หาการจับคู่ของไม้นี้
+                        hedge_info = self._get_hedge_info(getattr(pos, 'ticket', 'N/A'), positions)
+                        
                         # เพิ่มข้อมูลใน Treeview
                         values = (
                             getattr(pos, 'ticket', 'N/A'),
@@ -965,7 +988,8 @@ class TradingGUI:
                             f"{getattr(pos, 'profit', 0):.2f}",
                             f"{profit_pct:.2f}%",
                             f"{getattr(pos, 'swap', 0):.2f}",
-                            getattr(pos, 'comment', '')
+                            getattr(pos, 'comment', ''),
+                            hedge_info
                         )
                         
                         item = self.positions_tree.insert('', 'end', values=values)
@@ -983,11 +1007,111 @@ class TradingGUI:
             else:
                 # ไม่มี positions - แสดงข้อความ
                 self.positions_tree.insert('', 'end', values=(
-                    'No positions', '', '', '', '', '', '', '', '', ''
+                    'No positions', '', '', '', '', '', '', '', '', '', ''
                 ))
                     
         except Exception as e:
             logger.error(f"เกิดข้อผิดพลาดในการอัพเดท Positions: {str(e)}")
+    
+    def _analyze_hedge_pairs(self, positions):
+        """วิเคราะห์การจับคู่ไม้"""
+        try:
+            if not positions or len(positions) < 2:
+                return []
+            
+            hedge_pairs = []
+            
+            # หาการจับคู่แบบง่ายๆ
+            for i, pos1 in enumerate(positions):
+                for j, pos2 in enumerate(positions[i+1:], i+1):
+                    profit1 = getattr(pos1, 'profit', 0)
+                    profit2 = getattr(pos2, 'profit', 0)
+                    total_profit = profit1 + profit2
+                    
+                    # ถ้าผลรวมเป็นบวก ให้จับคู่
+                    if total_profit > 0.1:
+                        hedge_pairs.append({
+                            'position1': pos1,
+                            'position2': pos2,
+                            'total_profit': total_profit,
+                            'tickets': [getattr(pos1, 'ticket', 'N/A'), getattr(pos2, 'ticket', 'N/A')]
+                        })
+            
+            return hedge_pairs
+            
+        except Exception as e:
+            logger.error(f"Error analyzing hedge pairs: {e}")
+            return []
+    
+    def _get_hedge_info(self, ticket, positions):
+        """หาข้อมูลการจับคู่ของไม้"""
+        try:
+            if not positions:
+                return "No positions"
+            
+            # หาการจับคู่ที่เกี่ยวข้องกับไม้นี้
+            for pos1 in positions:
+                if getattr(pos1, 'ticket', 'N/A') == ticket:
+                    for pos2 in positions:
+                        if pos1 != pos2:
+                            profit1 = getattr(pos1, 'profit', 0)
+                            profit2 = getattr(pos2, 'profit', 0)
+                            total_profit = profit1 + profit2
+                            
+                            if total_profit > 0.1:
+                                pair_ticket = getattr(pos2, 'ticket', 'N/A')
+                                return f"Paired with {pair_ticket} (+${total_profit:.2f})"
+            
+            return "No pair found"
+            
+        except Exception as e:
+            logger.error(f"Error getting hedge info: {e}")
+            return "Error"
+    
+    def analyze_hedge_pairs(self):
+        """วิเคราะห์การจับคู่ไม้"""
+        try:
+            if not self.trading_system or not hasattr(self.trading_system, 'order_manager'):
+                messagebox.showwarning("Warning", "Trading system not available")
+                return
+            
+            positions = self.trading_system.order_manager.active_positions
+            if not positions:
+                messagebox.showinfo("Info", "No positions to analyze")
+                return
+            
+            # วิเคราะห์การจับคู่
+            hedge_pairs = self._analyze_hedge_pairs(positions)
+            
+            if hedge_pairs:
+                message = f"Found {len(hedge_pairs)} hedge pairs:\n\n"
+                for i, pair in enumerate(hedge_pairs[:5]):  # แสดงแค่ 5 คู่แรก
+                    ticket1 = pair['tickets'][0]
+                    ticket2 = pair['tickets'][1]
+                    profit = pair['total_profit']
+                    message += f"Pair {i+1}: {ticket1} + {ticket2} = +${profit:.2f}\n"
+                
+                if len(hedge_pairs) > 5:
+                    message += f"\n... and {len(hedge_pairs) - 5} more pairs"
+                
+                messagebox.showinfo("Hedge Analysis", message)
+                self.hedge_status_label.config(text=f"✅ Found {len(hedge_pairs)} pairs")
+            else:
+                messagebox.showinfo("Hedge Analysis", "No profitable hedge pairs found")
+                self.hedge_status_label.config(text="❌ No pairs found")
+                
+        except Exception as e:
+            logger.error(f"Error in hedge analysis: {e}")
+            messagebox.showerror("Error", f"Error analyzing hedge pairs: {e}")
+    
+    def refresh_hedge_pairs(self):
+        """รีเฟรชการจับคู่ไม้"""
+        try:
+            self.update_positions_display()
+            self.hedge_status_label.config(text="🔄 Refreshed")
+        except Exception as e:
+            logger.error(f"Error refreshing hedge pairs: {e}")
+            messagebox.showerror("Error", f"Error refreshing: {e}")
             
     # Event handlers
     def connect_mt5(self):
