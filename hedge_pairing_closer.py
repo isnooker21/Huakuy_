@@ -94,11 +94,16 @@ class HedgePairingCloser:
                 )
             
             # 2. ไม่มีการจับคู่ที่เหมาะสม → แสดงสถานะ
-            logger.info("💤 No profitable combinations found - waiting for better conditions")
-            logger.info(f"   Current positions: {len(positions)} total")
-            logger.info(f"   Buy positions: {len([p for p in positions if getattr(p, 'type', 0) == 0])}")
-            logger.info(f"   Sell positions: {len([p for p in positions if getattr(p, 'type', 0) == 1])}")
+            logger.info("=" * 60)
+            logger.info("💤 NO PROFITABLE COMBINATIONS FOUND")
+            logger.info("=" * 60)
+            logger.info(f"📊 Current positions: {len(positions)} total")
+            logger.info(f"📊 Buy positions: {len([p for p in positions if getattr(p, 'type', 0) == 0])}")
+            logger.info(f"📊 Sell positions: {len([p for p in positions if getattr(p, 'type', 0) == 1])}")
             
+            logger.info("-" * 40)
+            logger.info("📋 DETAILED POSITION LIST")
+            logger.info("-" * 40)
             # แสดงข้อมูลไม้ทั้งหมด
             for pos in positions:
                 pos_type = "BUY" if getattr(pos, 'type', 0) == 0 else "SELL"
@@ -107,6 +112,8 @@ class HedgePairingCloser:
                 has_hedge = self._has_hedge_pair(positions, pos)
                 hedge_status = "🔗 HEDGED" if has_hedge else "💤 NO HEDGE"
                 logger.info(f"   {ticket}: {pos_type} ${profit:.2f} - {hedge_status}")
+            
+            logger.info("=" * 60)
             
             return None
             
@@ -120,7 +127,15 @@ class HedgePairingCloser:
             # หาการจับคู่แบบ Hedge เท่านั้น
             hedge_combinations = self._find_hedge_combinations(positions)
             if hedge_combinations:
-                logger.info(f"🔍 Found {len(hedge_combinations)} hedge combinations")
+                logger.info("-" * 40)
+                logger.info("✅ HEDGE COMBINATIONS FOUND")
+                logger.info("-" * 40)
+                logger.info(f"🎯 Total combinations: {len(hedge_combinations)}")
+                for i, combo in enumerate(hedge_combinations[:3]):  # แสดงแค่ 3 อันแรก
+                    logger.info(f"   {i+1}. {combo.combination_type}: ${combo.total_profit:.2f} ({combo.size} positions)")
+                if len(hedge_combinations) > 3:
+                    logger.info(f"   ... and {len(hedge_combinations) - 3} more combinations")
+                logger.info("=" * 60)
                 return hedge_combinations
             
             # หาไม้ที่ไม่มีคู่และไม้ที่มี Hedge แล้ว
@@ -147,10 +162,12 @@ class HedgePairingCloser:
             # หา Hedge pairs ที่มีอยู่แล้ว
             existing_hedge_pairs = self._find_existing_hedge_pairs(positions)
             
-            logger.info(f"📊 Position Summary:")
-            logger.info(f"   Unpaired profitable: {len(unpaired_profitable)}")
-            logger.info(f"   Unpaired losing: {len(unpaired_losing)}")
-            logger.info(f"   Existing hedge pairs: {len(existing_hedge_pairs)}")
+            logger.info("-" * 40)
+            logger.info("📊 POSITION STATUS SUMMARY")
+            logger.info("-" * 40)
+            logger.info(f"💰 Unpaired profitable: {len(unpaired_profitable)}")
+            logger.info(f"📉 Unpaired losing: {len(unpaired_losing)}")
+            logger.info(f"🔗 Existing hedge pairs: {len(existing_hedge_pairs)}")
             
             # หาการรวมที่ดีที่สุด: ไม้กำไรที่ไม่มีคู่ + Hedge pairs ที่ติดลบ
             profitable_combinations = self._find_helping_combinations(unpaired_profitable, existing_hedge_pairs)
@@ -194,7 +211,10 @@ class HedgePairingCloser:
             buy_positions = [p for p in positions if getattr(p, 'type', 0) == 0]
             sell_positions = [p for p in positions if getattr(p, 'type', 0) == 1]
             
-            logger.info(f"🔍 Analyzing hedge combinations: {len(buy_positions)} Buy, {len(sell_positions)} Sell (Total: {len(positions)} positions)")
+            logger.info("=" * 60)
+            logger.info("🔍 HEDGE ANALYSIS START")
+            logger.info("=" * 60)
+            logger.info(f"📊 Positions: {len(buy_positions)} Buy, {len(sell_positions)} Sell (Total: {len(positions)})")
             logger.info(f"🔍 Looking for hedge pairs without duplication...")
             
             # Step 1: จับคู่ตรงข้ามก่อนเสมอ (ไม่ซ้ำซ้อน)
@@ -252,9 +272,12 @@ class HedgePairingCloser:
                             break  # หยุดเมื่อจับคู่แล้ว
             
             # แสดงสรุปการจับคู่
-            logger.info(f"📊 Hedge pairing summary: {len(hedge_pairs)} pairs found")
-            logger.info(f"   Used positions: {list(used_positions)}")
-            logger.info(f"   Unused positions: {len(positions) - len(used_positions)}")
+            logger.info("-" * 40)
+            logger.info("📊 HEDGE PAIRING SUMMARY")
+            logger.info("-" * 40)
+            logger.info(f"✅ Hedge pairs found: {len(hedge_pairs)}")
+            logger.info(f"📋 Used positions: {list(used_positions)}")
+            logger.info(f"📋 Unused positions: {len(positions) - len(used_positions)}")
             
             # แสดงไม้ที่มี Hedge
             hedged_positions = []
@@ -264,7 +287,7 @@ class HedgePairingCloser:
             
             if hedged_positions:
                 logger.info(f"🔗 Hedged positions: {hedged_positions}")
-                logger.info(f"   These positions will NOT be closed individually - waiting for additional positions")
+                logger.info(f"⚠️  These positions will NOT be closed individually - waiting for additional positions")
             
             # Step 2: หาไม้อื่นๆ มาจับคู่เพิ่มเติม
             for hedge_pair in hedge_pairs:
@@ -424,7 +447,11 @@ class HedgePairingCloser:
                 logger.info("💤 No losing hedge pairs to help")
                 return helping_combinations
             
-            logger.info(f"🔍 Found {len(losing_hedge_pairs)} losing hedge pairs to help")
+            logger.info("-" * 40)
+            logger.info("🔍 HELPING COMBINATIONS ANALYSIS")
+            logger.info("-" * 40)
+            logger.info(f"💰 Unpaired profitable positions: {len(unpaired_profitable)}")
+            logger.info(f"📉 Losing hedge pairs to help: {len(losing_hedge_pairs)}")
             
             # ลองทุกการรวมของไม้กำไรที่ไม่มีคู่
             for size in range(1, len(unpaired_profitable) + 1):
