@@ -363,7 +363,7 @@ class TradingGUI:
             if col == 'Hedge Pair':
                 self.positions_tree.column(col, width=150)  # กว้างขึ้นสำหรับแสดงการจับคู่
             else:
-                self.positions_tree.column(col, width=100)
+            self.positions_tree.column(col, width=100)
             
         # เพิ่ม scrollbar
         positions_scroll = ttk.Scrollbar(positions_frame, orient=tk.VERTICAL, 
@@ -727,23 +727,23 @@ class TradingGUI:
                 return
                 
             if self.mt5_connection and self.mt5_connection.is_connected:
-                account_info = self.mt5_connection.get_account_info()
-                if account_info:
-                    self.account_labels['balance'].config(text=f"{account_info['balance']:.2f}")
-                    self.account_labels['equity'].config(text=f"{account_info['equity']:.2f}")
-                    self.account_labels['margin'].config(text=f"{account_info['margin']:.2f}")
-                    self.account_labels['margin_free'].config(text=f"{account_info['margin_free']:.2f}")
-                    
-                    margin_level = account_info['margin_level']
-                    self.account_labels['margin_level'].config(text=f"{margin_level:.2f}%")
-                    
-                    # เปลี่ยนสีตาม Margin Level
-                    if margin_level < 100:
-                        self.account_labels['margin_level'].config(fg='red')
-                    elif margin_level < 200:
-                        self.account_labels['margin_level'].config(fg='orange')
-                    else:
-                        self.account_labels['margin_level'].config(fg='green')
+            account_info = self.mt5_connection.get_account_info()
+            if account_info:
+                self.account_labels['balance'].config(text=f"{account_info['balance']:.2f}")
+                self.account_labels['equity'].config(text=f"{account_info['equity']:.2f}")
+                self.account_labels['margin'].config(text=f"{account_info['margin']:.2f}")
+                self.account_labels['margin_free'].config(text=f"{account_info['margin_free']:.2f}")
+                
+                margin_level = account_info['margin_level']
+                self.account_labels['margin_level'].config(text=f"{margin_level:.2f}%")
+                
+                # เปลี่ยนสีตาม Margin Level
+                if margin_level < 100:
+                    self.account_labels['margin_level'].config(fg='red')
+                elif margin_level < 200:
+                    self.account_labels['margin_level'].config(fg='orange')
+                else:
+                    self.account_labels['margin_level'].config(fg='green')
                 else:
                     # แสดงข้อมูล default เมื่อไม่สามารถดึงข้อมูลได้
                     self.account_labels['balance'].config(text="0.00")
@@ -824,10 +824,10 @@ class TradingGUI:
             else:
                 # ไม่มี trading system หรือ order manager
                 self.trading_status_labels['active_positions'].config(text="0", fg='#cccccc')
-                self.trading_status_labels['total_pnl'].config(text="0.00", fg='#cccccc')
-                self.trading_status_labels['daily_pnl'].config(text="0.00", fg='#cccccc')
-                self.trading_status_labels['win_rate'].config(text="0%", fg='#cccccc')
-                self.trading_status_labels['profit_factor'].config(text="0.00", fg='#cccccc')
+                    self.trading_status_labels['total_pnl'].config(text="0.00", fg='#cccccc')
+                    self.trading_status_labels['daily_pnl'].config(text="0.00", fg='#cccccc')
+                    self.trading_status_labels['win_rate'].config(text="0%", fg='#cccccc')
+                    self.trading_status_labels['profit_factor'].config(text="0.00", fg='#cccccc')
         except Exception as e:
             logger.debug(f"Trading status update error: {str(e)}")
     
@@ -973,20 +973,20 @@ class TradingGUI:
             if positions:
                 for pos in positions:
                     try:
-                        # คำนวณ Profit %
-                        profit_pct = 0.0
+                    # คำนวณ Profit %
+                    profit_pct = 0.0
                         if hasattr(pos, 'price_open') and pos.price_open != 0:
                             if hasattr(pos, 'price_current'):
-                                if pos.type == 0:  # BUY
-                                    profit_pct = ((pos.price_current - pos.price_open) / pos.price_open) * 100
-                                else:  # SELL
-                                    profit_pct = ((pos.price_open - pos.price_current) / pos.price_open) * 100
+                        if pos.type == 0:  # BUY
+                            profit_pct = ((pos.price_current - pos.price_open) / pos.price_open) * 100
+                        else:  # SELL
+                            profit_pct = ((pos.price_open - pos.price_current) / pos.price_open) * 100
                         
                         # หาการจับคู่ของไม้นี้
                         hedge_info = self._get_hedge_info(getattr(pos, 'ticket', 'N/A'), positions)
                         
-                        # เพิ่มข้อมูลใน Treeview
-                        values = (
+                    # เพิ่มข้อมูลใน Treeview
+                    values = (
                             getattr(pos, 'ticket', 'N/A'),
                             getattr(pos, 'symbol', 'N/A'),
                             "BUY" if getattr(pos, 'type', 0) == 0 else "SELL",
@@ -994,15 +994,15 @@ class TradingGUI:
                             f"{getattr(pos, 'price_open', 0):.5f}",
                             f"{getattr(pos, 'price_current', 0):.5f}",
                             f"{getattr(pos, 'profit', 0):.2f}",
-                            f"{profit_pct:.2f}%",
+                        f"{profit_pct:.2f}%",
                             f"{getattr(pos, 'swap', 0):.2f}",
                             getattr(pos, 'comment', ''),
                             hedge_info
-                        )
-                        
-                        item = self.positions_tree.insert('', 'end', values=values)
-                        
-                        # เปลี่ยนสีตามกำไรขาดทุน
+                    )
+                    
+                    item = self.positions_tree.insert('', 'end', values=values)
+                    
+                    # เปลี่ยนสีตามกำไรขาดทุน
                         profit = getattr(pos, 'profit', 0)
                         if profit > 0:
                             self.positions_tree.set(item, 'Profit', f"+{profit:.2f}")
@@ -1042,7 +1042,7 @@ class TradingGUI:
                             'position1': pos1,
                             'position2': pos2,
                             'total_profit': total_profit,
-                            'tickets': [getattr(pos1, 'ticket', 'N/A'), getattr(pos2, 'ticket', 'N/A')]
+                            'tickets': [str(getattr(pos1, 'ticket', 'N/A')), str(getattr(pos2, 'ticket', 'N/A'))]
                         })
             
             return hedge_pairs
@@ -1152,7 +1152,7 @@ class TradingGUI:
                 
                 if additional_positions:
                     # แสดงไม้อื่นๆ ที่กำไร
-                    additional_tickets = [p['ticket'] for p in additional_positions[:2]]  # แสดงแค่ 2 ตัว
+                    additional_tickets = [str(p['ticket']) for p in additional_positions[:2]]  # แสดงแค่ 2 ตัว
                     return f"➕ Additional: {', '.join(additional_tickets)}"
                 else:
                     return "💤 No hedge pair"
