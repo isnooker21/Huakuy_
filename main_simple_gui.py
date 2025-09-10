@@ -2,7 +2,7 @@
 """
 🚀 Simple Breakout Trading System with GUI
 ==========================================
-
+#a6890fa5c048807e4fbb2653aa8d92f60237c430 <<< commit file ที่ใช้งานสมบูณ
 NEW ENTRY LOGIC:
 ✅ BUY: current.close > previous.high
 ✅ SELL: current.close < previous.low
@@ -223,6 +223,9 @@ class SimpleBreakoutTradingSystemGUI:
             try:
                 from hedge_pairing_closer import create_hedge_pairing_closer
                 self.hedge_pairing_closer = create_hedge_pairing_closer()
+                # ตั้งค่า MT5 connection สำหรับ Real-time P&L
+                if self.mt5_connection:
+                    self.hedge_pairing_closer.set_mt5_connection(self.mt5_connection)
                 logger.info("🚀 Hedge Pairing Closer initialized successfully")
             except Exception as e:
                 logger.error(f"❌ Failed to initialize Hedge Pairing Closer: {e}")
