@@ -93,37 +93,19 @@ class HedgePairingCloser:
                     reason=best_combination.reason
                 )
             
-            # 2. ไม่มีการจับคู่ที่เหมาะสม → ออกไม้เพิ่มเติม
-            if self.enable_position_generation:
-                logger.info("🔄 No profitable combinations found - generating additional positions")
-                additional_positions = self._generate_additional_positions(positions)
-                
-                if additional_positions:
-                    logger.info(f"📈 Generated {len(additional_positions)} additional positions")
-                    # ลองหาการจับคู่อีกครั้ง
-                    all_positions = positions + additional_positions
-                    new_combinations = self._find_profitable_combinations(all_positions)
-                    
-                    if new_combinations:
-                        best_combination = new_combinations[0]
-                        logger.info(f"✅ NEW HEDGE COMBINATION FOUND: {best_combination.combination_type}")
-                        logger.info(f"   Net P&L: ${best_combination.total_profit:.2f}")
-                        logger.info(f"   Positions: {best_combination.size}")
-                        
-                        return ClosingDecision(
-                            should_close=True,
-                            positions_to_close=best_combination.positions,
-                            method="HEDGE_PAIRING_WITH_GENERATION",
-                            net_pnl=best_combination.total_profit,
-                            expected_pnl=best_combination.total_profit,
-                            position_count=best_combination.size,
-                            buy_count=sum(1 for p in best_combination.positions if p.type == 0),
-                            sell_count=sum(1 for p in best_combination.positions if p.type == 1),
-                            confidence_score=best_combination.confidence_score,
-                            reason=best_combination.reason
-                        )
+            # 2. ไม่มีการจับคู่ที่เหมาะสม → แสดงสถานะ
+            logger.info("💤 No profitable combinations found - waiting for better conditions")
+            logger.info(f"   Current positions: {len(positions)} total")
+            logger.info(f"   Buy positions: {len([p for p in positions if getattr(p, 'type', 0) == 0])}")
+            logger.info(f"   Sell positions: {len([p for p in positions if getattr(p, 'type', 0) == 1])}")
             
-            logger.info("💤 No closing opportunities found - waiting for better conditions")
+            # แสดงข้อมูลไม้ทั้งหมด
+            for pos in positions:
+                pos_type = "BUY" if getattr(pos, 'type', 0) == 0 else "SELL"
+                profit = getattr(pos, 'profit', 0)
+                ticket = getattr(pos, 'ticket', 'N/A')
+                logger.info(f"   {ticket}: {pos_type} ${profit:.2f}")
+            
             return None
             
         except Exception as e:
@@ -142,7 +124,24 @@ class HedgePairingCloser:
             # ถ้าไม่มี Hedge ให้หาการรวมอื่นๆ ที่ไม่ใช่แบบเดียวกัน
             profitable_combinations = []
             
-            for size in range(self.min_combination_size, min(self.max_combination_size + 1, len(positions) + 1)):
+            # หาไม้ที่กำไรเพื่อปิดเดี่ยว
+            profitable_positions = [p for p in positions if getattr(p, 'profit', 0) >= self.min_net_profit]
+            
+            if profitable_positions:
+                # ปิดไม้กำไรเดี่ยว
+                for pos in profitable_positions:
+                    profitable_combinations.append(HedgeCombination(
+                        positions=[pos],
+                        total_profit=getattr(pos, 'profit', 0),
+                        combination_type="SINGLE_PROFIT",
+                        size=1,
+                        confidence_score=70.0,
+                        reason=f"Single profitable position: {getattr(pos, 'ticket', 'N/A')}"
+                    ))
+                    logger.info(f"🔍 Found single profitable position: {getattr(pos, 'ticket', 'N/A')} (${getattr(pos, 'profit', 0):.2f})")
+            
+            # หาการรวมแบบผสม (ไม่ใช่แบบเดียวกัน)
+            for size in range(2, min(self.max_combination_size + 1, len(positions) + 1)):
                 # ลองทุกการรวมของขนาดนี้
                 for combination in itertools.combinations(positions, size):
                     # ตรวจสอบว่าไม่ใช่การจับคู่แบบเดียวกัน
@@ -202,7 +201,7 @@ class HedgePairingCloser:
             buy_positions = [p for p in positions if getattr(p, 'type', 0) == 0]
             sell_positions = [p for p in positions if getattr(p, 'type', 0) == 1]
             
-            logger.info(f"🔍 Analyzing hedge combinations: {len(buy_positions)} Buy, {len(sell_positions)} Sell")
+            logger.info(f"🔍 Analyzing hedge combinations: {len(buy_positions)} Buy, {len(sell_positions)} Sell (Total: {len(positions)} positions)")
             
             # Step 1: จับคู่ตรงข้ามก่อนเสมอ (ไม่สนใจผลรวม)
             hedge_pairs = []
