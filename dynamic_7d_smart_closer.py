@@ -67,7 +67,7 @@ class Dynamic7DSmartCloser:
         
         # 🎯 ZERO LOSS POLICY: ปิดไม้เฉพาะเมื่อผลรวมเป็นบวกเสมอ - ไม่ปิดขาดทุนเลย
         self.smart_closing_enabled = True
-        self.min_net_profit = 0.01     # เกณฑ์กำไรสุทธิขั้นต่ำ $0.01
+        self.min_net_profit = 0.001    # ลดเกณฑ์กำไรสุทธิขั้นต่ำเป็น $0.001
         self.max_acceptable_loss = 0.0  # ไม่ยอมรับขาดทุนเลย = $0
         self.old_position_hours = 6     # ลดเวลาไม้เก่าเป็น 6 ชั่วโมง
         self.far_loss_threshold = 0.0   # ไม่ปิดไม้ขาดทุนเลย = $0
@@ -292,6 +292,9 @@ class Dynamic7DSmartCloser:
             logger.info("⏸️ No profitable closing opportunities found with enhanced analysis")
             logger.info(f"🔍 DEBUG: min_net_profit={self.min_net_profit}, max_acceptable_loss={self.max_acceptable_loss}")
             logger.info(f"🔍 DEBUG: old_position_hours={self.old_position_hours}, far_loss_threshold={self.far_loss_threshold}")
+            logger.info(f"🔍 DEBUG: Total positions analyzed: {len(positions)}")
+            logger.info(f"🔍 DEBUG: Best score found: {best_score}")
+            logger.info(f"🔍 DEBUG: Evaluation count: {evaluation_count}")
             return None
             
         except Exception as e:
