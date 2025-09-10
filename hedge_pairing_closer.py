@@ -70,8 +70,12 @@ class HedgePairingCloser:
             
             logger.info(f"🔍 HEDGE ANALYSIS: {len(positions)} positions")
             
+            # Step 1: Smart Filtering - คัดกรองไม้ที่ไม่น่าจะได้ผล
+            filtered_positions = self._smart_filter_positions(positions)
+            logger.info(f"🔍 Smart Filtering: {len(positions)} → {len(filtered_positions)} positions")
+            
             # 1. หาการจับคู่ไม้ที่มีอยู่
-            profitable_combinations = self._find_profitable_combinations(positions)
+            profitable_combinations = self._find_profitable_combinations(filtered_positions)
             
             if profitable_combinations:
                 # มีการจับคู่ที่เหมาะสม → ปิดไม้
@@ -121,11 +125,140 @@ class HedgePairingCloser:
             logger.error(f"❌ Error in hedge pairing analysis: {e}")
             return None
     
+    def _smart_filter_positions(self, positions: List[Any]) -> List[Any]:
+        """🔍 Smart Filtering - คัดกรองไม้ที่ไม่น่าจะได้ผล"""
+        try:
+            filtered_positions = []
+            
+            for pos in positions:
+                profit = getattr(pos, 'profit', 0)
+                volume = getattr(pos, 'volume', 0)
+                
+                # คัดกรองตามเงื่อนไข
+                if profit >= -10.0:  # ไม่เอาไม้ที่ขาดทุนมากเกินไป
+                    if volume >= 0.01:  # ไม่เอาไม้ที่เล็กเกินไป
+                        if abs(profit) >= 0.1:  # ไม่เอาไม้ที่กำไร/ขาดทุนน้อยเกินไป
+                            filtered_positions.append(pos)
+                        else:
+                            logger.debug(f"🔍 Filtered out: {getattr(pos, 'ticket', 'N/A')} (profit too small: ${profit:.2f})")
+                    else:
+                        logger.debug(f"🔍 Filtered out: {getattr(pos, 'ticket', 'N/A')} (volume too small: {volume:.2f})")
+                else:
+                    logger.debug(f"🔍 Filtered out: {getattr(pos, 'ticket', 'N/A')} (loss too large: ${profit:.2f})")
+            
+            logger.info(f"🔍 Smart Filtering: {len(positions)} → {len(filtered_positions)} positions")
+            return filtered_positions
+            
+        except Exception as e:
+            logger.error(f"❌ Error in smart filtering: {e}")
+            return positions  # Return original positions if error
+    
+    def _priority_based_selection(self, positions: List[Any]) -> List[Any]:
+        """🎯 Priority-based Selection - เลือกไม้ตามความสำคัญ"""
+        try:
+            # คำนวณ Priority Score สำหรับแต่ละไม้
+            priority_scores = []
+            for pos in positions:
+                priority_score = self._calculate_priority_score(pos)
+                priority_scores.append((priority_score, pos))
+            
+            # เรียงตาม Priority Score (มากสุดก่อน)
+            priority_scores.sort(key=lambda x: x[0], reverse=True)
+            
+            # เลือกเฉพาะไม้ที่มี Priority สูง (สูงสุด 15 ไม้)
+            max_positions = min(15, len(positions))
+            priority_positions = [pos for _, pos in priority_scores[:max_positions]]
+            
+            logger.info(f"🎯 Priority Selection: {len(positions)} → {len(priority_positions)} positions")
+            return priority_positions
+            
+        except Exception as e:
+            logger.error(f"❌ Error in priority selection: {e}")
+            return positions  # Return original positions if error
+    
+    def _calculate_priority_score(self, position: Any) -> float:
+        """📊 คำนวณ Priority Score"""
+        try:
+            profit = getattr(position, 'profit', 0)
+            volume = getattr(position, 'volume', 0)
+            
+            # คำนวณ Priority Score
+            priority_score = 0
+            
+            # ไม้ที่กำไรมาก = Priority สูง
+            if profit > 0:
+                priority_score += profit * 10
+            
+            # ไม้ที่ขาดทุนน้อย = Priority ปานกลาง
+            elif profit > -2.0:
+                priority_score += abs(profit) * 5
+            
+            # ไม้ที่ขาดทุนมาก = Priority ต่ำ
+            else:
+                priority_score += abs(profit) * 2
+            
+            # ปริมาณมาก = Priority สูง
+            priority_score += volume * 100
+            
+            return priority_score
+            
+        except Exception as e:
+            logger.error(f"❌ Error calculating priority score: {e}")
+            return 0.0
+    
+    def _dynamic_re_pairing(self, hedge_pair: dict, positions: List[Any]) -> Optional[HedgeCombination]:
+        """🔄 Dynamic Re-pairing - การจับคู่ใหม่แบบ Dynamic"""
+        try:
+            # หาไม้ที่ยังไม่ได้ใช้
+            used_tickets = set()
+            for pair in self._find_existing_hedge_pairs(positions):
+                used_tickets.add(getattr(pair['buy'], 'ticket', 'N/A'))
+                used_tickets.add(getattr(pair['sell'], 'ticket', 'N/A'))
+            
+            available_positions = [pos for pos in positions 
+                                 if getattr(pos, 'ticket', 'N/A') not in used_tickets]
+            
+            if len(available_positions) < 2:
+                return None
+            
+            # ทดสอบการจับคู่ใหม่
+            best_alternative = None
+            best_profit = -float('inf')
+            
+            for i, pos1 in enumerate(available_positions):
+                for j, pos2 in enumerate(available_positions[i+1:], i+1):
+                    if getattr(pos1, 'type', 0) != getattr(pos2, 'type', 0):  # ไม้ตรงข้าม
+                        test_profit = getattr(pos1, 'profit', 0) + getattr(pos2, 'profit', 0)
+                        
+                        if test_profit > best_profit and test_profit >= self.min_net_profit:
+                            best_alternative = [pos1, pos2]
+                            best_profit = test_profit
+            
+            if best_alternative:
+                return HedgeCombination(
+                    positions=best_alternative,
+                    total_profit=best_profit,
+                    combination_type="DYNAMIC_RE_PAIRING",
+                    size=2,
+                    confidence_score=80.0,
+                    reason="Dynamic re-pairing: Alternative pair found"
+                )
+            
+            return None
+            
+        except Exception as e:
+            logger.error(f"❌ Error in dynamic re-pairing: {e}")
+            return None
+    
     def _find_profitable_combinations(self, positions: List[Any]) -> List[HedgeCombination]:
         """🔍 หาการจับคู่ไม้ที่ผลรวมเป็นบวก (ใช้หลักการ Hedge เท่านั้น)"""
         try:
+            # Step 2: Priority-based Selection - เลือกไม้ตามความสำคัญ
+            priority_positions = self._priority_based_selection(positions)
+            logger.info(f"🔍 Priority Selection: {len(positions)} → {len(priority_positions)} positions")
+            
             # หาการจับคู่แบบ Hedge เท่านั้น
-            hedge_combinations = self._find_hedge_combinations(positions)
+            hedge_combinations = self._find_hedge_combinations(priority_positions)
             if hedge_combinations:
                 logger.info("-" * 40)
                 logger.info("✅ HEDGE COMBINATIONS FOUND")
@@ -332,6 +465,11 @@ class HedgePairingCloser:
                         logger.info(f"✅ Complete hedge combination found: ${best_profit:.2f}")
                     else:
                         logger.info(f"⚠️ No profitable combination found for hedge pair (${hedge_profit:.2f})")
+                        # Step 3: Dynamic Re-pairing - ลองจับคู่ใหม่
+                        alternative_pair = self._dynamic_re_pairing(hedge_pair, positions)
+                        if alternative_pair:
+                            hedge_combinations.append(alternative_pair)
+                            logger.info(f"🔄 Dynamic Re-pairing: Found alternative pair")
                         # ไม่เพิ่ม hedge pair ที่ติดลบ
                 else:
                     # ถ้า hedge pair กำไรแล้ว ให้จับคู่เดี่ยว
