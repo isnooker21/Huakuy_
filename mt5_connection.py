@@ -826,20 +826,22 @@ class MT5Connection:
         
         for filling_type in filling_types_to_test:
             try:
-                # ทดสอบด้วยการส่ง order จำลอง (ไม่ส่งจริง)
+                # ตรวจสอบ filling mode ที่โบรกเกอร์รองรับ
                 symbol_info = mt5.symbol_info(symbol)
                 if symbol_info:
-                    # บันทึก filling type ที่ใช้ได้
-                    self.filling_types[symbol] = filling_type
-                    
-                    filling_name = {
-                        mt5.ORDER_FILLING_FOK: "FOK",
-                        mt5.ORDER_FILLING_IOC: "IOC", 
-                        mt5.ORDER_FILLING_RETURN: "RETURN"
-                    }.get(filling_type, "UNKNOWN")
-                    
-                    logger.info(f"สัญลักษณ์ {symbol} ใช้ filling type: {filling_name}")
-                    return filling_type
+                    # ตรวจสอบว่าโบรกเกอร์รองรับ filling type นี้หรือไม่
+                    if symbol_info.filling_mode & filling_type:
+                        # บันทึก filling type ที่ใช้ได้
+                        self.filling_types[symbol] = filling_type
+                        
+                        filling_name = {
+                            mt5.ORDER_FILLING_FOK: "FOK",
+                            mt5.ORDER_FILLING_IOC: "IOC", 
+                            mt5.ORDER_FILLING_RETURN: "RETURN"
+                        }.get(filling_type, "UNKNOWN")
+                        
+                        logger.info(f"สัญลักษณ์ {symbol} ใช้ filling type: {filling_name}")
+                        return filling_type
                     
             except Exception:
                 continue
@@ -1216,20 +1218,8 @@ class MT5Connection:
                 price = mt5.symbol_info_tick(pos.symbol).ask
             
             # 🔧 Smart Filling Type Selection - Fix retcode 10030
-            symbol_info = mt5.symbol_info(pos.symbol)
-            filling_mode = mt5.ORDER_FILLING_RETURN  # Default to RETURN (most compatible)
-            
-            if symbol_info:
-                # ตรวจสอบ filling mode ที่ใช้ได้
-                if symbol_info.filling_mode & mt5.SYMBOL_FILLING_RETURN:
-                    filling_mode = mt5.ORDER_FILLING_RETURN
-                elif symbol_info.filling_mode & mt5.SYMBOL_FILLING_IOC:
-                    filling_mode = mt5.ORDER_FILLING_IOC
-                elif symbol_info.filling_mode & mt5.SYMBOL_FILLING_FOK:
-                    filling_mode = mt5.ORDER_FILLING_FOK
-                else:
-                    # ถ้าไม่เจอ ใช้ RETURN เป็นค่าเริ่มต้น
-                    filling_mode = mt5.ORDER_FILLING_RETURN
+            # ใช้ filling type ที่ตรวจสอบแล้วจาก _detect_filling_type
+            filling_mode = self._detect_filling_type(pos.symbol)
             
             # เตรียมข้อมูล request
             request = {
