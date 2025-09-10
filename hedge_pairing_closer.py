@@ -291,44 +291,59 @@ class HedgePairingCloser:
             
             # Step 2: หาไม้อื่นๆ มาจับคู่เพิ่มเติม
             for hedge_pair in hedge_pairs:
-                # หาไม้อื่นๆ ที่กำไรและไม่มี Hedge กับคู่อื่น
-                additional_positions = self._find_additional_profitable_positions(
-                    positions, hedge_pair['buy'], hedge_pair['sell']
-                )
+                hedge_profit = getattr(hedge_pair['buy'], 'profit', 0) + getattr(hedge_pair['sell'], 'profit', 0)
                 
-                if additional_positions:
-                    # รวมไม้ทั้งหมด
-                    all_positions = [hedge_pair['buy'], hedge_pair['sell']] + additional_positions
-                    total_profit = sum(getattr(pos, 'profit', 0) for pos in all_positions)
+                # ถ้า hedge pair ติดลบ ให้หาไม้อื่นๆ มาช่วย
+                if hedge_profit < 0:
+                    logger.info(f"🔍 Hedge pair is losing (${hedge_profit:.2f}), looking for additional profitable positions...")
                     
-                    logger.info(f"🔍 Testing hedge with additional positions: ${total_profit:.2f}")
+                    # หาไม้อื่นๆ ที่กำไรและไม่ได้ใช้แล้ว
+                    additional_positions = []
+                    for pos in positions:
+                        pos_ticket = getattr(pos, 'ticket', 'N/A')
+                        if pos_ticket not in used_positions and getattr(pos, 'profit', 0) > 0:
+                            additional_positions.append(pos)
                     
-                    if total_profit >= self.min_net_profit:
+                    logger.info(f"🔍 Found {len(additional_positions)} additional profitable positions")
+                    
+                    # ลองเพิ่มไม้ทีละตัวจนกว่าจะได้กำไร
+                    best_combination = None
+                    best_profit = hedge_profit
+                    
+                    for i in range(1, min(len(additional_positions) + 1, 5)):  # ลองเพิ่มสูงสุด 5 ไม้
+                        for combo in itertools.combinations(additional_positions, i):
+                            test_positions = [hedge_pair['buy'], hedge_pair['sell']] + list(combo)
+                            test_profit = sum(getattr(pos, 'profit', 0) for pos in test_positions)
+                            
+                            if test_profit > best_profit and test_profit >= self.min_net_profit:
+                                best_combination = test_positions
+                                best_profit = test_profit
+                                logger.info(f"✅ Found better combination: ${test_profit:.2f} with {len(test_positions)} positions")
+                    
+                    if best_combination:
                         hedge_combinations.append(HedgeCombination(
-                            positions=all_positions,
-                            total_profit=total_profit,
+                            positions=best_combination,
+                            total_profit=best_profit,
                             combination_type=f"HEDGE_{hedge_pair['type']}_WITH_ADDITIONAL",
-                            size=len(all_positions),
-                            confidence_score=95.0,  # Hedge มีคะแนนสูงมาก
+                            size=len(best_combination),
+                            confidence_score=95.0,
                             reason=f"Hedge: {hedge_pair['type']} with additional profitable positions"
                         ))
-                        logger.info(f"✅ Complete hedge combination found: ${total_profit:.2f}")
+                        logger.info(f"✅ Complete hedge combination found: ${best_profit:.2f}")
+                    else:
+                        logger.info(f"⚠️ No profitable combination found for hedge pair (${hedge_profit:.2f})")
+                        # ไม่เพิ่ม hedge pair ที่ติดลบ
                 else:
-                    # ถ้าไม่มีไม้อื่นๆ ให้จับคู่ Hedge เดี่ยว (ไม่สนใจผลรวม)
-                    total_profit = getattr(hedge_pair['buy'], 'profit', 0) + getattr(hedge_pair['sell'], 'profit', 0)
-                    
-                    logger.info(f"🔍 Testing hedge pair only: ${total_profit:.2f}")
-                    
-                    # จับคู่ Hedge เดี่ยว (ไม่สนใจผลรวม)
+                    # ถ้า hedge pair กำไรแล้ว ให้จับคู่เดี่ยว
+                    logger.info(f"✅ Hedge pair is profitable: ${hedge_profit:.2f}")
                     hedge_combinations.append(HedgeCombination(
                         positions=[hedge_pair['buy'], hedge_pair['sell']],
-                        total_profit=total_profit,
+                        total_profit=hedge_profit,
                         combination_type=f"HEDGE_{hedge_pair['type']}_ONLY",
                         size=2,
-                        confidence_score=85.0,  # Hedge เดี่ยวมีคะแนนสูง
-                        reason=f"Hedge: {hedge_pair['type']} (waiting for additional positions)"
+                        confidence_score=90.0,
+                        reason=f"Hedge: {hedge_pair['type']} (profitable pair)"
                     ))
-                    logger.info(f"✅ Hedge pair found: ${total_profit:.2f}")
             
             # เรียงตามผลรวมกำไร (มากสุดก่อน)
             hedge_combinations.sort(key=lambda x: x.total_profit, reverse=True)
