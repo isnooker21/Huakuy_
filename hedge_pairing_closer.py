@@ -52,17 +52,112 @@ class HedgePairingCloser:
         self.max_additional_positions = 3       # จำนวนไม้เพิ่มเติมสูงสุด
         self.additional_position_volume = 0.01  # ขนาดไม้เพิ่มเติม
         
+        # 🚀 Real-time P&L System
+        self.pnl_cache = {}  # เก็บข้อมูล P&L ไว้
+        self.cache_timeout = 1.0  # หมดอายุใน 1 วินาที
+        self.portfolio_health_score = "ปานกลาง"  # สุขภาพพอร์ต
+        self.performance_history = []  # ประวัติประสิทธิภาพ
+        self.mt5_connection = None  # จะถูกตั้งค่าในภายหลัง
+        
         logger.info("🚀 Hedge Pairing Closer initialized")
         logger.info(f"   Min Combination Size: {self.min_combination_size}")
         logger.info(f"   Max Combination Size: {self.max_combination_size}")
         logger.info(f"   Min Net Profit: ${self.min_net_profit}")
         logger.info(f"   Position Generation: {'Enabled' if self.enable_position_generation else 'Disabled'}")
+        logger.info("   Real-time P&L: Enabled")
+        logger.info("   Portfolio Health Analysis: Enabled")
+    
+    def set_mt5_connection(self, mt5_connection):
+        """ตั้งค่า MT5 Connection สำหรับ Real-time P&L"""
+        self.mt5_connection = mt5_connection
+        logger.info("🔗 MT5 Connection set for Real-time P&L")
+    
+    def _get_real_time_pnl(self, position: Any) -> float:
+        """ดึง Floating P&L แบบ Real-time"""
+        try:
+            # ใช้ Caching เพื่อความเร็ว
+            ticket = getattr(position, 'ticket', 'N/A')
+            current_time = time.time()
+            
+            # ตรวจสอบว่า cache ยังใช้ได้ไหม
+            if ticket in self.pnl_cache:
+                cached_data = self.pnl_cache[ticket]
+                if current_time - cached_data['timestamp'] < self.cache_timeout:
+                    return cached_data['pnl']  # ใช้ข้อมูลเก่า
+            
+            # คำนวณ P&L จากราคาปัจจุบัน
+            if self.mt5_connection and hasattr(self.mt5_connection, 'get_current_price'):
+                current_price = self.mt5_connection.get_current_price(getattr(position, 'symbol', ''))
+                if current_price is not None:
+                    # คำนวณ P&L จริง
+                    if getattr(position, 'type', 0) == 0:  # Buy
+                        pnl = (current_price - getattr(position, 'open_price', 0)) * getattr(position, 'volume', 0) * 100000
+                    else:  # Sell
+                        pnl = (getattr(position, 'open_price', 0) - current_price) * getattr(position, 'volume', 0) * 100000
+                    
+                    # เก็บไว้ใน cache
+                    self.pnl_cache[ticket] = {
+                        'pnl': pnl,
+                        'timestamp': current_time
+                    }
+                    
+                    return pnl
+            
+            # Fallback: ใช้ข้อมูลเก่า
+            fallback_pnl = getattr(position, 'profit', 0)
+            self.pnl_cache[ticket] = {
+                'pnl': fallback_pnl,
+                'timestamp': current_time
+            }
+            
+            return fallback_pnl
+            
+        except Exception as e:
+            logger.error(f"Error getting real-time P&L: {e}")
+            return getattr(position, 'profit', 0)
+    
+    def _analyze_portfolio_health(self, positions: List[Any], account_balance: float = 1000.0) -> dict:
+        """วิเคราะห์สุขภาพพอร์ต"""
+        try:
+            # คำนวณ Floating P&L จริง
+            real_pnl_list = [self._get_real_time_pnl(pos) for pos in positions]
+            total_pnl = sum(real_pnl_list)
+            position_count = len(positions)
+            
+            # คำนวณสุขภาพพอร์ต
+            if total_pnl > 100:
+                health_score = "ดีมาก"
+            elif total_pnl > 0:
+                health_score = "ดี"
+            elif total_pnl > -50:
+                health_score = "ปานกลาง"
+            elif total_pnl > -100:
+                health_score = "แย่"
+            else:
+                health_score = "แย่มาก"
+            
+            # คำนวณค่าเฉลี่ยของเงินทุนต่อไม้
+            avg_balance_per_position = account_balance / position_count if position_count > 0 else account_balance
+            
+            self.portfolio_health_score = health_score
+            
+            return {
+                'total_pnl': total_pnl,
+                'position_count': position_count,
+                'health_score': health_score,
+                'avg_balance_per_position': avg_balance_per_position,
+                'avg_pnl_per_position': total_pnl / position_count if position_count > 0 else 0
+            }
+        except Exception as e:
+            logger.error(f"Error analyzing portfolio health: {e}")
+            return {'health_score': 'ปานกลาง', 'total_pnl': 0}
     
     def find_optimal_closing(self, positions: List[Any], account_info: Dict, 
                            market_conditions: Optional[Dict] = None) -> Optional[ClosingDecision]:
         """
         🧠 หาการปิดไม้ที่ดีที่สุดแบบจับคู่
         """
+        start_time = time.time()
         try:
             if len(positions) < 1:
                 logger.info("⏸️ Need at least 1 position for analysis")
@@ -70,8 +165,13 @@ class HedgePairingCloser:
             
             logger.info(f"🔍 HEDGE ANALYSIS: {len(positions)} positions")
             
-            # Step 1: Smart Filtering - คัดกรองไม้ที่ไม่น่าจะได้ผล
-            filtered_positions = self._smart_filter_positions(positions)
+            # Step 1: วิเคราะห์สุขภาพพอร์ต
+            account_balance = account_info.get('balance', 1000.0)
+            portfolio_health = self._analyze_portfolio_health(positions, account_balance)
+            logger.info(f"📊 Portfolio Health: {portfolio_health['health_score']} (P&L: ${portfolio_health['total_pnl']:.2f})")
+            
+            # Step 2: Smart Filtering - คัดกรองไม้ตามค่าเฉลี่ยของเงินทุน
+            filtered_positions = self._smart_filter_positions(positions, account_balance)
             logger.info(f"🔍 Smart Filtering: {len(positions)} → {len(filtered_positions)} positions")
             
             # 1. หาการจับคู่ไม้ที่มีอยู่
@@ -83,6 +183,10 @@ class HedgePairingCloser:
                 logger.info(f"✅ HEDGE COMBINATION FOUND: {best_combination.combination_type}")
                 logger.info(f"   Net P&L: ${best_combination.total_profit:.2f}")
                 logger.info(f"   Positions: {best_combination.size}")
+                
+                # บันทึกประสิทธิภาพ
+                processing_time = time.time() - start_time
+                self._record_performance(True, best_combination.total_profit, processing_time)
                 
                 return ClosingDecision(
                     should_close=True,
@@ -119,39 +223,89 @@ class HedgePairingCloser:
             
             logger.info("=" * 60)
             
+            # บันทึกประสิทธิภาพ
+            processing_time = time.time() - start_time
+            self._record_performance(False, 0.0, processing_time)
+            
             return None
             
         except Exception as e:
             logger.error(f"❌ Error in hedge pairing analysis: {e}")
+            processing_time = time.time() - start_time
+            self._record_performance(False, 0.0, processing_time)
             return None
     
-    def _smart_filter_positions(self, positions: List[Any]) -> List[Any]:
-        """🔍 Smart Filtering - คัดกรองไม้ที่ไม่น่าจะได้ผล"""
+    def _smart_filter_positions(self, positions: List[Any], account_balance: float = 1000.0) -> List[Any]:
+        """🔍 Smart Filtering - คัดกรองไม้ตามค่าเฉลี่ยของเงินทุน"""
         try:
-            filtered_positions = []
+            # คำนวณ threshold ตามค่าเฉลี่ยของเงินทุน
+            threshold = self._calculate_portfolio_threshold(account_balance, len(positions))
             
+            filtered_positions = []
             for pos in positions:
-                profit = getattr(pos, 'profit', 0)
+                # ใช้ P&L แบบ Real-time
+                real_pnl = self._get_real_time_pnl(pos)
                 volume = getattr(pos, 'volume', 0)
                 
-                # คัดกรองตามเงื่อนไข
-                if profit >= -10.0:  # ไม่เอาไม้ที่ขาดทุนมากเกินไป
+                # คัดกรองตามเงื่อนไข (ใช้ threshold ที่คำนวณจากค่าเฉลี่ยของเงินทุน)
+                if real_pnl >= -threshold:  # ไม่เอาไม้ที่ขาดทุนมากเกินไป
                     if volume >= 0.01:  # ไม่เอาไม้ที่เล็กเกินไป
-                        if abs(profit) >= 0.1:  # ไม่เอาไม้ที่กำไร/ขาดทุนน้อยเกินไป
+                        if abs(real_pnl) >= 0.1:  # ไม่เอาไม้ที่กำไร/ขาดทุนน้อยเกินไป
                             filtered_positions.append(pos)
                         else:
-                            logger.debug(f"🔍 Filtered out: {getattr(pos, 'ticket', 'N/A')} (profit too small: ${profit:.2f})")
+                            logger.debug(f"🔍 Filtered out: {getattr(pos, 'ticket', 'N/A')} (profit too small: ${real_pnl:.2f})")
                     else:
                         logger.debug(f"🔍 Filtered out: {getattr(pos, 'ticket', 'N/A')} (volume too small: {volume:.2f})")
                 else:
-                    logger.debug(f"🔍 Filtered out: {getattr(pos, 'ticket', 'N/A')} (loss too large: ${profit:.2f})")
+                    logger.debug(f"🔍 Filtered out: {getattr(pos, 'ticket', 'N/A')} (loss too large: ${real_pnl:.2f})")
             
-            logger.info(f"🔍 Smart Filtering: {len(positions)} → {len(filtered_positions)} positions")
+            logger.info(f"🔍 Smart Filtering: {len(positions)} → {len(filtered_positions)} positions (threshold: ${threshold:.2f})")
             return filtered_positions
             
         except Exception as e:
             logger.error(f"❌ Error in smart filtering: {e}")
             return positions  # Return original positions if error
+    
+    def _calculate_portfolio_threshold(self, account_balance: float, position_count: int) -> float:
+        """คำนวณ threshold ตามค่าเฉลี่ยของเงินทุน"""
+        try:
+            if position_count == 0:
+                return 0.0
+            
+            # คำนวณค่าเฉลี่ยของเงินทุนต่อไม้
+            avg_balance_per_position = account_balance / position_count
+            
+            # คำนวณ threshold ตามเปอร์เซ็นต์ของเงินทุน
+            threshold_percentage = self._get_threshold_percentage()
+            threshold = avg_balance_per_position * threshold_percentage
+            
+            # กำหนด Min/Max threshold
+            min_threshold = 1.0   # ไม่ต่ำกว่า $1.00
+            max_threshold = 100.0 # ไม่สูงกว่า $100.00
+            
+            threshold = max(min_threshold, min(threshold, max_threshold))
+            
+            return threshold
+        except Exception as e:
+            logger.error(f"Error calculating portfolio threshold: {e}")
+            return 10.0
+    
+    def _get_threshold_percentage(self) -> float:
+        """ได้ threshold percentage ตามสุขภาพพอร์ต"""
+        try:
+            if self.portfolio_health_score == "ดีมาก":
+                return 0.05  # 5%
+            elif self.portfolio_health_score == "ดี":
+                return 0.08  # 8%
+            elif self.portfolio_health_score == "ปานกลาง":
+                return 0.10  # 10%
+            elif self.portfolio_health_score == "แย่":
+                return 0.15  # 15%
+            else:  # แย่มาก
+                return 0.20  # 20%
+        except Exception as e:
+            logger.error(f"Error getting threshold percentage: {e}")
+            return 0.10  # Default 10%
     
     def _priority_based_selection(self, positions: List[Any]) -> List[Any]:
         """🎯 Priority-based Selection - เลือกไม้ตามความสำคัญ"""
@@ -177,34 +331,143 @@ class HedgePairingCloser:
             return positions  # Return original positions if error
     
     def _calculate_priority_score(self, position: Any) -> float:
-        """📊 คำนวณ Priority Score"""
+        """📊 คำนวณ Priority Score จาก Real-time P&L"""
         try:
-            profit = getattr(position, 'profit', 0)
+            # ใช้ P&L แบบ Real-time
+            real_pnl = self._get_real_time_pnl(position)
             volume = getattr(position, 'volume', 0)
             
             # คำนวณ Priority Score
             priority_score = 0
             
             # ไม้ที่กำไรมาก = Priority สูง
-            if profit > 0:
-                priority_score += profit * 10
+            if real_pnl > 0:
+                priority_score += real_pnl * 10
             
             # ไม้ที่ขาดทุนน้อย = Priority ปานกลาง
-            elif profit > -2.0:
-                priority_score += abs(profit) * 5
+            elif real_pnl > -2.0:
+                priority_score += abs(real_pnl) * 5
             
             # ไม้ที่ขาดทุนมาก = Priority ต่ำ
             else:
-                priority_score += abs(profit) * 2
+                priority_score += abs(real_pnl) * 2
             
             # ปริมาณมาก = Priority สูง
             priority_score += volume * 100
+            
+            # เพิ่มคะแนนตามสุขภาพพอร์ต
+            if self.portfolio_health_score == "ดีมาก":
+                priority_score *= 1.2  # เพิ่ม 20%
+            elif self.portfolio_health_score == "ดี":
+                priority_score *= 1.1  # เพิ่ม 10%
+            elif self.portfolio_health_score == "แย่":
+                priority_score *= 0.9   # ลด 10%
+            elif self.portfolio_health_score == "แย่มาก":
+                priority_score *= 0.8  # ลด 20%
             
             return priority_score
             
         except Exception as e:
             logger.error(f"❌ Error calculating priority score: {e}")
             return 0.0
+    
+    def _validate_system_performance(self) -> dict:
+        """ตรวจสอบประสิทธิภาพระบบแบบ Real-time"""
+        try:
+            # ตรวจสอบความแม่นยำของการจับคู่
+            accuracy_score = self._calculate_accuracy_score()
+            
+            # ตรวจสอบประสิทธิภาพการปิดไม้
+            efficiency_score = self._calculate_efficiency_score()
+            
+            # ตรวจสอบความเร็วในการทำงาน
+            speed_score = self._calculate_speed_score()
+            
+            # คำนวณ Overall Performance Score
+            overall_score = (accuracy_score + efficiency_score + speed_score) / 3
+            
+            return {
+                'accuracy_score': accuracy_score,
+                'efficiency_score': efficiency_score,
+                'speed_score': speed_score,
+                'overall_score': overall_score,
+                'status': 'ดีมาก' if overall_score > 0.8 else 'ดี' if overall_score > 0.6 else 'ปานกลาง'
+            }
+        except Exception as e:
+            logger.error(f"Error validating system performance: {e}")
+            return {}
+    
+    def _calculate_accuracy_score(self) -> float:
+        """คำนวณ Accuracy Score"""
+        try:
+            # คำนวณจากประวัติประสิทธิภาพ
+            if len(self.performance_history) < 5:
+                return 0.75  # Default score
+            
+            recent_performance = self.performance_history[-10:]  # 10 ครั้งล่าสุด
+            successful_closes = sum(1 for p in recent_performance if p.get('success', False))
+            accuracy = successful_closes / len(recent_performance)
+            
+            return accuracy
+        except Exception as e:
+            logger.error(f"Error calculating accuracy score: {e}")
+            return 0.75
+    
+    def _calculate_efficiency_score(self) -> float:
+        """คำนวณ Efficiency Score"""
+        try:
+            # คำนวณจากประวัติประสิทธิภาพ
+            if len(self.performance_history) < 5:
+                return 0.70  # Default score
+            
+            recent_performance = self.performance_history[-10:]  # 10 ครั้งล่าสุด
+            avg_profit = sum(p.get('profit', 0) for p in recent_performance) / len(recent_performance)
+            
+            # Normalize efficiency score (0-1)
+            efficiency = min(1.0, max(0.0, (avg_profit + 10) / 20))  # -10 to +10 range
+            
+            return efficiency
+        except Exception as e:
+            logger.error(f"Error calculating efficiency score: {e}")
+            return 0.70
+    
+    def _calculate_speed_score(self) -> float:
+        """คำนวณ Speed Score"""
+        try:
+            # คำนวณจากประวัติประสิทธิภาพ
+            if len(self.performance_history) < 5:
+                return 0.80  # Default score
+            
+            recent_performance = self.performance_history[-10:]  # 10 ครั้งล่าสุด
+            avg_time = sum(p.get('processing_time', 1.0) for p in recent_performance) / len(recent_performance)
+            
+            # Normalize speed score (0-1) - ยิ่งเร็วยิ่งดี
+            speed = max(0.0, min(1.0, 2.0 - avg_time))  # 0-2 seconds range
+            
+            return speed
+        except Exception as e:
+            logger.error(f"Error calculating speed score: {e}")
+            return 0.80
+    
+    def _record_performance(self, success: bool, profit: float, processing_time: float):
+        """บันทึกประสิทธิภาพ"""
+        try:
+            performance_record = {
+                'timestamp': time.time(),
+                'success': success,
+                'profit': profit,
+                'processing_time': processing_time,
+                'portfolio_health': self.portfolio_health_score
+            }
+            
+            self.performance_history.append(performance_record)
+            
+            # เก็บเฉพาะ 100 รายการล่าสุด
+            if len(self.performance_history) > 100:
+                self.performance_history = self.performance_history[-100:]
+                
+        except Exception as e:
+            logger.error(f"Error recording performance: {e}")
     
     def _dynamic_re_pairing(self, hedge_pair: dict, positions: List[Any]) -> Optional[HedgeCombination]:
         """🔄 Dynamic Re-pairing - การจับคู่ใหม่แบบ Dynamic"""
