@@ -81,7 +81,7 @@ class SimpleBreakoutTradingSystemGUI:
         # ✅ KEEP POSITION MANAGEMENT & CLOSING SYSTEMS
         self.dynamic_position_modifier = None
         # 🚫 REMOVED: dynamic_adaptive_closer - Replaced by Enhanced 7D Smart Closer
-        self.dynamic_7d_smart_closer = None
+        self.hedge_pairing_closer = None
         
         # 🎯 SIMPLE BREAKOUT STATE
         self.last_candle_data = {}  # {timeframe: candle}
@@ -219,20 +219,13 @@ class SimpleBreakoutTradingSystemGUI:
                 logger.warning("ระบบเทรดกำลังทำงานอยู่แล้ว")
                 return True
             
-            # 🚀 Initialize 7D Smart Closer
+            # 🚀 Initialize Hedge Pairing Closer
             try:
-                from dynamic_7d_smart_closer import create_dynamic_7d_smart_closer
-                # 🚫 REMOVED: intelligent_position_manager import - Replaced by internal 7D analysis
-                
-                # Create intelligent manager with required parameters
-                # 🚫 REMOVED: Intelligent Position Manager - Replaced by internal 7D analysis
-                
-                # Create Enhanced 7D Smart Closer (Standalone Mode)
-                self.dynamic_7d_smart_closer = create_dynamic_7d_smart_closer()
-                logger.info("🚀 7D Smart Closer initialized successfully")
+                self.hedge_pairing_closer = create_hedge_pairing_closer()
+                logger.info("🚀 Hedge Pairing Closer initialized successfully")
             except Exception as e:
-                logger.error(f"❌ Failed to initialize 7D Smart Closer: {e}")
-                self.dynamic_7d_smart_closer = None
+                logger.error(f"❌ Failed to initialize Hedge Pairing Closer: {e}")
+                self.hedge_pairing_closer = None
             
             self.is_running = True
             self.trading_thread = threading.Thread(target=self._trading_loop, daemon=True)
@@ -739,9 +732,9 @@ class SimpleBreakoutTradingSystemGUI:
             logger.error(f"❌ Error in position management: {e}")
     
     def _handle_dynamic_closing(self, candle: CandleData):
-        """Handle dynamic closing using 7D Smart Closer"""
+        """Handle dynamic closing using Hedge Pairing Closer"""
         try:
-            if not self.dynamic_7d_smart_closer:
+            if not self.hedge_pairing_closer:
                 return
             
             # 🕐 Check market status before closing
@@ -758,7 +751,7 @@ class SimpleBreakoutTradingSystemGUI:
             if not positions:
                 return
             
-            # 🚀 Use 7D Smart Closer for comprehensive analysis
+            # 🚀 Use Hedge Pairing Closer for comprehensive analysis
             market_conditions = {
                 'current_price': candle.close,
                 'volatility': 'medium',  # Could be enhanced with real volatility calculation
@@ -768,28 +761,29 @@ class SimpleBreakoutTradingSystemGUI:
                 'london_ny_overlap': market_status.get('london_ny_overlap', False)
             }
             
-            closing_result = self.dynamic_7d_smart_closer.find_optimal_closing(
+            closing_result = self.hedge_pairing_closer.find_optimal_closing(
                 positions=positions,
                 account_info=account_info or {},
                 market_conditions=market_conditions
             )
             
             if closing_result and closing_result.should_close:
-                logger.info(f"🚀 7D CLOSING RECOMMENDED: {len(closing_result.positions_to_close)} positions")
+                logger.info(f"🚀 HEDGE CLOSING RECOMMENDED: {len(closing_result.positions_to_close)} positions")
                 logger.info(f"   Net P&L: ${closing_result.net_pnl:.2f}, Confidence: {closing_result.confidence_score:.1f}%")
+                logger.info(f"   Method: {closing_result.method}")
                 logger.info(f"   Reason: {closing_result.reason}")
                 
                 # Execute closing
                 result = self.order_manager.close_positions_group(closing_result.positions_to_close)
                 if result:
-                    logger.info(f"✅ 7D GROUP CLOSED successfully")
+                    logger.info(f"✅ HEDGE GROUP CLOSED successfully")
                 else:
-                    logger.warning(f"❌ 7D GROUP CLOSE FAILED")
+                    logger.warning(f"❌ HEDGE GROUP CLOSE FAILED")
             else:
-                logger.debug(f"💤 7D No closing recommended - waiting for better opportunity")
+                logger.debug(f"💤 HEDGE No closing recommended - waiting for better opportunity")
                             
         except Exception as e:
-            logger.error(f"❌ Error in 7D dynamic closing: {e}")
+            logger.error(f"❌ Error in Hedge dynamic closing: {e}")
     
     def start_gui(self):
         """Start GUI (Same as original)"""
