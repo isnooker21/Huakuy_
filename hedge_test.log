@@ -1,0 +1,328 @@
+2025-09-10 17:28:04,630 - INFO - 🔍 Starting Hedge System Test
+2025-09-10 17:28:04,630 - INFO - 🚀 Hedge Pairing Closer initialized
+2025-09-10 17:28:04,630 - INFO -    Min Combination Size: 2
+2025-09-10 17:28:04,630 - INFO -    Max Combination Size: 8
+2025-09-10 17:28:04,630 - INFO -    Min Net Profit: $0.1
+2025-09-10 17:28:04,630 - INFO -    Position Generation: Enabled
+2025-09-10 17:28:04,630 - INFO - ✅ Hedge Pairing Closer created
+2025-09-10 17:28:04,630 - INFO - 📊 Test Positions:
+2025-09-10 17:28:04,630 - INFO -    Ticket: 29640384, Type: BUY, Profit: $-3.47
+2025-09-10 17:28:04,630 - INFO -    Ticket: 29640203, Type: BUY, Profit: $-2.14
+2025-09-10 17:28:04,630 - INFO -    Ticket: 29632747, Type: SELL, Profit: $0.31
+2025-09-10 17:28:04,630 - INFO -    Ticket: 29632750, Type: SELL, Profit: $1.13
+2025-09-10 17:28:04,630 - INFO - 🔍 Testing profitable combinations...
+2025-09-10 17:28:04,630 - INFO - 🔍 Analyzing hedge combinations: 2 Buy, 2 Sell
+2025-09-10 17:28:04,630 - INFO - 🔍 Testing hedge: Buy 29640384 ($-3.47) + Sell 29632747 ($0.31) = $-3.16
+2025-09-10 17:28:04,630 - INFO - 🔍 Testing hedge: Buy 29640384 ($-3.47) + Sell 29632750 ($1.13) = $-2.34
+2025-09-10 17:28:04,630 - INFO - 🔍 Testing hedge: Buy 29640203 ($-2.14) + Sell 29632747 ($0.31) = $-1.83
+2025-09-10 17:28:04,630 - INFO - 🔍 Testing hedge: Buy 29640203 ($-2.14) + Sell 29632750 ($1.13) = $-1.01
+2025-09-10 17:28:04,630 - INFO - 🔍 Found 1 profitable combinations
+2025-09-10 17:28:04,630 - INFO - 📊 Found 1 profitable combinations
+2025-09-10 17:28:04,630 - INFO -    Combination 1: SELL_MAJORITY_2S+0B
+2025-09-10 17:28:04,630 - INFO -      Net P&L: $1.44
+2025-09-10 17:28:04,630 - INFO -      Positions: 2
+2025-09-10 17:28:04,630 - INFO -      Confidence: 7.6%
+2025-09-10 17:28:04,630 - INFO -      Reason: Hedge combination: SELL_MAJORITY_2S+0B
+2025-09-10 17:28:04,630 - INFO -        - Ticket: 29632747, Type: SELL, Profit: $0.31
+2025-09-10 17:28:04,630 - INFO -        - Ticket: 29632750, Type: SELL, Profit: $1.13
+2025-09-10 17:28:04,630 - INFO - 🔍 Testing hedge combinations...
+2025-09-10 17:28:04,630 - INFO - 🔍 Analyzing hedge combinations: 2 Buy, 2 Sell
+2025-09-10 17:28:04,630 - INFO - 🔍 Testing hedge: Buy 29640384 ($-3.47) + Sell 29632747 ($0.31) = $-3.16
+2025-09-10 17:28:04,631 - INFO - 🔍 Testing hedge: Buy 29640384 ($-3.47) + Sell 29632750 ($1.13) = $-2.34
+2025-09-10 17:28:04,631 - INFO - 🔍 Testing hedge: Buy 29640203 ($-2.14) + Sell 29632747 ($0.31) = $-1.83
+2025-09-10 17:28:04,631 - INFO - 🔍 Testing hedge: Buy 29640203 ($-2.14) + Sell 29632750 ($1.13) = $-1.01
+2025-09-10 17:28:04,631 - INFO - 📊 Found 0 hedge combinations
+2025-09-10 17:28:04,631 - WARNING - ❌ No hedge combinations found!
+2025-09-10 17:28:04,631 - INFO - 🔍 Analyzing why no hedge combinations found...
+2025-09-10 17:28:04,631 - INFO -    Buy positions: 2
+2025-09-10 17:28:04,631 - INFO -      - Ticket: 29640384, Profit: $-3.47
+2025-09-10 17:28:04,631 - INFO -      - Ticket: 29640203, Profit: $-2.14
+2025-09-10 17:28:04,631 - INFO -    Sell positions: 2
+2025-09-10 17:28:04,631 - INFO -      - Ticket: 29632747, Profit: $0.31
+2025-09-10 17:28:04,631 - INFO -      - Ticket: 29632750, Profit: $1.13
+2025-09-10 17:28:04,631 - INFO -    Testing hedge pairs:
+2025-09-10 17:28:04,631 - INFO -      29640384 (Buy, $-3.47) + 29632747 (Sell, $0.31) = $-3.16
+2025-09-10 17:28:04,631 - INFO -        ❌ Below min_net_profit threshold
+2025-09-10 17:28:04,631 - INFO -      29640384 (Buy, $-3.47) + 29632750 (Sell, $1.13) = $-2.34
+2025-09-10 17:28:04,631 - INFO -        ❌ Below min_net_profit threshold
+2025-09-10 17:28:04,631 - INFO -      29640203 (Buy, $-2.14) + 29632747 (Sell, $0.31) = $-1.83
+2025-09-10 17:28:04,631 - INFO -        ❌ Below min_net_profit threshold
+2025-09-10 17:28:04,631 - INFO -      29640203 (Buy, $-2.14) + 29632750 (Sell, $1.13) = $-1.01
+2025-09-10 17:28:04,631 - INFO -        ❌ Below min_net_profit threshold
+2025-09-10 17:28:04,631 - INFO - 🔍 Testing full hedge pairing analysis...
+2025-09-10 17:28:04,631 - INFO - 🔍 HEDGE ANALYSIS: 4 positions
+2025-09-10 17:28:04,631 - INFO - 🔍 Analyzing hedge combinations: 2 Buy, 2 Sell
+2025-09-10 17:28:04,631 - INFO - 🔍 Testing hedge: Buy 29640384 ($-3.47) + Sell 29632747 ($0.31) = $-3.16
+2025-09-10 17:28:04,631 - INFO - 🔍 Testing hedge: Buy 29640384 ($-3.47) + Sell 29632750 ($1.13) = $-2.34
+2025-09-10 17:28:04,631 - INFO - 🔍 Testing hedge: Buy 29640203 ($-2.14) + Sell 29632747 ($0.31) = $-1.83
+2025-09-10 17:28:04,631 - INFO - 🔍 Testing hedge: Buy 29640203 ($-2.14) + Sell 29632750 ($1.13) = $-1.01
+2025-09-10 17:28:04,631 - INFO - 🔍 Found 1 profitable combinations
+2025-09-10 17:28:04,631 - INFO - ✅ HEDGE COMBINATION FOUND: SELL_MAJORITY_2S+0B
+2025-09-10 17:28:04,631 - INFO -    Net P&L: $1.44
+2025-09-10 17:28:04,631 - INFO -    Positions: 2
+2025-09-10 17:28:04,631 - INFO - ✅ HEDGE CLOSING RECOMMENDED:
+2025-09-10 17:28:04,631 - INFO -    Positions: 2
+2025-09-10 17:28:04,631 - INFO -    Net P&L: $1.44
+2025-09-10 17:28:04,631 - INFO -    Method: HEDGE_PAIRING
+2025-09-10 17:28:04,631 - INFO -    Reason: Hedge combination: SELL_MAJORITY_2S+0B
+2025-09-10 17:28:04,631 - INFO -    Confidence: 7.6%
+2025-09-10 17:28:04,631 - INFO -    Positions to close:
+2025-09-10 17:28:04,631 - INFO -      - Ticket: 29632747, Type: SELL, Profit: $0.31
+2025-09-10 17:28:04,631 - INFO -      - Ticket: 29632750, Type: SELL, Profit: $1.13
+2025-09-10 17:28:04,631 - INFO - 🔍 Hedge System Test Completed
+2025-09-10 17:51:45,263 - INFO - 🔍 Starting Hedge System Test
+2025-09-10 17:51:45,263 - INFO - 🚀 Hedge Pairing Closer initialized
+2025-09-10 17:51:45,263 - INFO -    Min Combination Size: 2
+2025-09-10 17:51:45,263 - INFO -    Max Combination Size: 8
+2025-09-10 17:51:45,263 - INFO -    Min Net Profit: $0.1
+2025-09-10 17:51:45,263 - INFO -    Position Generation: Enabled
+2025-09-10 17:51:45,263 - INFO - ✅ Hedge Pairing Closer created
+2025-09-10 17:51:45,263 - INFO - 📊 Test Positions:
+2025-09-10 17:51:45,263 - INFO -    Ticket: 29640384, Type: BUY, Profit: $-3.47
+2025-09-10 17:51:45,263 - INFO -    Ticket: 29640203, Type: BUY, Profit: $-2.14
+2025-09-10 17:51:45,263 - INFO -    Ticket: 29632747, Type: SELL, Profit: $0.31
+2025-09-10 17:51:45,263 - INFO -    Ticket: 29632750, Type: SELL, Profit: $1.13
+2025-09-10 17:51:45,263 - INFO - 🔍 Testing profitable combinations...
+2025-09-10 17:51:45,263 - INFO - 🔍 Analyzing hedge combinations: 2 Buy, 2 Sell
+2025-09-10 17:51:45,263 - INFO - 🔍 Found hedge pair: Buy 29640384 ($-3.47) + Sell 29632747 ($0.31)
+2025-09-10 17:51:45,263 - INFO - 🔍 Found hedge pair: Buy 29640384 ($-3.47) + Sell 29632750 ($1.13)
+2025-09-10 17:51:45,263 - INFO - 🔍 Found hedge pair: Buy 29640203 ($-2.14) + Sell 29632747 ($0.31)
+2025-09-10 17:51:45,263 - INFO - 🔍 Found hedge pair: Buy 29640203 ($-2.14) + Sell 29632750 ($1.13)
+2025-09-10 17:51:45,264 - INFO - 🔍 Found additional profitable position: 29632750 ($1.13)
+2025-09-10 17:51:45,264 - INFO - 🔍 Testing hedge with additional positions: $-2.03
+2025-09-10 17:51:45,264 - INFO - 🔍 Found additional profitable position: 29632747 ($0.31)
+2025-09-10 17:51:45,264 - INFO - 🔍 Testing hedge with additional positions: $-2.03
+2025-09-10 17:51:45,264 - INFO - 🔍 Found additional profitable position: 29632750 ($1.13)
+2025-09-10 17:51:45,264 - INFO - 🔍 Testing hedge with additional positions: $-0.70
+2025-09-10 17:51:45,264 - INFO - 🔍 Found additional profitable position: 29632747 ($0.31)
+2025-09-10 17:51:45,264 - INFO - 🔍 Testing hedge with additional positions: $-0.70
+2025-09-10 17:51:45,264 - INFO - 🔍 Found 0 profitable combinations
+2025-09-10 17:51:45,264 - INFO - 📊 Found 0 profitable combinations
+2025-09-10 17:51:45,264 - WARNING - ❌ No profitable combinations found!
+2025-09-10 17:51:45,264 - INFO - 🔍 Analyzing why no combinations found...
+2025-09-10 17:51:45,264 - INFO -    Min Net Profit: $0.1
+2025-09-10 17:51:45,264 - INFO -    Testing 2-position combinations:
+2025-09-10 17:51:45,264 - INFO -      29640384 (BUY, $-3.47) + 29640203 (BUY, $-2.14) = $-5.61
+2025-09-10 17:51:45,264 - INFO -        ❌ Below min_net_profit threshold
+2025-09-10 17:51:45,264 - INFO -      29640384 (BUY, $-3.47) + 29632747 (SELL, $0.31) = $-3.16
+2025-09-10 17:51:45,264 - INFO -        ❌ Below min_net_profit threshold
+2025-09-10 17:51:45,264 - INFO -      29640384 (BUY, $-3.47) + 29632750 (SELL, $1.13) = $-2.34
+2025-09-10 17:51:45,264 - INFO -        ❌ Below min_net_profit threshold
+2025-09-10 17:51:45,264 - INFO -      29640203 (BUY, $-2.14) + 29632747 (SELL, $0.31) = $-1.83
+2025-09-10 17:51:45,264 - INFO -        ❌ Below min_net_profit threshold
+2025-09-10 17:51:45,264 - INFO -      29640203 (BUY, $-2.14) + 29632750 (SELL, $1.13) = $-1.01
+2025-09-10 17:51:45,264 - INFO -        ❌ Below min_net_profit threshold
+2025-09-10 17:51:45,264 - INFO -      29632747 (SELL, $0.31) + 29632750 (SELL, $1.13) = $1.44
+2025-09-10 17:51:45,264 - INFO -        ✅ This combination should work!
+2025-09-10 17:51:45,264 - INFO -    Testing 3-position combinations:
+2025-09-10 17:51:45,264 - INFO -      29640384 + 29640203 + 29632747 = $-5.30
+2025-09-10 17:51:45,264 - INFO -        ❌ Below min_net_profit threshold
+2025-09-10 17:51:45,264 - INFO -      29640384 + 29640203 + 29632750 = $-4.48
+2025-09-10 17:51:45,264 - INFO -        ❌ Below min_net_profit threshold
+2025-09-10 17:51:45,264 - INFO -      29640384 + 29632747 + 29632750 = $-2.03
+2025-09-10 17:51:45,264 - INFO -        ❌ Below min_net_profit threshold
+2025-09-10 17:51:45,264 - INFO -      29640203 + 29632747 + 29632750 = $-0.70
+2025-09-10 17:51:45,264 - INFO -        ❌ Below min_net_profit threshold
+2025-09-10 17:51:45,264 - INFO -    Testing 4-position combinations:
+2025-09-10 17:51:45,264 - INFO -      All 4 positions = $-4.17
+2025-09-10 17:51:45,264 - INFO -        ❌ Below min_net_profit threshold
+2025-09-10 17:51:45,264 - INFO - 🔍 Testing hedge combinations...
+2025-09-10 17:51:45,264 - INFO - 🔍 Analyzing hedge combinations: 2 Buy, 2 Sell
+2025-09-10 17:51:45,264 - INFO - 🔍 Found hedge pair: Buy 29640384 ($-3.47) + Sell 29632747 ($0.31)
+2025-09-10 17:51:45,264 - INFO - 🔍 Found hedge pair: Buy 29640384 ($-3.47) + Sell 29632750 ($1.13)
+2025-09-10 17:51:45,264 - INFO - 🔍 Found hedge pair: Buy 29640203 ($-2.14) + Sell 29632747 ($0.31)
+2025-09-10 17:51:45,264 - INFO - 🔍 Found hedge pair: Buy 29640203 ($-2.14) + Sell 29632750 ($1.13)
+2025-09-10 17:51:45,264 - INFO - 🔍 Found additional profitable position: 29632750 ($1.13)
+2025-09-10 17:51:45,264 - INFO - 🔍 Testing hedge with additional positions: $-2.03
+2025-09-10 17:51:45,264 - INFO - 🔍 Found additional profitable position: 29632747 ($0.31)
+2025-09-10 17:51:45,264 - INFO - 🔍 Testing hedge with additional positions: $-2.03
+2025-09-10 17:51:45,264 - INFO - 🔍 Found additional profitable position: 29632750 ($1.13)
+2025-09-10 17:51:45,264 - INFO - 🔍 Testing hedge with additional positions: $-0.70
+2025-09-10 17:51:45,265 - INFO - 🔍 Found additional profitable position: 29632747 ($0.31)
+2025-09-10 17:51:45,265 - INFO - 🔍 Testing hedge with additional positions: $-0.70
+2025-09-10 17:51:45,265 - INFO - 📊 Found 0 hedge combinations
+2025-09-10 17:51:45,265 - WARNING - ❌ No hedge combinations found!
+2025-09-10 17:51:45,265 - INFO - 🔍 Analyzing why no hedge combinations found...
+2025-09-10 17:51:45,265 - INFO -    Buy positions: 2
+2025-09-10 17:51:45,265 - INFO -      - Ticket: 29640384, Profit: $-3.47
+2025-09-10 17:51:45,265 - INFO -      - Ticket: 29640203, Profit: $-2.14
+2025-09-10 17:51:45,265 - INFO -    Sell positions: 2
+2025-09-10 17:51:45,265 - INFO -      - Ticket: 29632747, Profit: $0.31
+2025-09-10 17:51:45,265 - INFO -      - Ticket: 29632750, Profit: $1.13
+2025-09-10 17:51:45,265 - INFO -    Testing hedge pairs:
+2025-09-10 17:51:45,265 - INFO -      29640384 (Buy, $-3.47) + 29632747 (Sell, $0.31) = $-3.16
+2025-09-10 17:51:45,265 - INFO -        ❌ Below min_net_profit threshold
+2025-09-10 17:51:45,265 - INFO -      29640384 (Buy, $-3.47) + 29632750 (Sell, $1.13) = $-2.34
+2025-09-10 17:51:45,265 - INFO -        ❌ Below min_net_profit threshold
+2025-09-10 17:51:45,265 - INFO -      29640203 (Buy, $-2.14) + 29632747 (Sell, $0.31) = $-1.83
+2025-09-10 17:51:45,265 - INFO -        ❌ Below min_net_profit threshold
+2025-09-10 17:51:45,265 - INFO -      29640203 (Buy, $-2.14) + 29632750 (Sell, $1.13) = $-1.01
+2025-09-10 17:51:45,265 - INFO -        ❌ Below min_net_profit threshold
+2025-09-10 17:51:45,265 - INFO - 🔍 Testing full hedge pairing analysis...
+2025-09-10 17:51:45,265 - INFO - 🔍 HEDGE ANALYSIS: 4 positions
+2025-09-10 17:51:45,265 - INFO - 🔍 Analyzing hedge combinations: 2 Buy, 2 Sell
+2025-09-10 17:51:45,265 - INFO - 🔍 Found hedge pair: Buy 29640384 ($-3.47) + Sell 29632747 ($0.31)
+2025-09-10 17:51:45,265 - INFO - 🔍 Found hedge pair: Buy 29640384 ($-3.47) + Sell 29632750 ($1.13)
+2025-09-10 17:51:45,265 - INFO - 🔍 Found hedge pair: Buy 29640203 ($-2.14) + Sell 29632747 ($0.31)
+2025-09-10 17:51:45,265 - INFO - 🔍 Found hedge pair: Buy 29640203 ($-2.14) + Sell 29632750 ($1.13)
+2025-09-10 17:51:45,265 - INFO - 🔍 Found additional profitable position: 29632750 ($1.13)
+2025-09-10 17:51:45,265 - INFO - 🔍 Testing hedge with additional positions: $-2.03
+2025-09-10 17:51:45,265 - INFO - 🔍 Found additional profitable position: 29632747 ($0.31)
+2025-09-10 17:51:45,265 - INFO - 🔍 Testing hedge with additional positions: $-2.03
+2025-09-10 17:51:45,265 - INFO - 🔍 Found additional profitable position: 29632750 ($1.13)
+2025-09-10 17:51:45,265 - INFO - 🔍 Testing hedge with additional positions: $-0.70
+2025-09-10 17:51:45,265 - INFO - 🔍 Found additional profitable position: 29632747 ($0.31)
+2025-09-10 17:51:45,265 - INFO - 🔍 Testing hedge with additional positions: $-0.70
+2025-09-10 17:51:45,265 - INFO - 🔍 Found 0 profitable combinations
+2025-09-10 17:51:45,265 - INFO - 🔄 No profitable combinations found - generating additional positions
+2025-09-10 17:51:45,265 - INFO - 🔍 Found 2 unmatched positions
+2025-09-10 17:51:45,265 - INFO - 🔄 Created SELL position for ticket 29640384
+2025-09-10 17:51:45,265 - INFO - 🔄 Created SELL position for ticket 29640203
+2025-09-10 17:51:45,265 - INFO - 📈 Generated 2 additional positions
+2025-09-10 17:51:45,265 - INFO - 📈 Generated 2 additional positions
+2025-09-10 17:51:45,265 - INFO - 🔍 Analyzing hedge combinations: 2 Buy, 4 Sell
+2025-09-10 17:51:45,265 - INFO - 🔍 Found hedge pair: Buy 29640384 ($-3.47) + Sell 29632747 ($0.31)
+2025-09-10 17:51:45,265 - INFO - 🔍 Found hedge pair: Buy 29640384 ($-3.47) + Sell 29632750 ($1.13)
+2025-09-10 17:51:45,265 - INFO - 🔍 Found hedge pair: Buy 29640203 ($-2.14) + Sell 29632747 ($0.31)
+2025-09-10 17:51:45,265 - INFO - 🔍 Found hedge pair: Buy 29640203 ($-2.14) + Sell 29632750 ($1.13)
+2025-09-10 17:51:45,265 - INFO - 🔍 Found additional profitable position: 29632750 ($1.13)
+2025-09-10 17:51:45,265 - INFO - 🔍 Testing hedge with additional positions: $-2.03
+2025-09-10 17:51:45,265 - INFO - 🔍 Found additional profitable position: 29632747 ($0.31)
+2025-09-10 17:51:45,266 - INFO - 🔍 Testing hedge with additional positions: $-2.03
+2025-09-10 17:51:45,266 - INFO - 🔍 Found additional profitable position: 29632750 ($1.13)
+2025-09-10 17:51:45,266 - INFO - 🔍 Testing hedge with additional positions: $-0.70
+2025-09-10 17:51:45,266 - INFO - 🔍 Found additional profitable position: 29632747 ($0.31)
+2025-09-10 17:51:45,266 - INFO - 🔍 Testing hedge with additional positions: $-0.70
+2025-09-10 17:51:45,266 - INFO - 🔍 Found 0 profitable combinations
+2025-09-10 17:51:45,266 - INFO - 💤 No closing opportunities found - waiting for better conditions
+2025-09-10 17:51:45,266 - WARNING - ❌ No closing recommended!
+2025-09-10 17:51:45,266 - INFO -    This means the system is not finding profitable combinations
+2025-09-10 17:51:45,266 - INFO - 🔍 Hedge System Test Completed
+2025-09-10 17:54:07,325 - INFO - 🔍 Starting Hedge System Test
+2025-09-10 17:54:07,326 - INFO - 🚀 Hedge Pairing Closer initialized
+2025-09-10 17:54:07,330 - INFO -    Min Combination Size: 2
+2025-09-10 17:54:07,330 - INFO -    Max Combination Size: 8
+2025-09-10 17:54:07,330 - INFO -    Min Net Profit: $0.1
+2025-09-10 17:54:07,330 - INFO -    Position Generation: Enabled
+2025-09-10 17:54:07,331 - INFO - ✅ Hedge Pairing Closer created
+2025-09-10 17:54:07,331 - INFO - 📊 Test Positions:
+2025-09-10 17:54:07,331 - INFO -    Ticket: 29640384, Type: BUY, Profit: $-3.47
+2025-09-10 17:54:07,331 - INFO -    Ticket: 29640203, Type: BUY, Profit: $-2.14
+2025-09-10 17:54:07,331 - INFO -    Ticket: 29632747, Type: SELL, Profit: $0.31
+2025-09-10 17:54:07,331 - INFO -    Ticket: 29632750, Type: SELL, Profit: $1.13
+2025-09-10 17:54:07,331 - INFO - 🔍 Testing profitable combinations...
+2025-09-10 17:54:07,331 - INFO - 🔍 Analyzing hedge combinations: 2 Buy, 2 Sell
+2025-09-10 17:54:07,331 - INFO - 🔍 Found hedge pair: Buy 29640384 ($-3.47) + Sell 29632747 ($0.31)
+2025-09-10 17:54:07,331 - INFO - 🔍 Found hedge pair: Buy 29640384 ($-3.47) + Sell 29632750 ($1.13)
+2025-09-10 17:54:07,331 - INFO - 🔍 Found hedge pair: Buy 29640203 ($-2.14) + Sell 29632747 ($0.31)
+2025-09-10 17:54:07,331 - INFO - 🔍 Found hedge pair: Buy 29640203 ($-2.14) + Sell 29632750 ($1.13)
+2025-09-10 17:54:07,331 - INFO - 🔍 Found additional profitable position: 29632750 ($1.13)
+2025-09-10 17:54:07,333 - INFO - 🔍 Testing hedge with additional positions: $-2.03
+2025-09-10 17:54:07,333 - INFO - 🔍 Found additional profitable position: 29632747 ($0.31)
+2025-09-10 17:54:07,333 - INFO - 🔍 Testing hedge with additional positions: $-2.03
+2025-09-10 17:54:07,333 - INFO - 🔍 Found additional profitable position: 29632750 ($1.13)
+2025-09-10 17:54:07,333 - INFO - 🔍 Testing hedge with additional positions: $-0.70
+2025-09-10 17:54:07,333 - INFO - 🔍 Found additional profitable position: 29632747 ($0.31)
+2025-09-10 17:54:07,333 - INFO - 🔍 Testing hedge with additional positions: $-0.70
+2025-09-10 17:54:07,333 - INFO - 🔍 Found 0 profitable combinations
+2025-09-10 17:54:07,333 - INFO - 📊 Found 0 profitable combinations
+2025-09-10 17:54:07,333 - WARNING - ❌ No profitable combinations found!
+2025-09-10 17:54:07,333 - INFO - 🔍 Analyzing why no combinations found...
+2025-09-10 17:54:07,333 - INFO -    Min Net Profit: $0.1
+2025-09-10 17:54:07,334 - INFO -    Testing 2-position combinations:
+2025-09-10 17:54:07,334 - INFO -      29640384 (BUY, $-3.47) + 29640203 (BUY, $-2.14) = $-5.61
+2025-09-10 17:54:07,334 - INFO -        ❌ Below min_net_profit threshold
+2025-09-10 17:54:07,334 - INFO -      29640384 (BUY, $-3.47) + 29632747 (SELL, $0.31) = $-3.16
+2025-09-10 17:54:07,334 - INFO -        ❌ Below min_net_profit threshold
+2025-09-10 17:54:07,334 - INFO -      29640384 (BUY, $-3.47) + 29632750 (SELL, $1.13) = $-2.34
+2025-09-10 17:54:07,334 - INFO -        ❌ Below min_net_profit threshold
+2025-09-10 17:54:07,334 - INFO -      29640203 (BUY, $-2.14) + 29632747 (SELL, $0.31) = $-1.83
+2025-09-10 17:54:07,334 - INFO -        ❌ Below min_net_profit threshold
+2025-09-10 17:54:07,334 - INFO -      29640203 (BUY, $-2.14) + 29632750 (SELL, $1.13) = $-1.01
+2025-09-10 17:54:07,334 - INFO -        ❌ Below min_net_profit threshold
+2025-09-10 17:54:07,334 - INFO -      29632747 (SELL, $0.31) + 29632750 (SELL, $1.13) = $1.44
+2025-09-10 17:54:07,334 - INFO -        ✅ This combination should work!
+2025-09-10 17:54:07,334 - INFO -    Testing 3-position combinations:
+2025-09-10 17:54:07,334 - INFO -      29640384 + 29640203 + 29632747 = $-5.30
+2025-09-10 17:54:07,334 - INFO -        ❌ Below min_net_profit threshold
+2025-09-10 17:54:07,334 - INFO -      29640384 + 29640203 + 29632750 = $-4.48
+2025-09-10 17:54:07,334 - INFO -        ❌ Below min_net_profit threshold
+2025-09-10 17:54:07,334 - INFO -      29640384 + 29632747 + 29632750 = $-2.03
+2025-09-10 17:54:07,334 - INFO -        ❌ Below min_net_profit threshold
+2025-09-10 17:54:07,334 - INFO -      29640203 + 29632747 + 29632750 = $-0.70
+2025-09-10 17:54:07,334 - INFO -        ❌ Below min_net_profit threshold
+2025-09-10 17:54:07,334 - INFO -    Testing 4-position combinations:
+2025-09-10 17:54:07,334 - INFO -      All 4 positions = $-4.17
+2025-09-10 17:54:07,334 - INFO -        ❌ Below min_net_profit threshold
+2025-09-10 17:54:07,334 - INFO - 🔍 Testing hedge combinations...
+2025-09-10 17:54:07,334 - INFO - 🔍 Analyzing hedge combinations: 2 Buy, 2 Sell
+2025-09-10 17:54:07,335 - INFO - 🔍 Found hedge pair: Buy 29640384 ($-3.47) + Sell 29632747 ($0.31)
+2025-09-10 17:54:07,335 - INFO - 🔍 Found hedge pair: Buy 29640384 ($-3.47) + Sell 29632750 ($1.13)
+2025-09-10 17:54:07,335 - INFO - 🔍 Found hedge pair: Buy 29640203 ($-2.14) + Sell 29632747 ($0.31)
+2025-09-10 17:54:07,335 - INFO - 🔍 Found hedge pair: Buy 29640203 ($-2.14) + Sell 29632750 ($1.13)
+2025-09-10 17:54:07,335 - INFO - 🔍 Found additional profitable position: 29632750 ($1.13)
+2025-09-10 17:54:07,335 - INFO - 🔍 Testing hedge with additional positions: $-2.03
+2025-09-10 17:54:07,335 - INFO - 🔍 Found additional profitable position: 29632747 ($0.31)
+2025-09-10 17:54:07,335 - INFO - 🔍 Testing hedge with additional positions: $-2.03
+2025-09-10 17:54:07,335 - INFO - 🔍 Found additional profitable position: 29632750 ($1.13)
+2025-09-10 17:54:07,335 - INFO - 🔍 Testing hedge with additional positions: $-0.70
+2025-09-10 17:54:07,335 - INFO - 🔍 Found additional profitable position: 29632747 ($0.31)
+2025-09-10 17:54:07,335 - INFO - 🔍 Testing hedge with additional positions: $-0.70
+2025-09-10 17:54:07,335 - INFO - 📊 Found 0 hedge combinations
+2025-09-10 17:54:07,335 - WARNING - ❌ No hedge combinations found!
+2025-09-10 17:54:07,335 - INFO - 🔍 Analyzing why no hedge combinations found...
+2025-09-10 17:54:07,335 - INFO -    Buy positions: 2
+2025-09-10 17:54:07,335 - INFO -      - Ticket: 29640384, Profit: $-3.47
+2025-09-10 17:54:07,335 - INFO -      - Ticket: 29640203, Profit: $-2.14
+2025-09-10 17:54:07,335 - INFO -    Sell positions: 2
+2025-09-10 17:54:07,335 - INFO -      - Ticket: 29632747, Profit: $0.31
+2025-09-10 17:54:07,335 - INFO -      - Ticket: 29632750, Profit: $1.13
+2025-09-10 17:54:07,335 - INFO -    Testing hedge pairs:
+2025-09-10 17:54:07,335 - INFO -      29640384 (Buy, $-3.47) + 29632747 (Sell, $0.31) = $-3.16
+2025-09-10 17:54:07,335 - INFO -        ❌ Below min_net_profit threshold
+2025-09-10 17:54:07,335 - INFO -      29640384 (Buy, $-3.47) + 29632750 (Sell, $1.13) = $-2.34
+2025-09-10 17:54:07,335 - INFO -        ❌ Below min_net_profit threshold
+2025-09-10 17:54:07,335 - INFO -      29640203 (Buy, $-2.14) + 29632747 (Sell, $0.31) = $-1.83
+2025-09-10 17:54:07,335 - INFO -        ❌ Below min_net_profit threshold
+2025-09-10 17:54:07,335 - INFO -      29640203 (Buy, $-2.14) + 29632750 (Sell, $1.13) = $-1.01
+2025-09-10 17:54:07,335 - INFO -        ❌ Below min_net_profit threshold
+2025-09-10 17:54:07,335 - INFO - 🔍 Testing full hedge pairing analysis...
+2025-09-10 17:54:07,335 - INFO - 🔍 HEDGE ANALYSIS: 4 positions
+2025-09-10 17:54:07,335 - INFO - 🔍 Analyzing hedge combinations: 2 Buy, 2 Sell
+2025-09-10 17:54:07,335 - INFO - 🔍 Found hedge pair: Buy 29640384 ($-3.47) + Sell 29632747 ($0.31)
+2025-09-10 17:54:07,335 - INFO - 🔍 Found hedge pair: Buy 29640384 ($-3.47) + Sell 29632750 ($1.13)
+2025-09-10 17:54:07,335 - INFO - 🔍 Found hedge pair: Buy 29640203 ($-2.14) + Sell 29632747 ($0.31)
+2025-09-10 17:54:07,335 - INFO - 🔍 Found hedge pair: Buy 29640203 ($-2.14) + Sell 29632750 ($1.13)
+2025-09-10 17:54:07,335 - INFO - 🔍 Found additional profitable position: 29632750 ($1.13)
+2025-09-10 17:54:07,335 - INFO - 🔍 Testing hedge with additional positions: $-2.03
+2025-09-10 17:54:07,336 - INFO - 🔍 Found additional profitable position: 29632747 ($0.31)
+2025-09-10 17:54:07,336 - INFO - 🔍 Testing hedge with additional positions: $-2.03
+2025-09-10 17:54:07,336 - INFO - 🔍 Found additional profitable position: 29632750 ($1.13)
+2025-09-10 17:54:07,336 - INFO - 🔍 Testing hedge with additional positions: $-0.70
+2025-09-10 17:54:07,336 - INFO - 🔍 Found additional profitable position: 29632747 ($0.31)
+2025-09-10 17:54:07,336 - INFO - 🔍 Testing hedge with additional positions: $-0.70
+2025-09-10 17:54:07,336 - INFO - 🔍 Found 0 profitable combinations
+2025-09-10 17:54:07,336 - INFO - 🔄 No profitable combinations found - generating additional positions
+2025-09-10 17:54:07,336 - INFO - 🔍 Found 2 unmatched positions
+2025-09-10 17:54:07,336 - INFO - 🔄 Created SELL position for ticket 29640384
+2025-09-10 17:54:07,336 - INFO - 🔄 Created SELL position for ticket 29640203
+2025-09-10 17:54:07,336 - INFO - 📈 Generated 2 additional positions
+2025-09-10 17:54:07,336 - INFO - 📈 Generated 2 additional positions
+2025-09-10 17:54:07,336 - INFO - 🔍 Analyzing hedge combinations: 2 Buy, 4 Sell
+2025-09-10 17:54:07,336 - INFO - 🔍 Found hedge pair: Buy 29640384 ($-3.47) + Sell 29632747 ($0.31)
+2025-09-10 17:54:07,336 - INFO - 🔍 Found hedge pair: Buy 29640384 ($-3.47) + Sell 29632750 ($1.13)
+2025-09-10 17:54:07,336 - INFO - 🔍 Found hedge pair: Buy 29640203 ($-2.14) + Sell 29632747 ($0.31)
+2025-09-10 17:54:07,336 - INFO - 🔍 Found hedge pair: Buy 29640203 ($-2.14) + Sell 29632750 ($1.13)
+2025-09-10 17:54:07,337 - INFO - 🔍 Found additional profitable position: 29632750 ($1.13)
+2025-09-10 17:54:07,337 - INFO - 🔍 Testing hedge with additional positions: $-2.03
+2025-09-10 17:54:07,337 - INFO - 🔍 Found additional profitable position: 29632747 ($0.31)
+2025-09-10 17:54:07,337 - INFO - 🔍 Testing hedge with additional positions: $-2.03
+2025-09-10 17:54:07,337 - INFO - 🔍 Found additional profitable position: 29632750 ($1.13)
+2025-09-10 17:54:07,337 - INFO - 🔍 Testing hedge with additional positions: $-0.70
+2025-09-10 17:54:07,337 - INFO - 🔍 Found additional profitable position: 29632747 ($0.31)
+2025-09-10 17:54:07,337 - INFO - 🔍 Testing hedge with additional positions: $-0.70
+2025-09-10 17:54:07,337 - INFO - 🔍 Found 0 profitable combinations
+2025-09-10 17:54:07,337 - INFO - 💤 No closing opportunities found - waiting for better conditions
+2025-09-10 17:54:07,337 - WARNING - ❌ No closing recommended!
+2025-09-10 17:54:07,337 - INFO -    This means the system is not finding profitable combinations
+2025-09-10 17:54:07,337 - INFO - 🔍 Hedge System Test Completed
