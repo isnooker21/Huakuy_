@@ -689,8 +689,9 @@ class TradingGUI:
             # อัพเดทเฉพาะเมื่อจำนวน position เปลี่ยน
             if len(positions) != current_count:
                 self.update_positions_display()
-                # อัพเดทสถานะ Hedge ด้วย
-                self.update_hedge_status()
+                # อัพเดทสถานะ Hedge ด้วย (ถ้า GUI พร้อมแล้ว)
+                if hasattr(self, 'hedge_status_label'):
+                    self.update_hedge_status()
                 
         except Exception as e:
             logger.debug(f"Position display update error: {str(e)}")
@@ -1200,14 +1201,21 @@ class TradingGUI:
         """รีเฟรชการจับคู่ไม้"""
         try:
             self.update_positions_display()
-            self.hedge_status_label.config(text="🔄 Refreshed", fg='#00ff88')
+            if hasattr(self, 'hedge_status_label'):
+                self.hedge_status_label.config(text="🔄 Refreshed", fg='#00ff88')
         except Exception as e:
             logger.error(f"Error refreshing hedge pairs: {e}")
-            self.hedge_status_label.config(text="❌ Error", fg='#ff4444')
+            if hasattr(self, 'hedge_status_label'):
+                self.hedge_status_label.config(text="❌ Error", fg='#ff4444')
     
     def update_hedge_status(self):
         """อัพเดทสถานะการจับคู่ Hedge"""
         try:
+            # ตรวจสอบว่า hedge_status_label ถูกสร้างแล้วหรือไม่
+            if not hasattr(self, 'hedge_status_label'):
+                logger.debug("hedge_status_label not yet created, skipping update")
+                return
+                
             if not self.trading_system or not hasattr(self.trading_system, 'order_manager'):
                 self.hedge_status_label.config(text="❌ No trading system", fg='#ff4444')
                 return
