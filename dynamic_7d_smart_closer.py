@@ -845,7 +845,7 @@ class Dynamic7DSmartCloser:
             profitable_positions = [p for p in positions if getattr(p, 'profit', 0) > 0]
             losing_positions = [p for p in positions if getattr(p, 'profit', 0) < 0]
             
-            logger.info(f"🧠 SMART SELECTION: ไม้กำไร {len(profitable_positions)} ตัว, ไม้ขาดทุน {len(losing_positions)} ตัว")
+            # logger.info(f"🧠 SMART SELECTION: ไม้กำไร {len(profitable_positions)} ตัว, ไม้ขาดทุน {len(losing_positions)} ตัว")
             
             # เรียงไม้กำไรตาม profit (มากสุดก่อน)
             profitable_sorted = sorted(profitable_positions, 
@@ -869,7 +869,7 @@ class Dynamic7DSmartCloser:
                     best_net_profit = total_profit
                     best_combination = selected_profits
                     best_strategy = f"PROFIT_ONLY_{len(selected_profits)}"
-                    logger.info(f"🎯 Strategy 1: เลือกเฉพาะไม้กำไร {len(selected_profits)} ตัว = Net ${total_profit:.2f}")
+                    # logger.info(f"🎯 Strategy 1: เลือกเฉพาะไม้กำไร {len(selected_profits)} ตัว = Net ${total_profit:.2f}")
             
             # Strategy 2: รวมไม้กำไร + ไม้ขาดทุน (ฉลาดในการเลือกไม้แย่)
             if profitable_sorted and losing_sorted:
@@ -901,7 +901,7 @@ class Dynamic7DSmartCloser:
                         best_combination = selected_profits + selected_losses
                         best_strategy = f"MIXED_{profit_count}P+{loss_count}L"
                         
-                        logger.info(f"🎯 NEW BEST: {profit_count}P+{loss_count}L = Net ${net_profit:.2f} (ฉลาดในการเลือกไม้แย่)")
+                        # logger.info(f"🎯 NEW BEST: {profit_count}P+{loss_count}L = Net ${net_profit:.2f} (ฉลาดในการเลือกไม้แย่)")
             
             # Strategy 3: ถ้าไม่มีไม้กำไรเลย → ไม่ปิดไม้เลย (ZERO LOSS POLICY)
             if not profitable_sorted and losing_sorted:
@@ -916,21 +916,22 @@ class Dynamic7DSmartCloser:
                     best_combination = profitable_sorted[:min(size, len(profitable_sorted))]
                     best_net_profit = sum(getattr(p, 'profit', 0) for p in best_combination)
                     best_strategy = f"FALLBACK_PROFIT_{len(best_combination)}"
-                    logger.info(f"🔄 FALLBACK: เลือกไม้กำไรมากที่สุด {len(best_combination)} ตัว = Net ${best_net_profit:.2f}")
+                    # logger.info(f"🔄 FALLBACK: เลือกไม้กำไรมากที่สุด {len(best_combination)} ตัว = Net ${best_net_profit:.2f}")
                 else:
                     logger.error("❌ ไม่มีไม้กำไรเลยและไม่เจอการรวมที่เป็นบวก")
                     return []
             
-            logger.info(f"🏆 FINAL SELECTION: {best_strategy} = {len(best_combination)} ไม้, Net Profit ${best_net_profit:.2f}")
+            # logger.info(f"🏆 FINAL SELECTION: {best_strategy} = {len(best_combination)} ไม้, Net Profit ${best_net_profit:.2f}")
             
             # แสดงรายละเอียดการเลือกไม้ที่ฉลาด
             if best_combination:
                 profit_count = len([p for p in best_combination if getattr(p, 'profit', 0) > 0])
                 loss_count = len([p for p in best_combination if getattr(p, 'profit', 0) < 0])
-                logger.info(f"🧠 SMART BREAKDOWN: ไม้กำไร {profit_count} ตัว, ไม้ขาดทุน {loss_count} ตัว")
+                # logger.info(f"🧠 SMART BREAKDOWN: ไม้กำไร {profit_count} ตัว, ไม้ขาดทุน {loss_count} ตัว")
                 
                 if loss_count > 0:
-                    logger.info(f"🎯 ฉลาดในการเลือกไม้แย่: เลือกไม้ขาดทุนมากสุด {loss_count} ตัว (ไม้ที่อยู่ไกลราคาปัจจุบัน) เพื่อให้ผลรวมเป็นบวก")
+                    # logger.info(f"🎯 ฉลาดในการเลือกไม้แย่: เลือกไม้ขาดทุนมากสุด {loss_count} ตัว (ไม้ที่อยู่ไกลราคาปัจจุบัน) เพื่อให้ผลรวมเป็นบวก")
+                    pass
             
             return best_combination
             
@@ -1319,7 +1320,7 @@ class Dynamic7DSmartCloser:
                 profit_sorted = sorted(profit_positions, 
                                      key=lambda x: x.total_score, reverse=True)
                 selected.extend(profit_sorted[:remaining_size])
-                logger.info(f"🧠 Strategy 2: เพิ่มไม้กำไร {len(profit_sorted[:remaining_size])} ตัว (ฉลาดในการเลือกไม้กำไร)")
+                # logger.info(f"🧠 Strategy 2: เพิ่มไม้กำไร {len(profit_sorted[:remaining_size])} ตัว (ฉลาดในการเลือกไม้กำไร)")
             
             # 🎯 Strategy 3: Fill remaining with highest scores
             if len(selected) < size:
