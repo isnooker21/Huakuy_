@@ -221,6 +221,7 @@ class SimpleBreakoutTradingSystemGUI:
             
             # 🚀 Initialize Hedge Pairing Closer
             try:
+                from hedge_pairing_closer import create_hedge_pairing_closer
                 self.hedge_pairing_closer = create_hedge_pairing_closer()
                 logger.info("🚀 Hedge Pairing Closer initialized successfully")
             except Exception as e:
