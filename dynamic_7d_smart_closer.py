@@ -112,8 +112,8 @@ class Dynamic7DSmartCloser:
         - Performance Optimization
         """
         try:
-            if len(positions) < 2:
-                logger.info("⏸️ Need at least 2 positions for closing")
+            if len(positions) < 1:
+                logger.info("⏸️ Need at least 1 position for closing")
                 return None
             
             logger.info(f"🧠 ENHANCED 7D ANALYSIS: {len(positions)} positions")

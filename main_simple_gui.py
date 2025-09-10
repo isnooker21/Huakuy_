@@ -751,7 +751,9 @@ class SimpleBreakoutTradingSystemGUI:
                 return
             
             account_info = self.mt5_connection.get_account_info()
-            positions = self.order_manager.active_positions
+            
+            # 🔄 ซิงค์ข้อมูล Position จาก MT5 ก่อนวิเคราะห์
+            positions = self.order_manager.sync_positions_from_mt5()
             
             if not positions:
                 return
