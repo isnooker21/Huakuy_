@@ -104,7 +104,9 @@ class HedgePairingCloser:
                 pos_type = "BUY" if getattr(pos, 'type', 0) == 0 else "SELL"
                 profit = getattr(pos, 'profit', 0)
                 ticket = getattr(pos, 'ticket', 'N/A')
-                logger.info(f"   {ticket}: {pos_type} ${profit:.2f}")
+                has_hedge = self._has_hedge_pair(positions, pos)
+                hedge_status = "🔗 HEDGED" if has_hedge else "💤 NO HEDGE"
+                logger.info(f"   {ticket}: {pos_type} ${profit:.2f} - {hedge_status}")
             
             return None
             
@@ -121,48 +123,39 @@ class HedgePairingCloser:
                 logger.info(f"🔍 Found {len(hedge_combinations)} hedge combinations")
                 return hedge_combinations
             
-            # ถ้าไม่มี Hedge ให้หาการรวมอื่นๆ ที่ไม่ใช่แบบเดียวกัน
-            profitable_combinations = []
+            # หาไม้ที่ไม่มีคู่และไม้ที่มี Hedge แล้ว
+            unpaired_profitable = []  # ไม้กำไรที่ไม่มีคู่
+            unpaired_losing = []     # ไม้ติดลบที่ไม่มีคู่
+            existing_hedge_pairs = [] # Hedge pairs ที่มีอยู่แล้ว
             
-            # หาไม้ที่กำไรเพื่อปิดเดี่ยว
-            profitable_positions = [p for p in positions if getattr(p, 'profit', 0) >= self.min_net_profit]
+            # แยกไม้ตามสถานะ
+            for pos in positions:
+                pos_ticket = getattr(pos, 'ticket', 'N/A')
+                pos_profit = getattr(pos, 'profit', 0)
+                has_hedge = self._has_hedge_pair(positions, pos)
+                
+                if not has_hedge:
+                    if pos_profit >= self.min_net_profit:
+                        unpaired_profitable.append(pos)
+                        logger.info(f"🔍 Unpaired profitable position: {pos_ticket} (${pos_profit:.2f})")
+                    else:
+                        unpaired_losing.append(pos)
+                        logger.info(f"🔍 Unpaired losing position: {pos_ticket} (${pos_profit:.2f}) - waiting for opposite")
+                else:
+                    logger.info(f"🔍 Hedged position: {pos_ticket} (${pos_profit:.2f})")
             
-            if profitable_positions:
-                # ปิดไม้กำไรเดี่ยว
-                for pos in profitable_positions:
-                    profitable_combinations.append(HedgeCombination(
-                        positions=[pos],
-                        total_profit=getattr(pos, 'profit', 0),
-                        combination_type="SINGLE_PROFIT",
-                        size=1,
-                        confidence_score=70.0,
-                        reason=f"Single profitable position: {getattr(pos, 'ticket', 'N/A')}"
-                    ))
-                    logger.info(f"🔍 Found single profitable position: {getattr(pos, 'ticket', 'N/A')} (${getattr(pos, 'profit', 0):.2f})")
+            # หา Hedge pairs ที่มีอยู่แล้ว
+            existing_hedge_pairs = self._find_existing_hedge_pairs(positions)
             
-            # หาการรวมแบบผสม (ไม่ใช่แบบเดียวกัน)
-            for size in range(2, min(self.max_combination_size + 1, len(positions) + 1)):
-                # ลองทุกการรวมของขนาดนี้
-                for combination in itertools.combinations(positions, size):
-                    # ตรวจสอบว่าไม่ใช่การจับคู่แบบเดียวกัน
-                    if self._is_same_type_combination(combination):
-                        continue  # ข้ามการจับคู่แบบเดียวกัน
-                    
-                    total_profit = sum(getattr(pos, 'profit', 0) for pos in combination)
-                    
-                    # ตรวจสอบเงื่อนไข
-                    if total_profit >= self.min_net_profit:
-                        combination_type = self._get_combination_type(combination)
-                        confidence_score = self._calculate_confidence_score(combination, total_profit)
-                        
-                        profitable_combinations.append(HedgeCombination(
-                            positions=list(combination),
-                            total_profit=total_profit,
-                            combination_type=combination_type,
-                            size=size,
-                            confidence_score=confidence_score,
-                            reason=f"Mixed combination: {combination_type}"
-                        ))
+            logger.info(f"📊 Position Summary:")
+            logger.info(f"   Unpaired profitable: {len(unpaired_profitable)}")
+            logger.info(f"   Unpaired losing: {len(unpaired_losing)}")
+            logger.info(f"   Existing hedge pairs: {len(existing_hedge_pairs)}")
+            
+            # หาการรวมที่ดีที่สุด: ไม้กำไรที่ไม่มีคู่ + Hedge pairs ที่ติดลบ
+            profitable_combinations = self._find_helping_combinations(unpaired_profitable, existing_hedge_pairs)
+            
+            # ไม่มีการรวมแบบผสมอื่นๆ - ใช้เฉพาะระบบช่วยเหลือ
             
             # เรียงตามผลรวมกำไร (มากสุดก่อน)
             profitable_combinations.sort(key=lambda x: x.total_profit, reverse=True)
@@ -263,6 +256,16 @@ class HedgePairingCloser:
             logger.info(f"   Used positions: {list(used_positions)}")
             logger.info(f"   Unused positions: {len(positions) - len(used_positions)}")
             
+            # แสดงไม้ที่มี Hedge
+            hedged_positions = []
+            for pos in positions:
+                if self._has_hedge_pair(positions, pos):
+                    hedged_positions.append(getattr(pos, 'ticket', 'N/A'))
+            
+            if hedged_positions:
+                logger.info(f"🔗 Hedged positions: {hedged_positions}")
+                logger.info(f"   These positions will NOT be closed individually - waiting for additional positions")
+            
             # Step 2: หาไม้อื่นๆ มาจับคู่เพิ่มเติม
             for hedge_pair in hedge_pairs:
                 # หาไม้อื่นๆ ที่กำไรและไม่มี Hedge กับคู่อื่น
@@ -335,13 +338,136 @@ class HedgePairingCloser:
             logger.error(f"❌ Error finding additional positions: {e}")
             return []
     
+    def _find_existing_hedge_pairs(self, positions: List[Any]) -> List[dict]:
+        """หา Hedge pairs ที่มีอยู่แล้ว"""
+        try:
+            hedge_pairs = []
+            used_positions = set()
+            
+            # แยกไม้ Buy และ Sell
+            buy_positions = [p for p in positions if getattr(p, 'type', 0) == 0]
+            sell_positions = [p for p in positions if getattr(p, 'type', 0) == 1]
+            
+            # หา Buy ติดลบ + Sell กำไร
+            for buy_pos in buy_positions:
+                if getattr(buy_pos, 'profit', 0) < 0:  # Buy ติดลบ
+                    buy_ticket = getattr(buy_pos, 'ticket', 'N/A')
+                    if buy_ticket in used_positions:
+                        continue
+                    
+                    for sell_pos in sell_positions:
+                        if getattr(sell_pos, 'profit', 0) > 0:  # Sell กำไร
+                            sell_ticket = getattr(sell_pos, 'ticket', 'N/A')
+                            if sell_ticket in used_positions:
+                                continue
+                            
+                            # จับคู่ไม้ที่ยังไม่ได้ใช้
+                            total_profit = getattr(buy_pos, 'profit', 0) + getattr(sell_pos, 'profit', 0)
+                            hedge_pairs.append({
+                                'buy': buy_pos,
+                                'sell': sell_pos,
+                                'total_profit': total_profit,
+                                'type': 'BUY_LOSS_SELL_PROFIT',
+                                'positions': [buy_pos, sell_pos]
+                            })
+                            used_positions.add(buy_ticket)
+                            used_positions.add(sell_ticket)
+                            logger.info(f"🔍 Existing hedge pair: Buy {buy_ticket} + Sell {sell_ticket} = ${total_profit:.2f}")
+                            break
+            
+            # หา Sell ติดลบ + Buy กำไร
+            for sell_pos in sell_positions:
+                if getattr(sell_pos, 'profit', 0) < 0:  # Sell ติดลบ
+                    sell_ticket = getattr(sell_pos, 'ticket', 'N/A')
+                    if sell_ticket in used_positions:
+                        continue
+                    
+                    for buy_pos in buy_positions:
+                        if getattr(buy_pos, 'profit', 0) > 0:  # Buy กำไร
+                            buy_ticket = getattr(buy_pos, 'ticket', 'N/A')
+                            if buy_ticket in used_positions:
+                                continue
+                            
+                            # จับคู่ไม้ที่ยังไม่ได้ใช้
+                            total_profit = getattr(sell_pos, 'profit', 0) + getattr(buy_pos, 'profit', 0)
+                            hedge_pairs.append({
+                                'buy': buy_pos,
+                                'sell': sell_pos,
+                                'total_profit': total_profit,
+                                'type': 'SELL_LOSS_BUY_PROFIT',
+                                'positions': [sell_pos, buy_pos]
+                            })
+                            used_positions.add(sell_ticket)
+                            used_positions.add(buy_ticket)
+                            logger.info(f"🔍 Existing hedge pair: Sell {sell_ticket} + Buy {buy_ticket} = ${total_profit:.2f}")
+                            break
+            
+            return hedge_pairs
+            
+        except Exception as e:
+            logger.error(f"❌ Error finding existing hedge pairs: {e}")
+            return []
+    
+    def _find_helping_combinations(self, unpaired_profitable: List[Any], existing_hedge_pairs: List[dict]) -> List[HedgeCombination]:
+        """หาไม้กำไรที่ไม่มีคู่ไปช่วย Hedge pairs ที่ติดลบ"""
+        try:
+            helping_combinations = []
+            
+            if not unpaired_profitable or not existing_hedge_pairs:
+                logger.info("💤 No unpaired profitable positions or existing hedge pairs to help")
+                return helping_combinations
+            
+            # หา Hedge pairs ที่ติดลบ
+            losing_hedge_pairs = [pair for pair in existing_hedge_pairs if pair['total_profit'] < 0]
+            
+            if not losing_hedge_pairs:
+                logger.info("💤 No losing hedge pairs to help")
+                return helping_combinations
+            
+            logger.info(f"🔍 Found {len(losing_hedge_pairs)} losing hedge pairs to help")
+            
+            # ลองทุกการรวมของไม้กำไรที่ไม่มีคู่
+            for size in range(1, len(unpaired_profitable) + 1):
+                for profitable_combo in itertools.combinations(unpaired_profitable, size):
+                    profitable_total = sum(getattr(pos, 'profit', 0) for pos in profitable_combo)
+                    
+                    # ลองช่วย Hedge pairs แต่ละคู่
+                    for hedge_pair in losing_hedge_pairs:
+                        combined_profit = profitable_total + hedge_pair['total_profit']
+                        
+                        logger.info(f"🔍 Testing: {len(profitable_combo)} profitable positions (${profitable_total:.2f}) + hedge pair (${hedge_pair['total_profit']:.2f}) = ${combined_profit:.2f}")
+                        
+                        if combined_profit >= self.min_net_profit:
+                            # รวมไม้ทั้งหมด
+                            all_positions = list(profitable_combo) + hedge_pair['positions']
+                            
+                            helping_combinations.append(HedgeCombination(
+                                positions=all_positions,
+                                total_profit=combined_profit,
+                                combination_type=f"HELPING_{hedge_pair['type']}",
+                                size=len(all_positions),
+                                confidence_score=95.0,
+                                reason=f"Unpaired profitable positions helping hedge pair: {hedge_pair['type']}"
+                            ))
+                            
+                            logger.info(f"✅ Found helping combination: ${combined_profit:.2f}")
+            
+            # เรียงตามผลรวมกำไร (มากสุดก่อน)
+            helping_combinations.sort(key=lambda x: x.total_profit, reverse=True)
+            
+            return helping_combinations
+            
+        except Exception as e:
+            logger.error(f"❌ Error finding helping combinations: {e}")
+            return []
+    
     def _has_hedge_pair(self, positions: List[Any], position: Any) -> bool:
         """ตรวจสอบว่าไม้นี้มี Hedge กับคู่อื่นหรือไม่"""
         try:
             pos_type = getattr(position, 'type', 0)
             pos_profit = getattr(position, 'profit', 0)
             
-            # หาไม้ตรงข้ามที่กำไร
+            # หาไม้ตรงข้ามที่สามารถจับคู่ Hedge ได้
             for other_pos in positions:
                 if other_pos == position:
                     continue
@@ -349,9 +475,14 @@ class HedgePairingCloser:
                 other_type = getattr(other_pos, 'type', 0)
                 other_profit = getattr(other_pos, 'profit', 0)
                 
-                # ตรวจสอบว่าเป็นไม้ตรงข้ามและกำไร
-                if pos_type != other_type and other_profit > 0:
-                    return True  # มี Hedge กับคู่อื่น
+                # ตรวจสอบการจับคู่ Hedge ที่เป็นไปได้
+                if pos_type != other_type:  # ไม้ตรงข้าม
+                    # กรณี 1: ไม้นี้ติดลบ + ไม้ตรงข้ามกำไร
+                    if pos_profit < 0 and other_profit > 0:
+                        return True
+                    # กรณี 2: ไม้นี้กำไร + ไม้ตรงข้ามติดลบ
+                    elif pos_profit > 0 and other_profit < 0:
+                        return True
             
             return False
             
