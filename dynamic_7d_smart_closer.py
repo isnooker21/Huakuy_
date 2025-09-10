@@ -195,7 +195,7 @@ class Dynamic7DSmartCloser:
                     break
                 
                 dynamic_max_size = min(max_size, dynamic_params['max_size'])
-                logger.debug(f"🔍 Evaluating {method_name} ({strategy_type}) - sizes {min_size}-{dynamic_max_size}")
+                # logger.debug(f"🔍 Evaluating {method_name} ({strategy_type}) - sizes {min_size}-{dynamic_max_size}")
                 
                 # Parallel evaluation of different sizes
                 for size in range(min_size, min(dynamic_max_size + 1, len(positions) + 1)):
@@ -237,8 +237,8 @@ class Dynamic7DSmartCloser:
                                 )
                                 final_score = impact_score * priority * dynamic_params['risk_factor']
                                 
-                                logger.debug(f"💰 {method_name}_{size}: Net ${result['net_pnl']:.2f}, "
-                                           f"Impact {impact_score:.1f}, Final {final_score:.1f}")
+                                # logger.debug(f"💰 {method_name}_{size}: Net ${result['net_pnl']:.2f}, "
+                                #            f"Impact {impact_score:.1f}, Final {final_score:.1f}")
                                 
                                 if final_score > best_score:
                                     best_score = final_score
@@ -629,7 +629,7 @@ class Dynamic7DSmartCloser:
         try:
             if method_name == 'smart_7d_selection':
                 # เรียงตาม 7D Score + BALANCED
-                logger.debug(f"🧠 Smart 7D Selection: size={size}")
+                # logger.debug(f"🧠 Smart 7D Selection: size={size}")
                 
                 # 🎯 CRITICAL FIX: ใช้ balanced selection
                 buy_scores = [s for s in position_scores if getattr(s.position, 'type', 0) == 0]
@@ -666,7 +666,7 @@ class Dynamic7DSmartCloser:
                 
             elif method_name == 'top_edge_7d':
                 # ขอบบน + 7D Score + BALANCED
-                logger.debug(f"🔝 Top Edge 7D: size={size}")
+                # logger.debug(f"🔝 Top Edge 7D: size={size}")
                 
                 # 🎯 CRITICAL FIX: ใช้ balanced method แทน
                 all_positions = [score.position for score in position_scores]
@@ -681,7 +681,7 @@ class Dynamic7DSmartCloser:
                     # ตรวจสอบ balance
                     buys = len([s for s in selected if getattr(s.position, 'type', 0) == 0])
                     sells = len([s for s in selected if getattr(s.position, 'type', 0) == 1])
-                    logger.debug(f"🔝 Top Edge Balance: {buys}B+{sells}S = {len(selected)} total")
+                    # logger.debug(f"🔝 Top Edge Balance: {buys}B+{sells}S = {len(selected)} total")
                 else:
                     # 🎯 UNBALANCED TOP EDGE: ใช้ positions ที่มี เรียงตามราคาสูงสุด
                     position_scores.sort(key=lambda x: getattr(x.position, 'price_open', 0), reverse=True)
@@ -690,7 +690,7 @@ class Dynamic7DSmartCloser:
                 
             elif method_name == 'bottom_edge_7d':
                 # ขอบล่าง + 7D Score + BALANCED
-                logger.debug(f"🔻 Bottom Edge 7D: size={size}")
+                # logger.debug(f"🔻 Bottom Edge 7D: size={size}")
                 
                 # 🎯 CRITICAL FIX: ใช้ balanced method แทน
                 all_positions = [score.position for score in position_scores]
@@ -714,7 +714,7 @@ class Dynamic7DSmartCloser:
                 
             elif method_name == 'mixed_edge_7d':
                 # ขอบผสม + 7D Score + BALANCED
-                logger.debug(f"🔀 Mixed Edge 7D: size={size}")
+                # logger.debug(f"🔀 Mixed Edge 7D: size={size}")
                 
                 # 🎯 CRITICAL FIX: ใช้ balanced methods แทน
                 all_positions = [score.position for score in position_scores]
@@ -750,7 +750,7 @@ class Dynamic7DSmartCloser:
                 
             else:
                 # Fallback to smart selection + BALANCED
-                logger.debug(f"🔄 Fallback Smart Selection: size={size}")
+                # logger.debug(f"🔄 Fallback Smart Selection: size={size}")
                 
                 # 🎯 CRITICAL FIX: ใช้ balanced fallback
                 buy_scores = [s for s in position_scores if getattr(s.position, 'type', 0) == 0]
@@ -893,7 +893,7 @@ class Dynamic7DSmartCloser:
                     total_loss = sum(getattr(p, 'profit', 0) for p in selected_losses)
                     net_profit = total_profit + total_loss
                     
-                    logger.debug(f"🧠 Strategy 2: {profit_count}P+{loss_count}L = Net ${net_profit:.2f} (Profit ${total_profit:.2f} + Loss ${total_loss:.2f})")
+                    # logger.debug(f"🧠 Strategy 2: {profit_count}P+{loss_count}L = Net ${net_profit:.2f} (Profit ${total_profit:.2f} + Loss ${total_loss:.2f})")
                     
                     # ถ้าผลรวมเป็นบวกและดีกว่าที่เคยเจอ
                     if net_profit > best_net_profit:
@@ -1213,7 +1213,7 @@ class Dynamic7DSmartCloser:
                     # No purpose analysis - use original score
                     enhanced_scores.append(score_obj)
             
-            logger.debug(f"🧠 Enhanced {len(enhanced_scores)} scores with Purpose Intelligence")
+            # logger.debug(f"🧠 Enhanced {len(enhanced_scores)} scores with Purpose Intelligence")
             return enhanced_scores
             
         except Exception as e:
@@ -1545,10 +1545,10 @@ class Dynamic7DSmartCloser:
             final_sells = len([p for p in selected if getattr(p, 'type', 0) == 1])
             
             if final_buys == 0 or final_sells == 0:
-                logger.debug(f"❌ Top edge cannot create balance: {final_buys}B+{final_sells}S")
+                # logger.debug(f"❌ Top edge cannot create balance: {final_buys}B+{final_sells}S")
                 return []
                 
-            logger.debug(f"🔝 Top edge balanced: {final_buys}B+{final_sells}S")
+            # logger.debug(f"🔝 Top edge balanced: {final_buys}B+{final_sells}S")
             return selected
             
         except Exception as e:
@@ -1579,10 +1579,10 @@ class Dynamic7DSmartCloser:
             final_sells = len([p for p in selected if getattr(p, 'type', 0) == 1])
             
             if final_buys == 0 or final_sells == 0:
-                logger.debug(f"❌ Bottom edge cannot create balance: {final_buys}B+{final_sells}S")
+                # logger.debug(f"❌ Bottom edge cannot create balance: {final_buys}B+{final_sells}S")
                 return []
                 
-            logger.debug(f"🔻 Bottom edge balanced: {final_buys}B+{final_sells}S")
+            # logger.debug(f"🔻 Bottom edge balanced: {final_buys}B+{final_sells}S")
             return selected
             
         except Exception as e:
@@ -1624,10 +1624,10 @@ class Dynamic7DSmartCloser:
             final_sells = len([p for p in selected if getattr(p, 'type', 0) == 1])
             
             if final_buys == 0 or final_sells == 0:
-                logger.debug(f"❌ Mixed edge cannot create balance: {final_buys}B+{final_sells}S")
+                # logger.debug(f"❌ Mixed edge cannot create balance: {final_buys}B+{final_sells}S")
                 return []
                 
-            logger.debug(f"🔄 Mixed edge balanced: {final_buys}B+{final_sells}S")
+            # logger.debug(f"🔄 Mixed edge balanced: {final_buys}B+{final_sells}S")
             return selected
             
         except Exception as e:
@@ -1695,10 +1695,10 @@ class Dynamic7DSmartCloser:
             # Calculate final threshold
             final_threshold = max(20.0, min(70.0, base_threshold + threshold_adjustment))
             
-            logger.debug(f"🎯 DYNAMIC THRESHOLD: {final_threshold:.1f} "
-                        f"(Base: {base_threshold:.1f}, Adj: {threshold_adjustment:+.1f}, "
-                        f"P&L: \${net_pnl:.2f}, Positions: {positions_count}, "
-                        f"Health: {health_impact:.1f}, Balance: {balance_improvement:.1f})")
+            # logger.debug(f"🎯 DYNAMIC THRESHOLD: {final_threshold:.1f} "
+            #             f"(Base: {base_threshold:.1f}, Adj: {threshold_adjustment:+.1f}, "
+            #             f"P&L: \${net_pnl:.2f}, Positions: {positions_count}, "
+            #             f"Health: {health_impact:.1f}, Balance: {balance_improvement:.1f})")
             
             return final_threshold
             
@@ -2128,14 +2128,14 @@ class Dynamic7DSmartCloser:
                 # In very low risk, be more selective
                 net_pnl = result.get('net_pnl', 0)
                 if net_pnl < 0.5:  # ลดจาก 5.0 เป็น 0.5
-                    logger.debug(f"🚫 ENHANCED DECISION: Rejecting - Low risk requires higher profit (${net_pnl:.2f} < $0.5)")
+                    # logger.debug(f"🚫 ENHANCED DECISION: Rejecting - Low risk requires higher profit (${net_pnl:.2f} < $0.5)")
                     return False
             
             # 2. Market timing decision
             timing_recommendation = market_intelligence['timing_recommendation']
             if timing_recommendation == 'AVOID':
                 # Avoid closing in poor market timing
-                logger.debug(f"🚫 ENHANCED DECISION: Rejecting - Poor market timing ({timing_recommendation})")
+                # logger.debug(f"🚫 ENHANCED DECISION: Rejecting - Poor market timing ({timing_recommendation})")
                 return False
             elif timing_recommendation == 'EXCELLENT':
                 # Excellent timing - be more aggressive
@@ -2154,10 +2154,10 @@ class Dynamic7DSmartCloser:
             enhanced_threshold = base_threshold + risk_adjustment + timing_adjustment
             
             if net_pnl < enhanced_threshold:
-                logger.debug(f"🚫 ENHANCED DECISION: Rejecting - Net P&L ${net_pnl:.2f} < Enhanced Threshold ${enhanced_threshold:.2f}")
+                # logger.debug(f"🚫 ENHANCED DECISION: Rejecting - Net P&L ${net_pnl:.2f} < Enhanced Threshold ${enhanced_threshold:.2f}")
                 return False
             
-            logger.debug(f"✅ ENHANCED DECISION: Accepting - Net P&L ${net_pnl:.2f} >= Enhanced Threshold ${enhanced_threshold:.2f}")
+            # logger.debug(f"✅ ENHANCED DECISION: Accepting - Net P&L ${net_pnl:.2f} >= Enhanced Threshold ${enhanced_threshold:.2f}")
             return True
             
         except Exception as e:
