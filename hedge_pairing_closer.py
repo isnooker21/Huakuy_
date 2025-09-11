@@ -859,14 +859,14 @@ class HedgePairingCloser:
             search_count = 0
             
             for buy_pos in buy_positions:
-                if test_count >= max_tests:
+                if search_count >= max_searches:
                     break
                     
                 for sell_pos in sell_positions:
-                    if test_count >= max_tests:
+                    if search_count >= max_searches:
                         break
                         
-                    test_count += 1
+                    search_count += 1
                     total_profit = getattr(buy_pos, 'profit', 0) + getattr(sell_pos, 'profit', 0)
                     
                     # ใช้ effective_min_profit แทน self.min_net_profit
