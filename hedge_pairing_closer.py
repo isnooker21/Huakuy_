@@ -1055,6 +1055,7 @@ class HedgePairingCloser:
                         # ไม้ติดลบที่ไม่มีคู่
                 else:
                     # ไม้ที่มีคู่แล้ว
+                    pass
             
             # หา Hedge pairs ที่มีอยู่แล้ว
             existing_hedge_pairs = self._find_existing_hedge_pairs(positions)
@@ -1185,6 +1186,7 @@ class HedgePairingCloser:
             
             if hedged_positions:
                 # ไม้ที่มีคู่แล้วจะไม่ปิดเดี่ยว
+                pass
             
             # Step 2: หาไม้อื่นๆ มาจับคู่เพิ่มเติม
             for hedge_pair in hedge_pairs:
