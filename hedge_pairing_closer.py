@@ -63,9 +63,9 @@ class HedgePairingCloser:
         self.best_profit_threshold = 2.0  # หยุดเมื่อกำไรมากกว่า 2 เท่าของ threshold
         
         # 🎯 Smart Filtering for Large Portfolios
-        self.large_portfolio_threshold = 30  # ถ้ามีไม้มากกว่า 30 ตัว
-        self.max_positions_to_analyze = 20   # วิเคราะห์สูงสุด 20 ตัว
-        self.priority_filtering = True       # ใช้การกรองตามความสำคัญ
+        self.large_portfolio_threshold = 100  # ถ้ามีไม้มากกว่า 100 ตัว
+        self.max_positions_to_analyze = 50    # วิเคราะห์สูงสุด 50 ตัว
+        self.priority_filtering = True        # ใช้การกรองตามความสำคัญ
         
         # 🚨 Emergency Mode Parameters (สำหรับพอร์ตที่แย่มาก)
         self.emergency_min_net_profit = 0.01  # กำไรขั้นต่ำในโหมดฉุกเฉิน $0.01
@@ -325,10 +325,17 @@ class HedgePairingCloser:
                 logger.info("⏸️ Need at least 1 position for analysis")
                 return None
             
+            # แสดงจำนวนไม้ทั้งหมดก่อนกรอง
+            self.original_position_count = len(positions)
+            logger.info(f"📊 TOTAL POSITIONS: {len(positions)} positions")
+            
             # 🎯 Smart Position Selection สำหรับพอร์ตใหญ่
             if self.priority_filtering and len(positions) > self.large_portfolio_threshold:
+                original_count = len(positions)
                 positions = self._smart_position_selection(positions)
-                logger.info(f"🎯 Using Smart Selection: {len(positions)} positions")
+                logger.info(f"🎯 Smart Selection: {original_count} → {len(positions)} positions")
+            else:
+                logger.info(f"🎯 Using All Positions: {len(positions)} positions")
             
             logger.info(f"🔍 HEDGE ANALYSIS: {len(positions)} positions")
             
@@ -388,9 +395,15 @@ class HedgePairingCloser:
             logger.info("=" * 60)
             logger.info("💤 NO PROFITABLE COMBINATIONS FOUND")
             logger.info("=" * 60)
-            logger.info(f"📊 Current positions: {len(positions)} total")
+            logger.info(f"📊 Analyzed positions: {len(positions)} total")
             logger.info(f"📊 Buy positions: {len([p for p in positions if getattr(p, 'type', 0) == 0])}")
             logger.info(f"📊 Sell positions: {len([p for p in positions if getattr(p, 'type', 0) == 1])}")
+            
+            # แสดงข้อมูลไม้ที่ถูกกรองออก
+            if hasattr(self, 'original_position_count') and self.original_position_count > len(positions):
+                filtered_count = self.original_position_count - len(positions)
+                logger.info(f"📊 Filtered out: {filtered_count} positions (too many for analysis)")
+                logger.info(f"📊 Total positions in system: {self.original_position_count}")
             
             logger.info("-" * 40)
             logger.info("📋 DETAILED POSITION LIST")
