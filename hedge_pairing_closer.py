@@ -700,21 +700,30 @@ class HedgePairingCloser:
                         if pos_ticket not in used_positions and getattr(pos, 'profit', 0) > 0:
                             additional_positions.append(pos)
                     
-                    logger.info(f"🔍 Found {len(additional_positions)} additional profitable positions")
+                    logger.debug(f"🔍 Found {len(additional_positions)} additional profitable positions")
                     
                     # ลองเพิ่มไม้ทีละตัวจนกว่าจะได้กำไร
                     best_combination = None
                     best_profit = hedge_profit
                     
-                    for i in range(1, min(len(additional_positions) + 1, 5)):  # ลองเพิ่มสูงสุด 5 ไม้
+                    # Early termination - ลดจำนวนการทดสอบ
+                    max_attempts = min(len(additional_positions), 3)  # ลดจาก 5 เป็น 3
+                    
+                    for i in range(1, min(len(additional_positions) + 1, max_attempts + 1)):
                         for combo in itertools.combinations(additional_positions, i):
                             test_positions = [hedge_pair['buy'], hedge_pair['sell']] + list(combo)
                             test_profit = sum(getattr(pos, 'profit', 0) for pos in test_positions)
                             
-                            if test_profit > best_profit and test_profit >= self.min_net_profit:
-                                best_combination = test_positions
-                                best_profit = test_profit
+                        if test_profit > best_profit and test_profit >= self.min_net_profit:
+                            best_combination = test_positions
+                            best_profit = test_profit
+                            # ลด log output - แสดงเฉพาะเมื่อพบ combination ที่ดีขึ้นมาก
+                            if test_profit > best_profit * 1.5:  # ดีขึ้นมากกว่า 50%
                                 logger.info(f"✅ Found better combination: ${test_profit:.2f} with {len(test_positions)} positions")
+                            
+                            # Early break - หยุดเมื่อพบ combination ที่ดีพอ
+                            if test_profit >= self.min_net_profit * 2:  # กำไรมากกว่า 2 เท่าของ threshold
+                                break
                     
                     if best_combination:
                         hedge_combinations.append(HedgeCombination(
