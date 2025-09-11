@@ -184,9 +184,11 @@ class DynamicPositionModifier:
             signal = Signal(
                 symbol=getattr(target_position, 'symbol', 'XAUUSD'),
                 direction="BUY" if correction_type == 0 else "SELL",
-                entry_price=correction_price,
+                price=correction_price,  # ใช้ price แทน entry_price
                 timestamp=datetime.now(),
-                comment=f"CORRECTION_{getattr(target_position, 'ticket', 'unknown')}"
+                comment=f"CORRECTION_{getattr(target_position, 'ticket', 'unknown')}",
+                strength=50.0,  # แรงของสัญญาณปานกลาง
+                confidence=80.0  # ความมั่นใจสูง
             )
             
             order_result = order_manager.place_order_from_signal(
