@@ -48,7 +48,7 @@ class HedgePairingCloser:
         self.max_acceptable_loss = 5.0     # ขาดทุนที่ยอมรับได้ $5.0
         
         # 🚨 Emergency Mode Parameters (สำหรับพอร์ตที่แย่มาก)
-        self.emergency_min_net_profit = 0.05  # กำไรขั้นต่ำในโหมดฉุกเฉิน $0.05
+        self.emergency_min_net_profit = -100.0  # รับขาดทุนได้ในโหมดฉุกเฉิน $100.0
         self.emergency_threshold_percentage = 0.10  # 10% ในโหมดฉุกเฉิน
         
         # 🔧 Position Generation Parameters
@@ -268,7 +268,8 @@ class HedgePairingCloser:
                 volume = getattr(pos, 'volume', 0)
                 
                 # คัดกรองตามเงื่อนไข (ใช้ threshold ที่คำนวณจากค่าเฉลี่ยของเงินทุน)
-                if real_pnl >= -threshold:  # ไม่เอาไม้ที่ขาดทุนมากเกินไป
+                # รับไม้ทั้งหมด (ทั้งกำไรและขาดทุน)
+                if True:  # รับไม้ทั้งหมด
                     if volume >= 0.01:  # ไม่เอาไม้ที่เล็กเกินไป
                         if abs(real_pnl) >= 0.1:  # ไม่เอาไม้ที่กำไร/ขาดทุนน้อยเกินไป
                             filtered_positions.append(pos)
@@ -320,9 +321,9 @@ class HedgePairingCloser:
             elif self.portfolio_health_score == "ปานกลาง":
                 return 0.10  # 10%
             elif self.portfolio_health_score == "แย่":
-                return 0.12  # 12% (ลดจาก 15%)
-            else:  # แย่มาก - Emergency Mode
-                return self.emergency_threshold_percentage  # 10% ในโหมดฉุกเฉิน
+                return 0.15  # 15%
+            else:  # แย่มาก
+                return 0.20  # 20%
         except Exception as e:
             logger.error(f"Error getting threshold percentage: {e}")
             return 0.10  # Default 10%
@@ -350,11 +351,8 @@ class HedgePairingCloser:
             # เรียงตาม Priority Score (มากสุดก่อน)
             priority_scores.sort(key=lambda x: x[0], reverse=True)
             
-            # เลือกเฉพาะไม้ที่มี Priority สูง (ปรับตามสุขภาพพอร์ต)
-            if self.portfolio_health_score in ["แย่", "แย่มาก"]:
-                max_positions = min(10, len(positions))  # ลดลงเหลือ 10 ไม้สำหรับพอร์ตแย่
-            else:
-                max_positions = min(15, len(positions))  # ปกติ 15 ไม้
+            # เลือกเฉพาะไม้ที่มี Priority สูง (สูงสุด 15 ไม้)
+            max_positions = min(15, len(positions))
             priority_positions = [pos for _, pos in priority_scores[:max_positions]]
             
             logger.info(f"🎯 Priority Selection: {len(positions)} → {len(priority_positions)} positions")
@@ -374,16 +372,12 @@ class HedgePairingCloser:
             # คำนวณ Priority Score
             priority_score = 0
             
-            # ไม้ที่กำไรมาก = Priority สูงสุด
+            # ไม้ที่กำไรมาก = Priority สูง
             if real_pnl > 0:
-                priority_score += real_pnl * 15  # เพิ่มคะแนนสำหรับไม้กำไร
+                priority_score += real_pnl * 10
             
-            # ไม้ที่ขาดทุนน้อย = Priority สูง (สำหรับพอร์ตแย่)
-            elif real_pnl > -1.0:
-                priority_score += abs(real_pnl) * 8  # เพิ่มคะแนนสำหรับไม้ขาดทุนน้อย
-            
-            # ไม้ที่ขาดทุนปานกลาง = Priority ปานกลาง
-            elif real_pnl > -3.0:
+            # ไม้ที่ขาดทุนน้อย = Priority ปานกลาง
+            elif real_pnl > -2.0:
                 priority_score += abs(real_pnl) * 5
             
             # ไม้ที่ขาดทุนมาก = Priority ต่ำ
@@ -399,19 +393,9 @@ class HedgePairingCloser:
             elif self.portfolio_health_score == "ดี":
                 priority_score *= 1.1  # เพิ่ม 10%
             elif self.portfolio_health_score == "แย่":
-                # สำหรับพอร์ตแย่ ให้คะแนนไม้ขาดทุนน้อยสูงขึ้น
-                if real_pnl > -2.0:
-                    priority_score *= 1.3  # เพิ่ม 30% สำหรับไม้ขาดทุนน้อย
-                else:
-                    priority_score *= 0.9   # ลด 10% สำหรับไม้ขาดทุนมาก
+                priority_score *= 0.9   # ลด 10%
             elif self.portfolio_health_score == "แย่มาก":
-                # สำหรับพอร์ตแย่มาก ให้คะแนนไม้ขาดทุนน้อยสูงมาก
-                if real_pnl > -1.5:
-                    priority_score *= 1.5  # เพิ่ม 50% สำหรับไม้ขาดทุนน้อยมาก
-                elif real_pnl > -3.0:
-                    priority_score *= 1.2  # เพิ่ม 20% สำหรับไม้ขาดทุนปานกลาง
-                else:
-                    priority_score *= 0.8  # ลด 20% สำหรับไม้ขาดทุนมาก
+                priority_score *= 0.8  # ลด 20%
             
             return priority_score
             
@@ -517,6 +501,120 @@ class HedgePairingCloser:
         except Exception as e:
             logger.error(f"Error recording performance: {e}")
     
+    def _try_re_pairing_all_positions(self, positions: List[Any]) -> List[HedgeCombination]:
+        """🔄 ลองจับคู่ใหม่จากไม้ทั้งหมดรวม HEDGED"""
+        try:
+            combinations = []
+            
+            # แยกไม้ตามประเภท (ไม่สนใจสถานะ HEDGED)
+            buy_positions = [pos for pos in positions if getattr(pos, 'type', 0) == 0]
+            sell_positions = [pos for pos in positions if getattr(pos, 'type', 0) == 1]
+            
+            logger.info(f"🔍 Re-pairing All Positions: {len(buy_positions)} Buy, {len(sell_positions)} Sell")
+            
+            # ลองจับคู่ Buy + Sell ทุกคู่ที่เป็นไปได้ (รวม HEDGED)
+            for buy_pos in buy_positions:
+                for sell_pos in sell_positions:
+                    total_profit = getattr(buy_pos, 'profit', 0) + getattr(sell_pos, 'profit', 0)
+                    
+                    # ใช้ effective_min_profit แทน self.min_net_profit
+                    effective_min_profit = self._get_effective_min_net_profit()
+                    if total_profit >= effective_min_profit:
+                        combinations.append(HedgeCombination(
+                            positions=[buy_pos, sell_pos],
+                            total_profit=total_profit,
+                            combination_type="RE_PAIRING_ALL",
+                            size=2,
+                            confidence_score=95.0,
+                            reason=f"Re-pairing all: Buy ${getattr(buy_pos, 'profit', 0):.2f} + Sell ${getattr(sell_pos, 'profit', 0):.2f}"
+                        ))
+            
+            # เรียงตามกำไร (มากสุดก่อน)
+            combinations.sort(key=lambda x: x.total_profit, reverse=True)
+            
+            logger.info(f"🔄 Re-pairing All Positions: Found {len(combinations)} possible pairs")
+            return combinations
+            
+        except Exception as e:
+            logger.error(f"❌ Error in try re-pairing all positions: {e}")
+            return []
+    
+    def _try_alternative_pairing(self, positions: List[Any]) -> List[HedgeCombination]:
+        """🔄 ลองจับคู่ใหม่จากไม้ทั้งหมดโดยไม่สนใจสถานะ HEDGED"""
+        try:
+            combinations = []
+            
+            # แยกไม้ตามประเภท
+            buy_positions = [pos for pos in positions if getattr(pos, 'type', 0) == 0]
+            sell_positions = [pos for pos in positions if getattr(pos, 'type', 0) == 1]
+            
+            logger.info(f"🔍 Alternative Pairing: {len(buy_positions)} Buy, {len(sell_positions)} Sell")
+            
+            # ลองจับคู่ Buy + Sell ทุกคู่ที่เป็นไปได้ (ไม่สนใจสถานะ HEDGED)
+            for buy_pos in buy_positions:
+                for sell_pos in sell_positions:
+                    total_profit = getattr(buy_pos, 'profit', 0) + getattr(sell_pos, 'profit', 0)
+                    
+                    # ใช้ effective_min_profit แทน self.min_net_profit
+                    effective_min_profit = self._get_effective_min_net_profit()
+                    if total_profit >= effective_min_profit:
+                        combinations.append(HedgeCombination(
+                            positions=[buy_pos, sell_pos],
+                            total_profit=total_profit,
+                            combination_type="ALTERNATIVE_PAIR",
+                            size=2,
+                            confidence_score=90.0,
+                            reason=f"Alternative pair: Buy ${getattr(buy_pos, 'profit', 0):.2f} + Sell ${getattr(sell_pos, 'profit', 0):.2f}"
+                        ))
+            
+            # เรียงตามกำไร (มากสุดก่อน)
+            combinations.sort(key=lambda x: x.total_profit, reverse=True)
+            
+            logger.info(f"🔄 Alternative Pairing: Found {len(combinations)} possible pairs")
+            return combinations
+            
+        except Exception as e:
+            logger.error(f"❌ Error in try alternative pairing: {e}")
+            return []
+    
+    def _try_dynamic_re_pairing(self, positions: List[Any]) -> List[HedgeCombination]:
+        """🔄 ลองจับคู่ใหม่จากไม้ทั้งหมดเมื่อไม่มี Hedge Combinations"""
+        try:
+            combinations = []
+            
+            # แยกไม้ตามประเภท
+            buy_positions = [pos for pos in positions if getattr(pos, 'type', 0) == 0]
+            sell_positions = [pos for pos in positions if getattr(pos, 'type', 0) == 1]
+            
+            logger.info(f"🔍 Dynamic Re-pairing: {len(buy_positions)} Buy, {len(sell_positions)} Sell")
+            
+            # ลองจับคู่ Buy + Sell ทุกคู่ที่เป็นไปได้
+            for buy_pos in buy_positions:
+                for sell_pos in sell_positions:
+                    total_profit = getattr(buy_pos, 'profit', 0) + getattr(sell_pos, 'profit', 0)
+                    
+                    # ใช้ effective_min_profit แทน self.min_net_profit
+                    effective_min_profit = self._get_effective_min_net_profit()
+                    if total_profit >= effective_min_profit:
+                        combinations.append(HedgeCombination(
+                            positions=[buy_pos, sell_pos],
+                            total_profit=total_profit,
+                            combination_type="DYNAMIC_PAIR",
+                            size=2,
+                            confidence_score=85.0,
+                            reason=f"Dynamic pair: Buy ${getattr(buy_pos, 'profit', 0):.2f} + Sell ${getattr(sell_pos, 'profit', 0):.2f}"
+                        ))
+            
+            # เรียงตามกำไร (มากสุดก่อน)
+            combinations.sort(key=lambda x: x.total_profit, reverse=True)
+            
+            logger.info(f"🔄 Dynamic Re-pairing: Found {len(combinations)} possible pairs")
+            return combinations
+            
+        except Exception as e:
+            logger.error(f"❌ Error in try dynamic re-pairing: {e}")
+            return []
+    
     def _dynamic_re_pairing(self, hedge_pair: dict, positions: List[Any]) -> Optional[HedgeCombination]:
         """🔄 Dynamic Re-pairing - การจับคู่ใหม่แบบ Dynamic"""
         try:
@@ -581,6 +679,54 @@ class HedgePairingCloser:
                     logger.info(f"   ... and {len(hedge_combinations) - 3} more combinations")
                 logger.info("=" * 60)
                 return hedge_combinations
+            
+            # Step 2: ถ้าไม่มี Hedge Combinations ให้ลอง Dynamic Re-pairing
+            logger.info("🔄 No hedge combinations found, trying dynamic re-pairing...")
+            dynamic_combinations = self._try_dynamic_re_pairing(priority_positions)
+            
+            if dynamic_combinations:
+                logger.info("-" * 40)
+                logger.info("✅ DYNAMIC RE-PAIRING FOUND")
+                logger.info("-" * 40)
+                logger.info(f"🎯 Total combinations: {len(dynamic_combinations)}")
+                for i, combo in enumerate(dynamic_combinations[:3]):  # แสดงแค่ 3 อันแรก
+                    logger.info(f"   {i+1}. {combo.combination_type}: ${combo.total_profit:.2f} ({combo.size} positions)")
+                if len(dynamic_combinations) > 3:
+                    logger.info(f"   ... and {len(dynamic_combinations) - 3} more combinations")
+                logger.info("=" * 60)
+                return dynamic_combinations
+            
+            # Step 3: ถ้าไม่มี Dynamic Re-pairing ให้ลองจับคู่ใหม่จากไม้ทั้งหมด
+            logger.info("🔄 No dynamic combinations found, trying alternative pairing...")
+            alternative_combinations = self._try_alternative_pairing(priority_positions)
+            
+            if alternative_combinations:
+                logger.info("-" * 40)
+                logger.info("✅ ALTERNATIVE PAIRING FOUND")
+                logger.info("-" * 40)
+                logger.info(f"🎯 Total combinations: {len(alternative_combinations)}")
+                for i, combo in enumerate(alternative_combinations[:3]):  # แสดงแค่ 3 อันแรก
+                    logger.info(f"   {i+1}. {combo.combination_type}: ${combo.total_profit:.2f} ({combo.size} positions)")
+                if len(alternative_combinations) > 3:
+                    logger.info(f"   ... and {len(alternative_combinations) - 3} more combinations")
+                logger.info("=" * 60)
+                return alternative_combinations
+            
+            # Step 4: ถ้าไม่มี Alternative Pairing ให้ลองจับคู่ใหม่จากไม้ทั้งหมด (รวม HEDGED)
+            logger.info("🔄 No alternative combinations found, trying re-pairing all positions...")
+            re_pairing_combinations = self._try_re_pairing_all_positions(priority_positions)
+            
+            if re_pairing_combinations:
+                logger.info("-" * 40)
+                logger.info("✅ RE-PAIRING ALL POSITIONS FOUND")
+                logger.info("-" * 40)
+                logger.info(f"🎯 Total combinations: {len(re_pairing_combinations)}")
+                for i, combo in enumerate(re_pairing_combinations[:3]):  # แสดงแค่ 3 อันแรก
+                    logger.info(f"   {i+1}. {combo.combination_type}: ${combo.total_profit:.2f} ({combo.size} positions)")
+                if len(re_pairing_combinations) > 3:
+                    logger.info(f"   ... and {len(re_pairing_combinations) - 3} more combinations")
+                logger.info("=" * 60)
+                return re_pairing_combinations
             
             # หาไม้ที่ไม่มีคู่และไม้ที่มี Hedge แล้ว
             unpaired_profitable = []  # ไม้กำไรที่ไม่มีคู่
