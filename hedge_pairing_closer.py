@@ -963,8 +963,24 @@ class HedgePairingCloser:
                 logger.info("=" * 60)
                 return hedge_combinations
             
-            # Step 2: ถ้าไม่มี Hedge Combinations ให้ลอง Dynamic Re-pairing
-            logger.info("🔄 No hedge combinations found, trying dynamic re-pairing...")
+            # Step 2: ถ้าไม่มี Hedge Combinations ให้หาไม้ช่วยสำหรับคู่ที่ HEDGED แล้ว
+            logger.info("🔄 No hedge combinations found, looking for helping positions...")
+            helping_combinations = self._find_helping_positions_for_hedged(priority_positions)
+            
+            if helping_combinations:
+                logger.info("-" * 40)
+                logger.info("✅ HELPING POSITIONS FOUND")
+                logger.info("-" * 40)
+                logger.info(f"🎯 Total combinations: {len(helping_combinations)}")
+                for i, combo in enumerate(helping_combinations[:3]):  # แสดงแค่ 3 อันแรก
+                    logger.info(f"   {i+1}. {combo.combination_type}: ${combo.total_profit:.2f} ({combo.size} positions)")
+                if len(helping_combinations) > 3:
+                    logger.info(f"   ... and {len(helping_combinations) - 3} more combinations")
+                logger.info("=" * 60)
+                return helping_combinations
+            
+            # Step 3: ถ้าไม่มี Helping Positions ให้ลอง Dynamic Re-pairing
+            logger.info("🔄 No helping positions found, trying dynamic re-pairing...")
             dynamic_combinations = self._try_dynamic_re_pairing(priority_positions)
             
             if dynamic_combinations:
@@ -979,7 +995,7 @@ class HedgePairingCloser:
                 logger.info("=" * 60)
                 return dynamic_combinations
             
-            # Step 3: ถ้าไม่มี Dynamic Re-pairing ให้ลองจับคู่ใหม่จากไม้ทั้งหมด
+            # Step 4: ถ้าไม่มี Dynamic Re-pairing ให้ลองจับคู่ใหม่จากไม้ทั้งหมด
             logger.info("🔄 No dynamic combinations found, trying alternative pairing...")
             alternative_combinations = self._try_alternative_pairing(priority_positions)
             
@@ -994,22 +1010,6 @@ class HedgePairingCloser:
                     logger.info(f"   ... and {len(alternative_combinations) - 3} more combinations")
                 logger.info("=" * 60)
                 return alternative_combinations
-            
-            # Step 4: ถ้าไม่มี Alternative Pairing ให้ลองหาตัวช่วยสำหรับไม้ที่ HEDGED แล้ว
-            logger.info("🔄 No alternative combinations found, looking for helping positions...")
-            helping_combinations = self._find_helping_positions_for_hedged(priority_positions)
-            
-            if helping_combinations:
-                logger.info("-" * 40)
-                logger.info("✅ HELPING POSITIONS FOUND")
-                logger.info("-" * 40)
-                logger.info(f"🎯 Total combinations: {len(helping_combinations)}")
-                for i, combo in enumerate(helping_combinations[:3]):  # แสดงแค่ 3 อันแรก
-                    logger.info(f"   {i+1}. {combo.combination_type}: ${combo.total_profit:.2f} ({combo.size} positions)")
-                if len(helping_combinations) > 3:
-                    logger.info(f"   ... and {len(helping_combinations) - 3} more combinations")
-                logger.info("=" * 60)
-                return helping_combinations
             
             # หาไม้ที่ไม่มีคู่และไม้ที่มี Hedge แล้ว
             unpaired_profitable = []  # ไม้กำไรที่ไม่มีคู่
