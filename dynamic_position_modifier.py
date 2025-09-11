@@ -75,10 +75,11 @@ class PortfolioModificationPlan:
 class DynamicPositionModifier:
     """ระบบแก้ไขตำแหน่งแบบ Dynamic"""
     
-    def __init__(self, mt5_connection=None, symbol: str = "XAUUSD", hedge_pairing_closer=None):
+    def __init__(self, mt5_connection=None, symbol: str = "XAUUSD", hedge_pairing_closer=None, initial_balance: float = 10000.0):
         self.mt5_connection = mt5_connection
         self.symbol = symbol
         self.hedge_pairing_closer = hedge_pairing_closer
+        self.initial_balance = initial_balance
         
         # 🎯 Dynamic Thresholds - ปรับตัวตามสถานการณ์
         self.heavy_loss_threshold = -200.0  # Dynamic based on balance
@@ -100,6 +101,12 @@ class DynamicPositionModifier:
         self.distance_threshold = 20.0  # 20 points พื้นฐาน
         self.volatility_factor = 1.5    # ปรับตามความผันผวน
         self.max_outlier_positions = 5  # จำนวนไม้ไกลสูงสุดที่แก้ไขได้
+        
+        # 🛡️ Safety Parameters
+        self.max_correction_distance = 50.0  # ไม้ไกลเกิน 50 points หยุดแก้ไข
+        self.max_position_loss = -100.0      # ไม้ติดลบเกิน $100 หยุดแก้ไข
+        self.conservative_volume_ratio = 0.1  # ใช้ขนาดไม้ 10% ของไม้หลัก
+        self.min_improvement_threshold = 0.0  # ต้องดีขึ้นอย่างน้อย $0
         
         logger.info("🔧 Dynamic Position Modifier initialized")
     
@@ -214,14 +221,41 @@ class DynamicPositionModifier:
             return None
     
     def _calculate_correction_volume(self, target_position: Any) -> float:
-        """💰 คำนวณขนาดไม้แก้ไข"""
+        """💰 คำนวณขนาดไม้แก้ไขแบบอนุรักษ์"""
         try:
             target_volume = getattr(target_position, 'volume', 0.01)
-            # ใช้ขนาด 50% ของไม้หลัก
-            return target_volume * 0.5
+            target_profit = getattr(target_position, 'profit', 0)
+            distance = self._calculate_position_distance(target_position, 0)  # จะอัปเดตในภายหลัง
+            
+            # ใช้ขนาดอนุรักษ์ (10% ของไม้หลัก)
+            conservative_volume = target_volume * self.conservative_volume_ratio
+            
+            # ปรับตามระยะทาง
+            if distance > 30:
+                conservative_volume *= 0.5  # ลดลงครึ่งหนึ่งถ้าไกลมาก
+            elif distance > 20:
+                conservative_volume *= 0.7  # ลดลง 30% ถ้าไกลปานกลาง
+            
+            # ปรับตามกำไร/ขาดทุน
+            if target_profit < -50:  # ขาดทุนมาก
+                conservative_volume *= 0.5  # ลดลงครึ่งหนึ่ง
+            elif target_profit < 0:  # ขาดทุนน้อย
+                conservative_volume *= 0.7  # ลดลง 30%
+            
+            # ไม่เกิน 0.005 lot
+            safe_volume = min(conservative_volume, 0.005)
+            
+            logger.info(f"💰 Conservative volume calculation:")
+            logger.info(f"   Target volume: {target_volume}")
+            logger.info(f"   Conservative ratio: {self.conservative_volume_ratio}")
+            logger.info(f"   Distance factor: {distance}")
+            logger.info(f"   Profit factor: {target_profit}")
+            logger.info(f"   Final volume: {safe_volume}")
+            
+            return safe_volume
         except Exception as e:
             logger.error(f"❌ Error calculating correction volume: {e}")
-            return 0.01
+            return 0.005  # ใช้ขนาดปลอดภัย
     
     def _calculate_correction_price(self, target_position: Any, current_price: float) -> float:
         """💰 คำนวณราคาไม้แก้ไข"""
@@ -231,6 +265,145 @@ class DynamicPositionModifier:
         except Exception as e:
             logger.error(f"❌ Error calculating correction price: {e}")
             return current_price
+    
+    def _is_safe_to_create_correction(self, target_pos: Any, current_price: float) -> bool:
+        """🛡️ ตรวจสอบว่าปลอดภัยที่จะสร้างไม้แก้ไขหรือไม่"""
+        try:
+            # ตรวจสอบระยะทาง
+            distance = self._calculate_position_distance(target_pos, current_price)
+            if distance > self.max_correction_distance:
+                logger.warning(f"⚠️ Position too far ({distance:.1f} points) - not safe to correct")
+                return False
+            
+            # ตรวจสอบขาดทุน
+            profit = getattr(target_pos, 'profit', 0)
+            if profit < self.max_position_loss:
+                logger.warning(f"⚠️ Position loss too high (${profit:.2f}) - not safe to correct")
+                return False
+            
+            # ตรวจสอบพอร์ต
+            if self._is_portfolio_critical():
+                logger.warning("⚠️ Portfolio critical - not safe to create corrections")
+                return False
+            
+            return True
+        except Exception as e:
+            logger.error(f"❌ Error checking correction safety: {e}")
+            return False
+    
+    def _is_portfolio_critical(self) -> bool:
+        """🚨 ตรวจสอบว่าพอร์ตอยู่ในภาวะวิกฤตหรือไม่"""
+        try:
+            # ตรวจสอบจาก account info ถ้ามี
+            if hasattr(self, 'last_account_info'):
+                balance = self.last_account_info.get('balance', 10000)
+                margin_level = self.last_account_info.get('margin_level', 1000)
+                
+                # พอร์ตวิกฤตถ้า margin level ต่ำ
+                if margin_level < 150:
+                    return True
+                
+                # พอร์ตวิกฤตถ้า balance ลดลงมาก
+                if balance < self.initial_balance * 0.5:
+                    return True
+            
+            return False
+        except Exception as e:
+            logger.error(f"❌ Error checking portfolio critical status: {e}")
+            return False
+    
+    def _validate_correction_profitability(self, main_pos: Any, correction_pos: Any, helpers: List[Any]) -> bool:
+        """📊 ตรวจสอบว่าไม้แก้ไขจะช่วยพอร์ตหรือไม่"""
+        try:
+            # คำนวณกำไรรวมก่อนสร้างไม้แก้ไข
+            current_profit = getattr(main_pos, 'profit', 0)
+            helper_profit = sum(getattr(h, 'profit', 0) for h in helpers)
+            total_before = current_profit + helper_profit
+            
+            # คำนวณกำไรรวมหลังสร้างไม้แก้ไข (คาดการณ์)
+            estimated_correction_profit = self._estimate_correction_profit(correction_pos)
+            total_after = total_before + estimated_correction_profit
+            
+            # ต้องดีขึ้นหรืออย่างน้อยไม่แย่ลง
+            improvement = total_after - total_before
+            is_profitable = improvement >= self.min_improvement_threshold
+            
+            logger.info(f"📊 Correction profitability check:")
+            logger.info(f"   Before: ${total_before:.2f}")
+            logger.info(f"   After: ${total_after:.2f}")
+            logger.info(f"   Improvement: ${improvement:.2f}")
+            logger.info(f"   Profitable: {is_profitable}")
+            
+            return is_profitable
+        except Exception as e:
+            logger.error(f"❌ Error validating correction profitability: {e}")
+            return False
+    
+    def _estimate_correction_profit(self, correction_pos: Any) -> float:
+        """💰 คาดการณ์กำไรของไม้แก้ไข"""
+        try:
+            # ไม้แก้ไขใหม่ยังไม่มีกำไร
+            return 0.0
+        except Exception as e:
+            logger.error(f"❌ Error estimating correction profit: {e}")
+            return 0.0
+    
+    def _smart_correction_strategy(self, target_pos: Any, current_price: float) -> Optional[Dict]:
+        """🎯 กลยุทธ์แก้ไขแบบฉลาด"""
+        try:
+            target_profit = getattr(target_pos, 'profit', 0)
+            distance = self._calculate_position_distance(target_pos, current_price)
+            position_type = getattr(target_pos, 'type', 0)
+            
+            logger.info(f"🎯 Smart correction strategy for ticket {getattr(target_pos, 'ticket', 'N/A')}:")
+            logger.info(f"   Profit: ${target_profit:.2f}")
+            logger.info(f"   Distance: {distance:.1f} points")
+            logger.info(f"   Type: {'BUY' if position_type == 0 else 'SELL'}")
+            
+            # กรณีที่ 1: ไม้กำไร + ไกล → ไม่ต้องแก้ไข
+            if target_profit > 0 and distance > 20:
+                logger.info("✅ Position is profitable but far - no correction needed")
+                return None
+            
+            # กรณีที่ 2: ไม้ติดลบ + ไกล → แก้ไขแบบปลอดภัย
+            if target_profit < 0 and distance > 20:
+                if position_type == 1:  # SELL ติดลบ
+                    return {'action': 'BUY', 'reason': 'AVERAGE_DOWN'}
+                else:  # BUY ติดลบ
+                    return {'action': 'SELL', 'reason': 'AVERAGE_UP'}
+            
+            # กรณีที่ 3: ไม้ติดลบ + ใกล้ → รอให้ดีขึ้น
+            if target_profit < 0 and distance <= 20:
+                logger.info("⏰ Position is losing but close - waiting for improvement")
+                return None
+            
+            # กรณีที่ 4: ไม้กำไร + ใกล้ → ไม่ต้องแก้ไข
+            if target_profit > 0 and distance <= 20:
+                logger.info("✅ Position is profitable and close - no correction needed")
+                return None
+            
+            return None
+        except Exception as e:
+            logger.error(f"❌ Error in smart correction strategy: {e}")
+            return None
+    
+    def _cancel_correction_position(self, correction_pos: Any):
+        """❌ ยกเลิกไม้แก้ไขที่ไม่ช่วยพอร์ต"""
+        try:
+            ticket = getattr(correction_pos, 'ticket', 'N/A')
+            logger.info(f"❌ Cancelling correction position {ticket}")
+            
+            # ปิดไม้แก้ไขทันที
+            if self.mt5_connection:
+                # ส่งคำสั่งปิดไม้
+                close_result = self.mt5_connection.close_position(ticket)
+                if close_result:
+                    logger.info(f"✅ Successfully cancelled correction position {ticket}")
+                else:
+                    logger.error(f"❌ Failed to cancel correction position {ticket}")
+            
+        except Exception as e:
+            logger.error(f"❌ Error cancelling correction position: {e}")
     
     def _send_correction_to_hedge_pairing(self, correction_pos: Any, target_pos: Any):
         """📤 ส่งไม้แก้ไขไปให้ Hedge Pairing Closer"""
@@ -264,34 +437,41 @@ class DynamicPositionModifier:
                 logger.info(f"🎯 Found {len(outliers)} outlier positions that need correction")
                 prioritized_outliers = self._prioritize_outlier_positions(outliers, current_price)
                 
-                # สร้างไม้แก้ไขสำหรับไม้ไกล
+                # สร้างไม้แก้ไขสำหรับไม้ไกล (แบบปลอดภัย)
                 correction_positions = []
                 for outlier in prioritized_outliers:
                     target_pos = outlier['position']
                     distance = outlier['distance']
                     profit = getattr(target_pos, 'profit', 0)
                     
-                    # กำหนดการแก้ไขตามประเภทไม้
-                    if getattr(target_pos, 'type', 0) == 1:  # SELL
-                        if profit < 0:  # SELL ติดลบ
-                            action_type = "BUY"  # สร้าง BUY เพื่อเฉลี่ยลง
-                        else:
-                            action_type = "SELL"  # SELL กำไร
-                    else:  # BUY
-                        if profit < 0:  # BUY ติดลบ
-                            action_type = "SELL"  # สร้าง SELL เพื่อเฉลี่ยขึ้น
-                        else:
-                            action_type = "BUY"  # BUY กำไร
+                    # ตรวจสอบความปลอดภัยก่อน
+                    if not self._is_safe_to_create_correction(target_pos, current_price):
+                        logger.warning(f"⚠️ Skipping correction for ticket {getattr(target_pos, 'ticket', 'N/A')} - not safe")
+                        continue
                     
-                    # สร้างไม้แก้ไข
+                    # ใช้กลยุทธ์ฉลาด
+                    correction_strategy = self._smart_correction_strategy(target_pos, current_price)
+                    if not correction_strategy:
+                        logger.info(f"💤 No correction needed for ticket {getattr(target_pos, 'ticket', 'N/A')}")
+                        continue
+                    
+                    action_type = correction_strategy['action']
                     correction_pos = self._create_correction_position_real(target_pos, action_type, current_price)
+                    
                     if correction_pos:
-                        correction_positions.append(correction_pos)
-                        logger.info(f"🔧 Created correction for ticket {getattr(target_pos, 'ticket', 'N/A')} (distance: {distance:.1f})")
-                        
-                        # ส่งไม้แก้ไขไปให้ Hedge Pairing Closer
-                        if self.hedge_pairing_closer:
-                            self._send_correction_to_hedge_pairing(correction_pos, target_pos)
+                        # ตรวจสอบความสามารถในการช่วยพอร์ต
+                        helpers = []  # ไม้ช่วย (จะหาใน Hedge Pairing)
+                        if self._validate_correction_profitability(target_pos, correction_pos, helpers):
+                            correction_positions.append(correction_pos)
+                            logger.info(f"✅ Created safe correction for ticket {getattr(target_pos, 'ticket', 'N/A')} (distance: {distance:.1f})")
+                            
+                            # ส่งไม้แก้ไขไปให้ Hedge Pairing Closer
+                            if self.hedge_pairing_closer:
+                                self._send_correction_to_hedge_pairing(correction_pos, target_pos)
+                        else:
+                            logger.warning(f"⚠️ Correction not profitable for ticket {getattr(target_pos, 'ticket', 'N/A')} - cancelled")
+                            # ยกเลิกไม้แก้ไขที่ไม่ช่วยพอร์ต
+                            self._cancel_correction_position(correction_pos)
             
             # 2. 🔍 Individual Position Analysis (ไม้ปกติ)
             individual_modifications = []
@@ -955,9 +1135,9 @@ class DynamicPositionModifier:
     def _assess_modification_risk(self, individual: List, group: List, account_info: Dict) -> float:
         return 0.2  # Placeholder
 
-def create_dynamic_position_modifier(mt5_connection=None, symbol: str = "XAUUSD") -> DynamicPositionModifier:
+def create_dynamic_position_modifier(mt5_connection=None, symbol: str = "XAUUSD", hedge_pairing_closer=None, initial_balance: float = 10000.0) -> DynamicPositionModifier:
     """สร้าง Dynamic Position Modifier"""
-    return DynamicPositionModifier(mt5_connection, symbol)
+    return DynamicPositionModifier(mt5_connection, symbol, hedge_pairing_closer, initial_balance)
 
 if __name__ == "__main__":
     # Test the system

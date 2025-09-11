@@ -172,7 +172,8 @@ class SimpleBreakoutTradingSystemGUI:
             self.dynamic_position_modifier = create_dynamic_position_modifier(
                 mt5_connection=self.mt5_connection,
                 symbol=self.actual_symbol,
-                hedge_pairing_closer=self.hedge_pairing_closer
+                hedge_pairing_closer=self.hedge_pairing_closer,
+                initial_balance=self.initial_balance
             )
             
             # 🚫 REMOVED: dynamic_adaptive_closer initialization - Replaced by Enhanced 7D Smart Closer
