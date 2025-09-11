@@ -10,6 +10,8 @@ import time
 from typing import List, Dict, Optional, Any, Tuple
 from dataclasses import dataclass
 from datetime import datetime
+from concurrent.futures import ThreadPoolExecutor, as_completed
+import multiprocessing
 
 logger = logging.getLogger(__name__)
 
@@ -47,6 +49,24 @@ class HedgePairingCloser:
         self.min_net_profit = 0.1          # กำไรสุทธิขั้นต่ำ $0.1
         self.max_acceptable_loss = 5.0     # ขาดทุนที่ยอมรับได้ $5.0
         
+        # 🚀 Performance Optimization
+        self.use_parallel_processing = True  # ใช้การประมวลผลแบบขนาน
+        self.max_workers = min(4, multiprocessing.cpu_count())  # จำนวน thread สูงสุด
+        
+        # 🧠 Smart Caching
+        self.combination_cache = {}  # เก็บผลลัพธ์การจับคู่ไว้
+        self.cache_hit_count = 0
+        self.cache_miss_count = 0
+        
+        # ⚡ Early Termination
+        self.early_termination_threshold = 5  # หยุดเมื่อพบ 5 combinations ที่ดี
+        self.best_profit_threshold = 2.0  # หยุดเมื่อกำไรมากกว่า 2 เท่าของ threshold
+        
+        # 🎯 Smart Filtering for Large Portfolios
+        self.large_portfolio_threshold = 30  # ถ้ามีไม้มากกว่า 30 ตัว
+        self.max_positions_to_analyze = 20   # วิเคราะห์สูงสุด 20 ตัว
+        self.priority_filtering = True       # ใช้การกรองตามความสำคัญ
+        
         # 🚨 Emergency Mode Parameters (สำหรับพอร์ตที่แย่มาก)
         self.emergency_min_net_profit = 0.01  # กำไรขั้นต่ำในโหมดฉุกเฉิน $0.01
         self.emergency_threshold_percentage = 0.10  # 10% ในโหมดฉุกเฉิน
@@ -64,17 +84,152 @@ class HedgePairingCloser:
         self.mt5_connection = None  # จะถูกตั้งค่าในภายหลัง
         
         logger.info("🚀 Hedge Pairing Closer initialized")
-        logger.info(f"   Min Combination Size: {self.min_combination_size}")
-        logger.info(f"   Max Combination Size: {self.max_combination_size}")
-        logger.info(f"   Min Net Profit: ${self.min_net_profit}")
-        logger.info(f"   Position Generation: {'Enabled' if self.enable_position_generation else 'Disabled'}")
-        logger.info("   Real-time P&L: Enabled")
-        logger.info("   Portfolio Health Analysis: Enabled")
+    
+    def _parallel_search_combinations(self, positions: List[Any], search_type: str) -> List[HedgeCombination]:
+        """🚀 Parallel search for combinations using multiple threads"""
+        if not self.use_parallel_processing or len(positions) < 10:
+            return []
+        
+        combinations = []
+        
+        # แบ่ง positions เป็น chunks สำหรับ parallel processing
+        chunk_size = max(1, len(positions) // self.max_workers)
+        position_chunks = [positions[i:i + chunk_size] for i in range(0, len(positions), chunk_size)]
+        
+        def search_chunk(chunk):
+            chunk_combinations = []
+            # ค้นหา combinations ใน chunk นี้
+            for i, pos1 in enumerate(chunk):
+                for j, pos2 in enumerate(chunk[i+1:], i+1):
+                    if getattr(pos1, 'type', 0) != getattr(pos2, 'type', 0):  # ไม้ตรงข้าม
+                        total_profit = getattr(pos1, 'profit', 0) + getattr(pos2, 'profit', 0)
+                        if total_profit >= self.min_net_profit:
+                            chunk_combinations.append(HedgeCombination(
+                                positions=[pos1, pos2],
+                                total_profit=total_profit,
+                                combination_type=f"PARALLEL_{search_type}",
+                                size=2,
+                                confidence_score=85.0,
+                                reason=f"Parallel {search_type}: ${total_profit:.2f}"
+                            ))
+            return chunk_combinations
+        
+        # ใช้ ThreadPoolExecutor สำหรับ parallel processing
+        with ThreadPoolExecutor(max_workers=self.max_workers) as executor:
+            future_to_chunk = {executor.submit(search_chunk, chunk): chunk for chunk in position_chunks}
+            
+            for future in as_completed(future_to_chunk):
+                try:
+                    chunk_combinations = future.result()
+                    combinations.extend(chunk_combinations)
+                except Exception as e:
+                    logger.error(f"Error in parallel search: {e}")
+        
+        return combinations
+    
+    def _get_cache_key(self, positions: List[Any], search_type: str) -> str:
+        """สร้าง cache key จาก positions"""
+        # สร้าง key จาก ticket numbers และ profit
+        position_data = []
+        for pos in positions:
+            position_data.append(f"{getattr(pos, 'ticket', 0)}_{getattr(pos, 'profit', 0):.2f}")
+        
+        return f"{search_type}_{hash(tuple(sorted(position_data)))}"
+    
+    def _get_cached_combinations(self, positions: List[Any], search_type: str) -> Optional[List[HedgeCombination]]:
+        """ดึงผลลัพธ์จาก cache"""
+        cache_key = self._get_cache_key(positions, search_type)
+        
+        if cache_key in self.combination_cache:
+            self.cache_hit_count += 1
+            logger.debug(f"🎯 Cache HIT for {search_type}")
+            return self.combination_cache[cache_key]
+        
+        self.cache_miss_count += 1
+        return None
+    
+    def _cache_combinations(self, positions: List[Any], search_type: str, combinations: List[HedgeCombination]):
+        """เก็บผลลัพธ์ใน cache"""
+        cache_key = self._get_cache_key(positions, search_type)
+        self.combination_cache[cache_key] = combinations
+        
+        # จำกัดขนาด cache
+        if len(self.combination_cache) > 100:
+            # ลบ cache เก่าออก
+            oldest_key = next(iter(self.combination_cache))
+            del self.combination_cache[oldest_key]
+    
+    def _should_terminate_early(self, combinations: List[HedgeCombination], current_profit: float) -> bool:
+        """ตรวจสอบว่าควรหยุดการค้นหาเร็วหรือไม่"""
+        # หยุดเมื่อพบ combinations เพียงพอ
+        if len(combinations) >= self.early_termination_threshold:
+            return True
+        
+        # หยุดเมื่อกำไรมากกว่า threshold
+        if current_profit >= self.min_net_profit * self.best_profit_threshold:
+            return True
+        
+        return False
+    
+    def _smart_position_selection(self, positions: List[Any]) -> List[Any]:
+        """🎯 เลือกไม้ที่สำคัญที่สุดสำหรับการวิเคราะห์"""
+        if len(positions) <= self.large_portfolio_threshold:
+            return positions  # ไม่ต้องกรองถ้าไม้ไม่เยอะ
+        
+        logger.info(f"🎯 Smart Selection: {len(positions)} → {self.max_positions_to_analyze} positions")
+        
+        # แยกไม้ตามประเภท
+        buy_positions = [pos for pos in positions if getattr(pos, 'type', 0) == 0]
+        sell_positions = [pos for pos in positions if getattr(pos, 'type', 0) == 1]
+        
+        # คำนวณ priority score สำหรับแต่ละไม้
+        def calculate_priority_score(pos):
+            profit = getattr(pos, 'profit', 0)
+            volume = getattr(pos, 'volume', 0.01)
+            
+            # ไม้ที่ขาดทุนมาก = priority สูง (ต้องปิดก่อน)
+            # ไม้ที่กำไรมาก = priority สูง (ใช้ช่วยได้)
+            if profit < 0:
+                return abs(profit) * 10  # ขาดทุนมาก = priority สูง
+            else:
+                return profit * 5  # กำไรมาก = priority สูง
+        
+        # เรียงตาม priority score
+        buy_positions.sort(key=calculate_priority_score, reverse=True)
+        sell_positions.sort(key=calculate_priority_score, reverse=True)
+        
+        # เลือกไม้ที่สำคัญที่สุด
+        selected_buy = buy_positions[:self.max_positions_to_analyze // 2]
+        selected_sell = sell_positions[:self.max_positions_to_analyze // 2]
+        
+        selected_positions = selected_buy + selected_sell
+        
+        logger.info(f"📊 Selected: {len(selected_buy)} Buy, {len(selected_sell)} Sell")
+        
+        return selected_positions
     
     def set_mt5_connection(self, mt5_connection):
         """ตั้งค่า MT5 Connection สำหรับ Real-time P&L"""
         self.mt5_connection = mt5_connection
         logger.info("🔗 MT5 Connection set for Real-time P&L")
+    
+    def get_performance_stats(self) -> Dict[str, Any]:
+        """📊 ดูสถิติประสิทธิภาพของระบบ"""
+        total_cache_requests = self.cache_hit_count + self.cache_miss_count
+        cache_hit_rate = (self.cache_hit_count / total_cache_requests * 100) if total_cache_requests > 0 else 0
+        
+        return {
+            'cache_hit_rate': f"{cache_hit_rate:.1f}%",
+            'cache_hits': self.cache_hit_count,
+            'cache_misses': self.cache_miss_count,
+            'cached_combinations': len(self.combination_cache),
+            'parallel_processing': self.use_parallel_processing,
+            'max_workers': self.max_workers,
+            'early_termination_threshold': self.early_termination_threshold,
+            'smart_filtering': self.priority_filtering,
+            'large_portfolio_threshold': self.large_portfolio_threshold,
+            'max_positions_to_analyze': self.max_positions_to_analyze
+        }
     
     def _get_real_time_pnl(self, position: Any) -> float:
         """ดึง Floating P&L แบบ Real-time"""
@@ -166,6 +321,11 @@ class HedgePairingCloser:
             if len(positions) < 1:
                 logger.info("⏸️ Need at least 1 position for analysis")
                 return None
+            
+            # 🎯 Smart Position Selection สำหรับพอร์ตใหญ่
+            if self.priority_filtering and len(positions) > self.large_portfolio_threshold:
+                positions = self._smart_position_selection(positions)
+                logger.info(f"🎯 Using Smart Selection: {len(positions)} positions")
             
             logger.info(f"🔍 HEDGE ANALYSIS: {len(positions)} positions")
             
@@ -544,19 +704,19 @@ class HedgePairingCloser:
             
             logger.debug(f"📉 Found {len(hedged_losing_pairs)} losing hedge pairs")
             
-            # ลองเพิ่มไม้กำไรที่ยังไม่ได้ใช้มาช่วยคู่ที่ติดลบ (จำกัดจำนวนการทดสอบ)
-            max_tests = min(50, len(hedged_losing_pairs) * len(profitable_unpaired))  # จำกัดการทดสอบสูงสุด 50 ครั้ง
-            test_count = 0
+            # ลองเพิ่มไม้กำไรที่ยังไม่ได้ใช้มาช่วยคู่ที่ติดลบ (จำกัดจำนวนการค้นหา)
+            max_searches = min(50, len(hedged_losing_pairs) * len(profitable_unpaired))  # จำกัดการค้นหาสูงสุด 50 ครั้ง
+            search_count = 0
             
             for losing_pair in hedged_losing_pairs:
-                if test_count >= max_tests:
+                if search_count >= max_searches:
                     break
                     
                 for helper_pos in profitable_unpaired:
-                    if test_count >= max_tests:
+                    if search_count >= max_searches:
                         break
                         
-                    test_count += 1
+                    search_count += 1
                     total_profit = losing_pair['profit'] + getattr(helper_pos, 'profit', 0)
                     
                     if total_profit >= self.min_net_profit:
@@ -639,19 +799,19 @@ class HedgePairingCloser:
             
             logger.info(f"🔍 Alternative Pairing: {len(buy_positions)} Buy, {len(sell_positions)} Sell")
             
-            # ลองจับคู่ Buy + Sell ทุกคู่ที่เป็นไปได้ (จำกัดจำนวนการทดสอบ)
-            max_tests = min(100, len(buy_positions) * len(sell_positions))  # จำกัดการทดสอบสูงสุด 100 ครั้ง
-            test_count = 0
+            # ลองจับคู่ Buy + Sell ทุกคู่ที่เป็นไปได้ (จำกัดจำนวนการค้นหา)
+            max_searches = min(100, len(buy_positions) * len(sell_positions))  # จำกัดการค้นหาสูงสุด 100 ครั้ง
+            search_count = 0
             
             for buy_pos in buy_positions:
-                if test_count >= max_tests:
+                if search_count >= max_searches:
                     break
                     
                 for sell_pos in sell_positions:
-                    if test_count >= max_tests:
+                    if search_count >= max_searches:
                         break
                         
-                    test_count += 1
+                    search_count += 1
                     total_profit = getattr(buy_pos, 'profit', 0) + getattr(sell_pos, 'profit', 0)
                     
                     # ใช้ effective_min_profit แทน self.min_net_profit
@@ -694,9 +854,9 @@ class HedgePairingCloser:
             
             logger.info(f"🔍 Dynamic Re-pairing: {len(buy_positions)} Buy, {len(sell_positions)} Sell")
             
-            # ลองจับคู่ Buy + Sell ทุกคู่ที่เป็นไปได้ (จำกัดจำนวนการทดสอบ)
-            max_tests = min(50, len(buy_positions) * len(sell_positions))  # จำกัดการทดสอบสูงสุด 50 ครั้ง
-            test_count = 0
+            # ลองจับคู่ Buy + Sell ทุกคู่ที่เป็นไปได้ (จำกัดจำนวนการค้นหา)
+            max_searches = min(50, len(buy_positions) * len(sell_positions))  # จำกัดการค้นหาสูงสุด 50 ครั้ง
+            search_count = 0
             
             for buy_pos in buy_positions:
                 if test_count >= max_tests:
