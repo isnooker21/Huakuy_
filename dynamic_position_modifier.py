@@ -105,7 +105,7 @@ class DynamicPositionModifier:
         # 🛡️ Safety Parameters
         self.max_correction_distance = 50.0  # ไม้ไกลเกิน 50 points หยุดแก้ไข
         self.max_position_loss = -100.0      # ไม้ติดลบเกิน $100 หยุดแก้ไข
-        self.conservative_volume_ratio = 0.1  # ใช้ขนาดไม้ 10% ของไม้หลัก
+        self.min_volume_threshold = 0.01     # ขั้นต่ำของโบรก 0.01 lot
         self.min_improvement_threshold = 0.0  # ต้องดีขึ้นอย่างน้อย $0
         
         logger.info("🔧 Dynamic Position Modifier initialized")
@@ -221,41 +221,27 @@ class DynamicPositionModifier:
             return None
     
     def _calculate_correction_volume(self, target_position: Any) -> float:
-        """💰 คำนวณขนาดไม้แก้ไขแบบอนุรักษ์"""
+        """💰 คำนวณขนาดไม้แก้ไข (ใช้ขนาดเดียวกับไม้หลัก)"""
         try:
             target_volume = getattr(target_position, 'volume', 0.01)
-            target_profit = getattr(target_position, 'profit', 0)
-            distance = self._calculate_position_distance(target_position, 0)  # จะอัปเดตในภายหลัง
             
-            # ใช้ขนาดอนุรักษ์ (10% ของไม้หลัก)
-            conservative_volume = target_volume * self.conservative_volume_ratio
+            # ใช้ขนาดเดียวกับไม้หลัก
+            correction_volume = target_volume
             
-            # ปรับตามระยะทาง
-            if distance > 30:
-                conservative_volume *= 0.5  # ลดลงครึ่งหนึ่งถ้าไกลมาก
-            elif distance > 20:
-                conservative_volume *= 0.7  # ลดลง 30% ถ้าไกลปานกลาง
+            # ตรวจสอบขั้นต่ำของโบรก (0.01 lot)
+            if correction_volume < 0.01:
+                correction_volume = 0.01
+                logger.warning(f"⚠️ Correction volume too small, using minimum 0.01 lot")
             
-            # ปรับตามกำไร/ขาดทุน
-            if target_profit < -50:  # ขาดทุนมาก
-                conservative_volume *= 0.5  # ลดลงครึ่งหนึ่ง
-            elif target_profit < 0:  # ขาดทุนน้อย
-                conservative_volume *= 0.7  # ลดลง 30%
-            
-            # ไม่เกิน 0.005 lot
-            safe_volume = min(conservative_volume, 0.005)
-            
-            logger.info(f"💰 Conservative volume calculation:")
+            logger.info(f"💰 Correction volume calculation:")
             logger.info(f"   Target volume: {target_volume}")
-            logger.info(f"   Conservative ratio: {self.conservative_volume_ratio}")
-            logger.info(f"   Distance factor: {distance}")
-            logger.info(f"   Profit factor: {target_profit}")
-            logger.info(f"   Final volume: {safe_volume}")
+            logger.info(f"   Correction volume: {correction_volume}")
+            logger.info(f"   Strategy: Same as main position")
             
-            return safe_volume
+            return correction_volume
         except Exception as e:
             logger.error(f"❌ Error calculating correction volume: {e}")
-            return 0.005  # ใช้ขนาดปลอดภัย
+            return 0.01  # ใช้ขนาดขั้นต่ำ
     
     def _calculate_correction_price(self, target_position: Any, current_price: float) -> float:
         """💰 คำนวณราคาไม้แก้ไข"""
