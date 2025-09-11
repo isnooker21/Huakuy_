@@ -10,6 +10,7 @@ from datetime import datetime, timedelta
 from dataclasses import dataclass
 from enum import Enum
 import math
+import time
 
 logger = logging.getLogger(__name__)
 
@@ -74,9 +75,10 @@ class PortfolioModificationPlan:
 class DynamicPositionModifier:
     """ระบบแก้ไขตำแหน่งแบบ Dynamic"""
     
-    def __init__(self, mt5_connection=None, symbol: str = "XAUUSD"):
+    def __init__(self, mt5_connection=None, symbol: str = "XAUUSD", hedge_pairing_closer=None):
         self.mt5_connection = mt5_connection
         self.symbol = symbol
+        self.hedge_pairing_closer = hedge_pairing_closer
         
         # 🎯 Dynamic Thresholds - ปรับตัวตามสถานการณ์
         self.heavy_loss_threshold = -200.0  # Dynamic based on balance
@@ -94,7 +96,159 @@ class DynamicPositionModifier:
         self.failure_history = {}
         self.adaptation_rate = 0.1
         
+        # 🎯 Outlier Detection Parameters
+        self.distance_threshold = 20.0  # 20 points พื้นฐาน
+        self.volatility_factor = 1.5    # ปรับตามความผันผวน
+        self.max_outlier_positions = 5  # จำนวนไม้ไกลสูงสุดที่แก้ไขได้
+        
         logger.info("🔧 Dynamic Position Modifier initialized")
+    
+    def _calculate_position_distance(self, position: Any, current_price: float) -> float:
+        """📏 คำนวณระยะทางของไม้จากราคาปัจจุบัน"""
+        try:
+            open_price = getattr(position, 'price_open', current_price)
+            distance = abs(open_price - current_price)
+            return distance
+        except Exception as e:
+            logger.error(f"❌ Error calculating position distance: {e}")
+            return 0.0
+    
+    def _detect_outlier_positions(self, positions: List[Any], current_price: float) -> List[Any]:
+        """🔍 ตรวจจับไม้ที่อยู่ขอบนอก (ไกลจากราคาปัจจุบัน)"""
+        try:
+            outliers = []
+            for pos in positions:
+                distance = self._calculate_position_distance(pos, current_price)
+                if distance > self.distance_threshold:
+                    outliers.append({
+                        'position': pos,
+                        'distance': distance,
+                        'ticket': getattr(pos, 'ticket', 'N/A'),
+                        'profit': getattr(pos, 'profit', 0)
+                    })
+            
+            logger.info(f"🎯 Outlier Detection: Found {len(outliers)} outlier positions")
+            return outliers
+        except Exception as e:
+            logger.error(f"❌ Error detecting outlier positions: {e}")
+            return []
+    
+    def _prioritize_outlier_positions(self, outliers: List[Dict], current_price: float) -> List[Dict]:
+        """📊 จัดลำดับความสำคัญของไม้ไกล"""
+        try:
+            for outlier in outliers:
+                pos = outlier['position']
+                distance = outlier['distance']
+                profit = getattr(pos, 'profit', 0)
+                volume = getattr(pos, 'volume', 0.01)
+                
+                # คำนวณ priority score (ยิ่งไกล + ขาดทุนเยอะ = priority สูง)
+                priority_score = (distance * 0.5) + (abs(profit) * 0.3) + (volume * 100)
+                outlier['priority_score'] = priority_score
+            
+            # เรียงตาม priority (มากสุดก่อน)
+            outliers.sort(key=lambda x: x['priority_score'], reverse=True)
+            
+            # จำกัดจำนวนไม้ที่แก้ไขได้
+            return outliers[:self.max_outlier_positions]
+        except Exception as e:
+            logger.error(f"❌ Error prioritizing outlier positions: {e}")
+            return outliers
+    
+    def _create_correction_position_real(self, target_position: Any, action_type: str, 
+                                       current_price: float) -> Optional[Any]:
+        """🔄 สร้างไม้แก้ไขจริงผ่าน MT5"""
+        try:
+            if not self.mt5_connection:
+                logger.warning("⚠️ No MT5 connection available for creating correction position")
+                return None
+            
+            # คำนวณพารามิเตอร์ไม้แก้ไข
+            correction_volume = self._calculate_correction_volume(target_position)
+            correction_price = self._calculate_correction_price(target_position, current_price)
+            correction_type = 0 if action_type == "BUY" else 1
+            
+            # ส่ง Order ผ่าน MT5 (ใช้ order_management.py)
+            from order_management import OrderManager
+            order_manager = OrderManager(self.mt5_connection)
+            
+            # สร้าง Signal object สำหรับ Order
+            from trading_conditions import Signal
+            signal = Signal(
+                symbol=getattr(target_position, 'symbol', 'XAUUSD'),
+                direction="BUY" if correction_type == 0 else "SELL",
+                entry_price=correction_price,
+                timestamp=datetime.now(),
+                comment=f"CORRECTION_{getattr(target_position, 'ticket', 'unknown')}"
+            )
+            
+            order_result = order_manager.place_order_from_signal(
+                signal, correction_volume, 10000.0  # ใช้ balance จำลอง
+            )
+            
+            if order_result.success:
+                # สร้าง Position object
+                correction_pos = type('Position', (), {
+                    'ticket': order_result.ticket,
+                    'symbol': getattr(target_position, 'symbol', 'XAUUSD'),
+                    'type': correction_type,
+                    'volume': correction_volume,
+                    'price_open': correction_price,
+                    'price_current': correction_price,
+                    'profit': 0.0,
+                    'position_role': 'CORRECTION',
+                    'correction_target': getattr(target_position, 'ticket', 'unknown'),
+                    'creation_reason': action_type,
+                    'time': int(time.time()),
+                    'comment': f"CORRECTION_{getattr(target_position, 'ticket', 'unknown')}"
+                })()
+                
+                logger.info(f"✅ Created correction position: {correction_pos.ticket} for target {target_position.ticket}")
+                return correction_pos
+            else:
+                logger.error(f"❌ Failed to create correction position: {order_result.error_message}")
+                return None
+                
+        except Exception as e:
+            logger.error(f"❌ Error creating correction position: {e}")
+            return None
+    
+    def _calculate_correction_volume(self, target_position: Any) -> float:
+        """💰 คำนวณขนาดไม้แก้ไข"""
+        try:
+            target_volume = getattr(target_position, 'volume', 0.01)
+            # ใช้ขนาด 50% ของไม้หลัก
+            return target_volume * 0.5
+        except Exception as e:
+            logger.error(f"❌ Error calculating correction volume: {e}")
+            return 0.01
+    
+    def _calculate_correction_price(self, target_position: Any, current_price: float) -> float:
+        """💰 คำนวณราคาไม้แก้ไข"""
+        try:
+            # ใช้ราคาปัจจุบัน
+            return current_price
+        except Exception as e:
+            logger.error(f"❌ Error calculating correction price: {e}")
+            return current_price
+    
+    def _send_correction_to_hedge_pairing(self, correction_pos: Any, target_pos: Any):
+        """📤 ส่งไม้แก้ไขไปให้ Hedge Pairing Closer"""
+        try:
+            if not self.hedge_pairing_closer:
+                return
+            
+            # เพิ่มไม้แก้ไขเข้าไปในรายการไม้ทั้งหมด
+            logger.info(f"📤 Sending correction position {getattr(correction_pos, 'ticket', 'N/A')} to Hedge Pairing Closer")
+            logger.info(f"   Target: {getattr(target_pos, 'ticket', 'N/A')}")
+            logger.info(f"   Role: {getattr(correction_pos, 'position_role', 'UNKNOWN')}")
+            logger.info(f"   Reason: {getattr(correction_pos, 'creation_reason', 'UNKNOWN')}")
+            
+            # ระบบจะใช้ไม้แก้ไขในการจับคู่ต่อไป
+            # Hedge Pairing Closer จะรู้ว่าไม้นี้เป็นไม้แก้ไขและต้องปิดพร้อมไม้หลัก
+            
+        except Exception as e:
+            logger.error(f"❌ Error sending correction to hedge pairing: {e}")
     
     def analyze_portfolio_modifications(self, positions: List[Any], account_info: Dict,
                                       current_price: float) -> PortfolioModificationPlan:
@@ -104,7 +258,42 @@ class DynamicPositionModifier:
         try:
             logger.info(f"🔍 DYNAMIC PORTFOLIO MODIFICATION ANALYSIS: {len(positions)} positions")
             
-            # 1. 🔍 Individual Position Analysis
+            # 1. 🎯 Outlier Detection - ตรวจจับไม้ไกล
+            outliers = self._detect_outlier_positions(positions, current_price)
+            if outliers:
+                logger.info(f"🎯 Found {len(outliers)} outlier positions that need correction")
+                prioritized_outliers = self._prioritize_outlier_positions(outliers, current_price)
+                
+                # สร้างไม้แก้ไขสำหรับไม้ไกล
+                correction_positions = []
+                for outlier in prioritized_outliers:
+                    target_pos = outlier['position']
+                    distance = outlier['distance']
+                    profit = getattr(target_pos, 'profit', 0)
+                    
+                    # กำหนดการแก้ไขตามประเภทไม้
+                    if getattr(target_pos, 'type', 0) == 1:  # SELL
+                        if profit < 0:  # SELL ติดลบ
+                            action_type = "BUY"  # สร้าง BUY เพื่อเฉลี่ยลง
+                        else:
+                            action_type = "SELL"  # SELL กำไร
+                    else:  # BUY
+                        if profit < 0:  # BUY ติดลบ
+                            action_type = "SELL"  # สร้าง SELL เพื่อเฉลี่ยขึ้น
+                        else:
+                            action_type = "BUY"  # BUY กำไร
+                    
+                    # สร้างไม้แก้ไข
+                    correction_pos = self._create_correction_position_real(target_pos, action_type, current_price)
+                    if correction_pos:
+                        correction_positions.append(correction_pos)
+                        logger.info(f"🔧 Created correction for ticket {getattr(target_pos, 'ticket', 'N/A')} (distance: {distance:.1f})")
+                        
+                        # ส่งไม้แก้ไขไปให้ Hedge Pairing Closer
+                        if self.hedge_pairing_closer:
+                            self._send_correction_to_hedge_pairing(correction_pos, target_pos)
+            
+            # 2. 🔍 Individual Position Analysis (ไม้ปกติ)
             individual_modifications = []
             for position in positions:
                 modification = self._analyze_individual_position(position, current_price, account_info)
