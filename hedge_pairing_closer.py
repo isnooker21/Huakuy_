@@ -83,6 +83,9 @@ class HedgePairingCloser:
         self.performance_history = []  # ประวัติประสิทธิภาพ
         self.mt5_connection = None  # จะถูกตั้งค่าในภายหลัง
         
+        # ⏰ Advanced Search Timing (1 hour delay)
+        self.last_advanced_search_time = 0  # เวลาล่าสุดที่ทำ Advanced Search
+        
         logger.info("🚀 Hedge Pairing Closer initialized")
     
     def _parallel_search_combinations(self, positions: List[Any], search_type: str) -> List[HedgeCombination]:
@@ -979,37 +982,54 @@ class HedgePairingCloser:
                 logger.info("=" * 60)
                 return helping_combinations
             
-            # Step 3: ถ้าไม่มี Helping Positions ให้ลอง Dynamic Re-pairing
-            logger.info("🔄 No helping positions found, trying dynamic re-pairing...")
-            dynamic_combinations = self._try_dynamic_re_pairing(priority_positions)
+            # Step 3-4: Advanced Search (ทุก 1 ชั่วโมงเท่านั้น)
+            current_time = time.time()
+            should_run_advanced = (current_time - self.last_advanced_search_time) >= 3600  # 1 ชั่วโมง = 3600 วินาที
             
-            if dynamic_combinations:
-                logger.info("-" * 40)
-                logger.info("✅ DYNAMIC RE-PAIRING FOUND")
-                logger.info("-" * 40)
-                logger.info(f"🎯 Total combinations: {len(dynamic_combinations)}")
-                for i, combo in enumerate(dynamic_combinations[:3]):  # แสดงแค่ 3 อันแรก
-                    logger.info(f"   {i+1}. {combo.combination_type}: ${combo.total_profit:.2f} ({combo.size} positions)")
-                if len(dynamic_combinations) > 3:
-                    logger.info(f"   ... and {len(dynamic_combinations) - 3} more combinations")
-                logger.info("=" * 60)
-                return dynamic_combinations
-            
-            # Step 4: ถ้าไม่มี Dynamic Re-pairing ให้ลองจับคู่ใหม่จากไม้ทั้งหมด
-            logger.info("🔄 No dynamic combinations found, trying alternative pairing...")
-            alternative_combinations = self._try_alternative_pairing(priority_positions)
-            
-            if alternative_combinations:
-                logger.info("-" * 40)
-                logger.info("✅ ALTERNATIVE PAIRING FOUND")
-                logger.info("-" * 40)
-                logger.info(f"🎯 Total combinations: {len(alternative_combinations)}")
-                for i, combo in enumerate(alternative_combinations[:3]):  # แสดงแค่ 3 อันแรก
-                    logger.info(f"   {i+1}. {combo.combination_type}: ${combo.total_profit:.2f} ({combo.size} positions)")
-                if len(alternative_combinations) > 3:
-                    logger.info(f"   ... and {len(alternative_combinations) - 3} more combinations")
-                logger.info("=" * 60)
-                return alternative_combinations
+            if should_run_advanced:
+                logger.info("⏰ Running advanced search (1+ hour since last run)")
+                
+                # Step 3: Dynamic Re-pairing
+                logger.info("🔄 No helping positions found, trying dynamic re-pairing...")
+                dynamic_combinations = self._try_dynamic_re_pairing(priority_positions)
+                
+                if dynamic_combinations:
+                    logger.info("-" * 40)
+                    logger.info("✅ DYNAMIC RE-PAIRING FOUND")
+                    logger.info("-" * 40)
+                    logger.info(f"🎯 Total combinations: {len(dynamic_combinations)}")
+                    for i, combo in enumerate(dynamic_combinations[:3]):  # แสดงแค่ 3 อันแรก
+                        logger.info(f"   {i+1}. {combo.combination_type}: ${combo.total_profit:.2f} ({combo.size} positions)")
+                    if len(dynamic_combinations) > 3:
+                        logger.info(f"   ... and {len(dynamic_combinations) - 3} more combinations")
+                    logger.info("=" * 60)
+                    self.last_advanced_search_time = current_time  # อัปเดตเวลา
+                    return dynamic_combinations
+                
+                # Step 4: Alternative Pairing
+                logger.info("🔄 No dynamic combinations found, trying alternative pairing...")
+                alternative_combinations = self._try_alternative_pairing(priority_positions)
+                
+                if alternative_combinations:
+                    logger.info("-" * 40)
+                    logger.info("✅ ALTERNATIVE PAIRING FOUND")
+                    logger.info("-" * 40)
+                    logger.info(f"🎯 Total combinations: {len(alternative_combinations)}")
+                    for i, combo in enumerate(alternative_combinations[:3]):  # แสดงแค่ 3 อันแรก
+                        logger.info(f"   {i+1}. {combo.combination_type}: ${combo.total_profit:.2f} ({combo.size} positions)")
+                    if len(alternative_combinations) > 3:
+                        logger.info(f"   ... and {len(alternative_combinations) - 3} more combinations")
+                    logger.info("=" * 60)
+                    self.last_advanced_search_time = current_time  # อัปเดตเวลา
+                    return alternative_combinations
+                
+                # อัปเดตเวลาแม้ไม่เจอ combination
+                self.last_advanced_search_time = current_time
+                logger.info("⏰ Advanced search completed, next run in 1 hour")
+            else:
+                time_remaining = 3600 - (current_time - self.last_advanced_search_time)
+                minutes_remaining = int(time_remaining / 60)
+                logger.info(f"⏰ Advanced search skipped ({minutes_remaining} min until next run)")
             
             # หาไม้ที่ไม่มีคู่และไม้ที่มี Hedge แล้ว
             unpaired_profitable = []  # ไม้กำไรที่ไม่มีคู่
