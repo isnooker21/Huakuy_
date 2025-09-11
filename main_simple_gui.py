@@ -2,7 +2,7 @@
 """
 🚀 Simple Breakout Trading System with GUI
 ==========================================
-#a6890fa5c048807e4fbb2653aa8d92f60237c430 <<< commit file ที่ใช้งานสมบูณ
+#85726dba89c0b032198ead4b3d0b292f01d7a23d <<< commit file ที่ใช้งานสมบูณ
 NEW ENTRY LOGIC:
 ✅ BUY: current.close > previous.high
 ✅ SELL: current.close < previous.low
@@ -171,7 +171,8 @@ class SimpleBreakoutTradingSystemGUI:
             
             self.dynamic_position_modifier = create_dynamic_position_modifier(
                 mt5_connection=self.mt5_connection,
-                symbol=self.actual_symbol
+                symbol=self.actual_symbol,
+                hedge_pairing_closer=self.hedge_pairing_closer
             )
             
             # 🚫 REMOVED: dynamic_adaptive_closer initialization - Replaced by Enhanced 7D Smart Closer
