@@ -405,17 +405,8 @@ class HedgePairingCloser:
                 logger.info(f"📊 Filtered out: {filtered_count} positions (too many for analysis)")
                 logger.info(f"📊 Total positions in system: {self.original_position_count}")
             
-            logger.info("-" * 40)
-            logger.info("📋 DETAILED POSITION LIST")
-            logger.info("-" * 40)
-            # แสดงข้อมูลไม้ทั้งหมด
-            for pos in positions:
-                pos_type = "BUY" if getattr(pos, 'type', 0) == 0 else "SELL"
-                profit = getattr(pos, 'profit', 0)
-                ticket = getattr(pos, 'ticket', 'N/A')
-                has_hedge = self._has_hedge_pair(positions, pos)
-                hedge_status = "🔗 HEDGED" if has_hedge else "💤 NO HEDGE"
-                logger.info(f"   {ticket}: {pos_type} ${profit:.2f} - {hedge_status}")
+            # แสดงเฉพาะจำนวนสุทธิ
+            logger.info(f"📊 Summary: {len(positions)} positions analyzed")
             
             logger.info("=" * 60)
             
@@ -979,8 +970,8 @@ class HedgePairingCloser:
                 logger.info("=" * 60)
                 return hedge_combinations
             
-            # Step 2: ถ้าไม่มี Hedge Combinations ให้หาไม้ช่วยสำหรับคู่ที่ HEDGED แล้ว
-            logger.info("🔄 No hedge combinations found, looking for helping positions...")
+            # Step 2: หาไม้ช่วยสำหรับคู่ที่ HEDGED แล้ว
+            logger.info("🔍 STEP 2: HELPING POSITIONS")
             helping_combinations = self._find_helping_positions_for_hedged(priority_positions)
             
             if helping_combinations:
@@ -1003,7 +994,7 @@ class HedgePairingCloser:
                 logger.info("⏰ Running advanced search (1+ hour since last run)")
                 
                 # Step 3: Dynamic Re-pairing
-                logger.info("🔄 No helping positions found, trying dynamic re-pairing...")
+                logger.info("🔍 STEP 3: DYNAMIC RE-PAIRING")
                 dynamic_combinations = self._try_dynamic_re_pairing(priority_positions)
                 
                 if dynamic_combinations:
@@ -1020,7 +1011,7 @@ class HedgePairingCloser:
                     return dynamic_combinations
                 
                 # Step 4: Alternative Pairing
-                logger.info("🔄 No dynamic combinations found, trying alternative pairing...")
+                logger.info("🔍 STEP 4: ALTERNATIVE PAIRING")
                 alternative_combinations = self._try_alternative_pairing(priority_positions)
                 
                 if alternative_combinations:
@@ -1058,22 +1049,23 @@ class HedgePairingCloser:
                 if not has_hedge:
                     if pos_profit >= self.min_net_profit:
                         unpaired_profitable.append(pos)
-                        logger.info(f"🔍 Unpaired profitable position: {pos_ticket} (${pos_profit:.2f})")
+                        # ไม้กำไรที่ไม่มีคู่
                     else:
                         unpaired_losing.append(pos)
-                        logger.info(f"🔍 Unpaired losing position: {pos_ticket} (${pos_profit:.2f}) - waiting for opposite")
+                        # ไม้ติดลบที่ไม่มีคู่
                 else:
-                    logger.info(f"🔍 Hedged position: {pos_ticket} (${pos_profit:.2f})")
+                    # ไม้ที่มีคู่แล้ว
             
             # หา Hedge pairs ที่มีอยู่แล้ว
             existing_hedge_pairs = self._find_existing_hedge_pairs(positions)
             
-            logger.info("-" * 40)
+            logger.info("=" * 50)
             logger.info("📊 POSITION STATUS SUMMARY")
-            logger.info("-" * 40)
+            logger.info("=" * 50)
             logger.info(f"💰 Unpaired profitable: {len(unpaired_profitable)}")
             logger.info(f"📉 Unpaired losing: {len(unpaired_losing)}")
             logger.info(f"🔗 Existing hedge pairs: {len(existing_hedge_pairs)}")
+            logger.info("=" * 50)
             
             # หาการรวมที่ดีที่สุด: ไม้กำไรที่ไม่มีคู่ + Hedge pairs ที่ติดลบ
             profitable_combinations = self._find_helping_combinations(unpaired_profitable, existing_hedge_pairs)
@@ -1192,8 +1184,7 @@ class HedgePairingCloser:
                     hedged_positions.append(getattr(pos, 'ticket', 'N/A'))
             
             if hedged_positions:
-                logger.info(f"🔗 Hedged positions: {hedged_positions}")
-                logger.info(f"⚠️  These positions will NOT be closed individually - waiting for additional positions")
+                # ไม้ที่มีคู่แล้วจะไม่ปิดเดี่ยว
             
             # Step 2: หาไม้อื่นๆ มาจับคู่เพิ่มเติม
             for hedge_pair in hedge_pairs:
@@ -1201,7 +1192,7 @@ class HedgePairingCloser:
                 
                 # ถ้า hedge pair ติดลบ ให้หาไม้อื่นๆ มาช่วย
                 if hedge_profit < 0:
-                    logger.info(f"🔍 Hedge pair is losing (${hedge_profit:.2f}), looking for additional profitable positions...")
+                    # หาไม้ช่วยสำหรับคู่ที่ติดลบ
                     
                     # หาไม้อื่นๆ ที่กำไรและไม่ได้ใช้แล้ว
                     additional_positions = []
@@ -1247,7 +1238,7 @@ class HedgePairingCloser:
                         ))
                         logger.info(f"✅ Complete hedge combination found: ${best_profit:.2f}")
                     else:
-                        logger.info(f"⚠️ No profitable combination found for hedge pair (${hedge_profit:.2f})")
+                        # ไม่พบการรวมที่กำไร
                         # Step 3: Dynamic Re-pairing - ลองจับคู่ใหม่
                         alternative_pair = self._dynamic_re_pairing(hedge_pair, positions)
                         if alternative_pair:
@@ -1331,7 +1322,7 @@ class HedgePairingCloser:
                             })
                             used_positions.add(buy_ticket)
                             used_positions.add(sell_ticket)
-                            logger.info(f"🔍 Existing hedge pair: Buy {buy_ticket} + Sell {sell_ticket} = ${total_profit:.2f}")
+                            # พบ hedge pair
                             break
             
             # หา Sell ติดลบ + Buy กำไร
@@ -1358,7 +1349,7 @@ class HedgePairingCloser:
                             })
                             used_positions.add(sell_ticket)
                             used_positions.add(buy_ticket)
-                            logger.info(f"🔍 Existing hedge pair: Sell {sell_ticket} + Buy {buy_ticket} = ${total_profit:.2f}")
+                            # พบ hedge pair
                             break
             
             return hedge_pairs
