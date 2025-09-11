@@ -48,7 +48,7 @@ class HedgePairingCloser:
         self.max_acceptable_loss = 5.0     # ขาดทุนที่ยอมรับได้ $5.0
         
         # 🚨 Emergency Mode Parameters (สำหรับพอร์ตที่แย่มาก)
-        self.emergency_min_net_profit = -100.0  # รับขาดทุนได้ในโหมดฉุกเฉิน $100.0
+        self.emergency_min_net_profit = 0.01  # กำไรขั้นต่ำในโหมดฉุกเฉิน $0.01
         self.emergency_threshold_percentage = 0.10  # 10% ในโหมดฉุกเฉิน
         
         # 🔧 Position Generation Parameters
@@ -501,43 +501,132 @@ class HedgePairingCloser:
         except Exception as e:
             logger.error(f"Error recording performance: {e}")
     
-    def _try_re_pairing_all_positions(self, positions: List[Any]) -> List[HedgeCombination]:
-        """🔄 ลองจับคู่ใหม่จากไม้ทั้งหมดรวม HEDGED"""
+    def _find_helping_positions_for_hedged(self, positions: List[Any]) -> List[HedgeCombination]:
+        """🔍 หาตัวช่วยสำหรับไม้ที่ HEDGED แล้ว"""
         try:
             combinations = []
             
-            # แยกไม้ตามประเภท (ไม่สนใจสถานะ HEDGED)
-            buy_positions = [pos for pos in positions if getattr(pos, 'type', 0) == 0]
-            sell_positions = [pos for pos in positions if getattr(pos, 'type', 0) == 1]
+            # หาไม้ที่ยังไม่ได้ใช้ (NO HEDGE)
+            unpaired_positions = []
+            for pos in positions:
+                if not self._has_hedge_pair(positions, pos):
+                    unpaired_positions.append(pos)
             
-            logger.info(f"🔍 Re-pairing All Positions: {len(buy_positions)} Buy, {len(sell_positions)} Sell")
+            logger.debug(f"🔍 Helping Positions: Found {len(unpaired_positions)} unpaired positions")
             
-            # ลองจับคู่ Buy + Sell ทุกคู่ที่เป็นไปได้ (รวม HEDGED)
-            for buy_pos in buy_positions:
-                for sell_pos in sell_positions:
-                    total_profit = getattr(buy_pos, 'profit', 0) + getattr(sell_pos, 'profit', 0)
+            if len(unpaired_positions) == 0:
+                logger.debug("💤 No unpaired positions to help with")
+                return combinations
+            
+            # หาไม้กำไรที่ยังไม่ได้ใช้
+            profitable_unpaired = [pos for pos in unpaired_positions if getattr(pos, 'profit', 0) > 0]
+            
+            if len(profitable_unpaired) == 0:
+                logger.debug("💤 No profitable unpaired positions to help with")
+                return combinations
+            
+            logger.debug(f"💰 Found {len(profitable_unpaired)} profitable unpaired positions")
+            
+            # หาไม้ที่ HEDGED แล้วและติดลบ
+            hedged_losing_pairs = []
+            for pos in positions:
+                if self._has_hedge_pair(positions, pos) and getattr(pos, 'profit', 0) < 0:
+                    # หาคู่ของไม้นี้
+                    pair_pos = self._find_pair_position(positions, pos)
+                    if pair_pos:
+                        pair_profit = getattr(pos, 'profit', 0) + getattr(pair_pos, 'profit', 0)
+                        if pair_profit < 0:  # คู่ติดลบ
+                            hedged_losing_pairs.append({
+                                'buy': pos if getattr(pos, 'type', 0) == 0 else pair_pos,
+                                'sell': pos if getattr(pos, 'type', 0) == 1 else pair_pos,
+                                'profit': pair_profit
+                            })
+            
+            logger.debug(f"📉 Found {len(hedged_losing_pairs)} losing hedge pairs")
+            
+            # ลองเพิ่มไม้กำไรที่ยังไม่ได้ใช้มาช่วยคู่ที่ติดลบ (จำกัดจำนวนการทดสอบ)
+            max_tests = min(50, len(hedged_losing_pairs) * len(profitable_unpaired))  # จำกัดการทดสอบสูงสุด 50 ครั้ง
+            test_count = 0
+            
+            for losing_pair in hedged_losing_pairs:
+                if test_count >= max_tests:
+                    break
                     
-                    # ใช้ effective_min_profit แทน self.min_net_profit
-                    effective_min_profit = self._get_effective_min_net_profit()
-                    if total_profit >= effective_min_profit:
+                for helper_pos in profitable_unpaired:
+                    if test_count >= max_tests:
+                        break
+                        
+                    test_count += 1
+                    total_profit = losing_pair['profit'] + getattr(helper_pos, 'profit', 0)
+                    
+                    if total_profit >= self.min_net_profit:
                         combinations.append(HedgeCombination(
-                            positions=[buy_pos, sell_pos],
+                            positions=[losing_pair['buy'], losing_pair['sell'], helper_pos],
                             total_profit=total_profit,
-                            combination_type="RE_PAIRING_ALL",
-                            size=2,
-                            confidence_score=95.0,
-                            reason=f"Re-pairing all: Buy ${getattr(buy_pos, 'profit', 0):.2f} + Sell ${getattr(sell_pos, 'profit', 0):.2f}"
+                            combination_type="HELPING_HEDGED",
+                            size=3,
+                            confidence_score=90.0,
+                            reason=f"Helping hedged pair: ${losing_pair['profit']:.2f} + Helper ${getattr(helper_pos, 'profit', 0):.2f}"
                         ))
+                        
+                        # หยุดเมื่อพบ combination ที่ดีแล้ว
+                        if len(combinations) >= 3:
+                            break
+                
+                if len(combinations) >= 3:
+                    break
             
             # เรียงตามกำไร (มากสุดก่อน)
             combinations.sort(key=lambda x: x.total_profit, reverse=True)
             
-            logger.info(f"🔄 Re-pairing All Positions: Found {len(combinations)} possible pairs")
+            logger.info(f"🔍 Helping Positions: Found {len(combinations)} helping combinations")
             return combinations
             
         except Exception as e:
-            logger.error(f"❌ Error in try re-pairing all positions: {e}")
+            logger.error(f"❌ Error in find helping positions for hedged: {e}")
             return []
+    
+    def _find_pair_position(self, positions: List[Any], position: Any) -> Optional[Any]:
+        """🔍 หาคู่ของไม้ที่กำหนด"""
+        try:
+            pos_ticket = getattr(position, 'ticket', 'N/A')
+            pos_type = getattr(position, 'type', 0)
+            
+            # หาไม้ตรงข้ามที่ยังไม่ได้ใช้
+            for other_pos in positions:
+                other_ticket = getattr(other_pos, 'ticket', 'N/A')
+                other_type = getattr(other_pos, 'type', 0)
+                
+                if other_ticket != pos_ticket and other_type != pos_type:
+                    # ตรวจสอบว่าไม้นี้เป็นคู่กันหรือไม่
+                    if self._is_hedge_pair(position, other_pos):
+                        return other_pos
+            
+            return None
+            
+        except Exception as e:
+            logger.error(f"❌ Error finding pair position: {e}")
+            return None
+    
+    def _is_hedge_pair(self, pos1: Any, pos2: Any) -> bool:
+        """🔍 ตรวจสอบว่าไม้ 2 ตัวเป็นคู่กันหรือไม่"""
+        try:
+            type1 = getattr(pos1, 'type', 0)
+            type2 = getattr(pos2, 'type', 0)
+            
+            # ต้องเป็นไม้ตรงข้าม
+            if type1 == type2:
+                return False
+            
+            # ต้องมีไม้หนึ่งกำไรและอีกไม้หนึ่งขาดทุน
+            profit1 = getattr(pos1, 'profit', 0)
+            profit2 = getattr(pos2, 'profit', 0)
+            
+            return (profit1 > 0 and profit2 < 0) or (profit1 < 0 and profit2 > 0)
+            
+        except Exception as e:
+            logger.error(f"❌ Error checking hedge pair: {e}")
+            return False
     
     def _try_alternative_pairing(self, positions: List[Any]) -> List[HedgeCombination]:
         """🔄 ลองจับคู่ใหม่จากไม้ทั้งหมดโดยไม่สนใจสถานะ HEDGED"""
@@ -550,9 +639,19 @@ class HedgePairingCloser:
             
             logger.info(f"🔍 Alternative Pairing: {len(buy_positions)} Buy, {len(sell_positions)} Sell")
             
-            # ลองจับคู่ Buy + Sell ทุกคู่ที่เป็นไปได้ (ไม่สนใจสถานะ HEDGED)
+            # ลองจับคู่ Buy + Sell ทุกคู่ที่เป็นไปได้ (จำกัดจำนวนการทดสอบ)
+            max_tests = min(100, len(buy_positions) * len(sell_positions))  # จำกัดการทดสอบสูงสุด 100 ครั้ง
+            test_count = 0
+            
             for buy_pos in buy_positions:
+                if test_count >= max_tests:
+                    break
+                    
                 for sell_pos in sell_positions:
+                    if test_count >= max_tests:
+                        break
+                        
+                    test_count += 1
                     total_profit = getattr(buy_pos, 'profit', 0) + getattr(sell_pos, 'profit', 0)
                     
                     # ใช้ effective_min_profit แทน self.min_net_profit
@@ -566,6 +665,13 @@ class HedgePairingCloser:
                             confidence_score=90.0,
                             reason=f"Alternative pair: Buy ${getattr(buy_pos, 'profit', 0):.2f} + Sell ${getattr(sell_pos, 'profit', 0):.2f}"
                         ))
+                        
+                        # หยุดเมื่อพบ combination ที่ดีแล้ว
+                        if len(combinations) >= 5:
+                            break
+                
+                if len(combinations) >= 5:
+                    break
             
             # เรียงตามกำไร (มากสุดก่อน)
             combinations.sort(key=lambda x: x.total_profit, reverse=True)
@@ -588,9 +694,19 @@ class HedgePairingCloser:
             
             logger.info(f"🔍 Dynamic Re-pairing: {len(buy_positions)} Buy, {len(sell_positions)} Sell")
             
-            # ลองจับคู่ Buy + Sell ทุกคู่ที่เป็นไปได้
+            # ลองจับคู่ Buy + Sell ทุกคู่ที่เป็นไปได้ (จำกัดจำนวนการทดสอบ)
+            max_tests = min(50, len(buy_positions) * len(sell_positions))  # จำกัดการทดสอบสูงสุด 50 ครั้ง
+            test_count = 0
+            
             for buy_pos in buy_positions:
+                if test_count >= max_tests:
+                    break
+                    
                 for sell_pos in sell_positions:
+                    if test_count >= max_tests:
+                        break
+                        
+                    test_count += 1
                     total_profit = getattr(buy_pos, 'profit', 0) + getattr(sell_pos, 'profit', 0)
                     
                     # ใช้ effective_min_profit แทน self.min_net_profit
@@ -604,6 +720,13 @@ class HedgePairingCloser:
                             confidence_score=85.0,
                             reason=f"Dynamic pair: Buy ${getattr(buy_pos, 'profit', 0):.2f} + Sell ${getattr(sell_pos, 'profit', 0):.2f}"
                         ))
+                        
+                        # หยุดเมื่อพบ combination ที่ดีแล้ว
+                        if len(combinations) >= 3:
+                            break
+                
+                if len(combinations) >= 3:
+                    break
             
             # เรียงตามกำไร (มากสุดก่อน)
             combinations.sort(key=lambda x: x.total_profit, reverse=True)
@@ -712,21 +835,21 @@ class HedgePairingCloser:
                 logger.info("=" * 60)
                 return alternative_combinations
             
-            # Step 4: ถ้าไม่มี Alternative Pairing ให้ลองจับคู่ใหม่จากไม้ทั้งหมด (รวม HEDGED)
-            logger.info("🔄 No alternative combinations found, trying re-pairing all positions...")
-            re_pairing_combinations = self._try_re_pairing_all_positions(priority_positions)
+            # Step 4: ถ้าไม่มี Alternative Pairing ให้ลองหาตัวช่วยสำหรับไม้ที่ HEDGED แล้ว
+            logger.info("🔄 No alternative combinations found, looking for helping positions...")
+            helping_combinations = self._find_helping_positions_for_hedged(priority_positions)
             
-            if re_pairing_combinations:
+            if helping_combinations:
                 logger.info("-" * 40)
-                logger.info("✅ RE-PAIRING ALL POSITIONS FOUND")
+                logger.info("✅ HELPING POSITIONS FOUND")
                 logger.info("-" * 40)
-                logger.info(f"🎯 Total combinations: {len(re_pairing_combinations)}")
-                for i, combo in enumerate(re_pairing_combinations[:3]):  # แสดงแค่ 3 อันแรก
+                logger.info(f"🎯 Total combinations: {len(helping_combinations)}")
+                for i, combo in enumerate(helping_combinations[:3]):  # แสดงแค่ 3 อันแรก
                     logger.info(f"   {i+1}. {combo.combination_type}: ${combo.total_profit:.2f} ({combo.size} positions)")
-                if len(re_pairing_combinations) > 3:
-                    logger.info(f"   ... and {len(re_pairing_combinations) - 3} more combinations")
+                if len(helping_combinations) > 3:
+                    logger.info(f"   ... and {len(helping_combinations) - 3} more combinations")
                 logger.info("=" * 60)
-                return re_pairing_combinations
+                return helping_combinations
             
             # หาไม้ที่ไม่มีคู่และไม้ที่มี Hedge แล้ว
             unpaired_profitable = []  # ไม้กำไรที่ไม่มีคู่
