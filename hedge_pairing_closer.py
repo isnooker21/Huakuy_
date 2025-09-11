@@ -47,6 +47,10 @@ class HedgePairingCloser:
         self.min_net_profit = 0.1          # กำไรสุทธิขั้นต่ำ $0.1
         self.max_acceptable_loss = 5.0     # ขาดทุนที่ยอมรับได้ $5.0
         
+        # 🚨 Emergency Mode Parameters (สำหรับพอร์ตที่แย่มาก)
+        self.emergency_min_net_profit = 0.05  # กำไรขั้นต่ำในโหมดฉุกเฉิน $0.05
+        self.emergency_threshold_percentage = 0.10  # 10% ในโหมดฉุกเฉิน
+        
         # 🔧 Position Generation Parameters
         self.enable_position_generation = True  # เปิดใช้งานการออกไม้เพิ่มเติม
         self.max_additional_positions = 3       # จำนวนไม้เพิ่มเติมสูงสุด
@@ -169,6 +173,22 @@ class HedgePairingCloser:
             account_balance = account_info.get('balance', 1000.0)
             portfolio_health = self._analyze_portfolio_health(positions, account_balance)
             logger.info(f"📊 Portfolio Health: {portfolio_health['health_score']} (P&L: ${portfolio_health['total_pnl']:.2f})")
+            
+            # แสดง Emergency Mode ถ้าพอร์ตแย่มาก
+            if portfolio_health['health_score'] in ["แย่", "แย่มาก"]:
+                effective_min_profit = self._get_effective_min_net_profit()
+                threshold_percentage = self._get_threshold_percentage()
+                logger.warning(f"🚨 EMERGENCY MODE ACTIVATED!")
+                logger.warning(f"   Min Net Profit: ${effective_min_profit:.2f} (ลดจาก ${self.min_net_profit:.2f})")
+                logger.warning(f"   Threshold: {threshold_percentage*100:.1f}% (ลดลง)")
+                logger.warning(f"   ระบบจะพยายามปิดไม้ให้ได้มากขึ้น!")
+                
+                # แสดงคำแนะนำสำหรับพอร์ตที่แย่มาก
+                if portfolio_health['total_pnl'] < -50:
+                    logger.warning(f"💡 คำแนะนำ: พอร์ตขาดทุนมาก (${portfolio_health['total_pnl']:.2f})")
+                    logger.warning(f"   - รอให้ราคากลับมาหรือ")
+                    logger.warning(f"   - ปิดไม้ที่ขาดทุนน้อยที่สุดก่อน")
+                    logger.warning(f"   - หรือเพิ่มเงินทุนเพื่อลดความเสี่ยง")
             
             # Step 2: Smart Filtering - คัดกรองไม้ตามค่าเฉลี่ยของเงินทุน
             filtered_positions = self._smart_filter_positions(positions, account_balance)
@@ -300,12 +320,23 @@ class HedgePairingCloser:
             elif self.portfolio_health_score == "ปานกลาง":
                 return 0.10  # 10%
             elif self.portfolio_health_score == "แย่":
-                return 0.15  # 15%
-            else:  # แย่มาก
-                return 0.20  # 20%
+                return 0.12  # 12% (ลดจาก 15%)
+            else:  # แย่มาก - Emergency Mode
+                return self.emergency_threshold_percentage  # 10% ในโหมดฉุกเฉิน
         except Exception as e:
             logger.error(f"Error getting threshold percentage: {e}")
             return 0.10  # Default 10%
+    
+    def _get_effective_min_net_profit(self) -> float:
+        """ได้ min_net_profit ที่มีประสิทธิภาพตามสุขภาพพอร์ต"""
+        try:
+            if self.portfolio_health_score in ["แย่", "แย่มาก"]:
+                return self.emergency_min_net_profit  # $0.05 ในโหมดฉุกเฉิน
+            else:
+                return self.min_net_profit  # $0.1 ปกติ
+        except Exception as e:
+            logger.error(f"Error getting effective min net profit: {e}")
+            return self.min_net_profit
     
     def _priority_based_selection(self, positions: List[Any]) -> List[Any]:
         """🎯 Priority-based Selection - เลือกไม้ตามความสำคัญ"""
@@ -714,7 +745,8 @@ class HedgePairingCloser:
                             test_positions = [hedge_pair['buy'], hedge_pair['sell']] + list(combo)
                             test_profit = sum(getattr(pos, 'profit', 0) for pos in test_positions)
                             
-                        if test_profit > best_profit and test_profit >= self.min_net_profit:
+                        effective_min_profit = self._get_effective_min_net_profit()
+                        if test_profit > best_profit and test_profit >= effective_min_profit:
                             best_combination = test_positions
                             best_profit = test_profit
                             # ลด log output - แสดงเฉพาะเมื่อพบ combination ที่ดีขึ้นมาก
@@ -722,7 +754,7 @@ class HedgePairingCloser:
                                 logger.info(f"✅ Found better combination: ${test_profit:.2f} with {len(test_positions)} positions")
                             
                             # Early break - หยุดเมื่อพบ combination ที่ดีพอ
-                            if test_profit >= self.min_net_profit * 2:  # กำไรมากกว่า 2 เท่าของ threshold
+                            if test_profit >= effective_min_profit * 2:  # กำไรมากกว่า 2 เท่าของ threshold
                                 break
                     
                     if best_combination:
