@@ -343,10 +343,7 @@ class DynamicPositionModifier:
             distance = self._calculate_position_distance(target_pos, current_price)
             position_type = getattr(target_pos, 'type', 0)
             
-            logger.info(f"🎯 Smart correction strategy for ticket {getattr(target_pos, 'ticket', 'N/A')}:")
-            logger.info(f"   Profit: ${target_profit:.2f}")
-            logger.info(f"   Distance: {distance:.1f} points")
-            logger.info(f"   Type: {'BUY' if position_type == 0 else 'SELL'}")
+            logger.info(f"🎯 Correction strategy: ${target_profit:.2f} profit, {distance:.1f} points")
             
             # กรณีที่ 1: ไม้กำไร + ไกล → ไม่ต้องแก้ไข
             if target_profit > 0 and distance > 20:
@@ -948,10 +945,9 @@ class DynamicPositionModifier:
             logger.info("🔧 No modifications needed")
             return
         
-        # Log แบบบรรทัดเดียว สั้นกระชับ
-        logger.info(f"🔧 MODIFY: {len(plan.individual_modifications)}pos | "
-                   f"Profit:+${plan.expected_portfolio_improvement:.0f} | "
-                   f"Success:{plan.success_probability:.0%}")
+        # Log แบบสั้นกระชับ
+        logger.info(f"🔧 MODIFY: {len(plan.individual_modifications)} positions | "
+                   f"Profit: +${plan.expected_portfolio_improvement:.0f}")
         
         # แสดง high priority เฉพาะที่สำคัญ
         critical_mods = [mod for mod in plan.individual_modifications 

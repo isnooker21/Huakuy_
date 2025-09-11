@@ -135,8 +135,7 @@ class OrderManager:
                 
                 self.active_positions.append(position)
                 
-                logger.info(f"✅ ส่ง Order สำเร็จ - Ticket: {ticket}, Deal: {deal_id}, Order: {order_id}")
-                logger.info(f"   Direction: {signal.direction}, Volume: {lot_size}, Price: {result.get('price', price)}")
+                logger.info(f"✅ Order sent successfully - Ticket: {ticket}")
                 
                 return OrderResult(
                     success=True,
@@ -335,7 +334,7 @@ class OrderManager:
                     
             # สรุปผลลัพธ์
             if closed_tickets:
-                success_msg = f"ปิด {len(closed_tickets)} Positions สำเร็จ - Profit: {total_profit:.2f}, Reason: {reason}"
+                success_msg = f"✅ Closed {len(closed_tickets)} positions - Profit: ${total_profit:.2f}"
                 logger.info(success_msg)
                 
                 return CloseResult(
@@ -493,13 +492,9 @@ class OrderManager:
             
             logger.info(f"📊 ซิงค์ข้อมูล Position สำเร็จ - จำนวน: {len(synced_positions)}")
             
-            # แสดงรายละเอียด Position ที่จดจำได้
+            # แสดงจำนวนสุทธิ
             if synced_positions:
-                logger.info("🔍 Position ที่จดจำได้จาก MT5:")
-                for pos in synced_positions:
-                    logger.info(f"   Ticket: {pos.ticket}, Symbol: {pos.symbol}, "
-                              f"Type: {'BUY' if pos.type == 0 else 'SELL'}, "
-                              f"Volume: {pos.volume}, Profit: {pos.profit:.2f}")
+                logger.info(f"📊 Synced positions: {len(synced_positions)}")
             else:
                 logger.info("ℹ️ ไม่พบ Position เก่าของระบบ (Magic Number: {})".format(self.magic_number))
             return synced_positions
