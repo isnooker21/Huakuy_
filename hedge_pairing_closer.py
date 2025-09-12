@@ -278,6 +278,22 @@ class HedgePairingCloser:
             logger.error(f"Error getting real-time P&L: {e}")
             return getattr(position, 'profit', 0)
     
+    def _get_current_price(self) -> float:
+        """📊 ดึงราคาปัจจุบันจาก MT5"""
+        try:
+            if not self.mt5_connection:
+                return 0.0
+            
+            current_price = self.mt5_connection.get_current_price(self.symbol)
+            if current_price is None:
+                return 0.0
+            
+            return current_price
+            
+        except Exception as e:
+            logger.error(f"❌ Error getting current price: {e}")
+            return 0.0
+    
     def _analyze_portfolio_health(self, positions: List[Any], account_balance: float = 1000.0) -> dict:
         """วิเคราะห์สุขภาพพอร์ต"""
         try:
@@ -530,26 +546,33 @@ class HedgePairingCloser:
             return positions  # Return original positions if error
     
     def _calculate_priority_score(self, position: Any) -> float:
-        """📊 คำนวณ Priority Score จาก Real-time P&L"""
+        """📊 คำนวณ Priority Score จาก Real-time P&L และระยะห่างจากราคาปัจจุบัน"""
         try:
             # ใช้ P&L แบบ Real-time
             real_pnl = self._get_real_time_pnl(position)
             volume = getattr(position, 'volume', 0)
             
+            # คำนวณระยะห่างจากราคาปัจจุบัน
+            current_price = self._get_current_price()
+            open_price = getattr(position, 'price_open', 0)
+            distance = abs(current_price - open_price)
+            
             # คำนวณ Priority Score
             priority_score = 0
             
-            # ไม้ที่กำไรมาก = Priority สูง
-            if real_pnl > 0:
-                priority_score += real_pnl * 10
-            
-            # ไม้ที่ขาดทุนน้อย = Priority ปานกลาง
-            elif real_pnl > -2.0:
-                priority_score += abs(real_pnl) * 5
-            
-            # ไม้ที่ขาดทุนมาก = Priority ต่ำ
-            else:
-                priority_score += abs(real_pnl) * 2
+            # ไม้ที่เสียไกลๆ = Priority สูงสุด (ต้องปิดก่อน)
+            if real_pnl < -5.0 and distance > 5.0:  # เสียมาก + ไกลมาก
+                priority_score += abs(real_pnl) * 25  # คะแนนสูงสุด
+                priority_score += distance * 10  # เพิ่มคะแนนตามระยะห่าง
+            elif real_pnl < -2.0 and distance > 3.0:  # เสียปานกลาง + ไกลปานกลาง
+                priority_score += abs(real_pnl) * 20  # คะแนนสูง
+                priority_score += distance * 8  # เพิ่มคะแนนตามระยะห่าง
+            elif real_pnl < 0:  # เสียน้อย
+                priority_score += abs(real_pnl) * 15  # คะแนนปานกลาง
+                priority_score += distance * 5  # เพิ่มคะแนนตามระยะห่าง
+            else:  # กำไร
+                priority_score += real_pnl * 10  # คะแนนต่ำ
+                priority_score += distance * 2  # เพิ่มคะแนนตามระยะห่าง (น้อย)
             
             # ปริมาณมาก = Priority สูง
             priority_score += volume * 100
