@@ -518,6 +518,24 @@ class SimpleBreakoutTradingSystemGUI:
                     logger.info("⏰ Waiting for bar close before opening new positions...")
                     return
             
+            # ตรวจสอบ SW Filter ก่อนออกไม้ใหม่
+            if hasattr(self, 'hedge_pairing_closer') and self.hedge_pairing_closer:
+                # สร้าง mock position สำหรับตรวจสอบ SW Filter
+                mock_position = type('MockPosition', (), {
+                    'price': current_candle.close,
+                    'price_open': current_candle.close,
+                    'type': 0 if direction == 'BUY' else 1,
+                    'volume': 0.01
+                })()
+                
+                # ตรวจสอบ SW Filter
+                existing_positions = self.order_manager.active_positions
+                sw_ok, sw_msg = self.hedge_pairing_closer._sw_filter_check(mock_position, existing_positions)
+                
+                if not sw_ok:
+                    logger.info(f"🚫 SW FILTER: {sw_msg}")
+                    return
+            
             # 💰 Calculate dynamic lot size
             lot_size = self._calculate_dynamic_lot_size(current_candle, timeframe)
             
