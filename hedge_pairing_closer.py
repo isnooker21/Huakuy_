@@ -406,12 +406,16 @@ class HedgePairingCloser:
             
             # นับไม้ที่อยู่ใกล้กัน (ใช้ราคาปัจจุบัน)
             nearby_positions = 0
-            for pos in existing_positions:
-                existing_price = getattr(pos, 'price', 0)
+            logger.debug(f"🔍 SW Filter Debug - New Price: {new_price}")
+            for i, pos in enumerate(existing_positions):
+                existing_price = getattr(pos, 'price_current', 0)
+                if existing_price == 0:
+                    existing_price = getattr(pos, 'price', 0)
                 if existing_price == 0:
                     existing_price = getattr(pos, 'price_open', 0)
                 
                 distance = abs(new_price - existing_price)
+                logger.debug(f"   Position {i+1}: {existing_price} (distance: {distance:.2f} points)")
                 
                 if distance <= self.clustering_threshold:
                     nearby_positions += 1
@@ -440,7 +444,9 @@ class HedgePairingCloser:
             # นับไม้ในรัศมี (ใช้ราคาปัจจุบัน)
             positions_in_radius = 0
             for pos in existing_positions:
-                existing_price = getattr(pos, 'price', 0)
+                existing_price = getattr(pos, 'price_current', 0)
+                if existing_price == 0:
+                    existing_price = getattr(pos, 'price', 0)
                 if existing_price == 0:
                     existing_price = getattr(pos, 'price_open', 0)
                 
@@ -471,7 +477,9 @@ class HedgePairingCloser:
             # คำนวณการกระจายของไม้ (ใช้ราคาปัจจุบัน)
             prices = []
             for pos in existing_positions:
-                price = getattr(pos, 'price', 0)
+                price = getattr(pos, 'price_current', 0)
+                if price == 0:
+                    price = getattr(pos, 'price', 0)
                 if price == 0:
                     price = getattr(pos, 'price_open', 0)
                 prices.append(price)
