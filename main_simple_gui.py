@@ -306,8 +306,8 @@ class SimpleBreakoutTradingSystemGUI:
                     self._handle_dynamic_closing(current_candle)
                     self._last_dynamic_closing_time = current_time
                 
-                # Sleep
-                time.sleep(2)  # Increase sleep time
+                # Sleep - ลดเวลาให้เหมาะสมกับการเทรดตามแท่งเทียน
+                time.sleep(0.1)  # ตรวจสอบแท่งเทียนทุก 0.1 วินาที
                 
             except Exception as e:
                 logger.error(f"❌ เกิดข้อผิดพลาดในลูปเทรด: {e}")
@@ -404,6 +404,9 @@ class SimpleBreakoutTradingSystemGUI:
                         current_candle=current_candle,
                         reason=reason
                     )
+                    
+                    # อัปเดตเวลาการเทรดล่าสุดเป็นเวลาแท่งเทียน
+                    self.last_trade_time[timeframe] = current_candle.time
             
             # Update candle history
             self._update_candle_history(current_candle)
@@ -412,28 +415,22 @@ class SimpleBreakoutTradingSystemGUI:
             logger.error(f"❌ Error in simple breakout processing: {e}")
     
     def _can_trade_timeframe(self, timeframe: str) -> bool:
-        """Check if we can trade this timeframe (one trade per candle rule) - สอดคล้องกับ Bar Close"""
+        """Check if we can trade this timeframe (one trade per candle rule) - ตรวจสอบแท่งเทียนปิดจริง"""
         last_trade = self.last_trade_time.get(timeframe)
         if last_trade is None:
             return True
         
-        # ใช้เวลาเดียวกันกับ Bar Close System
-        current_time = datetime.now()
+        # ตรวจสอบแท่งเทียนปิดจริงแทนการใช้เวลา
+        current_candle = self._get_current_candle()
+        if not current_candle:
+            return False
         
-        # Simple time-based check (adjust based on timeframe)
-        time_intervals = {
-            'M5': 300,   # 5 minutes
-            'M15': 900,  # 15 minutes  
-            'M30': 1800, # 30 minutes
-            'H1': 3600   # 1 hour
-        }
+        # ตรวจสอบว่าแท่งเทียนปัจจุบันเป็นแท่งใหม่หรือไม่
+        current_candle_time = current_candle.time
+        last_trade_time = last_trade
         
-        interval = time_intervals.get(timeframe, 60)
-        time_diff = (current_time - last_trade).total_seconds()
-        
-        # ลบ Bar Close System ออกทั้งหมด - ใช้เวลาเท่านั้น
-        
-        return time_diff > interval
+        # เปรียบเทียบเวลาแท่งเทียน (ไม่ใช่เวลาปัจจุบัน)
+        return current_candle_time > last_trade_time
     
     def _get_previous_candle(self, timeframe: str) -> Optional[CandleData]:
         """Get previous candle for timeframe"""
