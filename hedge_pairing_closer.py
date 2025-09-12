@@ -76,11 +76,11 @@ class HedgePairingCloser:
         self.max_density = 5  # สูงสุด 5 ไม้ในรัศมี 5 จุด
         self.min_std_deviation = 3.0  # ส่วนเบี่ยงเบนมาตรฐานขั้นต่ำ 3 จุด
         
-        # ⏰ Wait for Bar Close - รอปิดแท่งก่อนออกไม้ (แยกตาม TF)
-        self.wait_for_bar_close = True
-        self.last_bar_time = {}  # {timeframe: bar_time} - เวลาของแท่งล่าสุดแต่ละ TF
-        self.bar_close_wait_enabled = True
-        self.timeframes = ['M5', 'M15', 'M30', 'H1']  # TF ที่ใช้
+        # ลบ Bar Close System ออกทั้งหมด - ทำงานทันที
+        # self.wait_for_bar_close = True
+        # self.last_bar_time = {}  # {timeframe: bar_time} - เวลาของแท่งล่าสุดแต่ละ TF
+        # self.bar_close_wait_enabled = True
+        # self.timeframes = ['M5', 'M15', 'M30', 'H1']  # TF ที่ใช้
         
         # 💰 Close All When Portfolio Profitable - ปิดไม้ทั้งหมดเมื่อพอร์ตเป็นบวก
         self.close_all_when_profitable = True
@@ -641,9 +641,9 @@ class HedgePairingCloser:
                 logger.info("⏸️ Need at least 1 position for analysis")
                 return None
             
-            # ตรวจสอบการรอปิดแท่ง
-            if self._should_wait_for_bar_close():
-                return None
+            # ลบ Bar Close System ออกทั้งหมด - ทำงานทันที
+            # if self._should_wait_for_bar_close():
+            #     return None
             
             # แสดงจำนวนไม้ทั้งหมดก่อนกรอง (เฉพาะเมื่อมีไม้)
             self.original_position_count = len(positions)

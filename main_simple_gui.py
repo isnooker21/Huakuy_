@@ -258,39 +258,28 @@ class SimpleBreakoutTradingSystemGUI:
         logger.info("🛑 หยุดระบบเทรดแล้ว")
     
     def _trading_loop(self):
-        """Main trading loop with Simple Breakout Logic - OPTIMIZED"""
-        logger.info("🔄 เริ่มลูปเทรด (OPTIMIZED)")
+        """Main trading loop with Simple Breakout Logic"""
+        logger.info("🔄 เริ่มลูปเทรด")
         
-        # 🚀 Performance Optimization Variables
-        last_candle_check = 0
-        candle_cache = None
-        candle_cache_time = 0
-        candle_cache_duration = 1.0  # Cache candle for 1 second
+        # ลบ Performance Optimization Variables ออก - ใช้แบบเดิม
         
         while self.is_running:
             try:
                 current_time = time.time()
                 
-                # 🚀 OPTIMIZED: Check bar close only when needed
-                if hasattr(self, 'hedge_pairing_closer') and self.hedge_pairing_closer:
-                    if self.hedge_pairing_closer._should_wait_for_bar_close('M5'):
-                        time.sleep(0.5)  # Reduced from 1 second
-                        continue
+                # ลบ Bar Close System ออกทั้งหมด - ทำงานทันที
+                # if hasattr(self, 'hedge_pairing_closer') and self.hedge_pairing_closer:
+                #     if self.hedge_pairing_closer._should_wait_for_bar_close('M5'):
+                #         time.sleep(0.5)
+                #         continue
                 
-                # 🚀 OPTIMIZED: Cache candle data to reduce MT5 API calls
-                if current_time - candle_cache_time > candle_cache_duration:
-                    current_candle = self._get_current_candle()
-                    if current_candle:
-                        candle_cache = current_candle
-                        candle_cache_time = current_time
-                else:
-                    current_candle = candle_cache
-                
+                # Get current candle data
+                current_candle = self._get_current_candle()
                 if not current_candle:
-                    time.sleep(0.5)  # Reduced from 1 second
+                    time.sleep(1)
                     continue
                 
-                # 🕐 Log market status (every 5 minutes) - OPTIMIZED
+                # 🕐 Log market status (every 5 minutes)
                 if not hasattr(self, '_last_market_status_log'):
                     self._last_market_status_log = 0
                 
@@ -298,33 +287,31 @@ class SimpleBreakoutTradingSystemGUI:
                     self.mt5_connection.log_market_status(self.actual_symbol or "XAUUSD")
                     self._last_market_status_log = current_time
                 
-                # 🚀 OPTIMIZED: Process Simple Breakout only when candle changes
-                if current_time - last_candle_check >= 0.5:  # Check every 0.5 seconds
-                    self._process_simple_breakout(current_candle)
-                    last_candle_check = current_time
+                # Process Simple Breakout for all timeframes
+                self._process_simple_breakout(current_candle)
                 
-                # Position Management - OPTIMIZED timing
+                # Position Management (Keep original logic) - Throttle to every 5 seconds
                 if not hasattr(self, '_last_position_management_time'):
                     self._last_position_management_time = 0
                 
-                if current_time - self._last_position_management_time >= 15:  # Every 15 seconds (increased from 10)
+                if current_time - self._last_position_management_time >= 10:  # Every 10 seconds
                     self._handle_position_management(current_candle)
                     self._last_position_management_time = current_time
                 
-                # Dynamic Closing - OPTIMIZED timing
+                # Dynamic Closing (Keep original logic) - Throttle to every 8 seconds
                 if not hasattr(self, '_last_dynamic_closing_time'):
                     self._last_dynamic_closing_time = 0
                 
-                if current_time - self._last_dynamic_closing_time >= 12:  # Every 12 seconds (increased from 8)
+                if current_time - self._last_dynamic_closing_time >= 8:  # Every 8 seconds
                     self._handle_dynamic_closing(current_candle)
                     self._last_dynamic_closing_time = current_time
                 
-                # 🚀 OPTIMIZED: Reduced sleep time
-                time.sleep(0.3)  # Reduced from 2 seconds to 0.3 seconds
+                # Sleep
+                time.sleep(2)  # Increase sleep time
                 
             except Exception as e:
                 logger.error(f"❌ เกิดข้อผิดพลาดในลูปเทรด: {e}")
-                time.sleep(2)  # Reduced from 5 seconds
+                time.sleep(5)
         
         logger.info("🔄 จบลูปเทรด")
     
@@ -374,30 +361,19 @@ class SimpleBreakoutTradingSystemGUI:
         ✅ Dynamic lot sizing
         """
         try:
-            # ตรวจสอบการรอปิดแท่งก่อนออกไม้ใหม่ (ลบออกเพราะซ้ำซ้อนกับ _trading_loop)
-            # if hasattr(self, 'hedge_pairing_closer') and self.hedge_pairing_closer:
-            #     if self.hedge_pairing_closer._should_wait_for_bar_close('M5'):
-            #         logger.info("⏰ Waiting for bar close before opening new positions...")
-            #         return
-            
+            # ลบ Bar Close System ออกทั้งหมด - ทำงานทันที
             current_price = current_candle.close
             
             # Process each timeframe
             for timeframe in self.timeframes:
-                # Check if we can trade this timeframe (one per candle rule) - สอดคล้องกับ Bar Close
+                # Check if we can trade this timeframe (one per candle rule)
                 if not self._can_trade_timeframe(timeframe):
-                    logger.info(f"⏰ Cannot trade {timeframe} - waiting for bar close or time interval")
                     continue
-                
-                logger.info(f"🔍 Processing {timeframe} timeframe...")
                 
                 # Get previous candle for this timeframe
                 previous_candle = self._get_previous_candle(timeframe)
                 if not previous_candle:
-                    logger.info(f"❌ No previous candle for {timeframe}")
                     continue
-                
-                logger.info(f"📊 {timeframe}: Current={current_candle.close:.2f}, Previous High={previous_candle.high:.2f}, Low={previous_candle.low:.2f}")
                 
                 # 🎯 SIMPLE BREAKOUT DETECTION
                 breakout_signal = None
@@ -455,10 +431,7 @@ class SimpleBreakoutTradingSystemGUI:
         interval = time_intervals.get(timeframe, 60)
         time_diff = (current_time - last_trade).total_seconds()
         
-        # ตรวจสอบว่าแท่งปิดแล้วหรือยัง (ลบออกเพราะซ้ำซ้อนกับ _trading_loop)
-        # if hasattr(self, 'hedge_pairing_closer') and self.hedge_pairing_closer:
-        #     if self.hedge_pairing_closer._should_wait_for_bar_close(timeframe):
-        #         return False  # รอปิดแท่ง
+        # ลบ Bar Close System ออกทั้งหมด - ใช้เวลาเท่านั้น
         
         return time_diff > interval
     
@@ -518,11 +491,7 @@ class SimpleBreakoutTradingSystemGUI:
                                      current_candle: CandleData, reason: str):
         """Execute simple breakout trade"""
         try:
-            # ตรวจสอบการรอปิดแท่งก่อนออกไม้ใหม่ (ลบออกเพราะซ้ำซ้อนกับ _trading_loop)
-            # if hasattr(self, 'hedge_pairing_closer') and self.hedge_pairing_closer:
-            #     if self.hedge_pairing_closer._should_wait_for_bar_close('M5'):
-            #         logger.info("⏰ Waiting for bar close before opening new positions...")
-            #         return
+            # ลบ Bar Close System ออกทั้งหมด - ทำงานทันที
             
             # ตรวจสอบ SW Filter ก่อนออกไม้ใหม่
             if hasattr(self, 'hedge_pairing_closer') and self.hedge_pairing_closer:
