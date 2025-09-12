@@ -42,6 +42,12 @@ class MT5Connection:
         self.last_market_status = None
         self.market_status_cache = {}
         
+        # 🚀 Performance Optimization - Caching
+        self.tick_cache = {}  # Cache สำหรับ tick data
+        self.tick_cache_time = {}  # เวลาของ cache
+        self.cache_duration = 0.5  # Cache duration ในวินาที
+        self.max_cache_size = 10  # จำกัดขนาด cache เพื่อประหยัด memory
+        
     def connect_mt5(self, max_retries: int = 3, retry_delay: float = 2.0) -> bool:
         """
         เชื่อมต่อ MT5 Terminal
@@ -852,26 +858,70 @@ class MT5Connection:
         return mt5.ORDER_FILLING_RETURN
     
     def get_current_tick(self, symbol: str = None) -> Optional[Dict]:
-        """ดึงข้อมูล tick ปัจจุบัน รวม spread"""
+        """ดึงข้อมูล tick ปัจจุบัน รวม spread - OPTIMIZED with Caching"""
         try:
             if symbol is None:
                 symbol = self.default_symbol
             
+            # 🚀 OPTIMIZED: Check cache first
+            current_time = time.time()
+            if (symbol in self.tick_cache and 
+                symbol in self.tick_cache_time and 
+                current_time - self.tick_cache_time[symbol] < self.cache_duration):
+                return self.tick_cache[symbol]
+            
             tick = mt5.symbol_info_tick(symbol)
             if tick:
                 spread_points = tick.ask - tick.bid
-                return {
+                tick_data = {
                     'symbol': symbol,
                     'bid': tick.bid,
                     'ask': tick.ask,
                     'spread': spread_points,
                     'time': tick.time
                 }
+                
+                # 🚀 OPTIMIZED: Cache the result
+                self.tick_cache[symbol] = tick_data
+                self.tick_cache_time[symbol] = current_time
+                
+                # 🚀 OPTIMIZED: Cleanup old cache entries
+                self._cleanup_cache()
+                
+                return tick_data
             return None
             
         except Exception as e:
             logger.error(f"❌ Error getting current tick for {symbol}: {e}")
             return None
+    
+    def _cleanup_cache(self):
+        """Cleanup old cache entries to prevent memory leaks - OPTIMIZED"""
+        try:
+            current_time = time.time()
+            
+            # 🚀 OPTIMIZED: Remove expired cache entries
+            expired_symbols = []
+            for symbol, cache_time in self.tick_cache_time.items():
+                if current_time - cache_time > self.cache_duration * 2:  # 2x cache duration
+                    expired_symbols.append(symbol)
+            
+            for symbol in expired_symbols:
+                self.tick_cache.pop(symbol, None)
+                self.tick_cache_time.pop(symbol, None)
+            
+            # 🚀 OPTIMIZED: Limit cache size
+            if len(self.tick_cache) > self.max_cache_size:
+                # Remove oldest entries
+                sorted_symbols = sorted(self.tick_cache_time.items(), key=lambda x: x[1])
+                symbols_to_remove = sorted_symbols[:len(self.tick_cache) - self.max_cache_size]
+                
+                for symbol, _ in symbols_to_remove:
+                    self.tick_cache.pop(symbol, None)
+                    self.tick_cache_time.pop(symbol, None)
+                    
+        except Exception as e:
+            logger.debug(f"Error during cache cleanup: {e}")
     
     def close_positions_group(self, tickets: List[int]) -> Dict:
         """
