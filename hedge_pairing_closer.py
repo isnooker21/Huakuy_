@@ -644,9 +644,10 @@ class HedgePairingCloser:
             if self._should_wait_for_bar_close():
                 return None
             
-            # แสดงจำนวนไม้ทั้งหมดก่อนกรอง
+            # แสดงจำนวนไม้ทั้งหมดก่อนกรอง (เฉพาะเมื่อมีไม้)
             self.original_position_count = len(positions)
-            logger.info(f"📊 TOTAL POSITIONS: {len(positions)} positions")
+            if len(positions) > 0:
+                logger.info(f"📊 TOTAL POSITIONS: {len(positions)} positions")
             
             # ตรวจสอบการปิดไม้ทั้งหมดเมื่อพอร์ตเป็นบวก (เร็วขึ้น)
             account_balance = account_info.get('balance', 1000.0)
@@ -673,7 +674,9 @@ class HedgePairingCloser:
             else:
                 logger.info(f"🎯 Using All Positions: {len(positions)} positions")
             
-            logger.info(f"🔍 HEDGE ANALYSIS: {len(positions)} positions")
+            # แสดงการวิเคราะห์เฉพาะเมื่อมีไม้
+            if len(positions) > 0:
+                logger.info(f"🔍 HEDGE ANALYSIS: {len(positions)} positions")
             
             # Step 1: วิเคราะห์สุขภาพพอร์ต
             account_balance = account_info.get('balance', 1000.0)
@@ -690,7 +693,8 @@ class HedgePairingCloser:
             
             # Step 2: Smart Filtering - คัดกรองไม้ตามค่าเฉลี่ยของเงินทุน
             filtered_positions = self._smart_filter_positions(positions, account_balance)
-            logger.info(f"🔍 Smart Filtering: {len(positions)} → {len(filtered_positions)} positions")
+            if len(positions) > 0:
+                logger.info(f"🔍 Smart Filtering: {len(positions)} → {len(filtered_positions)} positions")
             
             # Step 2.5: SW Filter - ปิดการใช้งานใน find_optimal_closing
             # SW Filter ควรใช้สำหรับออกไม้ใหม่ ไม่ใช่ปิดไม้
@@ -733,16 +737,16 @@ class HedgePairingCloser:
             logger.info(f"📊 Buy positions: {len([p for p in positions if getattr(p, 'type', 0) == 0])}")
             logger.info(f"📊 Sell positions: {len([p for p in positions if getattr(p, 'type', 0) == 1])}")
             
-            # แสดงข้อมูลไม้ที่ถูกกรองออก
-            if hasattr(self, 'original_position_count') and self.original_position_count > len(positions):
+            # แสดงข้อมูลไม้ที่ถูกกรองออก (เฉพาะเมื่อมีไม้)
+            if hasattr(self, 'original_position_count') and self.original_position_count > len(positions) and len(positions) > 0:
                 filtered_count = self.original_position_count - len(positions)
                 logger.info(f"📊 Filtered out: {filtered_count} positions (too many for analysis)")
                 logger.info(f"📊 Total positions in system: {self.original_position_count}")
             
-            # แสดงเฉพาะจำนวนสุทธิ
-            logger.info(f"📊 Summary: {len(positions)} positions analyzed")
-            
-            logger.info("=" * 60)
+            # แสดงเฉพาะจำนวนสุทธิ (เฉพาะเมื่อมีไม้)
+            if len(positions) > 0:
+                logger.info(f"📊 Summary: {len(positions)} positions analyzed")
+                logger.info("=" * 60)
             
             # บันทึกประสิทธิภาพ
             processing_time = time.time() - start_time
