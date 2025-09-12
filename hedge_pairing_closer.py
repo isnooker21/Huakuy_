@@ -76,10 +76,11 @@ class HedgePairingCloser:
         self.max_density = 5  # สูงสุด 5 ไม้ในรัศมี 5 จุด
         self.min_std_deviation = 3.0  # ส่วนเบี่ยงเบนมาตรฐานขั้นต่ำ 3 จุด
         
-        # ⏰ Wait for Bar Close - รอปิดแท่งก่อนออกไม้
+        # ⏰ Wait for Bar Close - รอปิดแท่งก่อนออกไม้ (แยกตาม TF)
         self.wait_for_bar_close = True
-        self.last_bar_time = None
+        self.last_bar_time = {}  # {timeframe: bar_time} - เวลาของแท่งล่าสุดแต่ละ TF
         self.bar_close_wait_enabled = True
+        self.timeframes = ['M5', 'M15', 'M30', 'H1']  # TF ที่ใช้
         
         # 💰 Close All When Portfolio Profitable - ปิดไม้ทั้งหมดเมื่อพอร์ตเป็นบวก
         self.close_all_when_profitable = True
@@ -446,8 +447,8 @@ class HedgePairingCloser:
             logger.error(f"❌ Error in SW filter check: {e}")
             return False, "Error"
     
-    def _check_bar_close(self) -> bool:
-        """⏰ ตรวจสอบว่าแท่งปัจจุบันปิดแล้วหรือยัง - จับ TF M5"""
+    def _check_bar_close(self, timeframe: str = 'M5') -> bool:
+        """⏰ ตรวจสอบว่าแท่งปัจจุบันปิดแล้วหรือยัง - แยกตาม TF"""
         try:
             if not self.bar_close_wait_enabled:
                 return True  # ไม่ต้องรอปิดแท่ง
@@ -458,46 +459,56 @@ class HedgePairingCloser:
             # ใช้ default symbol หรือ symbol ที่ตั้งค่าไว้
             symbol = getattr(self, 'symbol', 'XAUUSD')
             
-            # ดึงข้อมูลแท่ง M5 ปัจจุบัน (TF หลัก)
+            # แปลง TF string เป็น MT5 constant
+            tf_mapping = {
+                'M5': 5,    # 5 minutes
+                'M15': 15,  # 15 minutes
+                'M30': 30,  # 30 minutes
+                'H1': 60    # 1 hour
+            }
+            
+            tf_minutes = tf_mapping.get(timeframe, 5)  # default M5
+            
+            # ดึงข้อมูลแท่งปัจจุบันตาม TF
             try:
                 import MetaTrader5 as mt5
-                rates = mt5.copy_rates_from_pos(symbol, mt5.TIMEFRAME_M5, 0, 1)
+                rates = mt5.copy_rates_from_pos(symbol, tf_minutes, 0, 1)
                 if rates is None or len(rates) == 0:
                     return True  # ไม่สามารถดึงข้อมูลได้
                 
                 current_bar_time = rates[0]['time']
                 
-                # ถ้ายังไม่มีข้อมูลแท่งเก่า ให้บันทึกเวลาปัจจุบัน
-                if self.last_bar_time is None:
-                    self.last_bar_time = current_bar_time
-                    logger.info("⏰ First run - waiting for M5 bar close")
+                # ถ้ายังไม่มีข้อมูลแท่งเก่าสำหรับ TF นี้
+                if timeframe not in self.last_bar_time:
+                    self.last_bar_time[timeframe] = current_bar_time
+                    logger.info(f"⏰ First run - waiting for {timeframe} bar close")
                     return False  # รอปิดแท่ง
                 
-                # ตรวจสอบว่าแท่ง M5 ใหม่เริ่มแล้วหรือยัง
-                if current_bar_time > self.last_bar_time:
-                    self.last_bar_time = current_bar_time
-                    logger.info("✅ M5 Bar closed - ready to trade")
+                # ตรวจสอบว่าแท่งใหม่เริ่มแล้วหรือยัง
+                if current_bar_time > self.last_bar_time[timeframe]:
+                    self.last_bar_time[timeframe] = current_bar_time
+                    logger.info(f"✅ {timeframe} Bar closed - ready to trade")
                     return True  # แท่งปิดแล้ว พร้อมเทรด
                 
                 # ยังไม่ปิดแท่ง
-                logger.info("⏰ Waiting for M5 bar close...")
+                logger.info(f"⏰ Waiting for {timeframe} bar close...")
                 return False
                 
             except Exception as e:
-                logger.error(f"❌ Error checking M5 bar close: {e}")
+                logger.error(f"❌ Error checking {timeframe} bar close: {e}")
                 return True  # ถ้า error ให้อนุญาตเทรด
             
         except Exception as e:
             logger.error(f"❌ Error checking bar close: {e}")
             return True  # ถ้า error ให้อนุญาตเทรด
     
-    def _should_wait_for_bar_close(self) -> bool:
-        """⏰ ตรวจสอบว่าควรรอปิดแท่งหรือไม่"""
+    def _should_wait_for_bar_close(self, timeframe: str = 'M5') -> bool:
+        """⏰ ตรวจสอบว่าควรรอปิดแท่งหรือไม่ - แยกตาม TF"""
         try:
             if not self.wait_for_bar_close:
                 return False  # ไม่ต้องรอปิดแท่ง
             
-            return not self._check_bar_close()
+            return not self._check_bar_close(timeframe)
             
         except Exception as e:
             logger.error(f"❌ Error checking if should wait: {e}")

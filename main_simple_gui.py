@@ -264,7 +264,7 @@ class SimpleBreakoutTradingSystemGUI:
             try:
                 # ตรวจสอบการรอปิดแท่ง
                 if hasattr(self, 'hedge_pairing_closer') and self.hedge_pairing_closer:
-                    if self.hedge_pairing_closer._should_wait_for_bar_close():
+                    if self.hedge_pairing_closer._should_wait_for_bar_close('M5'):
                         time.sleep(1)
                         continue
                     
@@ -295,7 +295,7 @@ class SimpleBreakoutTradingSystemGUI:
                 
                 # Process Simple Breakout for all timeframes (ตรวจสอบ Bar Close ก่อน)
                 if hasattr(self, 'hedge_pairing_closer') and self.hedge_pairing_closer:
-                    if not self.hedge_pairing_closer._should_wait_for_bar_close():
+                    if not self.hedge_pairing_closer._should_wait_for_bar_close('M5'):
                         self._process_simple_breakout(current_candle)
                     else:
                         logger.info("⏰ Waiting for bar close before opening new positions...")
@@ -375,7 +375,7 @@ class SimpleBreakoutTradingSystemGUI:
         try:
             # ตรวจสอบการรอปิดแท่งก่อนออกไม้ใหม่
             if hasattr(self, 'hedge_pairing_closer') and self.hedge_pairing_closer:
-                if self.hedge_pairing_closer._should_wait_for_bar_close():
+                if self.hedge_pairing_closer._should_wait_for_bar_close('M5'):
                     logger.info("⏰ Waiting for bar close before opening new positions...")
                     return
             
@@ -449,9 +449,9 @@ class SimpleBreakoutTradingSystemGUI:
         interval = time_intervals.get(timeframe, 60)
         time_diff = (current_time - last_trade).total_seconds()
         
-        # ตรวจสอบว่าแท่งปิดแล้วหรือยัง (สอดคล้องกับ Bar Close)
+        # ตรวจสอบว่าแท่งปิดแล้วหรือยัง (สอดคล้องกับ Bar Close) - แยกตาม TF
         if hasattr(self, 'hedge_pairing_closer') and self.hedge_pairing_closer:
-            if self.hedge_pairing_closer._should_wait_for_bar_close():
+            if self.hedge_pairing_closer._should_wait_for_bar_close(timeframe):
                 return False  # รอปิดแท่ง
         
         return time_diff > interval
@@ -514,7 +514,7 @@ class SimpleBreakoutTradingSystemGUI:
         try:
             # ตรวจสอบการรอปิดแท่งก่อนออกไม้ใหม่
             if hasattr(self, 'hedge_pairing_closer') and self.hedge_pairing_closer:
-                if self.hedge_pairing_closer._should_wait_for_bar_close():
+                if self.hedge_pairing_closer._should_wait_for_bar_close('M5'):
                     logger.info("⏰ Waiting for bar close before opening new positions...")
                     return
             
