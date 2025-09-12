@@ -67,6 +67,14 @@ class HedgePairingCloser:
         self.max_positions_to_analyze = 50    # วิเคราะห์สูงสุด 50 ตัว
         self.priority_filtering = True        # ใช้การกรองตามความสำคัญ
         
+        # 🛡️ SW Filter (Stop Loss) - ป้องกันไม้กองกระจุก
+        self.sw_filter_enabled = True
+        self.clustering_threshold = 2.0  # 2 จุด
+        self.max_clustered_positions = 3  # สูงสุด 3 ไม้ใกล้กัน
+        self.density_radius = 5.0  # 5 จุด
+        self.max_density = 5  # สูงสุด 5 ไม้ในรัศมี 5 จุด
+        self.min_std_deviation = 3.0  # ส่วนเบี่ยงเบนมาตรฐานขั้นต่ำ 3 จุด
+        
         # 🚨 Emergency Mode Parameters (สำหรับพอร์ตที่แย่มาก)
         self.emergency_min_net_profit = 0.01  # กำไรขั้นต่ำในโหมดฉุกเฉิน $0.01
         self.emergency_threshold_percentage = 0.10  # 10% ในโหมดฉุกเฉิน
@@ -211,6 +219,35 @@ class HedgePairingCloser:
         
         return selected_positions
     
+    def _apply_sw_filter(self, positions: List[Any]) -> List[Any]:
+        """🛡️ ใช้ SW Filter เพื่อกรองไม้ที่กองกระจุก"""
+        try:
+            if not self.sw_filter_enabled:
+                return positions
+            
+            filtered_positions = []
+            rejected_count = 0
+            
+            for pos in positions:
+                # ตรวจสอบ SW Filter
+                sw_ok, sw_msg = self._sw_filter_check(pos, filtered_positions)
+                
+                if sw_ok:
+                    filtered_positions.append(pos)
+                else:
+                    rejected_count += 1
+                    logger.debug(f"🚫 SW Filter rejected: {sw_msg}")
+            
+            if rejected_count > 0:
+                logger.info(f"🛡️ SW Filter: Rejected {rejected_count} positions due to clustering")
+                logger.info(f"📊 SW Filter: {len(positions)} → {len(filtered_positions)} positions")
+            
+            return filtered_positions
+            
+        except Exception as e:
+            logger.error(f"❌ Error applying SW filter: {e}")
+            return positions
+    
     def set_mt5_connection(self, mt5_connection):
         """ตั้งค่า MT5 Connection สำหรับ Real-time P&L"""
         self.mt5_connection = mt5_connection
@@ -293,6 +330,119 @@ class HedgePairingCloser:
         except Exception as e:
             logger.error(f"❌ Error getting current price: {e}")
             return 0.0
+    
+    def _check_position_clustering(self, new_position, existing_positions):
+        """ตรวจสอบว่าไม้ใหม่จะทำให้เกิดการกองกระจุกใกล้ๆ หรือไม่"""
+        try:
+            if not self.sw_filter_enabled:
+                return True, "SW filter disabled"
+            
+            new_price = getattr(new_position, 'price_open', 0)
+            
+            # นับไม้ที่อยู่ใกล้กัน
+            nearby_positions = 0
+            for pos in existing_positions:
+                existing_price = getattr(pos, 'price_open', 0)
+                distance = abs(new_price - existing_price)
+                
+                if distance <= self.clustering_threshold:
+                    nearby_positions += 1
+            
+            # ถ้ามีไม้ใกล้กันมากเกินไป ให้หยุดออกไม้
+            if nearby_positions >= self.max_clustered_positions:
+                return False, f"Too many positions clustered near {new_price} ({nearby_positions} positions within {self.clustering_threshold} points)"
+            
+            return True, "OK"
+            
+        except Exception as e:
+            logger.error(f"❌ Error checking position clustering: {e}")
+            return False, "Error"
+    
+    def _check_position_density(self, new_position, existing_positions):
+        """ตรวจสอบความหนาแน่นของไม้ในพื้นที่ใกล้เคียง"""
+        try:
+            if not self.sw_filter_enabled:
+                return True, "SW filter disabled"
+            
+            new_price = getattr(new_position, 'price_open', 0)
+            
+            # นับไม้ในรัศมี
+            positions_in_radius = 0
+            for pos in existing_positions:
+                existing_price = getattr(pos, 'price_open', 0)
+                distance = abs(new_price - existing_price)
+                
+                if distance <= self.density_radius:
+                    positions_in_radius += 1
+            
+            # ถ้าไม้หนาแน่นเกินไป ให้หยุดออกไม้
+            if positions_in_radius >= self.max_density:
+                return False, f"Position density too high near {new_price} ({positions_in_radius} positions in {self.density_radius} points)"
+            
+            return True, "OK"
+            
+        except Exception as e:
+            logger.error(f"❌ Error checking position density: {e}")
+            return False, "Error"
+    
+    def _check_position_distribution(self, new_position, existing_positions):
+        """ตรวจสอบการกระจายของไม้ในพอร์ต"""
+        try:
+            if not self.sw_filter_enabled:
+                return True, "SW filter disabled"
+            
+            if len(existing_positions) < 5:
+                return True, "Not enough positions to check distribution"
+            
+            # คำนวณการกระจายของไม้
+            prices = [getattr(pos, 'price_open', 0) for pos in existing_positions]
+            prices.append(getattr(new_position, 'price_open', 0))
+            
+            # คำนวณค่าเฉลี่ยและส่วนเบี่ยงเบนมาตรฐาน
+            mean_price = sum(prices) / len(prices)
+            variance = sum((p - mean_price) ** 2 for p in prices) / len(prices)
+            std_deviation = variance ** 0.5
+            
+            # ถ้าการกระจายน้อยเกินไป (ไม้กองกัน) ให้หยุดออกไม้
+            if std_deviation < self.min_std_deviation:
+                return False, f"Positions too clustered (std_dev: {std_deviation:.2f} < {self.min_std_deviation})"
+            
+            return True, "OK"
+            
+        except Exception as e:
+            logger.error(f"❌ Error checking position distribution: {e}")
+            return False, "Error"
+    
+    def _sw_filter_check(self, new_position, existing_positions):
+        """ระบบกรอง SW แบบรวม"""
+        try:
+            if not self.sw_filter_enabled:
+                return True, "SW filter disabled"
+            
+            # ตรวจสอบการกองกระจุก
+            clustering_ok, clustering_msg = self._check_position_clustering(new_position, existing_positions)
+            if not clustering_ok:
+                logger.warning(f"🚫 SW FILTER: {clustering_msg}")
+                return False, clustering_msg
+            
+            # ตรวจสอบความหนาแน่น
+            density_ok, density_msg = self._check_position_density(new_position, existing_positions)
+            if not density_ok:
+                logger.warning(f"🚫 SW FILTER: {density_msg}")
+                return False, density_msg
+            
+            # ตรวจสอบการกระจาย
+            distribution_ok, distribution_msg = self._check_position_distribution(new_position, existing_positions)
+            if not distribution_ok:
+                logger.warning(f"🚫 SW FILTER: {distribution_msg}")
+                return False, distribution_msg
+            
+            logger.info("✅ SW FILTER: Position passed all checks")
+            return True, "All checks passed"
+            
+        except Exception as e:
+            logger.error(f"❌ Error in SW filter check: {e}")
+            return False, "Error"
     
     def _analyze_portfolio_health(self, positions: List[Any], account_balance: float = 1000.0) -> dict:
         """วิเคราะห์สุขภาพพอร์ต"""
@@ -379,6 +529,11 @@ class HedgePairingCloser:
             # Step 2: Smart Filtering - คัดกรองไม้ตามค่าเฉลี่ยของเงินทุน
             filtered_positions = self._smart_filter_positions(positions, account_balance)
             logger.info(f"🔍 Smart Filtering: {len(positions)} → {len(filtered_positions)} positions")
+            
+            # Step 2.5: SW Filter - กรองไม้ที่กองกระจุก
+            if self.sw_filter_enabled:
+                filtered_positions = self._apply_sw_filter(filtered_positions)
+                logger.info(f"🛡️ SW Filter: Applied clustering protection")
             
             # 1. หาการจับคู่ไม้ที่มีอยู่
             profitable_combinations = self._find_profitable_combinations(filtered_positions)
