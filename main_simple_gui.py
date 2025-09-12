@@ -224,7 +224,7 @@ class SimpleBreakoutTradingSystemGUI:
             # 🚀 Initialize Hedge Pairing Closer
             try:
                 from hedge_pairing_closer import create_hedge_pairing_closer
-                self.hedge_pairing_closer = create_hedge_pairing_closer()
+                self.hedge_pairing_closer = create_hedge_pairing_closer(symbol=self.actual_symbol)
                 # ตั้งค่า MT5 connection สำหรับ Real-time P&L
                 if self.mt5_connection:
                     self.hedge_pairing_closer.set_mt5_connection(self.mt5_connection)
