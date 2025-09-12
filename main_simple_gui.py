@@ -373,11 +373,11 @@ class SimpleBreakoutTradingSystemGUI:
         ✅ Dynamic lot sizing
         """
         try:
-            # ตรวจสอบการรอปิดแท่งก่อนออกไม้ใหม่
-            if hasattr(self, 'hedge_pairing_closer') and self.hedge_pairing_closer:
-                if self.hedge_pairing_closer._should_wait_for_bar_close('M5'):
-                    logger.info("⏰ Waiting for bar close before opening new positions...")
-                    return
+            # ตรวจสอบการรอปิดแท่งก่อนออกไม้ใหม่ (ลบออกเพราะซ้ำซ้อนกับ _trading_loop)
+            # if hasattr(self, 'hedge_pairing_closer') and self.hedge_pairing_closer:
+            #     if self.hedge_pairing_closer._should_wait_for_bar_close('M5'):
+            #         logger.info("⏰ Waiting for bar close before opening new positions...")
+            #         return
             
             current_price = current_candle.close
             
@@ -385,13 +385,18 @@ class SimpleBreakoutTradingSystemGUI:
             for timeframe in self.timeframes:
                 # Check if we can trade this timeframe (one per candle rule) - สอดคล้องกับ Bar Close
                 if not self._can_trade_timeframe(timeframe):
-                    logger.debug(f"⏰ Cannot trade {timeframe} - waiting for bar close or time interval")
+                    logger.info(f"⏰ Cannot trade {timeframe} - waiting for bar close or time interval")
                     continue
+                
+                logger.info(f"🔍 Processing {timeframe} timeframe...")
                 
                 # Get previous candle for this timeframe
                 previous_candle = self._get_previous_candle(timeframe)
                 if not previous_candle:
+                    logger.info(f"❌ No previous candle for {timeframe}")
                     continue
+                
+                logger.info(f"📊 {timeframe}: Current={current_candle.close:.2f}, Previous High={previous_candle.high:.2f}, Low={previous_candle.low:.2f}")
                 
                 # 🎯 SIMPLE BREAKOUT DETECTION
                 breakout_signal = None
@@ -449,10 +454,10 @@ class SimpleBreakoutTradingSystemGUI:
         interval = time_intervals.get(timeframe, 60)
         time_diff = (current_time - last_trade).total_seconds()
         
-        # ตรวจสอบว่าแท่งปิดแล้วหรือยัง (สอดคล้องกับ Bar Close) - แยกตาม TF
-        if hasattr(self, 'hedge_pairing_closer') and self.hedge_pairing_closer:
-            if self.hedge_pairing_closer._should_wait_for_bar_close(timeframe):
-                return False  # รอปิดแท่ง
+        # ตรวจสอบว่าแท่งปิดแล้วหรือยัง (ลบออกเพราะซ้ำซ้อนกับ _trading_loop)
+        # if hasattr(self, 'hedge_pairing_closer') and self.hedge_pairing_closer:
+        #     if self.hedge_pairing_closer._should_wait_for_bar_close(timeframe):
+        #         return False  # รอปิดแท่ง
         
         return time_diff > interval
     
