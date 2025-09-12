@@ -285,9 +285,12 @@ class HedgePairingCloser:
                     return cached_data['pnl']  # ใช้ข้อมูลเก่า
             
             # คำนวณ P&L จากราคาปัจจุบัน
-            if self.mt5_connection and hasattr(self.mt5_connection, 'get_current_price'):
-                current_price = self.mt5_connection.get_current_price(getattr(position, 'symbol', ''))
-                if current_price is not None:
+            if self.mt5_connection and hasattr(self.mt5_connection, 'get_current_tick'):
+                tick_data = self.mt5_connection.get_current_tick(getattr(position, 'symbol', ''))
+                if tick_data is not None:
+                    # ใช้ราคาเฉลี่ยระหว่าง bid และ ask
+                    current_price = (tick_data['bid'] + tick_data['ask']) / 2
+                    
                     # คำนวณ P&L จริง
                     if getattr(position, 'type', 0) == 0:  # Buy
                         pnl = (current_price - getattr(position, 'open_price', 0)) * getattr(position, 'volume', 0) * 100000
@@ -321,10 +324,13 @@ class HedgePairingCloser:
             if not self.mt5_connection:
                 return 0.0
             
-            current_price = self.mt5_connection.get_current_price(self.symbol)
-            if current_price is None:
+            # ใช้ get_current_tick แทน get_current_price
+            tick_data = self.mt5_connection.get_current_tick(self.symbol)
+            if tick_data is None:
                 return 0.0
             
+            # ใช้ราคาเฉลี่ยระหว่าง bid และ ask
+            current_price = (tick_data['bid'] + tick_data['ask']) / 2
             return current_price
             
         except Exception as e:
