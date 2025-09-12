@@ -50,22 +50,23 @@ class HedgePairingCloser:
         self.min_net_profit = 0.1          # กำไรสุทธิขั้นต่ำ $0.1
         self.max_acceptable_loss = 5.0     # ขาดทุนที่ยอมรับได้ $5.0
         
-        # 🚀 Performance Optimization - OPTIMIZED
-        self.use_parallel_processing = False  # ปิดการประมวลผลแบบขนานเพื่อลด overhead
-        self.max_workers = 1  # ใช้ single thread เพื่อลด complexity
+        # 🚀 Dynamic Performance Optimization - ปรับตามจำนวนไม้และสถานะพอร์ต
+        self.use_parallel_processing = True   # เปิดการประมวลผลแบบขนาน
+        self.max_workers = 2  # ใช้ 2 threads (ไม่มากเกินไป)
         
         # 🧠 Smart Caching
         self.combination_cache = {}  # เก็บผลลัพธ์การจับคู่ไว้
         self.cache_hit_count = 0
         self.cache_miss_count = 0
         
-        # ⚡ Early Termination - OPTIMIZED
-        self.early_termination_threshold = 3  # หยุดเมื่อพบ 3 combinations ที่ดี (ลดจาก 5)
-        self.best_profit_threshold = 1.5  # หยุดเมื่อกำไรมากกว่า 1.5 เท่าของ threshold (ลดจาก 2.0)
+        # ⚡ Dynamic Early Termination - ปรับตามจำนวนไม้
+        self.base_early_termination = 3  # ฐาน 3 combinations
+        self.base_best_profit_threshold = 1.5  # ฐาน 1.5 เท่า
         
-        # 🎯 Smart Filtering for Large Portfolios - OPTIMIZED
-        self.large_portfolio_threshold = 50   # ถ้ามีไม้มากกว่า 50 ตัว (ลดจาก 100)
-        self.max_positions_to_analyze = 20    # วิเคราะห์สูงสุด 20 ตัว (ลดจาก 50)
+        # 🎯 Dynamic Smart Filtering - ปรับตามจำนวนไม้
+        self.small_portfolio_threshold = 20    # ไม้น้อย: 1-20 ตัว
+        self.medium_portfolio_threshold = 60   # ไม้ปานกลาง: 21-60 ตัว
+        self.large_portfolio_threshold = 100   # ไม้เยอะ: 61+ ตัว
         self.priority_filtering = True        # ใช้การกรองตามความสำคัญ
         
         # 🛡️ SW Filter (Stop Loss) - ป้องกันไม้กองกระจุก
@@ -94,13 +95,89 @@ class HedgePairingCloser:
         
         # 🔧 Position Generation Parameters
         self.enable_position_generation = True  # เปิดใช้งานการออกไม้เพิ่มเติม
-        self.max_additional_positions = 3       # จำนวนไม้เพิ่มเติมสูงสุด
+        self.max_additional_positions = 3
+        
+        # 🎯 Dynamic Adjustment Methods
+        self._adjust_performance_settings = self._get_dynamic_performance_settings
         self.additional_position_volume = 0.01  # ขนาดไม้เพิ่มเติม
         
         # 🚀 Real-time P&L System
         self.pnl_cache = {}  # เก็บข้อมูล P&L ไว้
         self.cache_timeout = 1.0  # หมดอายุใน 1 วินาที
         self.portfolio_health_score = "ปานกลาง"  # สุขภาพพอร์ต
+    
+    def _get_dynamic_performance_settings(self, position_count: int, portfolio_health: str = "ปานกลาง") -> dict:
+        """🎯 Dynamic Performance Settings - ปรับตามจำนวนไม้และสถานะพอร์ต"""
+        try:
+            # กำหนดประเภทพอร์ต
+            if position_count <= self.small_portfolio_threshold:
+                portfolio_type = "small"
+            elif position_count <= self.medium_portfolio_threshold:
+                portfolio_type = "medium"
+            else:
+                portfolio_type = "large"
+            
+            # กำหนดการตั้งค่าตามประเภทพอร์ต
+            if portfolio_type == "small":
+                # ไม้น้อย: วิเคราะห์ทั้งหมด, หา pair ทุกความเป็นไปได้
+                settings = {
+                    'max_positions_to_analyze': position_count,  # วิเคราะห์ทั้งหมด
+                    'early_termination_threshold': 5,  # หา pair มากขึ้น
+                    'best_profit_threshold': 2.0,  # หา pair ที่ดีกว่า
+                    'max_searches': 200,  # ค้นหามากขึ้น
+                    'max_attempts': 5,  # ลองมากขึ้น
+                    'use_parallel_processing': False,  # ไม่ต้องใช้ parallel
+                    'max_workers': 1
+                }
+            elif portfolio_type == "medium":
+                # ไม้ปานกลาง: สมดุลระหว่างความเร็วและประสิทธิภาพ
+                settings = {
+                    'max_positions_to_analyze': min(40, position_count),  # วิเคราะห์ 40 ตัว
+                    'early_termination_threshold': 4,  # หา pair ปานกลาง
+                    'best_profit_threshold': 1.8,  # หา pair ที่ดี
+                    'max_searches': 150,  # ค้นหาปานกลาง
+                    'max_attempts': 4,  # ลองปานกลาง
+                    'use_parallel_processing': True,  # ใช้ parallel
+                    'max_workers': 2
+                }
+            else:
+                # ไม้เยอะ: เน้นความเร็ว, กรองไม้สำคัญ
+                settings = {
+                    'max_positions_to_analyze': min(50, position_count),  # วิเคราะห์ 50 ตัว
+                    'early_termination_threshold': 3,  # หา pair เร็ว
+                    'best_profit_threshold': 1.5,  # หา pair เร็ว
+                    'max_searches': 100,  # ค้นหาน้อย
+                    'max_attempts': 3,  # ลองน้อย
+                    'use_parallel_processing': True,  # ใช้ parallel
+                    'max_workers': 2
+                }
+            
+            # ปรับตามสุขภาพพอร์ต
+            if portfolio_health in ["แย่", "แย่มาก"]:
+                # พอร์ตแย่: หา pair มากขึ้น, ใช้เวลานานขึ้น
+                settings['early_termination_threshold'] = min(8, settings['early_termination_threshold'] + 2)
+                settings['max_searches'] = min(300, settings['max_searches'] + 50)
+                settings['max_attempts'] = min(8, settings['max_attempts'] + 2)
+            elif portfolio_health == "ดี":
+                # พอร์ตดี: หา pair เร็ว, ใช้เวลาน้อย
+                settings['early_termination_threshold'] = max(2, settings['early_termination_threshold'] - 1)
+                settings['max_searches'] = max(50, settings['max_searches'] - 25)
+                settings['max_attempts'] = max(2, settings['max_attempts'] - 1)
+            
+            return settings
+            
+        except Exception as e:
+            logger.error(f"❌ Error getting dynamic performance settings: {e}")
+            # Fallback to default settings
+            return {
+                'max_positions_to_analyze': 30,
+                'early_termination_threshold': 3,
+                'best_profit_threshold': 1.5,
+                'max_searches': 100,
+                'max_attempts': 3,
+                'use_parallel_processing': True,
+                'max_workers': 2
+            }
         self.performance_history = []  # ประวัติประสิทธิภาพ
         self.mt5_connection = None  # จะถูกตั้งค่าในภายหลัง
         
@@ -667,8 +744,19 @@ class HedgePairingCloser:
                 logger.info(f"🎯 Total Profit: ${total_profit:.2f} | Positions: {len(positions)}")
                 return self._create_close_all_decision(positions, total_profit)
             
+            # 🎯 Dynamic Performance Settings - ปรับตามจำนวนไม้และสถานะพอร์ต
+            dynamic_settings = self._get_dynamic_performance_settings(len(positions), portfolio_health['health_score'])
+            
+            # ใช้ dynamic settings
+            max_positions_to_analyze = dynamic_settings['max_positions_to_analyze']
+            early_termination_threshold = dynamic_settings['early_termination_threshold']
+            best_profit_threshold = dynamic_settings['best_profit_threshold']
+            
+            logger.info(f"🎯 Dynamic Settings: {len(positions)} positions → {max_positions_to_analyze} to analyze")
+            logger.info(f"   Early Termination: {early_termination_threshold}, Best Profit: {best_profit_threshold}x")
+            
             # 🎯 Smart Position Selection สำหรับพอร์ตใหญ่
-            if self.priority_filtering and len(positions) > self.large_portfolio_threshold:
+            if self.priority_filtering and len(positions) > max_positions_to_analyze:
                 original_count = len(positions)
                 positions = self._smart_position_selection(positions)
                 logger.info(f"🎯 Smart Selection: {original_count} → {len(positions)} positions")
@@ -1463,7 +1551,7 @@ class HedgePairingCloser:
             logger.error(f"❌ Error checking same type combination: {e}")
             return False
     
-    def _find_hedge_combinations(self, positions: List[Any]) -> List[HedgeCombination]:
+    def _find_hedge_combinations(self, positions: List[Any], dynamic_settings: dict = None) -> List[HedgeCombination]:
         """หาการจับคู่แบบ Hedge (ตรงข้ามก่อนเสมอ) - เร็วขึ้น"""
         try:
             hedge_combinations = []
