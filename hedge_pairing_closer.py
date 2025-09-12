@@ -463,7 +463,7 @@ class HedgePairingCloser:
             return False, "Error"
     
     def _check_bar_close(self) -> bool:
-        """⏰ ตรวจสอบว่าแท่งปัจจุบันปิดแล้วหรือยัง"""
+        """⏰ ตรวจสอบว่าแท่งปัจจุบันปิดแล้วหรือยัง - สอดคล้องกับระบบ Trading"""
         try:
             if not self.bar_close_wait_enabled:
                 return True  # ไม่ต้องรอปิดแท่ง
@@ -479,7 +479,9 @@ class HedgePairingCloser:
             if tick_data is None:
                 return True  # ไม่สามารถดึงข้อมูลได้
             
-            current_time = tick_data['time']
+            # ใช้เวลาเดียวกันกับระบบ Trading (datetime.now())
+            from datetime import datetime
+            current_time = datetime.now()
             
             # ถ้ายังไม่มีข้อมูลแท่งเก่า ให้บันทึกเวลาปัจจุบัน
             if self.last_bar_time is None:
@@ -487,7 +489,7 @@ class HedgePairingCloser:
                 logger.info("⏰ First run - waiting for bar close")
                 return False  # รอปิดแท่ง
             
-            # ตรวจสอบว่าแท่งใหม่เริ่มแล้วหรือยัง
+            # ตรวจสอบว่าแท่งใหม่เริ่มแล้วหรือยัง (ใช้เวลาเดียวกัน)
             if current_time > self.last_bar_time:
                 self.last_bar_time = current_time
                 logger.info("✅ Bar closed - ready to trade")

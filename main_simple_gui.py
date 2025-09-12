@@ -383,8 +383,9 @@ class SimpleBreakoutTradingSystemGUI:
             
             # Process each timeframe
             for timeframe in self.timeframes:
-                # Check if we can trade this timeframe (one per candle rule)
+                # Check if we can trade this timeframe (one per candle rule) - สอดคล้องกับ Bar Close
                 if not self._can_trade_timeframe(timeframe):
+                    logger.debug(f"⏰ Cannot trade {timeframe} - waiting for bar close or time interval")
                     continue
                 
                 # Get previous candle for this timeframe
@@ -429,10 +430,13 @@ class SimpleBreakoutTradingSystemGUI:
             logger.error(f"❌ Error in simple breakout processing: {e}")
     
     def _can_trade_timeframe(self, timeframe: str) -> bool:
-        """Check if we can trade this timeframe (one trade per candle rule)"""
+        """Check if we can trade this timeframe (one trade per candle rule) - สอดคล้องกับ Bar Close"""
         last_trade = self.last_trade_time.get(timeframe)
         if last_trade is None:
             return True
+        
+        # ใช้เวลาเดียวกันกับ Bar Close System
+        current_time = datetime.now()
         
         # Simple time-based check (adjust based on timeframe)
         time_intervals = {
@@ -443,7 +447,14 @@ class SimpleBreakoutTradingSystemGUI:
         }
         
         interval = time_intervals.get(timeframe, 60)
-        return (datetime.now() - last_trade).total_seconds() > interval
+        time_diff = (current_time - last_trade).total_seconds()
+        
+        # ตรวจสอบว่าแท่งปิดแล้วหรือยัง (สอดคล้องกับ Bar Close)
+        if hasattr(self, 'hedge_pairing_closer') and self.hedge_pairing_closer:
+            if self.hedge_pairing_closer._should_wait_for_bar_close():
+                return False  # รอปิดแท่ง
+        
+        return time_diff > interval
     
     def _get_previous_candle(self, timeframe: str) -> Optional[CandleData]:
         """Get previous candle for timeframe"""
