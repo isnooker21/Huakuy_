@@ -303,11 +303,11 @@ class HedgePairingCloser:
                     # ใช้ราคาเฉลี่ยระหว่าง bid และ ask
                     current_price = (tick_data['bid'] + tick_data['ask']) / 2
                     
-                    # คำนวณ P&L จริง
+                    # คำนวณ P&L จริง (แก้ไขการคำนวณ)
                     if getattr(position, 'type', 0) == 0:  # Buy
-                        pnl = (current_price - getattr(position, 'open_price', 0)) * getattr(position, 'volume', 0) * 100000
+                        pnl = (current_price - getattr(position, 'open_price', 0)) * getattr(position, 'volume', 0) * 100
                     else:  # Sell
-                        pnl = (getattr(position, 'open_price', 0) - current_price) * getattr(position, 'volume', 0) * 100000
+                        pnl = (getattr(position, 'open_price', 0) - current_price) * getattr(position, 'volume', 0) * 100
                     
                     # เก็บไว้ใน cache
                     self.pnl_cache[ticket] = {
@@ -596,10 +596,17 @@ class HedgePairingCloser:
     def _analyze_portfolio_health(self, positions: List[Any], account_balance: float = 1000.0) -> dict:
         """วิเคราะห์สุขภาพพอร์ต"""
         try:
-            # คำนวณ Floating P&L จริง
+            # คำนวณ Floating P&L จริง (ตรวจสอบความถูกต้อง)
             real_pnl_list = [self._get_real_time_pnl(pos) for pos in positions]
             total_pnl = sum(real_pnl_list)
             position_count = len(positions)
+            
+            # ตรวจสอบ P&L ที่ผิดปกติ
+            if abs(total_pnl) > account_balance * 10:  # P&L มากกว่า 10 เท่าของเงินทุน
+                logger.warning(f"⚠️ P&L calculation seems wrong: ${total_pnl:.2f} (Account: ${account_balance:.2f})")
+                # ใช้ข้อมูลจาก position.profit แทน
+                total_pnl = sum(getattr(pos, 'profit', 0) for pos in positions)
+                logger.warning(f"⚠️ Using fallback P&L: ${total_pnl:.2f}")
             
             # คำนวณสุขภาพพอร์ต
             if total_pnl > 100:
@@ -652,6 +659,13 @@ class HedgePairingCloser:
             # ตรวจสอบการปิดไม้ทั้งหมดเมื่อพอร์ตเป็นบวก (เร็วขึ้น)
             account_balance = account_info.get('balance', 1000.0)
             total_profit = sum(getattr(pos, 'profit', 0) for pos in positions)
+            
+            # ตรวจสอบ P&L ที่ผิดปกติ
+            if abs(total_profit) > account_balance * 10:  # P&L มากกว่า 10 เท่าของเงินทุน
+                logger.warning(f"⚠️ P&L calculation seems wrong: ${total_profit:.2f} (Account: ${account_balance:.2f})")
+                # ใช้ข้อมูลจาก position.profit แทน
+                total_profit = sum(getattr(pos, 'profit', 0) for pos in positions)
+                logger.warning(f"⚠️ Using fallback P&L: ${total_profit:.2f}")
             
             # ตรวจสอบกำไรเร่งด่วนก่อน (ปิดทันที) - เร็วขึ้น
             if total_profit >= self.urgent_profit_threshold:
