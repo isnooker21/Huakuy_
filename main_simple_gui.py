@@ -406,7 +406,7 @@ class SimpleBreakoutTradingSystemGUI:
                     )
                     
                     # อัปเดตเวลาการเทรดล่าสุดเป็นเวลาแท่งเทียน
-                    self.last_trade_time[timeframe] = current_candle.time
+                    self.last_trade_time[timeframe] = current_candle.timestamp
             
             # Update candle history
             self._update_candle_history(current_candle)
@@ -426,7 +426,7 @@ class SimpleBreakoutTradingSystemGUI:
             return False
         
         # ตรวจสอบว่าแท่งเทียนปัจจุบันเป็นแท่งใหม่หรือไม่
-        current_candle_time = current_candle.time
+        current_candle_time = current_candle.timestamp
         last_trade_time = last_trade
         
         # เปรียบเทียบเวลาแท่งเทียน (ไม่ใช่เวลาปัจจุบัน)
