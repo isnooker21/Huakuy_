@@ -59,6 +59,9 @@ class HedgePairingCloser:
         self.cache_hit_count = 0
         self.cache_miss_count = 0
         
+        # 📊 Performance Tracking
+        self.performance_history = []  # ประวัติประสิทธิภาพ
+        
         # ⚡ Dynamic Early Termination - ปรับตามจำนวนไม้
         self.base_early_termination = 3  # ฐาน 3 combinations
         self.base_best_profit_threshold = 1.5  # ฐาน 1.5 เท่า
@@ -178,7 +181,7 @@ class HedgePairingCloser:
                 'use_parallel_processing': True,
                 'max_workers': 2
             }
-        self.performance_history = []  # ประวัติประสิทธิภาพ
+        # 📊 Performance Tracking (ย้ายไปข้างบนแล้ว)
         self.mt5_connection = None  # จะถูกตั้งค่าในภายหลัง
         
         # ⏰ Advanced Search Timing (1 hour delay)
@@ -744,6 +747,10 @@ class HedgePairingCloser:
                 logger.info(f"🎯 Total Profit: ${total_profit:.2f} | Positions: {len(positions)}")
                 return self._create_close_all_decision(positions, total_profit)
             
+            # Step 1: วิเคราะห์สุขภาพพอร์ตก่อน
+            account_balance = account_info.get('balance', 1000.0)
+            portfolio_health = self._analyze_portfolio_health(positions, account_balance)
+            
             # 🎯 Dynamic Performance Settings - ปรับตามจำนวนไม้และสถานะพอร์ต
             dynamic_settings = self._get_dynamic_performance_settings(len(positions), portfolio_health['health_score'])
             
@@ -767,9 +774,7 @@ class HedgePairingCloser:
             if len(positions) > 0:
                 logger.info(f"🔍 HEDGE ANALYSIS: {len(positions)} positions")
             
-            # Step 1: วิเคราะห์สุขภาพพอร์ต
-            account_balance = account_info.get('balance', 1000.0)
-            portfolio_health = self._analyze_portfolio_health(positions, account_balance)
+            # Step 1: วิเคราะห์สุขภาพพอร์ต (ย้ายไปข้างบนแล้ว)
             
             # แสดงสถานะพอร์ตเฉพาะเมื่อเปลี่ยนสถานะ
             if not hasattr(self, '_last_portfolio_status'):
