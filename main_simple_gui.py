@@ -297,8 +297,8 @@ class SimpleBreakoutTradingSystemGUI:
                 if hasattr(self, 'hedge_pairing_closer') and self.hedge_pairing_closer:
                     if not self.hedge_pairing_closer._should_wait_for_bar_close('M5'):
                         self._process_simple_breakout(current_candle)
-                    else:
-                        logger.info("⏰ Waiting for bar close before opening new positions...")
+                    # else:
+                        # logger.info("⏰ Waiting for bar close before opening new positions...")
                 else:
                     self._process_simple_breakout(current_candle)
                 

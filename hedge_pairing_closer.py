@@ -490,8 +490,7 @@ class HedgePairingCloser:
                     logger.info(f"✅ {timeframe} Bar closed - ready to trade")
                     return True  # แท่งปิดแล้ว พร้อมเทรด
                 
-                # ยังไม่ปิดแท่ง
-                logger.info(f"⏰ Waiting for {timeframe} bar close...")
+                # ยังไม่ปิดแท่ง (ไม่ log ถี่ๆ)
                 return False
                 
             except Exception as e:
@@ -643,7 +642,6 @@ class HedgePairingCloser:
             
             # ตรวจสอบการรอปิดแท่ง
             if self._should_wait_for_bar_close():
-                logger.info("⏰ Waiting for bar close before trading...")
                 return None
             
             # แสดงจำนวนไม้ทั้งหมดก่อนกรอง
@@ -680,12 +678,15 @@ class HedgePairingCloser:
             # Step 1: วิเคราะห์สุขภาพพอร์ต
             account_balance = account_info.get('balance', 1000.0)
             portfolio_health = self._analyze_portfolio_health(positions, account_balance)
-            logger.info(f"📊 Portfolio Health: {portfolio_health['health_score']} (P&L: ${portfolio_health['total_pnl']:.2f})")
             
-            # แสดงสถานะพอร์ต (ไม่ใช้ Emergency Mode)
-            if portfolio_health['health_score'] in ["แย่", "แย่มาก"]:
-                logger.info(f"📊 Portfolio Status: {portfolio_health['health_score']} (P&L: ${portfolio_health['total_pnl']:.2f})")
-                logger.info(f"   ระบบจะทำงานตามปกติ")
+            # แสดงสถานะพอร์ตเฉพาะเมื่อเปลี่ยนสถานะ
+            if not hasattr(self, '_last_portfolio_status'):
+                self._last_portfolio_status = None
+            
+            current_status = portfolio_health['health_score']
+            if current_status != self._last_portfolio_status:
+                logger.info(f"📊 Portfolio Health: {current_status} (P&L: ${portfolio_health['total_pnl']:.2f})")
+                self._last_portfolio_status = current_status
             
             # Step 2: Smart Filtering - คัดกรองไม้ตามค่าเฉลี่ยของเงินทุน
             filtered_positions = self._smart_filter_positions(positions, account_balance)
