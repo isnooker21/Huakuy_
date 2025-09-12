@@ -83,8 +83,9 @@ class HedgePairingCloser:
         
         # 💰 Close All When Portfolio Profitable - ปิดไม้ทั้งหมดเมื่อพอร์ตเป็นบวก
         self.close_all_when_profitable = True
-        self.profitable_threshold_percentage = 2.0  # 2% ของเงินทุน
-        self.min_profit_for_close_all = 10.0  # กำไรขั้นต่ำ $10
+        self.profitable_threshold_percentage = 1.0  # 1% ของเงินทุน (ลดลง)
+        self.min_profit_for_close_all = 5.0  # กำไรขั้นต่ำ $5 (ลดลง)
+        self.urgent_profit_threshold = 50.0  # กำไรเร่งด่วน $50
         
         # 🚨 Emergency Mode Parameters (สำหรับพอร์ตที่แย่มาก)
         self.emergency_min_net_profit = 0.01  # กำไรขั้นต่ำในโหมดฉุกเฉิน $0.01
@@ -513,7 +514,7 @@ class HedgePairingCloser:
             return False  # ถ้า error ให้ไม่รอ
     
     def _check_close_all_profitable(self, positions: List[Any], account_balance: float) -> bool:
-        """💰 ตรวจสอบว่าควรปิดไม้ทั้งหมดเมื่อพอร์ตเป็นบวกหรือไม่"""
+        """💰 ตรวจสอบว่าควรปิดไม้ทั้งหมดเมื่อพอร์ตเป็นบวกหรือไม่ (เร็วขึ้น)"""
         try:
             if not self.close_all_when_profitable:
                 return False  # ไม่เปิดใช้ฟีเจอร์นี้
@@ -521,20 +522,26 @@ class HedgePairingCloser:
             if len(positions) < 1:
                 return False  # ไม่มีไม้ให้ปิด
             
-            # คำนวณกำไรรวมของพอร์ต
+            # คำนวณกำไรรวมของพอร์ต (เร็วขึ้น)
             total_profit = sum(getattr(pos, 'profit', 0) for pos in positions)
             
-            # ตรวจสอบเงื่อนไขการปิดไม้ทั้งหมด
-            profit_percentage = (total_profit / account_balance) * 100 if account_balance > 0 else 0
+            # ตรวจสอบเงื่อนไขการปิดไม้ทั้งหมด (เร็วขึ้น)
             
             # เงื่อนไข 1: กำไรรวมมากกว่าเปอร์เซ็นต์ที่กำหนด
-            if profit_percentage >= self.profitable_threshold_percentage:
-                logger.info(f"💰 Portfolio profitable: {profit_percentage:.2f}% >= {self.profitable_threshold_percentage}%")
-                return True
+            if account_balance > 0:
+                profit_percentage = (total_profit / account_balance) * 100
+                if profit_percentage >= self.profitable_threshold_percentage:
+                    logger.info(f"💰 Portfolio profitable: {profit_percentage:.2f}% >= {self.profitable_threshold_percentage}%")
+                    return True
             
             # เงื่อนไข 2: กำไรรวมมากกว่าจำนวนเงินขั้นต่ำ
             if total_profit >= self.min_profit_for_close_all:
                 logger.info(f"💰 Portfolio profitable: ${total_profit:.2f} >= ${self.min_profit_for_close_all}")
+                return True
+            
+            # เงื่อนไข 3: กำไรรวมมากกว่าเกณฑ์เร่งด่วน (ปิดทันที)
+            if total_profit >= self.urgent_profit_threshold:
+                logger.info(f"🚨 URGENT: Portfolio very profitable: ${total_profit:.2f} >= ${self.urgent_profit_threshold}")
                 return True
             
             return False
@@ -642,10 +649,23 @@ class HedgePairingCloser:
             self.original_position_count = len(positions)
             logger.info(f"📊 TOTAL POSITIONS: {len(positions)} positions")
             
-            # ตรวจสอบการปิดไม้ทั้งหมดเมื่อพอร์ตเป็นบวก
+            # ตรวจสอบการปิดไม้ทั้งหมดเมื่อพอร์ตเป็นบวก (เร็วขึ้น)
             account_balance = account_info.get('balance', 1000.0)
+            total_profit = sum(getattr(pos, 'profit', 0) for pos in positions)
+            
+            # ตรวจสอบกำไรเร่งด่วนก่อน (ปิดทันที)
+            if total_profit >= self.urgent_profit_threshold:
+                logger.info("=" * 60)
+                logger.info("🚨 URGENT CLOSE ALL - VERY PROFITABLE")
+                logger.info("=" * 60)
+                logger.info(f"🎯 Total Profit: ${total_profit:.2f}")
+                logger.info(f"📊 Positions to close: {len(positions)}")
+                logger.info(f"💡 Reason: URGENT - Very profitable portfolio")
+                logger.info("=" * 60)
+                return self._create_close_all_decision(positions, total_profit)
+            
+            # ตรวจสอบการปิดไม้ทั้งหมดเมื่อพอร์ตเป็นบวก
             if self._check_close_all_profitable(positions, account_balance):
-                total_profit = sum(getattr(pos, 'profit', 0) for pos in positions)
                 logger.info("=" * 60)
                 logger.info("💰 CLOSE ALL POSITIONS - PORTFOLIO PROFITABLE")
                 logger.info("=" * 60)
