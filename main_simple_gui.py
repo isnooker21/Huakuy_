@@ -267,6 +267,16 @@ class SimpleBreakoutTradingSystemGUI:
                     if self.hedge_pairing_closer._should_wait_for_bar_close():
                         time.sleep(1)
                         continue
+                    
+                    # ตรวจสอบการปิดกำไรเร่งด่วน (เร็วขึ้น)
+                    if hasattr(self, 'active_positions') and self.active_positions:
+                        total_profit = sum(getattr(pos, 'profit', 0) for pos in self.active_positions)
+                        if total_profit >= 50.0:  # กำไรเร่งด่วน $50
+                            logger.info(f"🚨 URGENT: Total profit ${total_profit:.2f} - Closing all positions immediately")
+                            # ปิดไม้ทั้งหมดทันที
+                            self._handle_dynamic_closing()
+                            time.sleep(1)
+                            continue
                 
                 # Get current candle data
                 current_candle = self._get_current_candle()
