@@ -293,14 +293,8 @@ class SimpleBreakoutTradingSystemGUI:
                     self.mt5_connection.log_market_status(self.actual_symbol or "XAUUSD")
                     self._last_market_status_log = current_time
                 
-                # Process Simple Breakout for all timeframes (ตรวจสอบ Bar Close ก่อน)
-                if hasattr(self, 'hedge_pairing_closer') and self.hedge_pairing_closer:
-                    if not self.hedge_pairing_closer._should_wait_for_bar_close('M5'):
-                        self._process_simple_breakout(current_candle)
-                    # else:
-                        # logger.info("⏰ Waiting for bar close before opening new positions...")
-                else:
-                    self._process_simple_breakout(current_candle)
+                # Process Simple Breakout for all timeframes (Bar Close ตรวจสอบแล้วข้างบน)
+                self._process_simple_breakout(current_candle)
                 
                 # Position Management (Keep original logic) - Throttle to every 5 seconds
                 if not hasattr(self, '_last_position_management_time'):
@@ -517,11 +511,11 @@ class SimpleBreakoutTradingSystemGUI:
                                      current_candle: CandleData, reason: str):
         """Execute simple breakout trade"""
         try:
-            # ตรวจสอบการรอปิดแท่งก่อนออกไม้ใหม่
-            if hasattr(self, 'hedge_pairing_closer') and self.hedge_pairing_closer:
-                if self.hedge_pairing_closer._should_wait_for_bar_close('M5'):
-                    logger.info("⏰ Waiting for bar close before opening new positions...")
-                    return
+            # ตรวจสอบการรอปิดแท่งก่อนออกไม้ใหม่ (ลบออกเพราะซ้ำซ้อนกับ _trading_loop)
+            # if hasattr(self, 'hedge_pairing_closer') and self.hedge_pairing_closer:
+            #     if self.hedge_pairing_closer._should_wait_for_bar_close('M5'):
+            #         logger.info("⏰ Waiting for bar close before opening new positions...")
+            #         return
             
             # ตรวจสอบ SW Filter ก่อนออกไม้ใหม่
             if hasattr(self, 'hedge_pairing_closer') and self.hedge_pairing_closer:

@@ -540,9 +540,10 @@ class HedgePairingCloser:
                 return True
             
             # เงื่อนไข 3: กำไรรวมมากกว่าเกณฑ์เร่งด่วน (ปิดทันที)
-            if total_profit >= self.urgent_profit_threshold:
-                logger.info(f"🚨 URGENT: Portfolio very profitable: ${total_profit:.2f} >= ${self.urgent_profit_threshold}")
-                return True
+            # ลบออกเพราะซ้ำซ้อนกับ Close All System
+            # if total_profit >= self.urgent_profit_threshold:
+            #     logger.info(f"🚨 URGENT: Portfolio very profitable: ${total_profit:.2f} >= ${self.urgent_profit_threshold}")
+            #     return True
             
             return False
             
