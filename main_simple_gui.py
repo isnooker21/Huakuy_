@@ -293,8 +293,14 @@ class SimpleBreakoutTradingSystemGUI:
                     self.mt5_connection.log_market_status(self.actual_symbol or "XAUUSD")
                     self._last_market_status_log = current_time
                 
-                # Process Simple Breakout for all timeframes
-                self._process_simple_breakout(current_candle)
+                # Process Simple Breakout for all timeframes (ตรวจสอบ Bar Close ก่อน)
+                if hasattr(self, 'hedge_pairing_closer') and self.hedge_pairing_closer:
+                    if not self.hedge_pairing_closer._should_wait_for_bar_close():
+                        self._process_simple_breakout(current_candle)
+                    else:
+                        logger.info("⏰ Waiting for bar close before opening new positions...")
+                else:
+                    self._process_simple_breakout(current_candle)
                 
                 # Position Management (Keep original logic) - Throttle to every 5 seconds
                 if not hasattr(self, '_last_position_management_time'):
@@ -367,6 +373,12 @@ class SimpleBreakoutTradingSystemGUI:
         ✅ Dynamic lot sizing
         """
         try:
+            # ตรวจสอบการรอปิดแท่งก่อนออกไม้ใหม่
+            if hasattr(self, 'hedge_pairing_closer') and self.hedge_pairing_closer:
+                if self.hedge_pairing_closer._should_wait_for_bar_close():
+                    logger.info("⏰ Waiting for bar close before opening new positions...")
+                    return
+            
             current_price = current_candle.close
             
             # Process each timeframe
@@ -489,6 +501,12 @@ class SimpleBreakoutTradingSystemGUI:
                                      current_candle: CandleData, reason: str):
         """Execute simple breakout trade"""
         try:
+            # ตรวจสอบการรอปิดแท่งก่อนออกไม้ใหม่
+            if hasattr(self, 'hedge_pairing_closer') and self.hedge_pairing_closer:
+                if self.hedge_pairing_closer._should_wait_for_bar_close():
+                    logger.info("⏰ Waiting for bar close before opening new positions...")
+                    return
+            
             # 💰 Calculate dynamic lot size
             lot_size = self._calculate_dynamic_lot_size(current_candle, timeframe)
             
