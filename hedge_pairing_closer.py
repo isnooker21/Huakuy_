@@ -548,11 +548,20 @@ class HedgePairingCloser:
         try:
             # สร้างรายการไม้ที่จะปิด
             positions_to_close = []
+            buy_count = 0
+            sell_count = 0
+            
             for pos in positions:
+                pos_type = getattr(pos, 'type', 0)
+                if pos_type == 0:  # BUY
+                    buy_count += 1
+                else:  # SELL
+                    sell_count += 1
+                
                 positions_to_close.append({
                     'ticket': getattr(pos, 'ticket', 'N/A'),
                     'symbol': getattr(pos, 'symbol', 'XAUUSD'),
-                    'type': 'BUY' if getattr(pos, 'type', 0) == 0 else 'SELL',
+                    'type': 'BUY' if pos_type == 0 else 'SELL',
                     'volume': getattr(pos, 'volume', 0),
                     'profit': getattr(pos, 'profit', 0)
                 })
@@ -561,12 +570,14 @@ class HedgePairingCloser:
             decision = ClosingDecision(
                 should_close=True,
                 positions_to_close=positions_to_close,
-                total_profit=total_profit,
-                reason=f"Close all positions - Portfolio profitable: ${total_profit:.2f}",
+                method="CLOSE_ALL_PROFITABLE",
+                net_pnl=total_profit,
+                expected_pnl=total_profit,
+                position_count=len(positions),
+                buy_count=buy_count,
+                sell_count=sell_count,
                 confidence_score=95.0,
-                combination_type="CLOSE_ALL_PROFITABLE",
-                size=len(positions),
-                expected_improvement=total_profit
+                reason=f"Close all positions - Portfolio profitable: ${total_profit:.2f}"
             )
             
             return decision
