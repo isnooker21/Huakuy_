@@ -676,10 +676,11 @@ class HedgePairingCloser:
             filtered_positions = self._smart_filter_positions(positions, account_balance)
             logger.info(f"🔍 Smart Filtering: {len(positions)} → {len(filtered_positions)} positions")
             
-            # Step 2.5: SW Filter - กรองไม้ที่กองกระจุก
-            if self.sw_filter_enabled:
-                filtered_positions = self._apply_sw_filter(filtered_positions)
-                logger.info(f"🛡️ SW Filter: Applied clustering protection")
+            # Step 2.5: SW Filter - ปิดการใช้งานใน find_optimal_closing
+            # SW Filter ควรใช้สำหรับออกไม้ใหม่ ไม่ใช่ปิดไม้
+            # if self.sw_filter_enabled:
+            #     filtered_positions = self._apply_sw_filter(filtered_positions)
+            #     logger.info(f"🛡️ SW Filter: Applied clustering protection")
             
             # 1. หาการจับคู่ไม้ที่มีอยู่
             profitable_combinations = self._find_profitable_combinations(filtered_positions)
