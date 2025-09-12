@@ -75,6 +75,11 @@ class HedgePairingCloser:
         self.max_density = 5  # สูงสุด 5 ไม้ในรัศมี 5 จุด
         self.min_std_deviation = 3.0  # ส่วนเบี่ยงเบนมาตรฐานขั้นต่ำ 3 จุด
         
+        # ⏰ Wait for Bar Close - รอปิดแท่งก่อนออกไม้
+        self.wait_for_bar_close = True
+        self.last_bar_time = None
+        self.bar_close_wait_enabled = True
+        
         # 🚨 Emergency Mode Parameters (สำหรับพอร์ตที่แย่มาก)
         self.emergency_min_net_profit = 0.01  # กำไรขั้นต่ำในโหมดฉุกเฉิน $0.01
         self.emergency_threshold_percentage = 0.10  # 10% ในโหมดฉุกเฉิน
@@ -450,6 +455,54 @@ class HedgePairingCloser:
             logger.error(f"❌ Error in SW filter check: {e}")
             return False, "Error"
     
+    def _check_bar_close(self) -> bool:
+        """⏰ ตรวจสอบว่าแท่งปัจจุบันปิดแล้วหรือยัง"""
+        try:
+            if not self.bar_close_wait_enabled:
+                return True  # ไม่ต้องรอปิดแท่ง
+            
+            if not self.mt5_connection:
+                return True  # ไม่มี MT5 connection
+            
+            # ดึงข้อมูลแท่งปัจจุบัน
+            tick_data = self.mt5_connection.get_current_tick(self.symbol)
+            if tick_data is None:
+                return True  # ไม่สามารถดึงข้อมูลได้
+            
+            current_time = tick_data['time']
+            
+            # ถ้ายังไม่มีข้อมูลแท่งเก่า ให้บันทึกเวลาปัจจุบัน
+            if self.last_bar_time is None:
+                self.last_bar_time = current_time
+                logger.info("⏰ First run - waiting for bar close")
+                return False  # รอปิดแท่ง
+            
+            # ตรวจสอบว่าแท่งใหม่เริ่มแล้วหรือยัง
+            if current_time > self.last_bar_time:
+                self.last_bar_time = current_time
+                logger.info("✅ Bar closed - ready to trade")
+                return True  # แท่งปิดแล้ว พร้อมเทรด
+            
+            # ยังไม่ปิดแท่ง
+            logger.info("⏰ Waiting for bar close...")
+            return False
+            
+        except Exception as e:
+            logger.error(f"❌ Error checking bar close: {e}")
+            return True  # ถ้า error ให้อนุญาตเทรด
+    
+    def _should_wait_for_bar_close(self) -> bool:
+        """⏰ ตรวจสอบว่าควรรอปิดแท่งหรือไม่"""
+        try:
+            if not self.wait_for_bar_close:
+                return False  # ไม่ต้องรอปิดแท่ง
+            
+            return not self._check_bar_close()
+            
+        except Exception as e:
+            logger.error(f"❌ Error checking if should wait: {e}")
+            return False  # ถ้า error ให้ไม่รอ
+    
     def _analyze_portfolio_health(self, positions: List[Any], account_balance: float = 1000.0) -> dict:
         """วิเคราะห์สุขภาพพอร์ต"""
         try:
@@ -495,6 +548,11 @@ class HedgePairingCloser:
         try:
             if len(positions) < 1:
                 logger.info("⏸️ Need at least 1 position for analysis")
+                return None
+            
+            # ตรวจสอบการรอปิดแท่ง
+            if self._should_wait_for_bar_close():
+                logger.info("⏰ Waiting for bar close before trading...")
                 return None
             
             # แสดงจำนวนไม้ทั้งหมดก่อนกรอง

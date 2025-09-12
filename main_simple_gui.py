@@ -262,6 +262,12 @@ class SimpleBreakoutTradingSystemGUI:
         
         while self.is_running:
             try:
+                # ตรวจสอบการรอปิดแท่ง
+                if hasattr(self, 'hedge_pairing_closer') and self.hedge_pairing_closer:
+                    if self.hedge_pairing_closer._should_wait_for_bar_close():
+                        time.sleep(1)
+                        continue
+                
                 # Get current candle data
                 current_candle = self._get_current_candle()
                 if not current_candle:
