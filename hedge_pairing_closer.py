@@ -42,8 +42,9 @@ class ClosingDecision:
 class HedgePairingCloser:
     """🚀 Hedge Pairing Closer - ระบบปิดไม้แบบจับคู่"""
     
-    def __init__(self):
+    def __init__(self, symbol: str = "XAUUSD"):
         # 🎯 Hedge Strategy Parameters
+        self.symbol = symbol                # Symbol สำหรับเทรด
         self.min_combination_size = 2      # ขนาดการจับคู่ขั้นต่ำ
         self.max_combination_size = 8       # ขนาดการจับคู่สูงสุด
         self.min_net_profit = 0.1          # กำไรสุทธิขั้นต่ำ $0.1
@@ -464,8 +465,11 @@ class HedgePairingCloser:
             if not self.mt5_connection:
                 return True  # ไม่มี MT5 connection
             
+            # ใช้ default symbol หรือ symbol ที่ตั้งค่าไว้
+            symbol = getattr(self, 'symbol', 'XAUUSD')
+            
             # ดึงข้อมูลแท่งปัจจุบัน
-            tick_data = self.mt5_connection.get_current_tick(self.symbol)
+            tick_data = self.mt5_connection.get_current_tick(symbol)
             if tick_data is None:
                 return True  # ไม่สามารถดึงข้อมูลได้
             
@@ -1929,6 +1933,6 @@ class HedgePairingCloser:
             logger.error(f"❌ Error creating opposite position: {e}")
             return None
 
-def create_hedge_pairing_closer() -> HedgePairingCloser:
+def create_hedge_pairing_closer(symbol: str = "XAUUSD") -> HedgePairingCloser:
     """สร้าง Hedge Pairing Closer"""
-    return HedgePairingCloser()
+    return HedgePairingCloser(symbol=symbol)
