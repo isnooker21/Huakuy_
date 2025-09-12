@@ -1443,6 +1443,8 @@ class HedgePairingCloser:
             
             # Step 3-4: Advanced Search (ทุก 1 ชั่วโมงเท่านั้น)
             current_time = time.time()
+            if not hasattr(self, 'last_advanced_search_time'):
+                self.last_advanced_search_time = 0
             should_run_advanced = (current_time - self.last_advanced_search_time) >= 3600  # 1 ชั่วโมง = 3600 วินาที
             
             if should_run_advanced:
