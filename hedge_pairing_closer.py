@@ -447,7 +447,7 @@ class HedgePairingCloser:
             return False, "Error"
     
     def _check_bar_close(self) -> bool:
-        """⏰ ตรวจสอบว่าแท่งปัจจุบันปิดแล้วหรือยัง - สอดคล้องกับระบบ Trading"""
+        """⏰ ตรวจสอบว่าแท่งปัจจุบันปิดแล้วหรือยัง - จับ TF M5"""
         try:
             if not self.bar_close_wait_enabled:
                 return True  # ไม่ต้องรอปิดแท่ง
@@ -458,30 +458,34 @@ class HedgePairingCloser:
             # ใช้ default symbol หรือ symbol ที่ตั้งค่าไว้
             symbol = getattr(self, 'symbol', 'XAUUSD')
             
-            # ดึงข้อมูลแท่งปัจจุบัน
-            tick_data = self.mt5_connection.get_current_tick(symbol)
-            if tick_data is None:
-                return True  # ไม่สามารถดึงข้อมูลได้
-            
-            # ใช้เวลาเดียวกันกับระบบ Trading (datetime.now())
-            from datetime import datetime
-            current_time = datetime.now()
-            
-            # ถ้ายังไม่มีข้อมูลแท่งเก่า ให้บันทึกเวลาปัจจุบัน
-            if self.last_bar_time is None:
-                self.last_bar_time = current_time
-                logger.info("⏰ First run - waiting for bar close")
-                return False  # รอปิดแท่ง
-            
-            # ตรวจสอบว่าแท่งใหม่เริ่มแล้วหรือยัง (ใช้เวลาเดียวกัน)
-            if current_time > self.last_bar_time:
-                self.last_bar_time = current_time
-                logger.info("✅ Bar closed - ready to trade")
-                return True  # แท่งปิดแล้ว พร้อมเทรด
-            
-            # ยังไม่ปิดแท่ง
-            logger.info("⏰ Waiting for bar close...")
-            return False
+            # ดึงข้อมูลแท่ง M5 ปัจจุบัน (TF หลัก)
+            try:
+                import MetaTrader5 as mt5
+                rates = mt5.copy_rates_from_pos(symbol, mt5.TIMEFRAME_M5, 0, 1)
+                if rates is None or len(rates) == 0:
+                    return True  # ไม่สามารถดึงข้อมูลได้
+                
+                current_bar_time = rates[0]['time']
+                
+                # ถ้ายังไม่มีข้อมูลแท่งเก่า ให้บันทึกเวลาปัจจุบัน
+                if self.last_bar_time is None:
+                    self.last_bar_time = current_bar_time
+                    logger.info("⏰ First run - waiting for M5 bar close")
+                    return False  # รอปิดแท่ง
+                
+                # ตรวจสอบว่าแท่ง M5 ใหม่เริ่มแล้วหรือยัง
+                if current_bar_time > self.last_bar_time:
+                    self.last_bar_time = current_bar_time
+                    logger.info("✅ M5 Bar closed - ready to trade")
+                    return True  # แท่งปิดแล้ว พร้อมเทรด
+                
+                # ยังไม่ปิดแท่ง
+                logger.info("⏰ Waiting for M5 bar close...")
+                return False
+                
+            except Exception as e:
+                logger.error(f"❌ Error checking M5 bar close: {e}")
+                return True  # ถ้า error ให้อนุญาตเทรด
             
         except Exception as e:
             logger.error(f"❌ Error checking bar close: {e}")
