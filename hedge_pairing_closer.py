@@ -284,50 +284,13 @@ class HedgePairingCloser:
         }
     
     def _get_real_time_pnl(self, position: Any) -> float:
-        """ดึง Floating P&L แบบ Real-time"""
+        """ดึง P&L จาก position.profit โดยตรง (ไม่คำนวณ real-time)"""
         try:
-            # ใช้ Caching เพื่อความเร็ว
-            ticket = getattr(position, 'ticket', 'N/A')
-            current_time = time.time()
-            
-            # ตรวจสอบว่า cache ยังใช้ได้ไหม
-            if ticket in self.pnl_cache:
-                cached_data = self.pnl_cache[ticket]
-                if current_time - cached_data['timestamp'] < self.cache_timeout:
-                    return cached_data['pnl']  # ใช้ข้อมูลเก่า
-            
-            # คำนวณ P&L จากราคาปัจจุบัน
-            if self.mt5_connection and hasattr(self.mt5_connection, 'get_current_tick'):
-                tick_data = self.mt5_connection.get_current_tick(getattr(position, 'symbol', ''))
-                if tick_data is not None:
-                    # ใช้ราคาเฉลี่ยระหว่าง bid และ ask
-                    current_price = (tick_data['bid'] + tick_data['ask']) / 2
-                    
-                    # คำนวณ P&L จริง (แก้ไขการคำนวณ)
-                    if getattr(position, 'type', 0) == 0:  # Buy
-                        pnl = (current_price - getattr(position, 'open_price', 0)) * getattr(position, 'volume', 0) * 100
-                    else:  # Sell
-                        pnl = (getattr(position, 'open_price', 0) - current_price) * getattr(position, 'volume', 0) * 100
-                    
-                    # เก็บไว้ใน cache
-                    self.pnl_cache[ticket] = {
-                        'pnl': pnl,
-                        'timestamp': current_time
-                    }
-                    
-                    return pnl
-            
-            # Fallback: ใช้ข้อมูลเก่า
-            fallback_pnl = getattr(position, 'profit', 0)
-            self.pnl_cache[ticket] = {
-                'pnl': fallback_pnl,
-                'timestamp': current_time
-            }
-            
-            return fallback_pnl
+            # ใช้ข้อมูลจาก position.profit โดยตรง (ไม่คำนวณ real-time)
+            return getattr(position, 'profit', 0)
             
         except Exception as e:
-            logger.error(f"Error getting real-time P&L: {e}")
+            logger.error(f"Error getting P&L: {e}")
             return getattr(position, 'profit', 0)
     
     def _get_current_price(self) -> float:
@@ -598,9 +561,8 @@ class HedgePairingCloser:
     def _analyze_portfolio_health(self, positions: List[Any], account_balance: float = 1000.0) -> dict:
         """วิเคราะห์สุขภาพพอร์ต"""
         try:
-            # คำนวณ Floating P&L จริง (ตรวจสอบความถูกต้อง)
-            real_pnl_list = [self._get_real_time_pnl(pos) for pos in positions]
-            total_pnl = sum(real_pnl_list)
+            # คำนวณ P&L จาก position.profit โดยตรง (ไม่ใช้ real-time calculation)
+            total_pnl = sum(getattr(pos, 'profit', 0) for pos in positions)
             position_count = len(positions)
             
             
@@ -684,21 +646,10 @@ class HedgePairingCloser:
             portfolio_health = self._analyze_portfolio_health(positions, account_balance)
             logger.info(f"📊 Portfolio Health: {portfolio_health['health_score']} (P&L: ${portfolio_health['total_pnl']:.2f})")
             
-            # แสดง Emergency Mode ถ้าพอร์ตแย่มาก
+            # แสดงสถานะพอร์ต (ไม่ใช้ Emergency Mode)
             if portfolio_health['health_score'] in ["แย่", "แย่มาก"]:
-                effective_min_profit = self._get_effective_min_net_profit()
-                threshold_percentage = self._get_threshold_percentage()
-                logger.warning(f"🚨 EMERGENCY MODE ACTIVATED!")
-                logger.warning(f"   Min Net Profit: ${effective_min_profit:.2f} (ลดจาก ${self.min_net_profit:.2f})")
-                logger.warning(f"   Threshold: {threshold_percentage*100:.1f}% (ลดลง)")
-                logger.warning(f"   ระบบจะพยายามปิดไม้ให้ได้มากขึ้น!")
-                
-                # แสดงคำแนะนำสำหรับพอร์ตที่แย่มาก
-                if portfolio_health['total_pnl'] < -50:
-                    logger.warning(f"💡 คำแนะนำ: พอร์ตขาดทุนมาก (${portfolio_health['total_pnl']:.2f})")
-                    logger.warning(f"   - รอให้ราคากลับมาหรือ")
-                    logger.warning(f"   - ปิดไม้ที่ขาดทุนน้อยที่สุดก่อน")
-                    logger.warning(f"   - หรือเพิ่มเงินทุนเพื่อลดความเสี่ยง")
+                logger.info(f"📊 Portfolio Status: {portfolio_health['health_score']} (P&L: ${portfolio_health['total_pnl']:.2f})")
+                logger.info(f"   ระบบจะทำงานตามปกติ")
             
             # Step 2: Smart Filtering - คัดกรองไม้ตามค่าเฉลี่ยของเงินทุน
             filtered_positions = self._smart_filter_positions(positions, account_balance)
