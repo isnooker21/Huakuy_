@@ -640,11 +640,11 @@ class HedgePairingCloser:
             total_profit = sum(getattr(pos, 'profit', 0) for pos in positions)
             
             
-            # ตรวจสอบกำไรเร่งด่วนก่อน (ปิดทันที) - เร็วขึ้น
-            if total_profit >= self.urgent_profit_threshold:
-                logger.info("🚨 URGENT CLOSE ALL - VERY PROFITABLE")
-                logger.info(f"🎯 Total Profit: ${total_profit:.2f} | Positions: {len(positions)}")
-                return self._create_close_all_decision(positions, total_profit)
+            # ตรวจสอบกำไรเร่งด่วนก่อน (ปิดทันที) - เอาออกเพราะซ้ำซ้อนกับ Close All
+            # if total_profit >= self.urgent_profit_threshold:
+            #     logger.info("🚨 URGENT CLOSE ALL - VERY PROFITABLE")
+            #     logger.info(f"🎯 Total Profit: ${total_profit:.2f} | Positions: {len(positions)}")
+            #     return self._create_close_all_decision(positions, total_profit)
             
             # ตรวจสอบการปิดไม้ทั้งหมดเมื่อพอร์ตเป็นบวก (เร็วขึ้น)
             if self._check_close_all_profitable(positions, account_balance):

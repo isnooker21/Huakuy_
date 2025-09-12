@@ -268,15 +268,15 @@ class SimpleBreakoutTradingSystemGUI:
                         time.sleep(1)
                         continue
                     
-                    # ตรวจสอบการปิดกำไรเร่งด่วน (เร็วขึ้น)
-                    if hasattr(self, 'order_manager') and self.order_manager.active_positions:
-                        total_profit = sum(getattr(pos, 'profit', 0) for pos in self.order_manager.active_positions)
-                        if total_profit >= 50.0:  # กำไรเร่งด่วน $50
-                            logger.info(f"🚨 URGENT: Total profit ${total_profit:.2f} - Closing all positions immediately")
-                            # ปิดไม้ทั้งหมดทันที
-                            self._handle_dynamic_closing(current_candle)
-                            time.sleep(1)
-                            continue
+                    # ตรวจสอบการปิดกำไรเร่งด่วน (เร็วขึ้น) - เอาออกเพราะซ้ำซ้อนกับ Close All
+                    # if hasattr(self, 'order_manager') and self.order_manager.active_positions:
+                    #     total_profit = sum(getattr(pos, 'profit', 0) for pos in self.order_manager.active_positions)
+                    #     if total_profit >= 50.0:  # กำไรเร่งด่วน $50
+                    #         logger.info(f"🚨 URGENT: Total profit ${total_profit:.2f} - Closing all positions immediately")
+                    #         # ปิดไม้ทั้งหมดทันที
+                    #         self._handle_dynamic_closing(current_candle)
+                    #         time.sleep(1)
+                    #         continue
                 
                 # Get current candle data
                 current_candle = self._get_current_candle()
