@@ -313,17 +313,23 @@ class HedgePairingCloser:
             return 0.0
     
     def _check_position_clustering(self, new_position, existing_positions):
-        """ตรวจสอบว่าไม้ใหม่จะทำให้เกิดการกองกระจุกใกล้ๆ หรือไม่"""
+        """ตรวจสอบว่าไม้ใหม่จะทำให้เกิดการกองกระจุกใกล้ๆ หรือไม่ (ใช้ราคาปัจจุบัน)"""
         try:
             if not self.sw_filter_enabled:
                 return True, "SW filter disabled"
             
-            new_price = getattr(new_position, 'price_open', 0)
+            # ใช้ราคาปัจจุบันแทนราคาเปิด
+            new_price = getattr(new_position, 'price', 0)
+            if new_price == 0:
+                new_price = getattr(new_position, 'price_open', 0)
             
-            # นับไม้ที่อยู่ใกล้กัน
+            # นับไม้ที่อยู่ใกล้กัน (ใช้ราคาปัจจุบัน)
             nearby_positions = 0
             for pos in existing_positions:
-                existing_price = getattr(pos, 'price_open', 0)
+                existing_price = getattr(pos, 'price', 0)
+                if existing_price == 0:
+                    existing_price = getattr(pos, 'price_open', 0)
+                
                 distance = abs(new_price - existing_price)
                 
                 if distance <= self.clustering_threshold:
@@ -340,17 +346,23 @@ class HedgePairingCloser:
             return False, "Error"
     
     def _check_position_density(self, new_position, existing_positions):
-        """ตรวจสอบความหนาแน่นของไม้ในพื้นที่ใกล้เคียง"""
+        """ตรวจสอบความหนาแน่นของไม้ในพื้นที่ใกล้เคียง (ใช้ราคาปัจจุบัน)"""
         try:
             if not self.sw_filter_enabled:
                 return True, "SW filter disabled"
             
-            new_price = getattr(new_position, 'price_open', 0)
+            # ใช้ราคาปัจจุบันแทนราคาเปิด
+            new_price = getattr(new_position, 'price', 0)
+            if new_price == 0:
+                new_price = getattr(new_position, 'price_open', 0)
             
-            # นับไม้ในรัศมี
+            # นับไม้ในรัศมี (ใช้ราคาปัจจุบัน)
             positions_in_radius = 0
             for pos in existing_positions:
-                existing_price = getattr(pos, 'price_open', 0)
+                existing_price = getattr(pos, 'price', 0)
+                if existing_price == 0:
+                    existing_price = getattr(pos, 'price_open', 0)
+                
                 distance = abs(new_price - existing_price)
                 
                 if distance <= self.density_radius:
@@ -367,7 +379,7 @@ class HedgePairingCloser:
             return False, "Error"
     
     def _check_position_distribution(self, new_position, existing_positions):
-        """ตรวจสอบการกระจายของไม้ในพอร์ต"""
+        """ตรวจสอบการกระจายของไม้ในพอร์ต (ใช้ราคาปัจจุบัน)"""
         try:
             if not self.sw_filter_enabled:
                 return True, "SW filter disabled"
@@ -375,9 +387,18 @@ class HedgePairingCloser:
             if len(existing_positions) < 5:
                 return True, "Not enough positions to check distribution"
             
-            # คำนวณการกระจายของไม้
-            prices = [getattr(pos, 'price_open', 0) for pos in existing_positions]
-            prices.append(getattr(new_position, 'price_open', 0))
+            # คำนวณการกระจายของไม้ (ใช้ราคาปัจจุบัน)
+            prices = []
+            for pos in existing_positions:
+                price = getattr(pos, 'price', 0)
+                if price == 0:
+                    price = getattr(pos, 'price_open', 0)
+                prices.append(price)
+            
+            new_price = getattr(new_position, 'price', 0)
+            if new_price == 0:
+                new_price = getattr(new_position, 'price_open', 0)
+            prices.append(new_price)
             
             # คำนวณค่าเฉลี่ยและส่วนเบี่ยงเบนมาตรฐาน
             mean_price = sum(prices) / len(prices)
