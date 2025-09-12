@@ -601,12 +601,6 @@ class HedgePairingCloser:
             total_pnl = sum(real_pnl_list)
             position_count = len(positions)
             
-            # ตรวจสอบ P&L ที่ผิดปกติ
-            if abs(total_pnl) > account_balance * 10:  # P&L มากกว่า 10 เท่าของเงินทุน
-                logger.warning(f"⚠️ P&L calculation seems wrong: ${total_pnl:.2f} (Account: ${account_balance:.2f})")
-                # ใช้ข้อมูลจาก position.profit แทน
-                total_pnl = sum(getattr(pos, 'profit', 0) for pos in positions)
-                logger.warning(f"⚠️ Using fallback P&L: ${total_pnl:.2f}")
             
             # คำนวณสุขภาพพอร์ต
             if total_pnl > 100:
@@ -660,12 +654,6 @@ class HedgePairingCloser:
             account_balance = account_info.get('balance', 1000.0)
             total_profit = sum(getattr(pos, 'profit', 0) for pos in positions)
             
-            # ตรวจสอบ P&L ที่ผิดปกติ
-            if abs(total_profit) > account_balance * 10:  # P&L มากกว่า 10 เท่าของเงินทุน
-                logger.warning(f"⚠️ P&L calculation seems wrong: ${total_profit:.2f} (Account: ${account_balance:.2f})")
-                # ใช้ข้อมูลจาก position.profit แทน
-                total_profit = sum(getattr(pos, 'profit', 0) for pos in positions)
-                logger.warning(f"⚠️ Using fallback P&L: ${total_profit:.2f}")
             
             # ตรวจสอบกำไรเร่งด่วนก่อน (ปิดทันที) - เร็วขึ้น
             if total_profit >= self.urgent_profit_threshold:
