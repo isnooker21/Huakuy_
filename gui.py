@@ -552,56 +552,58 @@ class TradingGUI:
             self.update_thread.start()
             
     def light_update_loop(self):
-        """Loop อัพเดทแบบเบา"""
+        """Loop อัพเดทแบบเบา - OPTIMIZED"""
         update_counter = 0
         while not self.stop_update:
             try:
                 if not self.stop_update:
-                    # อัพเดท connection status ทุกครั้ง
+                    # 🚀 OPTIMIZED: อัพเดท connection status ทุกครั้ง
                     self.root.after_idle(self.update_connection_status_light)
                     
-                    # อัพเดทข้อมูลอื่นๆ แบบสลับกัน
-                    if update_counter % 2 == 0:  # ทุก 20 วินาที
+                    # 🚀 OPTIMIZED: อัพเดทข้อมูลอื่นๆ แบบสลับกัน - ลดความถี่
+                    if update_counter % 3 == 0:  # ทุก 30 วินาที (เพิ่มจาก 20)
                         self.root.after_idle(self.update_account_info)
                         self.root.after_idle(self.update_trading_status_data)
+                    
+                    if update_counter % 4 == 0:  # ทุก 40 วินาที (เพิ่มจาก 30)
                         self.root.after_idle(self.update_positions_display_light)
                     
-                    if update_counter % 3 == 0:  # ทุก 30 วินาที
+                    if update_counter % 6 == 0:  # ทุก 60 วินาที (เพิ่มจาก 30)
                         self.root.after_idle(self.update_7d_closer_status)
                     
                     update_counter += 1
-                time.sleep(10)  # อัพเดททุก 10 วินาที
+                time.sleep(15)  # อัพเดททุก 15 วินาที (เพิ่มจาก 10)
             except Exception as e:
                 logger.debug(f"Light update error: {str(e)}")
                 time.sleep(30)
             
     def update_data_loop(self):
-        """Loop สำหรับอัพเดทข้อมูล"""
+        """Loop สำหรับอัพเดทข้อมูล - OPTIMIZED"""
         while not self.stop_update:
             try:
-                # อัพเดทข้อมูลใน main thread (ลดความถี่มากขึ้น)
+                # 🚀 OPTIMIZED: อัพเดทข้อมูลใน main thread - ลดความถี่มากขึ้น
                 if not self.stop_update:  # ตรวจสอบอีกครั้ง
                     self.root.after_idle(self.safe_update_gui_data)  # ใช้ after_idle แทน after(0)
-                time.sleep(5)  # อัพเดททุก 5 วินาที (เพิ่มจาก 3 วินาที)
+                time.sleep(8)  # อัพเดททุก 8 วินาที (เพิ่มจาก 5 วินาที)
             except Exception as e:
                 logger.error(f"เกิดข้อผิดพลาดในการอัพเดทข้อมูล: {str(e)}")
-                time.sleep(15)  # รอนานขึ้นเมื่อเกิดข้อผิดพลาด
+                time.sleep(20)  # รอนานขึ้นเมื่อเกิดข้อผิดพลาด (เพิ่มจาก 15)
                 
     def safe_update_gui_data(self):
-        """อัพเดทข้อมูลใน GUI อย่างปลอดภัย"""
+        """อัพเดทข้อมูลใน GUI อย่างปลอดภัย - OPTIMIZED"""
         try:
             if self.stop_update:  # หยุดการอัพเดทถ้าได้รับสัญญาณ
                 return
                 
-            # อัพเดทสถานะการเชื่อมต่อ (เบาๆ)
+            # 🚀 OPTIMIZED: อัพเดทสถานะการเชื่อมต่อ (เบาๆ)
             self.update_connection_status_light()
             
             if self.stop_update:
                 return
                 
-            # อัพเดทข้อมูลบัญชี (ลดความถี่)
+            # 🚀 OPTIMIZED: อัพเดทข้อมูลบัญชี (ลดความถี่มากขึ้น)
             if hasattr(self, '_last_account_update'):
-                if time.time() - self._last_account_update < 10:  # อัพเดททุก 10 วินาที
+                if time.time() - self._last_account_update < 20:  # อัพเดททุก 20 วินาที (เพิ่มจาก 10)
                     return
             
             if self.mt5_connection.is_connected:  # ใช้ตัวแปรแทนการเรียกฟังก์ชัน
@@ -611,15 +613,28 @@ class TradingGUI:
             if self.stop_update:
                 return
                 
-            # อัพเดทข้อมูลพอร์ต (ลดความถี่)
+            # 🚀 OPTIMIZED: อัพเดทข้อมูลพอร์ต (ลดความถี่)
+            if hasattr(self, '_last_portfolio_update'):
+                if time.time() - self._last_portfolio_update < 30:  # อัพเดททุก 30 วินาที
+                    return
+            else:
+                self._last_portfolio_update = 0
+                
             self.update_portfolio_info_light()
+            self._last_portfolio_update = time.time()
             
             if self.stop_update:
                 return
                 
-            # อัพเดท Positions (ลดความถี่)
+            # 🚀 OPTIMIZED: อัพเดท Positions (ลดความถี่)
+            if hasattr(self, '_last_positions_update'):
+                if time.time() - self._last_positions_update < 25:  # อัพเดททุก 25 วินาที
+                    return
+            else:
+                self._last_positions_update = 0
+                
             self.update_positions_display_light()
-            
+            self._last_positions_update = time.time()
             
         except Exception as e:
             logger.debug(f"GUI update error: {str(e)}")  # ใช้ debug แทน error

@@ -97,10 +97,11 @@ class SimpleBreakoutTradingSystemGUI:
         self.trading_thread = None
         self.last_candle_time = None
         
-        # ข้อมูลตลาด
+        # ข้อมูลตลาด - OPTIMIZED with Memory Management
         self.current_prices = {}
         self.volume_history = []
         self.price_history = []
+        self.max_history_size = 100  # จำกัดขนาด history เพื่อประหยัด memory
         
         # GUI
         self.gui = None
@@ -257,67 +258,73 @@ class SimpleBreakoutTradingSystemGUI:
         logger.info("🛑 หยุดระบบเทรดแล้ว")
     
     def _trading_loop(self):
-        """Main trading loop with Simple Breakout Logic"""
-        logger.info("🔄 เริ่มลูปเทรด")
+        """Main trading loop with Simple Breakout Logic - OPTIMIZED"""
+        logger.info("🔄 เริ่มลูปเทรด (OPTIMIZED)")
+        
+        # 🚀 Performance Optimization Variables
+        last_candle_check = 0
+        candle_cache = None
+        candle_cache_time = 0
+        candle_cache_duration = 1.0  # Cache candle for 1 second
         
         while self.is_running:
             try:
-                # ตรวจสอบการรอปิดแท่ง
+                current_time = time.time()
+                
+                # 🚀 OPTIMIZED: Check bar close only when needed
                 if hasattr(self, 'hedge_pairing_closer') and self.hedge_pairing_closer:
                     if self.hedge_pairing_closer._should_wait_for_bar_close('M5'):
-                        time.sleep(1)
+                        time.sleep(0.5)  # Reduced from 1 second
                         continue
-                    
-                    # ตรวจสอบการปิดกำไรเร่งด่วน (เร็วขึ้น) - เอาออกเพราะซ้ำซ้อนกับ Close All
-                    # if hasattr(self, 'order_manager') and self.order_manager.active_positions:
-                    #     total_profit = sum(getattr(pos, 'profit', 0) for pos in self.order_manager.active_positions)
-                    #     if total_profit >= 50.0:  # กำไรเร่งด่วน $50
-                    #         logger.info(f"🚨 URGENT: Total profit ${total_profit:.2f} - Closing all positions immediately")
-                    #         # ปิดไม้ทั้งหมดทันที
-                    #         self._handle_dynamic_closing(current_candle)
-                    #         time.sleep(1)
-                    #         continue
                 
-                # Get current candle data
-                current_candle = self._get_current_candle()
+                # 🚀 OPTIMIZED: Cache candle data to reduce MT5 API calls
+                if current_time - candle_cache_time > candle_cache_duration:
+                    current_candle = self._get_current_candle()
+                    if current_candle:
+                        candle_cache = current_candle
+                        candle_cache_time = current_time
+                else:
+                    current_candle = candle_cache
+                
                 if not current_candle:
-                    time.sleep(1)
+                    time.sleep(0.5)  # Reduced from 1 second
                     continue
                 
-                # 🕐 Log market status (every 5 minutes)
+                # 🕐 Log market status (every 5 minutes) - OPTIMIZED
                 if not hasattr(self, '_last_market_status_log'):
                     self._last_market_status_log = 0
                 
-                current_time = time.time()
                 if current_time - self._last_market_status_log >= 300:  # 5 minutes
                     self.mt5_connection.log_market_status(self.actual_symbol or "XAUUSD")
                     self._last_market_status_log = current_time
                 
-                # Process Simple Breakout for all timeframes (Bar Close ตรวจสอบแล้วข้างบน)
-                self._process_simple_breakout(current_candle)
+                # 🚀 OPTIMIZED: Process Simple Breakout only when candle changes
+                if current_time - last_candle_check >= 0.5:  # Check every 0.5 seconds
+                    self._process_simple_breakout(current_candle)
+                    last_candle_check = current_time
                 
-                # Position Management (Keep original logic) - Throttle to every 5 seconds
+                # Position Management - OPTIMIZED timing
                 if not hasattr(self, '_last_position_management_time'):
                     self._last_position_management_time = 0
                 
-                if current_time - self._last_position_management_time >= 10:  # Every 10 seconds
+                if current_time - self._last_position_management_time >= 15:  # Every 15 seconds (increased from 10)
                     self._handle_position_management(current_candle)
                     self._last_position_management_time = current_time
                 
-                # Dynamic Closing (Keep original logic) - Throttle to every 8 seconds
+                # Dynamic Closing - OPTIMIZED timing
                 if not hasattr(self, '_last_dynamic_closing_time'):
                     self._last_dynamic_closing_time = 0
                 
-                if current_time - self._last_dynamic_closing_time >= 8:  # Every 8 seconds
+                if current_time - self._last_dynamic_closing_time >= 12:  # Every 12 seconds (increased from 8)
                     self._handle_dynamic_closing(current_candle)
                     self._last_dynamic_closing_time = current_time
                 
-                # Sleep
-                time.sleep(2)  # Increase sleep time
+                # 🚀 OPTIMIZED: Reduced sleep time
+                time.sleep(0.3)  # Reduced from 2 seconds to 0.3 seconds
                 
             except Exception as e:
                 logger.error(f"❌ เกิดข้อผิดพลาดในลูปเทรด: {e}")
-                time.sleep(5)
+                time.sleep(2)  # Reduced from 5 seconds
         
         logger.info("🔄 จบลูปเทรด")
     
@@ -637,12 +644,15 @@ class SimpleBreakoutTradingSystemGUI:
             return 50.0
     
     def _update_candle_history(self, candle: CandleData):
-        """Update candle history"""
+        """Update candle history - OPTIMIZED with Memory Management"""
         for tf in self.timeframes:
             self.last_candle_data[tf] = candle
         
-        # 🛡️ Update price range history for range-bound detection
+        # 🚀 OPTIMIZED: Update price range history with memory management
         self._update_price_range_history(candle)
+        
+        # 🚀 OPTIMIZED: Cleanup old data to prevent memory leaks
+        self._cleanup_old_data()
     
     def _update_price_range_history(self, candle: CandleData):
         """Update price range history for range-bound market detection"""
@@ -663,6 +673,24 @@ class SimpleBreakoutTradingSystemGUI:
                 
         except Exception as e:
             logger.error(f"❌ Error updating price range history: {e}")
+    
+    def _cleanup_old_data(self):
+        """Cleanup old data to prevent memory leaks - OPTIMIZED"""
+        try:
+            # 🚀 OPTIMIZED: Limit price history size
+            if len(self.price_history) > self.max_history_size:
+                self.price_history = self.price_history[-self.max_history_size:]
+            
+            # 🚀 OPTIMIZED: Limit volume history size
+            if len(self.volume_history) > self.max_history_size:
+                self.volume_history = self.volume_history[-self.max_history_size:]
+            
+            # 🚀 OPTIMIZED: Limit price range history size
+            if len(self.price_range_history) > self.max_history_size:
+                self.price_range_history = self.price_range_history[-self.max_history_size:]
+                
+        except Exception as e:
+            logger.debug(f"Error during data cleanup: {e}")
     
     def _is_range_bound_market(self) -> bool:
         """

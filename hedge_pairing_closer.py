@@ -50,22 +50,22 @@ class HedgePairingCloser:
         self.min_net_profit = 0.1          # กำไรสุทธิขั้นต่ำ $0.1
         self.max_acceptable_loss = 5.0     # ขาดทุนที่ยอมรับได้ $5.0
         
-        # 🚀 Performance Optimization
-        self.use_parallel_processing = True  # ใช้การประมวลผลแบบขนาน
-        self.max_workers = min(4, multiprocessing.cpu_count())  # จำนวน thread สูงสุด
+        # 🚀 Performance Optimization - OPTIMIZED
+        self.use_parallel_processing = False  # ปิดการประมวลผลแบบขนานเพื่อลด overhead
+        self.max_workers = 1  # ใช้ single thread เพื่อลด complexity
         
         # 🧠 Smart Caching
         self.combination_cache = {}  # เก็บผลลัพธ์การจับคู่ไว้
         self.cache_hit_count = 0
         self.cache_miss_count = 0
         
-        # ⚡ Early Termination
-        self.early_termination_threshold = 5  # หยุดเมื่อพบ 5 combinations ที่ดี
-        self.best_profit_threshold = 2.0  # หยุดเมื่อกำไรมากกว่า 2 เท่าของ threshold
+        # ⚡ Early Termination - OPTIMIZED
+        self.early_termination_threshold = 3  # หยุดเมื่อพบ 3 combinations ที่ดี (ลดจาก 5)
+        self.best_profit_threshold = 1.5  # หยุดเมื่อกำไรมากกว่า 1.5 เท่าของ threshold (ลดจาก 2.0)
         
-        # 🎯 Smart Filtering for Large Portfolios
-        self.large_portfolio_threshold = 100  # ถ้ามีไม้มากกว่า 100 ตัว
-        self.max_positions_to_analyze = 50    # วิเคราะห์สูงสุด 50 ตัว
+        # 🎯 Smart Filtering for Large Portfolios - OPTIMIZED
+        self.large_portfolio_threshold = 50   # ถ้ามีไม้มากกว่า 50 ตัว (ลดจาก 100)
+        self.max_positions_to_analyze = 20    # วิเคราะห์สูงสุด 20 ตัว (ลดจาก 50)
         self.priority_filtering = True        # ใช้การกรองตามความสำคัญ
         
         # 🛡️ SW Filter (Stop Loss) - ป้องกันไม้กองกระจุก
