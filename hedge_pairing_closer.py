@@ -986,6 +986,22 @@ class HedgePairingCloser:
                 logger.info("=" * 60)
                 return helping_combinations
             
+            # Step 2.5: หาไม้ฝั่งเดียวที่ P&L รวมเป็นบวก (เฉพาะเมื่อไม่มีไม้ฝั่งตรงข้าม)
+            logger.info("🔍 STEP 2.5: SINGLE SIDE PROFITABLE CLOSING")
+            single_side_combinations = self._find_single_side_profitable(priority_positions)
+            
+            if single_side_combinations:
+                logger.info("-" * 40)
+                logger.info("✅ SINGLE SIDE PROFITABLE FOUND")
+                logger.info("-" * 40)
+                logger.info(f"🎯 Total combinations: {len(single_side_combinations)}")
+                for i, combo in enumerate(single_side_combinations[:3]):  # แสดงแค่ 3 อันแรก
+                    logger.info(f"   {i+1}. {combo.combination_type}: ${combo.total_profit:.2f} ({combo.size} positions)")
+                if len(single_side_combinations) > 3:
+                    logger.info(f"   ... and {len(single_side_combinations) - 3} more combinations")
+                logger.info("=" * 60)
+                return single_side_combinations
+            
             # Step 3-4: Advanced Search (ทุก 1 ชั่วโมงเท่านั้น)
             current_time = time.time()
             should_run_advanced = (current_time - self.last_advanced_search_time) >= 3600  # 1 ชั่วโมง = 3600 วินาที
@@ -1358,6 +1374,81 @@ class HedgePairingCloser:
             
         except Exception as e:
             logger.error(f"❌ Error finding existing hedge pairs: {e}")
+            return []
+    
+    def _find_single_side_profitable(self, positions: List[Any]) -> List[HedgeCombination]:
+        """🔍 หาไม้ฝั่งเดียวที่ P&L รวมเป็นบวก (เฉพาะเมื่อไม่มีไม้ฝั่งตรงข้าม)"""
+        try:
+            # ตรวจสอบว่ามีไม้ฝั่งตรงข้ามหรือไม่
+            buy_positions = [pos for pos in positions if getattr(pos, 'type', 0) == 0]
+            sell_positions = [pos for pos in positions if getattr(pos, 'type', 0) == 1]
+            
+            # ถ้ามีไม้ฝั่งตรงข้ามทั้งสองฝั่ง ให้ข้ามฟังก์ชันนี้
+            if len(buy_positions) > 0 and len(sell_positions) > 0:
+                logger.info("⚠️ Both BUY and SELL positions exist - skipping single side closing")
+                return []
+            
+            # ถ้ามีไม้ฝั่งเดียวเท่านั้น ให้หาการรวมที่กำไร
+            if len(buy_positions) >= 2:
+                logger.info("🔍 Only BUY positions found - looking for profitable BUY combinations")
+                return self._find_single_side_combinations(buy_positions, "BUY_ONLY")
+            elif len(sell_positions) >= 2:
+                logger.info("🔍 Only SELL positions found - looking for profitable SELL combinations")
+                return self._find_single_side_combinations(sell_positions, "SELL_ONLY")
+            else:
+                logger.info("⚠️ Not enough positions for single side closing (need at least 2)")
+                return []
+                
+        except Exception as e:
+            logger.error(f"❌ Error in find single side profitable: {e}")
+            return []
+    
+    def _find_single_side_combinations(self, positions: List[Any], side_type: str) -> List[HedgeCombination]:
+        """🔍 หาการรวมไม้ฝั่งเดียวที่กำไร"""
+        try:
+            combinations = []
+            used_positions = set()
+            
+            # หาการรวม 2-4 ไม้
+            for combo_size in range(2, min(5, len(positions) + 1)):
+                for combo in self._generate_combinations(positions, combo_size):
+                    # ตรวจสอบว่าไม้ไม่ซ้ำ
+                    combo_tickets = [getattr(pos, 'ticket', 'N/A') for pos in combo]
+                    if any(ticket in used_positions for ticket in combo_tickets):
+                        continue
+                    
+                    # คำนวณกำไรรวม
+                    total_profit = sum(getattr(pos, 'profit', 0) for pos in combo)
+                    
+                    # ตรวจสอบว่ากำไรรวมเป็นบวก
+                    if total_profit >= self.min_net_profit:
+                        # สร้าง HedgeCombination
+                        combination = HedgeCombination(
+                            positions=combo,
+                            total_profit=total_profit,
+                            combination_type=f"{side_type}_{combo_size}",
+                            size=len(combo),
+                            confidence_score=min(95.0, 70.0 + (total_profit * 2)),
+                            reason=f"Single side profitable: {side_type} {combo_size} positions"
+                        )
+                        combinations.append(combination)
+                        
+                        # เพิ่มไม้ที่ใช้แล้ว
+                        used_positions.update(combo_tickets)
+            
+            return combinations
+            
+        except Exception as e:
+            logger.error(f"❌ Error in find single side combinations: {e}")
+            return []
+    
+    def _generate_combinations(self, positions: List[Any], combo_size: int) -> List[List[Any]]:
+        """🔍 สร้างการรวมไม้ตามขนาดที่กำหนด"""
+        try:
+            from itertools import combinations
+            return list(combinations(positions, combo_size))
+        except Exception as e:
+            logger.error(f"❌ Error generating combinations: {e}")
             return []
     
     def _find_helping_combinations(self, unpaired_profitable: List[Any], existing_hedge_pairs: List[dict]) -> List[HedgeCombination]:
