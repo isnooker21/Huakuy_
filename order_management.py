@@ -260,7 +260,7 @@ class OrderManager:
             logger.info(f"✅ ZERO LOSS POLICY: Safe to close - profit margin OK")
             
             # 🎯 BUSINESS LOGIC: Spread check และ group analysis ที่นี่
-            tickets = [pos.ticket for pos in valid_positions]
+            tickets = [pos['ticket'] if isinstance(pos, dict) else getattr(pos, 'ticket', None) for pos in valid_positions]
             
             # 📊 STEP 1: Analyze positions with spread check
             position_analysis = []
@@ -269,19 +269,21 @@ class OrderManager:
             for pos in valid_positions:
                 try:
                     # คำนวณกำไรและ spread
-                    profit_info = self.mt5.calculate_position_profit_with_spread(pos.ticket)
+                    ticket = pos['ticket'] if isinstance(pos, dict) else getattr(pos, 'ticket', None)
+                    profit_info = self.mt5.calculate_position_profit_with_spread(ticket)
                     if profit_info:
                         position_analysis.append({
-                            'ticket': pos.ticket,
+                            'ticket': ticket,
                             'position': pos,
                             'profit_info': profit_info,
                             'should_close': profit_info['should_close'] or profit_info['profit_percentage'] >= -0.5
                         })
                         total_group_profit += profit_info['current_profit']
                     else:
-                        logger.error(f"❌ Cannot analyze Position {pos.ticket}")
+                        logger.error(f"❌ Cannot analyze Position {ticket}")
                 except Exception as e:
-                    logger.error(f"❌ Analysis error for Position {pos.ticket}: {e}")
+                    ticket = pos['ticket'] if isinstance(pos, dict) else getattr(pos, 'ticket', None)
+                    logger.error(f"❌ Analysis error for Position {ticket}: {e}")
             
             if not position_analysis:
                 return CloseResult(
@@ -319,7 +321,7 @@ class OrderManager:
             # อัพเดท active positions (ลบที่ปิดสำเร็จ)
             self.active_positions = [
                 pos for pos in self.active_positions 
-                if pos.ticket not in closed_tickets
+                if (pos['ticket'] if isinstance(pos, dict) else getattr(pos, 'ticket', None)) not in closed_tickets
             ]
             
             # จัดการ error messages
@@ -416,7 +418,7 @@ class OrderManager:
         """
         try:
             # หาข้อมูล Position
-            position = next((pos for pos in self.active_positions if pos.ticket == ticket), None)
+            position = next((pos for pos in self.active_positions if (pos['ticket'] if isinstance(pos, dict) else getattr(pos, 'ticket', None)) == ticket), None)
             if not position:
                 logger.error(f"ไม่พบ Position ticket {ticket}")
                 return False
