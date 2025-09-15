@@ -645,6 +645,7 @@ class MT5Connection:
             # ดึงข้อมูล Position
             position = mt5.positions_get(ticket=ticket)
             if not position:
+                logger.warning(f"⚠️ Position {ticket} not found in MT5")
                 return None
                 
             pos = position[0]
@@ -652,10 +653,15 @@ class MT5Connection:
             # ดึงข้อมูล symbol
             symbol_info = mt5.symbol_info(pos.symbol)
             if not symbol_info:
+                logger.warning(f"⚠️ Symbol info not found for {pos.symbol}")
                 return None
             
             # คำนวณ spread
             current_tick = mt5.symbol_info_tick(pos.symbol)
+            if not current_tick:
+                logger.warning(f"⚠️ Current tick not found for {pos.symbol}")
+                return None
+                
             spread_points = current_tick.ask - current_tick.bid
             spread_pct = (spread_points / pos.price_open) * 100
             
