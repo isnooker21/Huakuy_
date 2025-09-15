@@ -104,6 +104,11 @@ class DynamicPositionModifier:
         self.loss_threshold = -50.0     # เพิ่มเกณฑ์ขาดทุน (แก้ไม้ขาดทุนมาก)
         self.time_threshold_hours = 12  # ลดจาก 24 เป็น 12 ชั่วโมง (แก้ไม้เก่าเร็วขึ้น)
         
+        # 📊 Technical Analysis Parameters
+        self.demand_supply_enabled = True
+        self.fibonacci_enabled = True
+        self.fibonacci_levels = [0.236, 0.382, 0.5, 0.618, 0.786]
+        
         # 🛡️ Safety Parameters (ปรับปรุงให้เก่งขึ้น)
         self.max_correction_distance = 60.0  # เพิ่มจาก 50 เป็น 60 points (แก้ไขได้มากขึ้น)
         self.max_position_loss = -200.0      # เพิ่มจาก -100 เป็น -200 (แก้ไขไม้ขาดทุนมากได้)
@@ -113,6 +118,103 @@ class DynamicPositionModifier:
         self.correction_cooldown = 300       # 5 นาที cooldown ระหว่างการแก้ไข
         
         logger.info("🔧 Dynamic Position Modifier initialized")
+    
+    def _analyze_demand_supply(self, current_price: float) -> Dict:
+        """📊 วิเคราะห์ Demand Supply Zones"""
+        try:
+            # ใช้ข้อมูลราคาล่าสุดเพื่อหาจุด Demand/Supply
+            # ตัวอย่างการวิเคราะห์แบบง่าย
+            demand_zones = []
+            supply_zones = []
+            
+            # หาจุดต่ำสุดและสูงสุดในช่วง 20 แท่ง
+            # (ในระบบจริงควรใช้ข้อมูลจาก MT5)
+            return {
+                'demand_zones': demand_zones,
+                'supply_zones': supply_zones,
+                'current_price': current_price
+            }
+        except Exception as e:
+            logger.error(f"❌ Error analyzing demand supply: {e}")
+            return {'demand_zones': [], 'supply_zones': [], 'current_price': current_price}
+    
+    def _analyze_fibonacci_levels(self, current_price: float, positions: List[Any]) -> Dict:
+        """📊 วิเคราะห์ Fibonacci Levels"""
+        try:
+            if not positions:
+                return {'levels': [], 'current_price': current_price}
+            
+            # หาจุดสูงสุดและต่ำสุดจากไม้ที่มีอยู่
+            prices = [getattr(pos, 'price_open', current_price) for pos in positions]
+            if not prices:
+                return {'levels': [], 'current_price': current_price}
+            
+            high_price = max(prices)
+            low_price = min(prices)
+            price_range = high_price - low_price
+            
+            # คำนวณ Fibonacci Levels
+            fib_levels = {}
+            for level in self.fibonacci_levels:
+                fib_price = low_price + (price_range * level)
+                fib_levels[level] = fib_price
+            
+            return {
+                'levels': fib_levels,
+                'high_price': high_price,
+                'low_price': low_price,
+                'current_price': current_price
+            }
+        except Exception as e:
+            logger.error(f"❌ Error analyzing fibonacci: {e}")
+            return {'levels': [], 'current_price': current_price}
+    
+    def _check_hedge_pair_status(self, target_pos: Any, positions: List[Any]) -> bool:
+        """🔍 ตรวจสอบว่าไม้มี HG pair แล้วหรือยัง"""
+        try:
+            target_type = getattr(target_pos, 'type', 0)
+            target_ticket = getattr(target_pos, 'ticket', 0)
+            
+            # หาไม้ฝั่งตรงข้ามที่อาจเป็น pair
+            opposite_positions = [pos for pos in positions 
+                                if getattr(pos, 'type', 0) != target_type 
+                                and getattr(pos, 'ticket', 0) != target_ticket]
+            
+            # ตรวจสอบว่าไม้ฝั่งตรงข้ามมี comment หรือ tag ที่บ่งบอกว่าเป็น pair
+            for pos in opposite_positions:
+                comment = getattr(pos, 'comment', '')
+                if 'HEDGE' in comment or 'PAIR' in comment:
+                    return True
+            
+            return False
+        except Exception as e:
+            logger.error(f"❌ Error checking hedge pair status: {e}")
+            return False
+    
+    def _find_helper_strategy(self, target_pos: Any, positions: List[Any], current_price: float) -> Optional[Dict]:
+        """🔍 หาไม้ช่วยเหลือสำหรับไม้ที่มี HG pair แล้ว"""
+        try:
+            # หาไม้กำไรที่สามารถช่วยได้
+            profitable_positions = [pos for pos in positions 
+                                  if getattr(pos, 'profit', 0) > 0 
+                                  and getattr(pos, 'ticket', 0) != getattr(target_pos, 'ticket', 0)]
+            
+            if not profitable_positions:
+                return None
+            
+            # เลือกไม้กำไรที่ดีที่สุด
+            best_helper = max(profitable_positions, key=lambda x: getattr(x, 'profit', 0))
+            
+            return {
+                'action': 'HELPER',
+                'reason': f'HELPER_FOR_HEDGED: Ticket {getattr(best_helper, "ticket", "N/A")}',
+                'priority': 75,
+                'strategy_type': 'HELPER',
+                'helper_position': best_helper
+            }
+        except Exception as e:
+            logger.error(f"❌ Error finding helper strategy: {e}")
+            return None
     
     def _calculate_position_distance(self, position: Any, current_price: float) -> float:
         """📏 คำนวณระยะทางของไม้จากราคาปัจจุบัน"""
@@ -501,7 +603,7 @@ class DynamicPositionModifier:
                         continue
                     
                     # ใช้กลยุทธ์ฉลาด
-                    correction_strategy = self._smart_correction_strategy(target_pos, current_price)
+                    correction_strategy = self._smart_correction_strategy(target_pos, current_price, positions)
                     if not correction_strategy:
                         logger.info(f"💤 No correction needed for ticket {getattr(target_pos, 'ticket', 'N/A')}")
                         continue
