@@ -46,9 +46,9 @@ class HedgePairingCloser:
         # 🎯 Hedge Strategy Parameters
         self.symbol = symbol                # Symbol สำหรับเทรด
         self.min_combination_size = 2      # ขนาดการจับคู่ขั้นต่ำ
-        self.max_combination_size = 8       # ขนาดการจับคู่สูงสุด
-        self.min_net_profit = 0.1          # กำไรสุทธิขั้นต่ำ $0.1
-        self.max_acceptable_loss = 5.0     # ขาดทุนที่ยอมรับได้ $5.0
+        self.max_combination_size = 12      # ขนาดการจับคู่สูงสุด (เพิ่มจาก 8)
+        self.min_net_profit = 0.05         # กำไรสุทธิขั้นต่ำ $0.05 (ลดจาก 0.1)
+        self.max_acceptable_loss = 10.0    # ขาดทุนที่ยอมรับได้ $10.0 (เพิ่มจาก 5.0)
         
         # 🚀 Dynamic Performance Optimization - ปรับตามจำนวนไม้และสถานะพอร์ต
         self.use_parallel_processing = True   # เปิดการประมวลผลแบบขนาน
@@ -95,6 +95,32 @@ class HedgePairingCloser:
         # 🚨 Emergency Mode Parameters (สำหรับพอร์ตที่แย่มาก)
         self.emergency_min_net_profit = 0.01  # กำไรขั้นต่ำในโหมดฉุกเฉิน $0.01
         self.emergency_threshold_percentage = 0.10  # 10% ในโหมดฉุกเฉิน
+        
+        # ⚡ Quick Profit Mode - ปิดไม้เร็วขึ้น
+        self.quick_profit_enabled = True
+        self.quick_profit_thresholds = [0.05, 0.1, 0.25, 0.5, 1.0]  # ระดับกำไรหลายขั้น
+        self.quick_profit_max_combinations = 20  # หาได้สูงสุด 20 combinations
+        
+        # ⏰ Time-Based Closing - ปิดตามเวลา
+        self.time_based_closing_enabled = True
+        self.old_position_hours = 2  # ไม้เก่า > 2 ชั่วโมง
+        self.very_old_position_hours = 4  # ไม้เก่ามาก > 4 ชั่วโมง
+        self.time_based_profit_thresholds = [0.1, 0.25, 0.5]  # กำไรตามเวลา
+        
+        # 📊 Volume-Based Closing - ปิดตามขนาดไม้
+        self.volume_based_closing_enabled = True
+        self.small_lot_threshold = 0.02  # ไม้เล็ก < 0.02
+        self.large_lot_threshold = 0.05  # ไม้ใหญ่ > 0.05
+        self.volume_profit_thresholds = [0.05, 0.15, 0.3]  # กำไรตามขนาด
+        
+        # 🎯 Trend-Based Closing - ปิดตามเทรนด์
+        self.trend_based_closing_enabled = True
+        self.trend_profit_thresholds = [0.2, 0.4, 0.8]  # กำไรตามเทรนด์
+        
+        # 🔄 Partial Closing - ปิดบางส่วน
+        self.partial_closing_enabled = True
+        self.partial_close_ratios = [0.25, 0.5, 0.75]  # ปิด 25%, 50%, 75%
+        self.partial_profit_thresholds = [0.1, 0.3, 0.6]  # กำไรสำหรับปิดบางส่วน
         
         # 🔧 Position Generation Parameters
         self.enable_position_generation = True  # เปิดใช้งานการออกไม้เพิ่มเติม
@@ -813,6 +839,102 @@ class HedgePairingCloser:
             #     filtered_positions = self._apply_sw_filter(filtered_positions)
             #     logger.info(f"🛡️ SW Filter: Applied clustering protection")
             
+            # 0. Quick Profit Search - หาโอกาสปิดเร็ว
+            if self.quick_profit_enabled:
+                quick_combinations = self._find_quick_profit_opportunities(filtered_positions)
+                if quick_combinations:
+                    logger.info(f"⚡ QUICK PROFIT FOUND: {len(quick_combinations)} combinations")
+                    best_quick = quick_combinations[0]
+                    logger.info(f"   Best: {best_quick.combination_type}: ${best_quick.total_profit:.2f} ({best_quick.size} positions)")
+                    
+                    processing_time = time.time() - start_time
+                    self._record_performance(True, best_quick.total_profit, processing_time)
+                    
+                    return ClosingDecision(
+                        should_close=True,
+                        positions_to_close=best_quick.positions,
+                        method="QUICK_PROFIT",
+                        net_pnl=best_quick.total_profit,
+                        expected_pnl=best_quick.total_profit,
+                        position_count=best_quick.size,
+                        buy_count=sum(1 for p in best_quick.positions if p.type == 0),
+                        sell_count=sum(1 for p in best_quick.positions if p.type == 1),
+                        confidence_score=best_quick.confidence_score,
+                        reason=best_quick.reason
+                    )
+            
+            # 0.5. Time-Based Closing - ปิดตามเวลา
+            if self.time_based_closing_enabled:
+                time_combinations = self._find_time_based_closing(filtered_positions)
+                if time_combinations:
+                    logger.info(f"⏰ TIME-BASED CLOSING FOUND: {len(time_combinations)} combinations")
+                    best_time = time_combinations[0]
+                    logger.info(f"   Best: {best_time.combination_type}: ${best_time.total_profit:.2f} ({best_time.size} positions)")
+                    
+                    processing_time = time.time() - start_time
+                    self._record_performance(True, best_time.total_profit, processing_time)
+                    
+                    return ClosingDecision(
+                        should_close=True,
+                        positions_to_close=best_time.positions,
+                        method="TIME_BASED",
+                        net_pnl=best_time.total_profit,
+                        expected_pnl=best_time.total_profit,
+                        position_count=best_time.size,
+                        buy_count=sum(1 for p in best_time.positions if p.type == 0),
+                        sell_count=sum(1 for p in best_time.positions if p.type == 1),
+                        confidence_score=best_time.confidence_score,
+                        reason=best_time.reason
+                    )
+            
+            # 0.6. Volume-Based Closing - ปิดตามขนาดไม้
+            if self.volume_based_closing_enabled:
+                volume_combinations = self._find_volume_based_closing(filtered_positions)
+                if volume_combinations:
+                    logger.info(f"📊 VOLUME-BASED CLOSING FOUND: {len(volume_combinations)} combinations")
+                    best_volume = volume_combinations[0]
+                    logger.info(f"   Best: {best_volume.combination_type}: ${best_volume.total_profit:.2f} ({best_volume.size} positions)")
+                    
+                    processing_time = time.time() - start_time
+                    self._record_performance(True, best_volume.total_profit, processing_time)
+                    
+                    return ClosingDecision(
+                        should_close=True,
+                        positions_to_close=best_volume.positions,
+                        method="VOLUME_BASED",
+                        net_pnl=best_volume.total_profit,
+                        expected_pnl=best_volume.total_profit,
+                        position_count=best_volume.size,
+                        buy_count=sum(1 for p in best_volume.positions if p.type == 0),
+                        sell_count=sum(1 for p in best_volume.positions if p.type == 1),
+                        confidence_score=best_volume.confidence_score,
+                        reason=best_volume.reason
+                    )
+            
+            # 0.7. Trend-Based Closing - ปิดตามเทรนด์
+            if self.trend_based_closing_enabled:
+                trend_combinations = self._find_trend_based_closing(filtered_positions)
+                if trend_combinations:
+                    logger.info(f"🎯 TREND-BASED CLOSING FOUND: {len(trend_combinations)} combinations")
+                    best_trend = trend_combinations[0]
+                    logger.info(f"   Best: {best_trend.combination_type}: ${best_trend.total_profit:.2f} ({best_trend.size} positions)")
+                    
+                    processing_time = time.time() - start_time
+                    self._record_performance(True, best_trend.total_profit, processing_time)
+                    
+                    return ClosingDecision(
+                        should_close=True,
+                        positions_to_close=best_trend.positions,
+                        method="TREND_BASED",
+                        net_pnl=best_trend.total_profit,
+                        expected_pnl=best_trend.total_profit,
+                        position_count=best_trend.size,
+                        buy_count=sum(1 for p in best_trend.positions if p.type == 0),
+                        sell_count=sum(1 for p in best_trend.positions if p.type == 1),
+                        confidence_score=best_trend.confidence_score,
+                        reason=best_trend.reason
+                    )
+            
             # 1. หาการจับคู่ไม้ที่มีอยู่
             profitable_combinations = self._find_profitable_combinations(filtered_positions)
             
@@ -1458,14 +1580,14 @@ class HedgePairingCloser:
                 logger.info("=" * 60)
                 return single_side_combinations
             
-            # Step 3-4: Advanced Search (ทุก 1 ชั่วโมงเท่านั้น)
+            # Step 3-4: Advanced Search (ทุก 5 นาที)
             current_time = time.time()
             if not hasattr(self, 'last_advanced_search_time'):
                 self.last_advanced_search_time = 0
-            should_run_advanced = (current_time - self.last_advanced_search_time) >= 3600  # 1 ชั่วโมง = 3600 วินาที
+            should_run_advanced = (current_time - self.last_advanced_search_time) >= 300  # 5 นาที = 300 วินาที (ลดจาก 1 ชั่วโมง)
             
             if should_run_advanced:
-                logger.info("⏰ Running advanced search (1+ hour since last run)")
+                logger.info("⏰ Running advanced search (5+ minutes since last run)")
                 
                 # Step 3: Dynamic Re-pairing
                 logger.info("🔍 STEP 3: DYNAMIC RE-PAIRING")
@@ -2002,6 +2124,233 @@ class HedgePairingCloser:
         except Exception as e:
             logger.error(f"❌ Error calculating combination type: {e}")
             return "UNKNOWN"
+    
+    def _find_time_based_closing(self, positions: List[Any]) -> List[HedgeCombination]:
+        """⏰ หาโอกาสปิดไม้ตามเวลา - ไม้เก่า + กำไร"""
+        try:
+            if len(positions) < 1:
+                return []
+            
+            time_combinations = []
+            current_time = time.time()
+            
+            for position in positions:
+                position_profit = getattr(position, 'profit', 0)
+                position_time = getattr(position, 'time', 0)
+                
+                # คำนวณอายุไม้ (ชั่วโมง)
+                if position_time > 0:
+                    age_hours = (current_time - position_time) / 3600
+                else:
+                    age_hours = 0
+                
+                # ตรวจสอบเงื่อนไขตามเวลา
+                if age_hours >= self.very_old_position_hours:  # ไม้เก่ามาก > 4 ชั่วโมง
+                    for threshold in self.time_based_profit_thresholds:
+                        if position_profit >= threshold:
+                            combination_type = f"VERY_OLD_{age_hours:.1f}h"
+                            confidence = min(90.0, 70.0 + (position_profit * 20))
+                            
+                            time_combinations.append(HedgeCombination(
+                                positions=[position],
+                                total_profit=position_profit,
+                                combination_type=combination_type,
+                                size=1,
+                                confidence_score=confidence,
+                                reason=f"Very old position {age_hours:.1f}h with profit ${position_profit:.2f}"
+                            ))
+                            break
+                
+                elif age_hours >= self.old_position_hours:  # ไม้เก่า > 2 ชั่วโมง
+                    for threshold in self.time_based_profit_thresholds:
+                        if position_profit >= threshold:
+                            combination_type = f"OLD_{age_hours:.1f}h"
+                            confidence = min(85.0, 60.0 + (position_profit * 15))
+                            
+                            time_combinations.append(HedgeCombination(
+                                positions=[position],
+                                total_profit=position_profit,
+                                combination_type=combination_type,
+                                size=1,
+                                confidence_score=confidence,
+                                reason=f"Old position {age_hours:.1f}h with profit ${position_profit:.2f}"
+                            ))
+                            break
+            
+            # เรียงตามกำไร (มากไปน้อย)
+            time_combinations.sort(key=lambda x: x.total_profit, reverse=True)
+            
+            return time_combinations[:5]  # ส่งคืนแค่ 5 อันแรก
+            
+        except Exception as e:
+            logger.error(f"❌ Error in time-based closing: {e}")
+            return []
+    
+    def _find_trend_based_closing(self, positions: List[Any]) -> List[HedgeCombination]:
+        """🎯 หาโอกาสปิดไม้ตามเทรนด์ - ไม้ที่ตามเทรนด์ + กำไร"""
+        try:
+            if len(positions) < 1:
+                return []
+            
+            trend_combinations = []
+            
+            # แยกไม้ Buy และ Sell
+            buy_positions = [p for p in positions if getattr(p, 'type', 0) == 0]
+            sell_positions = [p for p in positions if getattr(p, 'type', 0) == 1]
+            
+            # หาไม้ที่ตามเทรนด์ (Buy กำไร + Sell ติดลบ = เทรนด์ขึ้น)
+            for buy_pos in buy_positions:
+                buy_profit = getattr(buy_pos, 'profit', 0)
+                if buy_profit > 0:  # Buy กำไร = เทรนด์ขึ้น
+                    for threshold in self.trend_profit_thresholds:
+                        if buy_profit >= threshold:
+                            combination_type = f"TREND_UP_BUY_{buy_profit:.2f}"
+                            confidence = min(90.0, 70.0 + (buy_profit * 10))
+                            
+                            trend_combinations.append(HedgeCombination(
+                                positions=[buy_pos],
+                                total_profit=buy_profit,
+                                combination_type=combination_type,
+                                size=1,
+                                confidence_score=confidence,
+                                reason=f"Trend up - Buy profit ${buy_profit:.2f}"
+                            ))
+                            break
+            
+            # หาไม้ที่ตามเทรนด์ (Sell กำไร + Buy ติดลบ = เทรนด์ลง)
+            for sell_pos in sell_positions:
+                sell_profit = getattr(sell_pos, 'profit', 0)
+                if sell_profit > 0:  # Sell กำไร = เทรนด์ลง
+                    for threshold in self.trend_profit_thresholds:
+                        if sell_profit >= threshold:
+                            combination_type = f"TREND_DOWN_SELL_{sell_profit:.2f}"
+                            confidence = min(90.0, 70.0 + (sell_profit * 10))
+                            
+                            trend_combinations.append(HedgeCombination(
+                                positions=[sell_pos],
+                                total_profit=sell_profit,
+                                combination_type=combination_type,
+                                size=1,
+                                confidence_score=confidence,
+                                reason=f"Trend down - Sell profit ${sell_profit:.2f}"
+                            ))
+                            break
+            
+            # เรียงตามกำไร (มากไปน้อย)
+            trend_combinations.sort(key=lambda x: x.total_profit, reverse=True)
+            
+            return trend_combinations[:5]  # ส่งคืนแค่ 5 อันแรก
+            
+        except Exception as e:
+            logger.error(f"❌ Error in trend-based closing: {e}")
+            return []
+    
+    def _find_volume_based_closing(self, positions: List[Any]) -> List[HedgeCombination]:
+        """📊 หาโอกาสปิดไม้ตามขนาด - ไม้เล็ก/ใหญ่ + กำไร"""
+        try:
+            if len(positions) < 1:
+                return []
+            
+            volume_combinations = []
+            
+            for position in positions:
+                position_profit = getattr(position, 'profit', 0)
+                position_volume = getattr(position, 'volume', 0.01)
+                
+                # ตรวจสอบเงื่อนไขตามขนาดไม้
+                if position_volume <= self.small_lot_threshold:  # ไม้เล็ก < 0.02
+                    for threshold in self.volume_profit_thresholds:
+                        if position_profit >= threshold:
+                            combination_type = f"SMALL_LOT_{position_volume}"
+                            confidence = min(80.0, 50.0 + (position_profit * 25))
+                            
+                            volume_combinations.append(HedgeCombination(
+                                positions=[position],
+                                total_profit=position_profit,
+                                combination_type=combination_type,
+                                size=1,
+                                confidence_score=confidence,
+                                reason=f"Small lot {position_volume} with profit ${position_profit:.2f}"
+                            ))
+                            break
+                
+                elif position_volume >= self.large_lot_threshold:  # ไม้ใหญ่ > 0.05
+                    for threshold in self.volume_profit_thresholds:
+                        if position_profit >= threshold:
+                            combination_type = f"LARGE_LOT_{position_volume}"
+                            confidence = min(95.0, 70.0 + (position_profit * 15))
+                            
+                            volume_combinations.append(HedgeCombination(
+                                positions=[position],
+                                total_profit=position_profit,
+                                combination_type=combination_type,
+                                size=1,
+                                confidence_score=confidence,
+                                reason=f"Large lot {position_volume} with profit ${position_profit:.2f}"
+                            ))
+                            break
+            
+            # เรียงตามกำไร (มากไปน้อย)
+            volume_combinations.sort(key=lambda x: x.total_profit, reverse=True)
+            
+            return volume_combinations[:5]  # ส่งคืนแค่ 5 อันแรก
+            
+        except Exception as e:
+            logger.error(f"❌ Error in volume-based closing: {e}")
+            return []
+    
+    def _find_quick_profit_opportunities(self, positions: List[Any]) -> List[HedgeCombination]:
+        """⚡ หาโอกาสปิดไม้เร็ว - เน้นความเร็วและโอกาส"""
+        try:
+            if len(positions) < 2:
+                return []
+            
+            quick_combinations = []
+            
+            # แยกไม้ Buy และ Sell
+            buy_positions = [p for p in positions if getattr(p, 'type', 0) == 0]
+            sell_positions = [p for p in positions if getattr(p, 'type', 0) == 1]
+            
+            # หา Buy + Sell ตรงข้าม (เร็วที่สุด)
+            for buy_pos in buy_positions:
+                for sell_pos in sell_positions:
+                    buy_profit = getattr(buy_pos, 'profit', 0)
+                    sell_profit = getattr(sell_pos, 'profit', 0)
+                    total_profit = buy_profit + sell_profit
+                    
+                    # ตรวจสอบเงื่อนไขกำไรเร็ว
+                    for threshold in self.quick_profit_thresholds:
+                        if total_profit >= threshold:
+                            combination_type = self._get_combination_type([buy_pos, sell_pos])
+                            confidence = min(95.0, 60.0 + (total_profit * 10))  # 60-95%
+                            
+                            quick_combinations.append(HedgeCombination(
+                                positions=[buy_pos, sell_pos],
+                                total_profit=total_profit,
+                                combination_type=combination_type,
+                                size=2,
+                                confidence_score=confidence,
+                                reason=f"Quick profit ${total_profit:.2f} (threshold: ${threshold})"
+                            ))
+                            
+                            # หยุดเมื่อเจอ threshold แรกที่ผ่าน
+                            break
+                    
+                    # จำกัดจำนวน combinations
+                    if len(quick_combinations) >= self.quick_profit_max_combinations:
+                        break
+                
+                if len(quick_combinations) >= self.quick_profit_max_combinations:
+                    break
+            
+            # เรียงตามกำไร (มากไปน้อย)
+            quick_combinations.sort(key=lambda x: x.total_profit, reverse=True)
+            
+            return quick_combinations[:10]  # ส่งคืนแค่ 10 อันแรก
+            
+        except Exception as e:
+            logger.error(f"❌ Error in quick profit search: {e}")
+            return []
     
     def _calculate_confidence_score(self, positions: List[Any], total_profit: float) -> float:
         """📈 คำนวณคะแนนความมั่นใจ"""
