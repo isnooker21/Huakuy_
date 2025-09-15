@@ -666,13 +666,17 @@ class OrderManager:
             total_profit = 0.0
             for pos in positions:
                 # รวม profit + swap + commission
-                pos_profit = getattr(pos, 'profit', 0.0)
-                pos_swap = getattr(pos, 'swap', 0.0)
-                pos_commission = getattr(pos, 'commission', 0.0)
+                pos_profit = getattr(pos, 'profit', 0)  # ใช้ 0 แทน 0.0
+                pos_swap = getattr(pos, 'swap', 0)
+                pos_commission = getattr(pos, 'commission', 0)
                 
                 net_pos_profit = pos_profit + pos_swap + pos_commission
                 total_profit += net_pos_profit
                 
+                # Debug log เพื่อตรวจสอบ
+                logger.debug(f"Position {getattr(pos, 'ticket', 'N/A')}: profit=${pos_profit:.2f}, swap=${pos_swap:.2f}, comm=${pos_commission:.2f}")
+                
+            logger.debug(f"Total calculated profit: ${total_profit:.2f}")
             return total_profit
             
         except Exception as e:
