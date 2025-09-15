@@ -420,9 +420,12 @@ class SimpleBreakoutTradingSystemGUI:
         """
         try:
             # Process each timeframe
+            logger.debug(f"🔍 Processing timeframes: {self.timeframes}")
             for timeframe in self.timeframes:
+                logger.debug(f"🔍 Checking timeframe: {timeframe}")
                 # Check if we can trade this timeframe (one per candle rule)
                 if not self._can_trade_timeframe(timeframe):
+                    logger.debug(f"⏰ {timeframe}: Cannot trade - already traded on this candle")
                     continue
                 
                 # Get current and previous candle for this specific timeframe
@@ -432,18 +435,7 @@ class SimpleBreakoutTradingSystemGUI:
                 if not current_tf_candle or not previous_candle:
                     continue
                 
-                # ตรวจสอบว่าแท่งเทียนปัจจุบันปิดแล้วหรือยัง
-                current_time = datetime.now()
-                candle_time = current_tf_candle.timestamp
-                time_diff = (current_time - candle_time).total_seconds()
-                
-                # ถ้าแท่งเทียนยังไม่ปิด (น้อยกว่า 1 นาทีสำหรับ M5, 15 นาทีสำหรับ M15, etc.)
-                timeframe_minutes = {'M5': 5, 'M15': 15, 'M30': 30, 'H1': 60}
-                min_time = timeframe_minutes.get(timeframe, 5) * 60  # Convert to seconds
-                
-                if time_diff < min_time:
-                    logger.debug(f"⏰ {timeframe}: Candle not closed yet - {time_diff:.0f}s < {min_time}s")
-                    continue
+                # ระบบจาก commit 1dd13e0 - ง่ายและทำงานได้ดี
                 
                 # 🎯 SIMPLE BREAKOUT DETECTION
                 breakout_signal = None
@@ -459,7 +451,7 @@ class SimpleBreakoutTradingSystemGUI:
                     reason = f"Breakout SELL {timeframe}: {current_tf_candle.close:.2f} < {previous_candle.low:.2f}"
                 
                 if breakout_signal:
-                    logger.debug(f"✅ Market OK for trading: {timeframe} - FIGHT MODE ACTIVE!")
+                    logger.info(f"🚀 {timeframe}: {breakout_signal} signal detected - {reason}")
                     
                     # 🚀 Execute breakout trade
                     self._execute_simple_breakout_trade(
@@ -471,6 +463,9 @@ class SimpleBreakoutTradingSystemGUI:
                     
                     # อัปเดตเวลาการเทรดล่าสุดเป็นเวลาแท่งเทียนของ timeframe นั้น
                     self.last_trade_time[timeframe] = current_tf_candle.timestamp
+                    logger.info(f"✅ {timeframe}: Trade executed, updated last_trade_time to {current_tf_candle.timestamp}")
+                else:
+                    logger.debug(f"⏰ {timeframe}: No breakout signal - Close: {current_tf_candle.close:.2f}, Prev High: {previous_candle.high:.2f}, Prev Low: {previous_candle.low:.2f}")
             
             # Update candle history
             self._update_candle_history(current_candle)
@@ -494,14 +489,7 @@ class SimpleBreakoutTradingSystemGUI:
         last_trade_time = last_trade
         
         # เปรียบเทียบเวลาแท่งเทียน (ไม่ใช่เวลาปัจจุบัน)
-        can_trade = current_candle_time > last_trade_time
-        
-        if not can_trade:
-            logger.debug(f"⏰ {timeframe}: Cannot trade - Last trade: {last_trade_time}, Current candle: {current_candle_time}")
-        else:
-            logger.info(f"✅ {timeframe}: Can trade - New candle detected")
-        
-        return can_trade
+        return current_candle_time > last_trade_time
     
     def _get_previous_candle(self, timeframe: str) -> Optional[CandleData]:
         """Get previous candle for timeframe"""
