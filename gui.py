@@ -1287,8 +1287,6 @@ class TradingGUI:
                         # อัพเดท GUI ใน main thread
                         self.root.after(0, lambda: self.update_trading_status(True))
                         logger.info("เริ่มการเทรดจาก GUI สำเร็จ")
-                    else:
-                        self.root.after(0, lambda: messagebox.showerror("Error", "ไม่สามารถเริ่มการเทรดได้"))
                 except Exception as e:
                     logger.error(f"เกิดข้อผิดพลาดในการเริ่มเทรด: {str(e)}")
                     self.root.after(0, lambda: messagebox.showerror("Error", f"เกิดข้อผิดพลาด: {str(e)}"))
@@ -1314,7 +1312,7 @@ class TradingGUI:
                 self.trading_status.config(text="Stopped", fg='red')
         except Exception as e:
             logger.error(f"เกิดข้อผิดพลาดในการอัพเดทสถานะ: {str(e)}")
-            
+    
     def stop_trading(self):
         """หยุดการเทรด"""
         try:
@@ -1439,3 +1437,17 @@ class TradingGUI:
                 self.root.quit()
             except:
                 pass
+
+    def alert(self, message, level='info'):
+        """แสดงการแจ้งเตือน"""
+        try:
+            if level == 'info':
+                messagebox.showinfo("Info", message)
+            elif level == 'warning':
+                messagebox.showwarning("Warning", message)
+            elif level == 'error':
+                messagebox.showerror("Error", message)
+            else:
+                messagebox.showinfo("Info", message)
+        except Exception as e:
+            logger.error(f"Error showing alert: {e}")
