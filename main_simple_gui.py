@@ -2,7 +2,7 @@
 """
 🚀 Simple Breakout Trading System with GUI
 ==========================================
-#85726dba89c0b032198ead4b3d0b292f01d7a23d <<< commit file ที่ใช้งานสมบูณ
+2645542741b983d3a8dc3f660a0531af92a85a69 <<< commit file ที่ใช้งานสมบูณ
 NEW ENTRY LOGIC:
 ✅ BUY: current.close > previous.high
 ✅ SELL: current.close < previous.low

@@ -763,8 +763,7 @@ class Dynamic7DSmartCloser:
                     all_scores.sort(key=lambda x: x.total_score, reverse=True)
                     selected = all_scores[:min(size, len(all_scores))]
                     
-                    type_name = "BUY" if buy_scores else "SELL"
-                    # logger.info(f"✅ Final Fallback: {len(selected)} {type_name} positions")
+                    type_name = "BUY" if buy_scores else "SELL"                    # logger.info(f"✅ Final Fallback: {len(selected)} {type_name} positions")
                 else:
                     # เรียงตาม score
                     buy_scores.sort(key=lambda x: x.total_score, reverse=True)
