@@ -1062,6 +1062,9 @@ class MT5Connection:
                 position = mt5.positions_get(ticket=ticket)
                 if position and len(position) > 0:
                     pos = position[0]
+                    # 🔧 Smart Filling Type Selection - Fix retcode 10030
+                    filling_mode = self._detect_filling_type(pos.symbol)
+                    
                     request = {
                         "action": mt5.TRADE_ACTION_DEAL,
                         "symbol": pos.symbol,
@@ -1073,7 +1076,7 @@ class MT5Connection:
                         "magic": 0,
                         "comment": "Group Close",
                         "type_time": mt5.ORDER_TIME_GTC,
-                        "type_filling": mt5.ORDER_FILLING_IOC,
+                        "type_filling": filling_mode,
                     }
                     requests.append(request)
             
