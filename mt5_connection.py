@@ -1062,9 +1062,7 @@ class MT5Connection:
                 position = mt5.positions_get(ticket=ticket)
                 if position and len(position) > 0:
                     pos = position[0]
-                    # 🔧 Smart Filling Type Selection - Fix retcode 10030
-                    filling_mode = self._detect_filling_type(pos.symbol)
-                    
+                    # 🚀 GROUP CLOSE: ไม่ระบุ type_filling ให้โบรกเกอร์เลือกเอง
                     request = {
                         "action": mt5.TRADE_ACTION_DEAL,
                         "symbol": pos.symbol,
@@ -1076,7 +1074,7 @@ class MT5Connection:
                         "magic": 0,
                         "comment": "Group Close",
                         "type_time": mt5.ORDER_TIME_GTC,
-                        "type_filling": filling_mode,
+                        # ⚠️ NO type_filling - let broker choose
                     }
                     requests.append(request)
             
@@ -1199,10 +1197,7 @@ class MT5Connection:
                 order_type = mt5.ORDER_TYPE_BUY
                 price = mt5.symbol_info_tick(pos.symbol).ask
             
-            # 🔧 Smart Filling Type Selection - Fix retcode 10030
-            filling_mode = self._detect_filling_type(pos.symbol)
-            
-            # 🚀 SIMPLE REQUEST: ใช้ dynamic filling type
+            # 🚀 SIMPLE REQUEST: ไม่ระบุ type_filling ให้โบรกเกอร์เลือกเอง
             request = {
                 "action": mt5.TRADE_ACTION_DEAL,
                 "symbol": pos.symbol,
@@ -1214,10 +1209,10 @@ class MT5Connection:
                 "magic": getattr(pos, 'magic', 0),
                 "comment": f"Legacy close {ticket}",
                 "type_time": mt5.ORDER_TIME_GTC,
-                "type_filling": filling_mode,
+                # ⚠️ NO type_filling - let broker choose
             }
             
-            logger.info(f"🚀 LEGACY CLOSE: {ticket} (using dynamic filling type)")
+            logger.info(f"🚀 LEGACY CLOSE: {ticket} (let broker choose filling type)")
             result = mt5.order_send(request)
             
             if result and result.retcode == 10009:  # TRADE_RETCODE_DONE
@@ -1273,11 +1268,7 @@ class MT5Connection:
                 order_type = mt5.ORDER_TYPE_BUY
                 price = mt5.symbol_info_tick(pos.symbol).ask
             
-            # 🔧 Smart Filling Type Selection - Fix retcode 10030
-            # ใช้ filling type ที่ตรวจสอบแล้วจาก _detect_filling_type
-            filling_mode = self._detect_filling_type(pos.symbol)
-            
-            # เตรียมข้อมูล request
+            # 🚀 INDIVIDUAL CLOSE: ไม่ระบุ type_filling ให้โบรกเกอร์เลือกเอง
             request = {
                 "action": mt5.TRADE_ACTION_DEAL,
                 "symbol": pos.symbol,
@@ -1289,7 +1280,7 @@ class MT5Connection:
                 "magic": getattr(pos, 'magic', 0),
                 "comment": f"Group close {ticket}",
                 "type_time": mt5.ORDER_TIME_GTC,
-                "type_filling": filling_mode,
+                # ⚠️ NO type_filling - let broker choose
             }
             
             # ส่ง Order
