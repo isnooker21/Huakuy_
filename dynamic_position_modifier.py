@@ -482,50 +482,85 @@ class DynamicPositionModifier:
             logger.error(f"❌ Error estimating correction profit: {e}")
             return 0.0
     
-    def _smart_correction_strategy(self, target_pos: Any, current_price: float) -> Optional[Dict]:
-        """🎯 กลยุทธ์แก้ไขแบบฉลาด"""
+    def _smart_correction_strategy(self, target_pos: Any, current_price: float, positions: List[Any] = None) -> Optional[Dict]:
+        """🎯 กลยุทธ์แก้ไขแบบฉลาด (ใช้ Demand Supply + Fibo + Logic ชัดเจน)"""
         try:
+            # ตั้งค่า positions default
+            if positions is None:
+                positions = []
+                
             target_profit = getattr(target_pos, 'profit', 0)
             distance = self._calculate_position_distance(target_pos, current_price)
             position_type = getattr(target_pos, 'type', 0)
             
             logger.info(f"🎯 Correction strategy: ${target_profit:.2f} profit, {distance:.1f} points")
             
-            # กรณีที่ 1: ไม้กำไร + ไกล → ไม่ต้องแก้ไข
-            if target_profit > 0 and distance > 20:
-                logger.info("✅ Position is profitable but far - no correction needed")
-                return None
+            # 1. วิเคราะห์ Demand Supply
+            ds_analysis = self._analyze_demand_supply(current_price)
             
-            # กรณีที่ 2: ไม้ติดลบ + ไกล → แก้ไขแบบปลอดภัย (ปรับปรุงให้เก่งขึ้น)
-            if target_profit < 0 and distance > 20:
-                if position_type == 1:  # SELL ติดลบ
-                    return {'action': 'BUY', 'reason': 'AVERAGE_DOWN'}
-                else:  # BUY ติดลบ
-                    return {'action': 'SELL', 'reason': 'AVERAGE_UP'}
+            # 2. วิเคราะห์ Fibonacci
+            fib_analysis = self._analyze_fibonacci_levels(current_price, positions)
             
-            # กรณีที่ 3: ไม้ขาดทุนหนัก + ใกล้ → แก้ไขทันที
-            if target_profit < -100.0 and distance <= 20:
-                if position_type == 1:  # SELL ติดลบ
-                    return {'action': 'BUY', 'reason': 'HEAVY_LOSS_HEDGE'}
-                else:  # BUY ติดลบ
-                    return {'action': 'SELL', 'reason': 'HEAVY_LOSS_HEDGE'}
+            # 3. ตรวจสอบว่าไม้มี HG pair แล้วหรือยัง
+            has_hedge_pair = self._check_hedge_pair_status(target_pos, positions)
             
-            # กรณีที่ 4: ไม้ขาดทุนปานกลาง + ใกล้ → แก้ไขเบาๆ
-            if target_profit < -30.0 and distance <= 20:
-                if position_type == 1:  # SELL ติดลบ
-                    return {'action': 'BUY', 'reason': 'LIGHT_HEDGE'}
-                else:  # BUY ติดลบ
-                    return {'action': 'SELL', 'reason': 'LIGHT_HEDGE'}
+            # 4. กลยุทธ์การแก้ไขตามเงื่อนไข
+            strategies = []
             
-            # กรณีที่ 5: ไม้ขาดทุนเล็กน้อย + ใกล้ → รอให้ดีขึ้น
-            if target_profit < 0 and distance <= 20:
-                logger.info("⏰ Position is losing but close - waiting for improvement")
-                return None
+            # กรณีที่ 1: ไม้ไกลจากราคาปัจจุบัน (Distance > 20 points)
+            if distance > 20.0:
+                if target_profit < 0:  # ไม้ขาดทุน + ไกล
+                    # ออกไม้ฝั่งเดียวกัน (Average Down/Up)
+                    strategies.append({
+                        'action': 'BUY' if position_type == 0 else 'SELL',  # ฝั่งเดียวกัน
+                        'reason': f'DISTANCE_FAR_SAME_SIDE: {distance:.1f}pts + ${target_profit:.2f}',
+                        'priority': 90,
+                        'strategy_type': 'AVERAGE_SAME_SIDE'
+                    })
+                else:  # ไม้กำไร + ไกล
+                    logger.info("✅ Position is profitable but far - no correction needed")
+                    return None
             
-            # กรณีที่ 4: ไม้กำไร + ใกล้ → ไม่ต้องแก้ไข
-            if target_profit > 0 and distance <= 20:
-                logger.info("✅ Position is profitable and close - no correction needed")
-                return None
+            # กรณีที่ 2: ไม้ใกล้ราคาปัจจุบัน (Distance <= 20 points)
+            elif distance <= 20.0:
+                if has_hedge_pair:  # มี HG pair แล้ว
+                    # หาไม้ช่วยเหลือ
+                    helper_strategy = self._find_helper_strategy(target_pos, positions, current_price)
+                    if helper_strategy:
+                        strategies.append(helper_strategy)
+                else:  # ไม่มี HG pair
+                    # สร้าง HG pair
+                    strategies.append({
+                        'action': 'BUY' if position_type == 1 else 'SELL',  # ฝั่งตรงข้าม
+                        'reason': f'CREATE_HEDGE_PAIR: {distance:.1f}pts + ${target_profit:.2f}',
+                        'priority': 85,
+                        'strategy_type': 'CREATE_HEDGE'
+                    })
+            
+            # กรณีที่ 3: ไม้ขาดทุนหนัก (ไม่ว่าจะไกลหรือใกล้)
+            if target_profit < -100.0:
+                strategies.append({
+                    'action': 'BUY' if position_type == 1 else 'SELL',  # ฝั่งตรงข้าม
+                    'reason': f'HEAVY_LOSS_HEDGE: ${target_profit:.2f}',
+                    'priority': 95,
+                    'strategy_type': 'HEAVY_LOSS_HEDGE'
+                })
+            
+            # กรณีที่ 4: ไม้เก่า + ขาดทุน
+            hours_old = (time.time() - getattr(target_pos, 'time', 0)) / 3600 if getattr(target_pos, 'time', 0) > 0 else 0
+            if hours_old > 24.0 and target_profit < -30.0:
+                strategies.append({
+                    'action': 'BUY' if position_type == 1 else 'SELL',  # ฝั่งตรงข้าม
+                    'reason': f'OLD_POSITION_HEDGE: {hours_old:.1f}h + ${target_profit:.2f}',
+                    'priority': 80,
+                    'strategy_type': 'OLD_POSITION_HEDGE'
+                })
+            
+            # เลือกกลยุทธ์ที่ดีที่สุด
+            if strategies:
+                best_strategy = max(strategies, key=lambda x: x['priority'])
+                logger.info(f"🎯 Best Strategy: {best_strategy['action']} - {best_strategy['reason']}")
+                return best_strategy
             
             return None
         except Exception as e:
