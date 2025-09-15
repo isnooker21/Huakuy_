@@ -97,16 +97,20 @@ class DynamicPositionModifier:
         self.failure_history = {}
         self.adaptation_rate = 0.1
         
-        # 🎯 Outlier Detection Parameters
-        self.distance_threshold = 20.0  # 20 points พื้นฐาน
-        self.volatility_factor = 1.5    # ปรับตามความผันผวน
-        self.max_outlier_positions = 5  # จำนวนไม้ไกลสูงสุดที่แก้ไขได้
+        # 🎯 Outlier Detection Parameters (ปรับปรุงให้เก่งขึ้น)
+        self.distance_threshold = 15.0  # ลดจาก 20 เป็น 15 points (ไวขึ้น)
+        self.volatility_factor = 2.0    # เพิ่มจาก 1.5 เป็น 2.0 (ปรับตามความผันผวนมากขึ้น)
+        self.max_outlier_positions = 8  # เพิ่มจาก 5 เป็น 8 ไม้ (แก้ไขได้มากขึ้น)
+        self.loss_threshold = -50.0     # เพิ่มเกณฑ์ขาดทุน (แก้ไม้ขาดทุนมาก)
+        self.time_threshold_hours = 12  # ลดจาก 24 เป็น 12 ชั่วโมง (แก้ไม้เก่าเร็วขึ้น)
         
-        # 🛡️ Safety Parameters
-        self.max_correction_distance = 50.0  # ไม้ไกลเกิน 50 points หยุดแก้ไข
-        self.max_position_loss = -100.0      # ไม้ติดลบเกิน $100 หยุดแก้ไข
+        # 🛡️ Safety Parameters (ปรับปรุงให้เก่งขึ้น)
+        self.max_correction_distance = 60.0  # เพิ่มจาก 50 เป็น 60 points (แก้ไขได้มากขึ้น)
+        self.max_position_loss = -200.0      # เพิ่มจาก -100 เป็น -200 (แก้ไขไม้ขาดทุนมากได้)
         self.min_volume_threshold = 0.01     # ขั้นต่ำของโบรก 0.01 lot
-        self.min_improvement_threshold = 0.0  # ต้องดีขึ้นอย่างน้อย $0
+        self.min_improvement_threshold = -5.0  # เปลี่ยนจาก 0 เป็น -5 (ยอมให้เสียเล็กน้อยเพื่อช่วยพอร์ต)
+        self.max_corrections_per_cycle = 5   # เพิ่มจำนวนไม้แก้ไขต่อรอบ
+        self.correction_cooldown = 300       # 5 นาที cooldown ระหว่างการแก้ไข
         
         logger.info("🔧 Dynamic Position Modifier initialized")
     
@@ -121,20 +125,60 @@ class DynamicPositionModifier:
             return 0.0
     
     def _detect_outlier_positions(self, positions: List[Any], current_price: float) -> List[Any]:
-        """🔍 ตรวจจับไม้ที่อยู่ขอบนอก (ไกลจากราคาปัจจุบัน)"""
+        """🔍 ตรวจจับไม้ที่อยู่ขอบนอก (ปรับปรุงให้เก่งขึ้น)"""
         try:
             outliers = []
             for pos in positions:
                 distance = self._calculate_position_distance(pos, current_price)
-                if distance > self.distance_threshold:
+                profit = getattr(pos, 'profit', 0)
+                open_time = getattr(pos, 'time', 0)
+                current_time = time.time()
+                hours_old = (current_time - open_time) / 3600 if open_time > 0 else 0
+                
+                # เกณฑ์การตรวจจับที่เก่งขึ้น (หลายเงื่อนไข)
+                is_distance_outlier = distance > self.distance_threshold
+                is_loss_outlier = profit < self.loss_threshold
+                is_time_outlier = hours_old > self.time_threshold_hours
+                is_heavy_loss = profit < -200.0  # ขาดทุนหนักมาก
+                
+                # ตรวจจับไม้ที่ต้องแก้ไข (เงื่อนไขใดเงื่อนไขหนึ่ง)
+                if is_distance_outlier or is_loss_outlier or is_time_outlier or is_heavy_loss:
+                    priority_score = 0
+                    if is_heavy_loss:
+                        priority_score += 100  # ขาดทุนหนัก = ความสำคัญสูงสุด
+                    if is_distance_outlier:
+                        priority_score += distance * 2  # ระยะไกล = ความสำคัญสูง
+                    if is_loss_outlier:
+                        priority_score += abs(profit) * 0.5  # ขาดทุน = ความสำคัญปานกลาง
+                    if is_time_outlier:
+                        priority_score += hours_old * 0.1  # ไม้เก่า = ความสำคัญต่ำ
+                    
                     outliers.append({
                         'position': pos,
                         'distance': distance,
                         'ticket': getattr(pos, 'ticket', 'N/A'),
-                        'profit': getattr(pos, 'profit', 0)
+                        'profit': profit,
+                        'hours_old': hours_old,
+                        'priority_score': priority_score,
+                        'reasons': []
                     })
+                    
+                    # บันทึกเหตุผล
+                    if is_heavy_loss:
+                        outliers[-1]['reasons'].append("HEAVY_LOSS")
+                    if is_distance_outlier:
+                        outliers[-1]['reasons'].append("DISTANCE_FAR")
+                    if is_loss_outlier:
+                        outliers[-1]['reasons'].append("LOSS_HIGH")
+                    if is_time_outlier:
+                        outliers[-1]['reasons'].append("TIME_OLD")
+            
+            # เรียงตาม Priority Score (มากสุดก่อน)
+            outliers.sort(key=lambda x: x['priority_score'], reverse=True)
             
             logger.info(f"🎯 Outlier Detection: Found {len(outliers)} outlier positions")
+            if outliers:
+                logger.info(f"   Top priority: Ticket {outliers[0]['ticket']} (score: {outliers[0]['priority_score']:.1f})")
             return outliers
         except Exception as e:
             logger.error(f"❌ Error detecting outlier positions: {e}")
@@ -350,14 +394,28 @@ class DynamicPositionModifier:
                 logger.info("✅ Position is profitable but far - no correction needed")
                 return None
             
-            # กรณีที่ 2: ไม้ติดลบ + ไกล → แก้ไขแบบปลอดภัย
+            # กรณีที่ 2: ไม้ติดลบ + ไกล → แก้ไขแบบปลอดภัย (ปรับปรุงให้เก่งขึ้น)
             if target_profit < 0 and distance > 20:
                 if position_type == 1:  # SELL ติดลบ
                     return {'action': 'BUY', 'reason': 'AVERAGE_DOWN'}
                 else:  # BUY ติดลบ
                     return {'action': 'SELL', 'reason': 'AVERAGE_UP'}
             
-            # กรณีที่ 3: ไม้ติดลบ + ใกล้ → รอให้ดีขึ้น
+            # กรณีที่ 3: ไม้ขาดทุนหนัก + ใกล้ → แก้ไขทันที
+            if target_profit < -100.0 and distance <= 20:
+                if position_type == 1:  # SELL ติดลบ
+                    return {'action': 'BUY', 'reason': 'HEAVY_LOSS_HEDGE'}
+                else:  # BUY ติดลบ
+                    return {'action': 'SELL', 'reason': 'HEAVY_LOSS_HEDGE'}
+            
+            # กรณีที่ 4: ไม้ขาดทุนปานกลาง + ใกล้ → แก้ไขเบาๆ
+            if target_profit < -30.0 and distance <= 20:
+                if position_type == 1:  # SELL ติดลบ
+                    return {'action': 'BUY', 'reason': 'LIGHT_HEDGE'}
+                else:  # BUY ติดลบ
+                    return {'action': 'SELL', 'reason': 'LIGHT_HEDGE'}
+            
+            # กรณีที่ 5: ไม้ขาดทุนเล็กน้อย + ใกล้ → รอให้ดีขึ้น
             if target_profit < 0 and distance <= 20:
                 logger.info("⏰ Position is losing but close - waiting for improvement")
                 return None
@@ -416,15 +474,23 @@ class DynamicPositionModifier:
         try:
             logger.info(f"🔍 DYNAMIC PORTFOLIO MODIFICATION ANALYSIS: {len(positions)} positions")
             
-            # 1. 🎯 Outlier Detection - ตรวจจับไม้ไกล
+            # 1. 🎯 Outlier Detection - ตรวจจับไม้ไกล (ปรับปรุงให้เก่งขึ้น)
             outliers = self._detect_outlier_positions(positions, current_price)
             if outliers:
                 logger.info(f"🎯 Found {len(outliers)} outlier positions that need correction")
                 prioritized_outliers = self._prioritize_outlier_positions(outliers, current_price)
                 
+                # แก้ไขแบบ Batch (หลายไม้พร้อมกัน)
+                correction_count = 0
+                max_corrections = min(self.max_corrections_per_cycle, len(prioritized_outliers))
+                
                 # สร้างไม้แก้ไขสำหรับไม้ไกล (แบบปลอดภัย)
                 correction_positions = []
                 for outlier in prioritized_outliers:
+                    # จำกัดจำนวนการแก้ไขต่อรอบ
+                    if correction_count >= max_corrections:
+                        logger.info(f"🛑 Reached maximum corrections per cycle: {max_corrections}")
+                        break
                     target_pos = outlier['position']
                     distance = outlier['distance']
                     profit = getattr(target_pos, 'profit', 0)
@@ -448,7 +514,8 @@ class DynamicPositionModifier:
                         helpers = []  # ไม้ช่วย (จะหาใน Hedge Pairing)
                         if self._validate_correction_profitability(target_pos, correction_pos, helpers):
                             correction_positions.append(correction_pos)
-                            logger.info(f"✅ Created safe correction for ticket {getattr(target_pos, 'ticket', 'N/A')} (distance: {distance:.1f})")
+                            correction_count += 1
+                            logger.info(f"✅ Created safe correction for ticket {getattr(target_pos, 'ticket', 'N/A')} (distance: {distance:.1f}) [{correction_count}/{max_corrections}]")
                             
                             # ส่งไม้แก้ไขไปให้ Hedge Pairing Closer
                             if self.hedge_pairing_closer:
