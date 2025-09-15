@@ -96,35 +96,35 @@ class HedgePairingCloser:
         self.emergency_min_net_profit = 0.01  # กำไรขั้นต่ำในโหมดฉุกเฉิน $0.01
         self.emergency_threshold_percentage = 0.10  # 10% ในโหมดฉุกเฉิน
         
-        # ⚡ Quick Profit Mode - ปิดไม้เร็วขึ้น
-        self.quick_profit_enabled = True
-        self.quick_profit_thresholds = [0.05, 0.1, 0.25, 0.5, 1.0]  # ระดับกำไรหลายขั้น
-        self.quick_profit_max_combinations = 20  # หาได้สูงสุด 20 combinations
         
-        # ⏰ Time-Based Closing - ปิดตามเวลา
-        self.time_based_closing_enabled = True
-        self.old_position_hours = 2  # ไม้เก่า > 2 ชั่วโมง
-        self.very_old_position_hours = 4  # ไม้เก่ามาก > 4 ชั่วโมง
-        self.time_based_profit_thresholds = [0.1, 0.25, 0.5]  # กำไรตามเวลา
         
-        # 📊 Volume-Based Closing - ปิดตามขนาดไม้
-        self.volume_based_closing_enabled = True
-        self.small_lot_threshold = 0.02  # ไม้เล็ก < 0.02
-        self.large_lot_threshold = 0.05  # ไม้ใหญ่ > 0.05
-        self.volume_profit_thresholds = [0.05, 0.15, 0.3]  # กำไรตามขนาด
         
-        # 🎯 Trend-Based Closing - ปิดตามเทรนด์
-        self.trend_based_closing_enabled = True
-        self.trend_profit_thresholds = [0.2, 0.4, 0.8]  # กำไรตามเทรนด์
         
-        # 🔄 Partial Closing - ปิดบางส่วน
-        self.partial_closing_enabled = True
-        self.partial_close_ratios = [0.25, 0.5, 0.75]  # ปิด 25%, 50%, 75%
-        self.partial_profit_thresholds = [0.1, 0.3, 0.6]  # กำไรสำหรับปิดบางส่วน
         
         # 🔧 Position Generation Parameters
         self.enable_position_generation = True  # เปิดใช้งานการออกไม้เพิ่มเติม
         self.max_additional_positions = 3
+        
+        # 🧠 Advanced Pairing Strategies - กลยุทธ์การจับคู่ขั้นสูง
+        self.advanced_pairing_enabled = True
+        self.multi_level_pairing = True  # จับคู่หลายระดับ (2-3-4-5 ไม้)
+        self.cascade_pairing = True  # จับคู่แบบต่อเนื่อง (A+B, A+B+C, A+B+C+D)
+        self.reverse_pairing = True  # จับคู่ย้อนกลับ (หาไม้ช่วยจากไม้ที่เสียมาก)
+        self.smart_priority_pairing = True  # จับคู่ตามความสำคัญ (ไม้เสียมากก่อน)
+        
+        # 🎯 Enhanced Helping System - ระบบช่วยเหลือขั้นสูง
+        self.enhanced_helping_enabled = True
+        self.multi_helper_system = True  # ไม้ช่วยหลายตัว (Helper1+Helper2+Main)
+        self.cascade_helping = True  # ช่วยแบบต่อเนื่อง (Helper→Main→Helper2)
+        self.smart_helper_selection = True  # เลือกไม้ช่วยอย่างฉลาด
+        self.emergency_helper_mode = True  # โหมดช่วยเหลือฉุกเฉิน (ไม้เสียมาก)
+        
+        # 📊 Advanced Filtering - การกรองขั้นสูง
+        self.advanced_filtering_enabled = True
+        self.distance_based_pairing = True  # จับคู่ตามระยะห่างราคา
+        self.time_based_pairing = True  # จับคู่ตามอายุไม้
+        self.volume_based_pairing = True  # จับคู่ตามขนาดไม้
+        self.profit_ratio_pairing = True  # จับคู่ตามอัตราส่วนกำไร/ขาดทุน
         
         # 🎯 Dynamic Adjustment Methods
         self._adjust_performance_settings = self._get_dynamic_performance_settings
@@ -839,100 +839,53 @@ class HedgePairingCloser:
             #     filtered_positions = self._apply_sw_filter(filtered_positions)
             #     logger.info(f"🛡️ SW Filter: Applied clustering protection")
             
-            # 0. Quick Profit Search - หาโอกาสปิดเร็ว
-            if self.quick_profit_enabled:
-                quick_combinations = self._find_quick_profit_opportunities(filtered_positions)
-                if quick_combinations:
-                    logger.info(f"⚡ QUICK PROFIT FOUND: {len(quick_combinations)} combinations")
-                    best_quick = quick_combinations[0]
-                    logger.info(f"   Best: {best_quick.combination_type}: ${best_quick.total_profit:.2f} ({best_quick.size} positions)")
+            
+            # 0.5. Advanced Pairing - กลยุทธ์การจับคู่ขั้นสูง
+            if self.advanced_pairing_enabled:
+                advanced_combinations = self._find_advanced_pairing_combinations(filtered_positions)
+                if advanced_combinations:
+                    logger.info(f"🧠 ADVANCED PAIRING FOUND: {len(advanced_combinations)} combinations")
+                    best_advanced = advanced_combinations[0]
+                    logger.info(f"   Best: {best_advanced.combination_type}: ${best_advanced.total_profit:.2f} ({best_advanced.size} positions)")
                     
                     processing_time = time.time() - start_time
-                    self._record_performance(True, best_quick.total_profit, processing_time)
+                    self._record_performance(True, best_advanced.total_profit, processing_time)
                     
                     return ClosingDecision(
                         should_close=True,
-                        positions_to_close=best_quick.positions,
-                        method="QUICK_PROFIT",
-                        net_pnl=best_quick.total_profit,
-                        expected_pnl=best_quick.total_profit,
-                        position_count=best_quick.size,
-                        buy_count=sum(1 for p in best_quick.positions if p.type == 0),
-                        sell_count=sum(1 for p in best_quick.positions if p.type == 1),
-                        confidence_score=best_quick.confidence_score,
-                        reason=best_quick.reason
+                        positions_to_close=best_advanced.positions,
+                        method="ADVANCED_PAIRING",
+                        net_pnl=best_advanced.total_profit,
+                        expected_pnl=best_advanced.total_profit,
+                        position_count=best_advanced.size,
+                        buy_count=sum(1 for p in best_advanced.positions if p.type == 0),
+                        sell_count=sum(1 for p in best_advanced.positions if p.type == 1),
+                        confidence_score=best_advanced.confidence_score,
+                        reason=best_advanced.reason
                     )
             
-            # 0.5. Time-Based Closing - ปิดตามเวลา
-            if self.time_based_closing_enabled:
-                time_combinations = self._find_time_based_closing(filtered_positions)
-                if time_combinations:
-                    logger.info(f"⏰ TIME-BASED CLOSING FOUND: {len(time_combinations)} combinations")
-                    best_time = time_combinations[0]
-                    logger.info(f"   Best: {best_time.combination_type}: ${best_time.total_profit:.2f} ({best_time.size} positions)")
+            # 0.6. Enhanced Helping - ระบบช่วยเหลือขั้นสูง
+            if self.enhanced_helping_enabled:
+                enhanced_helping = self._find_enhanced_helping_combinations(filtered_positions)
+                if enhanced_helping:
+                    logger.info(f"🎯 ENHANCED HELPING FOUND: {len(enhanced_helping)} combinations")
+                    best_helping = enhanced_helping[0]
+                    logger.info(f"   Best: {best_helping.combination_type}: ${best_helping.total_profit:.2f} ({best_helping.size} positions)")
                     
                     processing_time = time.time() - start_time
-                    self._record_performance(True, best_time.total_profit, processing_time)
+                    self._record_performance(True, best_helping.total_profit, processing_time)
                     
                     return ClosingDecision(
                         should_close=True,
-                        positions_to_close=best_time.positions,
-                        method="TIME_BASED",
-                        net_pnl=best_time.total_profit,
-                        expected_pnl=best_time.total_profit,
-                        position_count=best_time.size,
-                        buy_count=sum(1 for p in best_time.positions if p.type == 0),
-                        sell_count=sum(1 for p in best_time.positions if p.type == 1),
-                        confidence_score=best_time.confidence_score,
-                        reason=best_time.reason
-                    )
-            
-            # 0.6. Volume-Based Closing - ปิดตามขนาดไม้
-            if self.volume_based_closing_enabled:
-                volume_combinations = self._find_volume_based_closing(filtered_positions)
-                if volume_combinations:
-                    logger.info(f"📊 VOLUME-BASED CLOSING FOUND: {len(volume_combinations)} combinations")
-                    best_volume = volume_combinations[0]
-                    logger.info(f"   Best: {best_volume.combination_type}: ${best_volume.total_profit:.2f} ({best_volume.size} positions)")
-                    
-                    processing_time = time.time() - start_time
-                    self._record_performance(True, best_volume.total_profit, processing_time)
-                    
-                    return ClosingDecision(
-                        should_close=True,
-                        positions_to_close=best_volume.positions,
-                        method="VOLUME_BASED",
-                        net_pnl=best_volume.total_profit,
-                        expected_pnl=best_volume.total_profit,
-                        position_count=best_volume.size,
-                        buy_count=sum(1 for p in best_volume.positions if p.type == 0),
-                        sell_count=sum(1 for p in best_volume.positions if p.type == 1),
-                        confidence_score=best_volume.confidence_score,
-                        reason=best_volume.reason
-                    )
-            
-            # 0.7. Trend-Based Closing - ปิดตามเทรนด์
-            if self.trend_based_closing_enabled:
-                trend_combinations = self._find_trend_based_closing(filtered_positions)
-                if trend_combinations:
-                    logger.info(f"🎯 TREND-BASED CLOSING FOUND: {len(trend_combinations)} combinations")
-                    best_trend = trend_combinations[0]
-                    logger.info(f"   Best: {best_trend.combination_type}: ${best_trend.total_profit:.2f} ({best_trend.size} positions)")
-                    
-                    processing_time = time.time() - start_time
-                    self._record_performance(True, best_trend.total_profit, processing_time)
-                    
-                    return ClosingDecision(
-                        should_close=True,
-                        positions_to_close=best_trend.positions,
-                        method="TREND_BASED",
-                        net_pnl=best_trend.total_profit,
-                        expected_pnl=best_trend.total_profit,
-                        position_count=best_trend.size,
-                        buy_count=sum(1 for p in best_trend.positions if p.type == 0),
-                        sell_count=sum(1 for p in best_trend.positions if p.type == 1),
-                        confidence_score=best_trend.confidence_score,
-                        reason=best_trend.reason
+                        positions_to_close=best_helping.positions,
+                        method="ENHANCED_HELPING",
+                        net_pnl=best_helping.total_profit,
+                        expected_pnl=best_helping.total_profit,
+                        position_count=best_helping.size,
+                        buy_count=sum(1 for p in best_helping.positions if p.type == 0),
+                        sell_count=sum(1 for p in best_helping.positions if p.type == 1),
+                        confidence_score=best_helping.confidence_score,
+                        reason=best_helping.reason
                     )
             
             # 1. หาการจับคู่ไม้ที่มีอยู่
@@ -2125,231 +2078,386 @@ class HedgePairingCloser:
             logger.error(f"❌ Error calculating combination type: {e}")
             return "UNKNOWN"
     
-    def _find_time_based_closing(self, positions: List[Any]) -> List[HedgeCombination]:
-        """⏰ หาโอกาสปิดไม้ตามเวลา - ไม้เก่า + กำไร"""
-        try:
-            if len(positions) < 1:
-                return []
-            
-            time_combinations = []
-            current_time = time.time()
-            
-            for position in positions:
-                position_profit = getattr(position, 'profit', 0)
-                position_time = getattr(position, 'time', 0)
-                
-                # คำนวณอายุไม้ (ชั่วโมง)
-                if position_time > 0:
-                    age_hours = (current_time - position_time) / 3600
-                else:
-                    age_hours = 0
-                
-                # ตรวจสอบเงื่อนไขตามเวลา
-                if age_hours >= self.very_old_position_hours:  # ไม้เก่ามาก > 4 ชั่วโมง
-                    for threshold in self.time_based_profit_thresholds:
-                        if position_profit >= threshold:
-                            combination_type = f"VERY_OLD_{age_hours:.1f}h"
-                            confidence = min(90.0, 70.0 + (position_profit * 20))
-                            
-                            time_combinations.append(HedgeCombination(
-                                positions=[position],
-                                total_profit=position_profit,
-                                combination_type=combination_type,
-                                size=1,
-                                confidence_score=confidence,
-                                reason=f"Very old position {age_hours:.1f}h with profit ${position_profit:.2f}"
-                            ))
-                            break
-                
-                elif age_hours >= self.old_position_hours:  # ไม้เก่า > 2 ชั่วโมง
-                    for threshold in self.time_based_profit_thresholds:
-                        if position_profit >= threshold:
-                            combination_type = f"OLD_{age_hours:.1f}h"
-                            confidence = min(85.0, 60.0 + (position_profit * 15))
-                            
-                            time_combinations.append(HedgeCombination(
-                                positions=[position],
-                                total_profit=position_profit,
-                                combination_type=combination_type,
-                                size=1,
-                                confidence_score=confidence,
-                                reason=f"Old position {age_hours:.1f}h with profit ${position_profit:.2f}"
-                            ))
-                            break
-            
-            # เรียงตามกำไร (มากไปน้อย)
-            time_combinations.sort(key=lambda x: x.total_profit, reverse=True)
-            
-            return time_combinations[:5]  # ส่งคืนแค่ 5 อันแรก
-            
-        except Exception as e:
-            logger.error(f"❌ Error in time-based closing: {e}")
-            return []
     
-    def _find_trend_based_closing(self, positions: List[Any]) -> List[HedgeCombination]:
-        """🎯 หาโอกาสปิดไม้ตามเทรนด์ - ไม้ที่ตามเทรนด์ + กำไร"""
-        try:
-            if len(positions) < 1:
-                return []
-            
-            trend_combinations = []
-            
-            # แยกไม้ Buy และ Sell
-            buy_positions = [p for p in positions if getattr(p, 'type', 0) == 0]
-            sell_positions = [p for p in positions if getattr(p, 'type', 0) == 1]
-            
-            # หาไม้ที่ตามเทรนด์ (Buy กำไร + Sell ติดลบ = เทรนด์ขึ้น)
-            for buy_pos in buy_positions:
-                buy_profit = getattr(buy_pos, 'profit', 0)
-                if buy_profit > 0:  # Buy กำไร = เทรนด์ขึ้น
-                    for threshold in self.trend_profit_thresholds:
-                        if buy_profit >= threshold:
-                            combination_type = f"TREND_UP_BUY_{buy_profit:.2f}"
-                            confidence = min(90.0, 70.0 + (buy_profit * 10))
-                            
-                            trend_combinations.append(HedgeCombination(
-                                positions=[buy_pos],
-                                total_profit=buy_profit,
-                                combination_type=combination_type,
-                                size=1,
-                                confidence_score=confidence,
-                                reason=f"Trend up - Buy profit ${buy_profit:.2f}"
-                            ))
-                            break
-            
-            # หาไม้ที่ตามเทรนด์ (Sell กำไร + Buy ติดลบ = เทรนด์ลง)
-            for sell_pos in sell_positions:
-                sell_profit = getattr(sell_pos, 'profit', 0)
-                if sell_profit > 0:  # Sell กำไร = เทรนด์ลง
-                    for threshold in self.trend_profit_thresholds:
-                        if sell_profit >= threshold:
-                            combination_type = f"TREND_DOWN_SELL_{sell_profit:.2f}"
-                            confidence = min(90.0, 70.0 + (sell_profit * 10))
-                            
-                            trend_combinations.append(HedgeCombination(
-                                positions=[sell_pos],
-                                total_profit=sell_profit,
-                                combination_type=combination_type,
-                                size=1,
-                                confidence_score=confidence,
-                                reason=f"Trend down - Sell profit ${sell_profit:.2f}"
-                            ))
-                            break
-            
-            # เรียงตามกำไร (มากไปน้อย)
-            trend_combinations.sort(key=lambda x: x.total_profit, reverse=True)
-            
-            return trend_combinations[:5]  # ส่งคืนแค่ 5 อันแรก
-            
-        except Exception as e:
-            logger.error(f"❌ Error in trend-based closing: {e}")
-            return []
-    
-    def _find_volume_based_closing(self, positions: List[Any]) -> List[HedgeCombination]:
-        """📊 หาโอกาสปิดไม้ตามขนาด - ไม้เล็ก/ใหญ่ + กำไร"""
-        try:
-            if len(positions) < 1:
-                return []
-            
-            volume_combinations = []
-            
-            for position in positions:
-                position_profit = getattr(position, 'profit', 0)
-                position_volume = getattr(position, 'volume', 0.01)
-                
-                # ตรวจสอบเงื่อนไขตามขนาดไม้
-                if position_volume <= self.small_lot_threshold:  # ไม้เล็ก < 0.02
-                    for threshold in self.volume_profit_thresholds:
-                        if position_profit >= threshold:
-                            combination_type = f"SMALL_LOT_{position_volume}"
-                            confidence = min(80.0, 50.0 + (position_profit * 25))
-                            
-                            volume_combinations.append(HedgeCombination(
-                                positions=[position],
-                                total_profit=position_profit,
-                                combination_type=combination_type,
-                                size=1,
-                                confidence_score=confidence,
-                                reason=f"Small lot {position_volume} with profit ${position_profit:.2f}"
-                            ))
-                            break
-                
-                elif position_volume >= self.large_lot_threshold:  # ไม้ใหญ่ > 0.05
-                    for threshold in self.volume_profit_thresholds:
-                        if position_profit >= threshold:
-                            combination_type = f"LARGE_LOT_{position_volume}"
-                            confidence = min(95.0, 70.0 + (position_profit * 15))
-                            
-                            volume_combinations.append(HedgeCombination(
-                                positions=[position],
-                                total_profit=position_profit,
-                                combination_type=combination_type,
-                                size=1,
-                                confidence_score=confidence,
-                                reason=f"Large lot {position_volume} with profit ${position_profit:.2f}"
-                            ))
-                            break
-            
-            # เรียงตามกำไร (มากไปน้อย)
-            volume_combinations.sort(key=lambda x: x.total_profit, reverse=True)
-            
-            return volume_combinations[:5]  # ส่งคืนแค่ 5 อันแรก
-            
-        except Exception as e:
-            logger.error(f"❌ Error in volume-based closing: {e}")
-            return []
-    
-    def _find_quick_profit_opportunities(self, positions: List[Any]) -> List[HedgeCombination]:
-        """⚡ หาโอกาสปิดไม้เร็ว - เน้นความเร็วและโอกาส"""
+    def _find_advanced_pairing_combinations(self, positions: List[Any]) -> List[HedgeCombination]:
+        """🧠 หาการจับคู่ขั้นสูง - กลยุทธ์หลากหลาย"""
         try:
             if len(positions) < 2:
                 return []
             
-            quick_combinations = []
+            advanced_combinations = []
+            
+            # 1. Multi-Level Pairing - จับคู่หลายระดับ (2-3-4-5 ไม้)
+            if self.multi_level_pairing:
+                multi_level = self._find_multi_level_pairing(positions)
+                advanced_combinations.extend(multi_level)
+            
+            # 2. Cascade Pairing - จับคู่แบบต่อเนื่อง (A+B, A+B+C, A+B+C+D)
+            if self.cascade_pairing:
+                cascade = self._find_cascade_pairing(positions)
+                advanced_combinations.extend(cascade)
+            
+            # 3. Reverse Pairing - จับคู่ย้อนกลับ (หาไม้ช่วยจากไม้ที่เสียมาก)
+            if self.reverse_pairing:
+                reverse = self._find_reverse_pairing(positions)
+                advanced_combinations.extend(reverse)
+            
+            # 4. Smart Priority Pairing - จับคู่ตามความสำคัญ (ไม้เสียมากก่อน)
+            if self.smart_priority_pairing:
+                smart_priority = self._find_smart_priority_pairing(positions)
+                advanced_combinations.extend(smart_priority)
+            
+            # เรียงตามกำไร (มากไปน้อย)
+            advanced_combinations.sort(key=lambda x: x.total_profit, reverse=True)
+            
+            return advanced_combinations[:10]  # ส่งคืนแค่ 10 อันแรก
+            
+        except Exception as e:
+            logger.error(f"❌ Error in advanced pairing: {e}")
+            return []
+    
+    def _find_multi_level_pairing(self, positions: List[Any]) -> List[HedgeCombination]:
+        """🔢 จับคู่หลายระดับ (2-3-4-5 ไม้)"""
+        try:
+            combinations = []
             
             # แยกไม้ Buy และ Sell
             buy_positions = [p for p in positions if getattr(p, 'type', 0) == 0]
             sell_positions = [p for p in positions if getattr(p, 'type', 0) == 1]
             
-            # หา Buy + Sell ตรงข้าม (เร็วที่สุด)
+            # จับคู่ 2 ไม้ (Buy + Sell)
             for buy_pos in buy_positions:
                 for sell_pos in sell_positions:
-                    buy_profit = getattr(buy_pos, 'profit', 0)
-                    sell_profit = getattr(sell_pos, 'profit', 0)
-                    total_profit = buy_profit + sell_profit
-                    
-                    # ตรวจสอบเงื่อนไขกำไรเร็ว
-                    for threshold in self.quick_profit_thresholds:
-                        if total_profit >= threshold:
-                            combination_type = self._get_combination_type([buy_pos, sell_pos])
-                            confidence = min(95.0, 60.0 + (total_profit * 10))  # 60-95%
-                            
-                            quick_combinations.append(HedgeCombination(
-                                positions=[buy_pos, sell_pos],
-                                total_profit=total_profit,
-                                combination_type=combination_type,
-                                size=2,
-                                confidence_score=confidence,
-                                reason=f"Quick profit ${total_profit:.2f} (threshold: ${threshold})"
-                            ))
-                            
-                            # หยุดเมื่อเจอ threshold แรกที่ผ่าน
-                            break
-                    
-                    # จำกัดจำนวน combinations
-                    if len(quick_combinations) >= self.quick_profit_max_combinations:
-                        break
-                
-                if len(quick_combinations) >= self.quick_profit_max_combinations:
-                    break
+                    total_profit = getattr(buy_pos, 'profit', 0) + getattr(sell_pos, 'profit', 0)
+                    if total_profit >= self.min_net_profit:
+                        combinations.append(HedgeCombination(
+                            positions=[buy_pos, sell_pos],
+                            total_profit=total_profit,
+                            combination_type="MULTI_LEVEL_2",
+                            size=2,
+                            confidence_score=min(90.0, 60.0 + (total_profit * 10)),
+                            reason=f"Multi-level 2: ${total_profit:.2f}"
+                        ))
             
-            # เรียงตามกำไร (มากไปน้อย)
-            quick_combinations.sort(key=lambda x: x.total_profit, reverse=True)
+            # จับคู่ 3 ไม้ (Buy + Sell + Helper)
+            for buy_pos in buy_positions:
+                for sell_pos in sell_positions:
+                    for helper_pos in positions:
+                        if helper_pos not in [buy_pos, sell_pos]:
+                            total_profit = (getattr(buy_pos, 'profit', 0) + 
+                                          getattr(sell_pos, 'profit', 0) + 
+                                          getattr(helper_pos, 'profit', 0))
+                            if total_profit >= self.min_net_profit:
+                                combinations.append(HedgeCombination(
+                                    positions=[buy_pos, sell_pos, helper_pos],
+                                    total_profit=total_profit,
+                                    combination_type="MULTI_LEVEL_3",
+                                    size=3,
+                                    confidence_score=min(95.0, 70.0 + (total_profit * 8)),
+                                    reason=f"Multi-level 3: ${total_profit:.2f}"
+                                ))
             
-            return quick_combinations[:10]  # ส่งคืนแค่ 10 อันแรก
+            return combinations[:5]  # ส่งคืนแค่ 5 อันแรก
             
         except Exception as e:
-            logger.error(f"❌ Error in quick profit search: {e}")
+            logger.error(f"❌ Error in multi-level pairing: {e}")
+            return []
+    
+    def _find_cascade_pairing(self, positions: List[Any]) -> List[HedgeCombination]:
+        """🔄 จับคู่แบบต่อเนื่อง (A+B, A+B+C, A+B+C+D)"""
+        try:
+            combinations = []
+            
+            # หาไม้ที่เสียมากที่สุดก่อน
+            losing_positions = [p for p in positions if getattr(p, 'profit', 0) < 0]
+            losing_positions.sort(key=lambda x: getattr(x, 'profit', 0))  # เรียงจากเสียมากไปน้อย
+            
+            # หาไม้ที่กำไรมากที่สุด
+            profitable_positions = [p for p in positions if getattr(p, 'profit', 0) > 0]
+            profitable_positions.sort(key=lambda x: getattr(x, 'profit', 0), reverse=True)  # เรียงจากกำไรมากไปน้อย
+            
+            # Cascade: ไม้เสีย + ไม้กำไร (ต่อเนื่อง)
+            for losing_pos in losing_positions[:3]:  # ไม้เสียมาก 3 อันแรก
+                for profit_pos in profitable_positions[:5]:  # ไม้กำไร 5 อันแรก
+                    total_profit = getattr(losing_pos, 'profit', 0) + getattr(profit_pos, 'profit', 0)
+                    if total_profit >= self.min_net_profit:
+                        combinations.append(HedgeCombination(
+                            positions=[losing_pos, profit_pos],
+                            total_profit=total_profit,
+                            combination_type="CASCADE_2",
+                            size=2,
+                            confidence_score=min(85.0, 65.0 + (total_profit * 12)),
+                            reason=f"Cascade 2: ${total_profit:.2f}"
+                        ))
+            
+            return combinations[:5]  # ส่งคืนแค่ 5 อันแรก
+            
+        except Exception as e:
+            logger.error(f"❌ Error in cascade pairing: {e}")
+            return []
+    
+    def _find_reverse_pairing(self, positions: List[Any]) -> List[HedgeCombination]:
+        """🔄 จับคู่ย้อนกลับ (หาไม้ช่วยจากไม้ที่เสียมาก)"""
+        try:
+            combinations = []
+            
+            # หาไม้ที่เสียมากที่สุด
+            losing_positions = [p for p in positions if getattr(p, 'profit', 0) < -5.0]  # เสียมากกว่า $5
+            losing_positions.sort(key=lambda x: getattr(x, 'profit', 0))  # เรียงจากเสียมากไปน้อย
+            
+            # หาไม้ที่กำไร (เป็น Helper)
+            helper_positions = [p for p in positions if getattr(p, 'profit', 0) > 0]
+            helper_positions.sort(key=lambda x: getattr(x, 'profit', 0), reverse=True)  # เรียงจากกำไรมากไปน้อย
+            
+            # Reverse: ไม้เสียมาก + ไม้ช่วย
+            for losing_pos in losing_positions[:2]:  # ไม้เสียมาก 2 อันแรก
+                for helper_pos in helper_positions[:3]:  # ไม้ช่วย 3 อันแรก
+                    total_profit = getattr(losing_pos, 'profit', 0) + getattr(helper_pos, 'profit', 0)
+                    if total_profit >= self.min_net_profit:
+                        combinations.append(HedgeCombination(
+                            positions=[losing_pos, helper_pos],
+                            total_profit=total_profit,
+                            combination_type="REVERSE_PAIRING",
+                            size=2,
+                            confidence_score=min(95.0, 75.0 + (total_profit * 15)),
+                            reason=f"Reverse pairing: ${total_profit:.2f}"
+                        ))
+            
+            return combinations[:3]  # ส่งคืนแค่ 3 อันแรก
+            
+        except Exception as e:
+            logger.error(f"❌ Error in reverse pairing: {e}")
+            return []
+    
+    def _find_smart_priority_pairing(self, positions: List[Any]) -> List[HedgeCombination]:
+        """🧠 จับคู่ตามความสำคัญ (ไม้เสียมากก่อน)"""
+        try:
+            combinations = []
+            
+            # คำนวณ Priority Score สำหรับแต่ละไม้
+            priority_positions = []
+            for pos in positions:
+                profit = getattr(pos, 'profit', 0)
+                volume = getattr(pos, 'volume', 0.01)
+                time_open = getattr(pos, 'time', 0)
+                
+                # Priority Score = (ขาดทุน * ขนาด * เวลา) / 1000
+                priority_score = abs(profit) * volume * (time.time() - time_open) / 1000
+                priority_positions.append((pos, priority_score))
+            
+            # เรียงตาม Priority Score (มากไปน้อย)
+            priority_positions.sort(key=lambda x: x[1], reverse=True)
+            
+            # จับคู่ไม้ที่มี Priority สูง
+            for i, (pos1, score1) in enumerate(priority_positions[:5]):
+                for j, (pos2, score2) in enumerate(priority_positions[i+1:6]):
+                    total_profit = getattr(pos1, 'profit', 0) + getattr(pos2, 'profit', 0)
+                    if total_profit >= self.min_net_profit:
+                        combinations.append(HedgeCombination(
+                            positions=[pos1, pos2],
+                            total_profit=total_profit,
+                            combination_type="SMART_PRIORITY",
+                            size=2,
+                            confidence_score=min(90.0, 70.0 + (total_profit * 10)),
+                            reason=f"Smart priority: ${total_profit:.2f}"
+                        ))
+            
+            return combinations[:3]  # ส่งคืนแค่ 3 อันแรก
+            
+        except Exception as e:
+            logger.error(f"❌ Error in smart priority pairing: {e}")
+            return []
+    
+    def _find_enhanced_helping_combinations(self, positions: List[Any]) -> List[HedgeCombination]:
+        """🎯 ระบบช่วยเหลือขั้นสูง"""
+        try:
+            if len(positions) < 2:
+                return []
+            
+            enhanced_combinations = []
+            
+            # 1. Multi-Helper System - ไม้ช่วยหลายตัว
+            if self.multi_helper_system:
+                multi_helper = self._find_multi_helper_combinations(positions)
+                enhanced_combinations.extend(multi_helper)
+            
+            # 2. Cascade Helping - ช่วยแบบต่อเนื่อง
+            if self.cascade_helping:
+                cascade_helping = self._find_cascade_helping_combinations(positions)
+                enhanced_combinations.extend(cascade_helping)
+            
+            # 3. Smart Helper Selection - เลือกไม้ช่วยอย่างฉลาด
+            if self.smart_helper_selection:
+                smart_helper = self._find_smart_helper_combinations(positions)
+                enhanced_combinations.extend(smart_helper)
+            
+            # 4. Emergency Helper Mode - โหมดช่วยเหลือฉุกเฉิน
+            if self.emergency_helper_mode:
+                emergency_helper = self._find_emergency_helper_combinations(positions)
+                enhanced_combinations.extend(emergency_helper)
+            
+            # เรียงตามกำไร (มากไปน้อย)
+            enhanced_combinations.sort(key=lambda x: x.total_profit, reverse=True)
+            
+            return enhanced_combinations[:8]  # ส่งคืนแค่ 8 อันแรก
+            
+        except Exception as e:
+            logger.error(f"❌ Error in enhanced helping: {e}")
+            return []
+    
+    def _find_multi_helper_combinations(self, positions: List[Any]) -> List[HedgeCombination]:
+        """🤝 ไม้ช่วยหลายตัว (Helper1+Helper2+Main)"""
+        try:
+            combinations = []
+            
+            # หาไม้ที่เสียมาก
+            losing_positions = [p for p in positions if getattr(p, 'profit', 0) < -2.0]
+            losing_positions.sort(key=lambda x: getattr(x, 'profit', 0))  # เรียงจากเสียมากไปน้อย
+            
+            # หาไม้ที่กำไร (Helper)
+            helper_positions = [p for p in positions if getattr(p, 'profit', 0) > 0]
+            helper_positions.sort(key=lambda x: getattr(x, 'profit', 0), reverse=True)  # เรียงจากกำไรมากไปน้อย
+            
+            # Multi-Helper: ไม้เสีย + Helper1 + Helper2
+            for losing_pos in losing_positions[:2]:  # ไม้เสียมาก 2 อันแรก
+                for helper1 in helper_positions[:3]:  # Helper1
+                    for helper2 in helper_positions[1:4]:  # Helper2 (ไม่ซ้ำกับ Helper1)
+                        if helper1 != helper2:
+                            total_profit = (getattr(losing_pos, 'profit', 0) + 
+                                          getattr(helper1, 'profit', 0) + 
+                                          getattr(helper2, 'profit', 0))
+                            if total_profit >= self.min_net_profit:
+                                combinations.append(HedgeCombination(
+                                    positions=[losing_pos, helper1, helper2],
+                                    total_profit=total_profit,
+                                    combination_type="MULTI_HELPER",
+                                    size=3,
+                                    confidence_score=min(95.0, 80.0 + (total_profit * 8)),
+                                    reason=f"Multi-helper: ${total_profit:.2f}"
+                                ))
+            
+            return combinations[:3]  # ส่งคืนแค่ 3 อันแรก
+            
+        except Exception as e:
+            logger.error(f"❌ Error in multi-helper combinations: {e}")
+            return []
+    
+    def _find_cascade_helping_combinations(self, positions: List[Any]) -> List[HedgeCombination]:
+        """🔄 ช่วยแบบต่อเนื่อง (Helper→Main→Helper2)"""
+        try:
+            combinations = []
+            
+            # หาไม้ที่เสียมาก
+            losing_positions = [p for p in positions if getattr(p, 'profit', 0) < -3.0]
+            losing_positions.sort(key=lambda x: getattr(x, 'profit', 0))
+            
+            # หาไม้ที่กำไร (Helper)
+            helper_positions = [p for p in positions if getattr(p, 'profit', 0) > 0]
+            helper_positions.sort(key=lambda x: getattr(x, 'profit', 0), reverse=True)
+            
+            # Cascade Helping: ไม้เสีย + Helper1 + Helper2 + Helper3
+            for losing_pos in losing_positions[:1]:  # ไม้เสียมาก 1 อันแรก
+                for helper1 in helper_positions[:2]:  # Helper1
+                    for helper2 in helper_positions[1:3]:  # Helper2
+                        for helper3 in helper_positions[2:4]:  # Helper3
+                            if len(set([helper1, helper2, helper3])) == 3:  # ไม่ซ้ำกัน
+                                total_profit = (getattr(losing_pos, 'profit', 0) + 
+                                              getattr(helper1, 'profit', 0) + 
+                                              getattr(helper2, 'profit', 0) + 
+                                              getattr(helper3, 'profit', 0))
+                                if total_profit >= self.min_net_profit:
+                                    combinations.append(HedgeCombination(
+                                        positions=[losing_pos, helper1, helper2, helper3],
+                                        total_profit=total_profit,
+                                        combination_type="CASCADE_HELPING",
+                                        size=4,
+                                        confidence_score=min(98.0, 85.0 + (total_profit * 6)),
+                                        reason=f"Cascade helping: ${total_profit:.2f}"
+                                    ))
+            
+            return combinations[:2]  # ส่งคืนแค่ 2 อันแรก
+            
+        except Exception as e:
+            logger.error(f"❌ Error in cascade helping: {e}")
+            return []
+    
+    def _find_smart_helper_combinations(self, positions: List[Any]) -> List[HedgeCombination]:
+        """🧠 เลือกไม้ช่วยอย่างฉลาด"""
+        try:
+            combinations = []
+            
+            # หาไม้ที่เสียมาก
+            losing_positions = [p for p in positions if getattr(p, 'profit', 0) < -1.0]
+            losing_positions.sort(key=lambda x: getattr(x, 'profit', 0))
+            
+            # หาไม้ที่กำไร (Helper) - เลือกอย่างฉลาด
+            helper_positions = [p for p in positions if getattr(p, 'profit', 0) > 0]
+            
+            # Smart Selection: เลือก Helper ที่เหมาะสมกับไม้เสีย
+            for losing_pos in losing_positions[:3]:
+                best_helpers = []
+                losing_profit = getattr(losing_pos, 'profit', 0)
+                
+                for helper_pos in helper_positions:
+                    helper_profit = getattr(helper_pos, 'profit', 0)
+                    # เลือก Helper ที่กำไรพอที่จะช่วยไม้เสียได้
+                    if helper_profit >= abs(losing_profit) * 0.5:  # กำไรอย่างน้อย 50% ของขาดทุน
+                        best_helpers.append((helper_pos, helper_profit))
+                
+                # เรียงตามกำไร (มากไปน้อย)
+                best_helpers.sort(key=lambda x: x[1], reverse=True)
+                
+                # จับคู่กับ Helper ที่ดีที่สุด
+                for helper_pos, helper_profit in best_helpers[:2]:
+                    total_profit = losing_profit + helper_profit
+                    if total_profit >= self.min_net_profit:
+                        combinations.append(HedgeCombination(
+                            positions=[losing_pos, helper_pos],
+                            total_profit=total_profit,
+                            combination_type="SMART_HELPER",
+                            size=2,
+                            confidence_score=min(95.0, 75.0 + (total_profit * 12)),
+                            reason=f"Smart helper: ${total_profit:.2f}"
+                        ))
+            
+            return combinations[:4]  # ส่งคืนแค่ 4 อันแรก
+            
+        except Exception as e:
+            logger.error(f"❌ Error in smart helper: {e}")
+            return []
+    
+    def _find_emergency_helper_combinations(self, positions: List[Any]) -> List[HedgeCombination]:
+        """🚨 โหมดช่วยเหลือฉุกเฉิน (ไม้เสียมาก)"""
+        try:
+            combinations = []
+            
+            # หาไม้ที่เสียมาก (Emergency)
+            emergency_positions = [p for p in positions if getattr(p, 'profit', 0) < -10.0]
+            emergency_positions.sort(key=lambda x: getattr(x, 'profit', 0))
+            
+            # หาไม้ที่กำไร (Emergency Helper)
+            emergency_helpers = [p for p in positions if getattr(p, 'profit', 0) > 5.0]
+            emergency_helpers.sort(key=lambda x: getattr(x, 'profit', 0), reverse=True)
+            
+            # Emergency: ไม้เสียมาก + Emergency Helper
+            for emergency_pos in emergency_positions[:2]:  # ไม้เสียมาก 2 อันแรก
+                for emergency_helper in emergency_helpers[:3]:  # Emergency Helper 3 อันแรก
+                    total_profit = (getattr(emergency_pos, 'profit', 0) + 
+                                  getattr(emergency_helper, 'profit', 0))
+                    if total_profit >= self.min_net_profit:
+                        combinations.append(HedgeCombination(
+                            positions=[emergency_pos, emergency_helper],
+                            total_profit=total_profit,
+                            combination_type="EMERGENCY_HELPER",
+                            size=2,
+                            confidence_score=min(99.0, 90.0 + (total_profit * 5)),
+                            reason=f"Emergency helper: ${total_profit:.2f}"
+                        ))
+            
+            return combinations[:2]  # ส่งคืนแค่ 2 อันแรก
+            
+        except Exception as e:
+            logger.error(f"❌ Error in emergency helper: {e}")
             return []
     
     def _calculate_confidence_score(self, positions: List[Any], total_profit: float) -> float:
