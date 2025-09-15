@@ -115,7 +115,8 @@ class DynamicPositionModifier:
         self.min_volume_threshold = 0.01     # ขั้นต่ำของโบรก 0.01 lot
         self.min_improvement_threshold = -5.0  # เปลี่ยนจาก 0 เป็น -5 (ยอมให้เสียเล็กน้อยเพื่อช่วยพอร์ต)
         self.max_corrections_per_cycle = 5   # เพิ่มจำนวนไม้แก้ไขต่อรอบ
-        self.correction_cooldown = 300       # 5 นาที cooldown ระหว่างการแก้ไข
+        self.correction_cooldown = 1800      # 30 นาที cooldown ระหว่างการแก้ไข
+        self.last_correction_time = 0        # เวลาการแก้ไขล่าสุด
         
         logger.info("🔧 Dynamic Position Modifier initialized")
     
@@ -609,6 +610,12 @@ class DynamicPositionModifier:
         🎯 วิเคราะห์การแก้ไข Portfolio แบบ Dynamic
         """
         try:
+            # ตรวจสอบ Cooldown ก่อน
+            current_time = time.time()
+            if current_time - self.last_correction_time < self.correction_cooldown:
+                logger.info(f"⏰ Position Modifier: Cooldown active ({self.correction_cooldown}s) - skipping analysis")
+                return None
+            
             logger.info(f"🔍 DYNAMIC PORTFOLIO MODIFICATION ANALYSIS: {len(positions)} positions")
             
             # 1. 🎯 Outlier Detection - ตรวจจับไม้ไกล (ปรับปรุงให้เก่งขึ้น)
@@ -657,6 +664,9 @@ class DynamicPositionModifier:
                             # ส่งไม้แก้ไขไปให้ Hedge Pairing Closer
                             if self.hedge_pairing_closer:
                                 self._send_correction_to_hedge_pairing(correction_pos, target_pos)
+                            
+                            # อัปเดตเวลาการแก้ไขล่าสุด
+                            self.last_correction_time = current_time
                         else:
                             logger.warning(f"⚠️ Correction not profitable for ticket {getattr(target_pos, 'ticket', 'N/A')} - cancelled")
                             # ยกเลิกไม้แก้ไขที่ไม่ช่วยพอร์ต
