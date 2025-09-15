@@ -389,13 +389,19 @@ class SimpleBreakoutTradingSystemGUI:
             
             current_candle = candles[-1]
             
+            # ใช้เวลาจริงของแท่งเทียนจาก MT5
+            candle_time = current_candle.get('time', datetime.now())
+            if isinstance(candle_time, (int, float)):
+                # Convert timestamp to datetime
+                candle_time = datetime.fromtimestamp(candle_time)
+            
             return CandleData(
                 open=current_candle.get('open', 0),
                 high=current_candle.get('high', 0),
                 low=current_candle.get('low', 0),
                 close=current_candle.get('close', 0),
                 volume=current_candle.get('volume', 100),
-                timestamp=datetime.now()
+                timestamp=candle_time
             )
             
         except Exception as e:
@@ -424,6 +430,19 @@ class SimpleBreakoutTradingSystemGUI:
                 previous_candle = self._get_previous_candle(timeframe)
                 
                 if not current_tf_candle or not previous_candle:
+                    continue
+                
+                # ตรวจสอบว่าแท่งเทียนปัจจุบันปิดแล้วหรือยัง
+                current_time = datetime.now()
+                candle_time = current_tf_candle.timestamp
+                time_diff = (current_time - candle_time).total_seconds()
+                
+                # ถ้าแท่งเทียนยังไม่ปิด (น้อยกว่า 1 นาทีสำหรับ M5, 15 นาทีสำหรับ M15, etc.)
+                timeframe_minutes = {'M5': 5, 'M15': 15, 'M30': 30, 'H1': 60}
+                min_time = timeframe_minutes.get(timeframe, 5) * 60  # Convert to seconds
+                
+                if time_diff < min_time:
+                    logger.debug(f"⏰ {timeframe}: Candle not closed yet - {time_diff:.0f}s < {min_time}s")
                     continue
                 
                 # 🎯 SIMPLE BREAKOUT DETECTION
@@ -475,7 +494,14 @@ class SimpleBreakoutTradingSystemGUI:
         last_trade_time = last_trade
         
         # เปรียบเทียบเวลาแท่งเทียน (ไม่ใช่เวลาปัจจุบัน)
-        return current_candle_time > last_trade_time
+        can_trade = current_candle_time > last_trade_time
+        
+        if not can_trade:
+            logger.debug(f"⏰ {timeframe}: Cannot trade - Last trade: {last_trade_time}, Current candle: {current_candle_time}")
+        else:
+            logger.info(f"✅ {timeframe}: Can trade - New candle detected")
+        
+        return can_trade
     
     def _get_previous_candle(self, timeframe: str) -> Optional[CandleData]:
         """Get previous candle for timeframe"""
@@ -516,13 +542,19 @@ class SimpleBreakoutTradingSystemGUI:
             
             prev_candle = candles[-2]  # Previous candle
             
+            # ใช้เวลาจริงของแท่งเทียนจาก MT5
+            candle_time = prev_candle.get('time', datetime.now())
+            if isinstance(candle_time, (int, float)):
+                # Convert timestamp to datetime
+                candle_time = datetime.fromtimestamp(candle_time)
+            
             return CandleData(
                 open=prev_candle.get('open', 0),
                 high=prev_candle.get('high', 0),
                 low=prev_candle.get('low', 0),
                 close=prev_candle.get('close', 0),
                 volume=prev_candle.get('volume', 100),
-                timestamp=datetime.now()
+                timestamp=candle_time
             )
             
         except Exception as e:
@@ -590,8 +622,8 @@ class SimpleBreakoutTradingSystemGUI:
             
             if result and hasattr(result, 'success') and result.success:
                 logger.info(f"✅ BREAKOUT TRADE EXECUTED: Order #{getattr(result, 'ticket', 'N/A')}")
-                # Update last trade time
-                self.last_trade_time[timeframe] = datetime.now()
+                # Update last trade time to candle timestamp
+                self.last_trade_time[timeframe] = current_candle.timestamp
             else:
                 error_msg = getattr(result, 'error_message', 'Unknown error') if result else 'No result'
                 logger.error(f"❌ BREAKOUT TRADE FAILED: {error_msg}")
