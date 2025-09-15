@@ -74,11 +74,11 @@ class HedgePairingCloser:
         
         # 🛡️ SW Filter (Stop Loss) - ป้องกันไม้กองกระจุก
         self.sw_filter_enabled = True
-        self.clustering_threshold = 0.5  # 0.5 จุด (เข้มมาก)
-        self.max_clustered_positions = 2  # สูงสุด 2 ไม้ใกล้กัน
-        self.density_radius = 2.0  # 2 จุด (ลดลง)
-        self.max_density = 4  # สูงสุด 4 ไม้ในรัศมี 2 จุด (เพิ่มขึ้น)
-        self.min_std_deviation = 1.0  # ส่วนเบี่ยงเบนมาตรฐานขั้นต่ำ 1 จุด (ลดลง)
+        self.clustering_threshold = 0.1  # 0.1 จุด (เข้มมาก - เฉพาะไม้ที่ใกล้กันมาก)
+        self.max_clustered_positions = 3  # สูงสุด 3 ไม้ใกล้กัน
+        self.density_radius = 1.0  # 1 จุด (ลดลงมาก)
+        self.max_density = 5  # สูงสุด 5 ไม้ในรัศมี
+        self.min_std_deviation = 0.5  # ส่วนเบี่ยงเบนมาตรฐานขั้นต่ำ 0.5 จุด (ลดลงมาก)
         
         # ลบ Bar Close System ออกทั้งหมด - ทำงานทันที
         # self.wait_for_bar_close = True
@@ -422,8 +422,10 @@ class HedgePairingCloser:
             
             # ถ้ามีไม้ใกล้กันมากเกินไป ให้หยุดออกไม้
             if nearby_positions >= self.max_clustered_positions:
+                logger.warning(f"🚫 SW FILTER: Too many positions clustered near {new_price} ({nearby_positions} positions within {self.clustering_threshold} points)")
                 return False, f"Too many positions clustered near {new_price} ({nearby_positions} positions within {self.clustering_threshold} points)"
             
+            logger.info(f"✅ SW FILTER: Clustering check passed - {nearby_positions} positions within {self.clustering_threshold} points (max: {self.max_clustered_positions})")
             return True, "OK"
             
         except Exception as e:
@@ -457,8 +459,10 @@ class HedgePairingCloser:
             
             # ถ้าไม้หนาแน่นเกินไป ให้หยุดออกไม้
             if positions_in_radius >= self.max_density:
+                logger.warning(f"🚫 SW FILTER: Position density too high near {new_price} ({positions_in_radius} positions in {self.density_radius} points)")
                 return False, f"Position density too high near {new_price} ({positions_in_radius} positions in {self.density_radius} points)"
             
+            logger.info(f"✅ SW FILTER: Density check passed - {positions_in_radius} positions in {self.density_radius} points (max: {self.max_density})")
             return True, "OK"
             
         except Exception as e:
@@ -496,8 +500,10 @@ class HedgePairingCloser:
             
             # ถ้าการกระจายน้อยเกินไป (ไม้กองกัน) ให้หยุดออกไม้
             if std_deviation < self.min_std_deviation:
+                logger.warning(f"🚫 SW FILTER: Positions too clustered (std_dev: {std_deviation:.2f} < {self.min_std_deviation})")
                 return False, f"Positions too clustered (std_dev: {std_deviation:.2f} < {self.min_std_deviation})"
             
+            logger.info(f"✅ SW FILTER: Distribution check passed - std: {std_deviation:.2f} (min: {self.min_std_deviation})")
             return True, "OK"
             
         except Exception as e:
@@ -509,6 +515,8 @@ class HedgePairingCloser:
         try:
             if not self.sw_filter_enabled:
                 return True, "SW filter disabled"
+            
+            logger.info(f"🔍 SW FILTER: Checking new position against {len(existing_positions)} existing positions")
             
             # ตรวจสอบการกองกระจุก
             clustering_ok, clustering_msg = self._check_position_clustering(new_position, existing_positions)
@@ -528,7 +536,7 @@ class HedgePairingCloser:
                 logger.warning(f"🚫 SW FILTER: {distribution_msg}")
                 return False, distribution_msg
             
-            logger.info("✅ SW FILTER: Position passed all checks")
+            logger.info("✅ SW FILTER: Position passed all checks - ALLOWING TRADE")
             return True, "All checks passed"
             
         except Exception as e:
