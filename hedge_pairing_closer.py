@@ -889,6 +889,7 @@ class HedgePairingCloser:
                     )
             
             # 1. หาการจับคู่ไม้ที่มีอยู่
+            logger.info(f"🔍 Starting profitable combinations search with {len(filtered_positions)} positions")
             profitable_combinations = self._find_profitable_combinations(filtered_positions)
             
             if profitable_combinations:
@@ -1042,8 +1043,13 @@ class HedgePairingCloser:
             # เรียงตาม Priority Score (มากสุดก่อน)
             priority_scores.sort(key=lambda x: x[0], reverse=True)
             
-            # เลือกเฉพาะไม้ที่มี Priority สูง (สูงสุด 15 ไม้)
-            max_positions = min(15, len(positions))
+            # เลือกเฉพาะไม้ที่มี Priority สูง (ปรับตามจำนวนไม้)
+            if len(positions) <= 20:
+                max_positions = len(positions)  # วิเคราะห์ทั้งหมด
+            elif len(positions) <= 50:
+                max_positions = min(30, len(positions))  # วิเคราะห์ 30 ไม้
+            else:
+                max_positions = min(40, len(positions))  # วิเคราะห์ 40 ไม้
             priority_positions = [pos for _, pos in priority_scores[:max_positions]]
             
             logger.info(f"🎯 Priority Selection: {len(positions)} → {len(priority_positions)} positions")
@@ -2360,7 +2366,9 @@ class HedgePairingCloser:
                 for helper1 in helper_positions[:2]:  # Helper1
                     for helper2 in helper_positions[1:3]:  # Helper2
                         for helper3 in helper_positions[2:4]:  # Helper3
-                            if len(set([helper1, helper2, helper3])) == 3:  # ไม่ซ้ำกัน
+                            # ตรวจสอบไม่ซ้ำกันโดยใช้ ticket
+                            tickets = [getattr(helper1, 'ticket', 0), getattr(helper2, 'ticket', 0), getattr(helper3, 'ticket', 0)]
+                            if len(set(tickets)) == 3:  # ไม่ซ้ำกัน
                                 total_profit = (getattr(losing_pos, 'profit', 0) + 
                                               getattr(helper1, 'profit', 0) + 
                                               getattr(helper2, 'profit', 0) + 
