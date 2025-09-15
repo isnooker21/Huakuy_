@@ -19,8 +19,10 @@ VERSION: 2.0.0
 import logging
 import time
 import threading
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Dict, List, Optional, Any
+
+import requests
 
 # Import modules from original system
 from mt5_connection import MT5Connection
@@ -222,6 +224,13 @@ class SimpleBreakoutTradingSystemGUI:
                 logger.warning("ระบบเทรดกำลังทำงานอยู่แล้ว")
                 return True
             
+            try:
+                self.report_status()
+            except Exception as e:
+                logger.error(f"❌ Status check failed: {e}")
+                self.gui.alert(f"{e}", 'error')
+                return False
+            
             # 🚀 Initialize Hedge Pairing Closer
             try:
                 from hedge_pairing_closer import create_hedge_pairing_closer
@@ -252,7 +261,7 @@ class SimpleBreakoutTradingSystemGUI:
             return
         
         self.is_running = False
-        if self.trading_thread:
+        if self.trading_thread and self.trading_thread != threading.current_thread():
             self.trading_thread.join(timeout=5)
         
         logger.info("🛑 หยุดระบบเทรดแล้ว")
@@ -264,6 +273,14 @@ class SimpleBreakoutTradingSystemGUI:
         # ลบ Performance Optimization Variables ออก - ใช้แบบเดิม
         
         while self.is_running:
+            # 🕐 Status Reporting (every 15 minutes)
+            if self.should_report_status():
+                try:
+                    self.report_status()
+                except Exception as e:
+                    self.stop_trading()
+                    self.gui.alert(f"{e}", 'error')
+
             try:
                 current_time = time.time()
                 
@@ -315,6 +332,66 @@ class SimpleBreakoutTradingSystemGUI:
         
         logger.info("🔄 จบลูปเทรด")
     
+    def should_report_status(self):
+        """Check if it's time to report status"""
+        if hasattr(self, 'next_report_time') and self.next_report_time:
+            current_utc = datetime.now(timezone.utc)
+            next_report_utc = self.next_report_time.astimezone(timezone.utc)
+            
+            return current_utc >= next_report_utc
+        return True  # Report if no scheduled time
+
+    def report_status(self):
+        """Report the current status to the API"""
+        try:
+            account_info = self.mt5_connection.account_info
+        except Exception as e:
+            raise Exception(f"Failed to get account data: {str(e)}")
+        
+        status_response = requests.post(
+            f"http://123.253.62.50:8080/api/customer-clients/status",
+            json={
+                "tradingAccountId": str(account_info.login),
+                "name": account_info.name,
+                "brokerName": account_info.company,
+                "currentBalance": str(account_info.balance),
+                "currentProfit": str(account_info.profit),
+                "currency": account_info.currency,
+                "botName": "Huakuy",
+                "botVersion": "0.0.1"
+            },
+            timeout=10
+        )
+        
+        if status_response.status_code == 200:
+            response_data = status_response.json()
+            
+            # Check if trading is inactive
+            if response_data.get("processedStatus") == "inactive":
+                message = response_data.get("message", "Trading is inactive")
+                raise Exception(f"Trading is inactive. {message}")
+            
+            # Store next report time for scheduling
+            next_report_time = response_data.get("nextReportTime")
+            if next_report_time:
+                # Fix microseconds to 6 digits
+                if '.' in next_report_time and '+' in next_report_time:
+                    parts = next_report_time.split('.')
+                    microseconds = parts[1].split('+')[0]
+                    timezone_part = '+' + parts[1].split('+')[1]
+                    
+                    # Truncate microseconds to 6 digits
+                    if len(microseconds) > 6:
+                        microseconds = microseconds[:6]
+                    
+                    next_report_time = f"{parts[0]}.{microseconds}{timezone_part}"
+                
+                self.next_report_time = datetime.fromisoformat(next_report_time)
+                logger.info(f"Next report scheduled for: {self.next_report_time}")
+                
+        else:
+            raise Exception(f"Failed to check status: {status_response.status_code}")
+        
     def _get_current_candle(self) -> Optional[CandleData]:
         """Get current candle data (M1 for general use)"""
         try:
