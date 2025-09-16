@@ -38,7 +38,7 @@ class ZoneAnalyzer:
         try:
             self.symbol = symbol  # ตั้งค่า symbol จาก parameter
             logger.info(f"🔍 Analyzing zones for {self.symbol} (lookback: {lookback_hours}h)")
-        logger.info(f"🔧 Zone Detection Settings: tolerance={self.zone_tolerance}, min_strength={self.min_zone_strength}, min_touches={self.min_touches}")
+            logger.info(f"🔧 Zone Detection Settings: tolerance={self.zone_tolerance}, min_strength={self.min_zone_strength}, min_touches={self.min_touches}")
             
             support_zones = []
             resistance_zones = []
