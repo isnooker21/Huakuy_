@@ -767,9 +767,11 @@ class HedgePairingCloser:
             if excluded > 0:
                 logger.info(f"🛡️ Excluding {excluded} anchor positions from closing candidates")
             
-            # 🧹 Analyze stale positions for potential inclusion of anchors
-            stale_positions = self._identify_stale_positions(positions) if self.stale_clearing_enabled else []
-            allow_anchor_inclusion = self._should_include_anchors_for_stale_clearing(stale_positions, positions)
+            # 🧹 Analyze stale positions for potential inclusion of anchors (DISABLED)
+            # stale_positions = self._identify_stale_positions(positions) if self.stale_clearing_enabled else []
+            # allow_anchor_inclusion = self._should_include_anchors_for_stale_clearing(stale_positions, positions)
+            stale_positions = []
+            allow_anchor_inclusion = False
             
             if allow_anchor_inclusion and anchor_positions:
                 logger.info(f"🧹 STALE CLEARING: Including {len(anchor_positions)} anchors for stale position clearing")
@@ -1291,18 +1293,18 @@ class HedgePairingCloser:
                         break
                 
                 if best_combination:
-                    combinations.append(HedgeCombination(
+                        combinations.append(HedgeCombination(
                         positions=best_combination,
                         total_profit=best_profit,
                         combination_type="HELPING_HEDGED_MULTIPLE",
                         size=len(best_combination),
                         confidence_score=95.0,
                         reason=f"Multi-helper hedged pair: ${losing_pair['profit']:.2f} + {len(best_combination)-2} helpers = ${best_profit:.2f}"
-                    ))
-                    
-                    # หยุดเมื่อพบ combination ที่ดีแล้ว
-                    if len(combinations) >= 3:
-                        break
+                        ))
+                        
+                        # หยุดเมื่อพบ combination ที่ดีแล้ว
+                        if len(combinations) >= 3:
+                            break
                 
                 if len(combinations) >= 3:
                     break
@@ -1563,18 +1565,18 @@ class HedgePairingCloser:
                 # มีไม้ฝั่งเดียว - อนุญาตให้ใช้ Single Side Closing
                 logger.info("🔍 STEP 2.5: SINGLE SIDE PROFITABLE CLOSING")
                 single_side_combinations = self._find_single_side_profitable(priority_positions)
-                
-                if single_side_combinations:
-                    logger.info("-" * 40)
-                    logger.info("✅ SINGLE SIDE PROFITABLE FOUND")
-                    logger.info("-" * 40)
-                    logger.info(f"🎯 Total combinations: {len(single_side_combinations)}")
-                    for i, combo in enumerate(single_side_combinations[:3]):  # แสดงแค่ 3 อันแรก
-                        logger.info(f"   {i+1}. {combo.combination_type}: ${combo.total_profit:.2f} ({combo.size} positions)")
-                    if len(single_side_combinations) > 3:
-                        logger.info(f"   ... and {len(single_side_combinations) - 3} more combinations")
-                    logger.info("=" * 60)
-                    return single_side_combinations
+            
+            if single_side_combinations:
+                logger.info("-" * 40)
+                logger.info("✅ SINGLE SIDE PROFITABLE FOUND")
+                logger.info("-" * 40)
+                logger.info(f"🎯 Total combinations: {len(single_side_combinations)}")
+                for i, combo in enumerate(single_side_combinations[:3]):  # แสดงแค่ 3 อันแรก
+                    logger.info(f"   {i+1}. {combo.combination_type}: ${combo.total_profit:.2f} ({combo.size} positions)")
+                if len(single_side_combinations) > 3:
+                    logger.info(f"   ... and {len(single_side_combinations) - 3} more combinations")
+                logger.info("=" * 60)
+                return single_side_combinations
             
             # Step 3-4: Advanced Search (ทุก 5 นาที)
             current_time = time.time()
