@@ -323,8 +323,8 @@ class SimpleBreakoutTradingSystemGUI:
                     self.mt5_connection.log_market_status(self.actual_symbol or "XAUUSD")
                     self._last_market_status_log = current_time
                 
-                # Process Simple Breakout for all timeframes
-                self._process_simple_breakout(current_candle)
+                # Process Simple Breakout for all timeframes - DISABLED (ใช้ Smart Entry System แทน)
+                # self._process_simple_breakout(current_candle)
                 
                 # 🚀 Immediate Take Profit Check (ใหม่) - ตรวจสอบ TP ทันที
                 self._check_immediate_take_profit(current_candle)
@@ -400,7 +400,7 @@ class SimpleBreakoutTradingSystemGUI:
                     self._last_dynamic_closing_time = current_time
                 
                 # 🎯 Smart Trading Systems - Handle every 10 minutes (เพิ่ม cooldown มากขึ้น)
-                if current_time - getattr(self, '_last_smart_systems_time', 0) >= 600:  # 10 นาที
+                if current_time - getattr(self, '_last_smart_systems_time', 0) >= 5:  # 5 วินาที (Smart Entry เป็นหลัก)
                     # ตรวจสอบว่า Smart Systems ทำงานอยู่หรือไม่ก่อนเริ่มใหม่
                     if not hasattr(self, '_smart_systems_running') or not self._smart_systems_running:
                         self._smart_systems_running = True
@@ -571,14 +571,21 @@ class SimpleBreakoutTradingSystemGUI:
     
     def _process_simple_breakout(self, current_candle: CandleData):
         """
-        🚀 NEW SIMPLE BREAKOUT LOGIC
+        🚫 DISABLED: Simple Breakout Logic (ใช้ Smart Entry System แทน)
         
-        LOGIC:
-        ✅ BUY: current.close > previous.high
-        ✅ SELL: current.close < previous.low
-        ✅ One trade per candle per timeframe
-        ✅ Dynamic lot sizing
+        ระบบเก่านี้ถูกปิดใช้งานแล้ว เนื่องจาก:
+        ❌ ขัดแย้งกับ Smart Entry System
+        ❌ เข้าไม้ตามเทรนด์ (trend-following) ขณะที่ Smart Entry เข้าไม้ตาม Demand & Supply
+        ❌ อาจเข้าไม้ทิศทางตรงข้ามกัน
+        
+        ใช้ Smart Entry System แทน:
+        ✅ เข้าไม้ตาม Support/Resistance + Pivot Point
+        ✅ เข้าไม้ทุก 5 วินาที
+        ✅ ไม่มีการขัดแย้ง
         """
+        # ระบบนี้ถูกปิดใช้งานแล้ว - ใช้ Smart Entry System แทน
+        return
+        
         try:
             # Process each timeframe
             logger.debug(f"🔍 Processing timeframes: {self.timeframes}")
