@@ -1342,34 +1342,56 @@ class HedgePairingCloser:
             
             logger.debug(f"📉 Found {len(hedged_losing_pairs)} losing hedge pairs")
             
-            # ลองเพิ่มไม้กำไรที่ยังไม่ได้ใช้มาช่วยคู่ที่ติดลบ (จำกัดจำนวนการค้นหา)
-            max_searches = min(50, len(hedged_losing_pairs) * len(profitable_unpaired))  # จำกัดการค้นหาสูงสุด 50 ครั้ง
+            # ลองเพิ่มไม้กำไรที่ยังไม่ได้ใช้มาช่วยคู่ที่ติดลบ (ใช้หลายตัว)
+            max_searches = min(100, len(hedged_losing_pairs) * len(profitable_unpaired))  # เพิ่มการค้นหาสูงสุด 100 ครั้ง
             search_count = 0
+            
+            logger.info(f"🔍 Enhanced Helping: {len(hedged_losing_pairs)} losing pairs, {len(profitable_unpaired)} helpers available")
             
             for losing_pair in hedged_losing_pairs:
                 if search_count >= max_searches:
                     break
                     
-                for helper_pos in profitable_unpaired:
+                # ลองไม้ช่วยหลายตัว (1-5 ตัว)
+                max_helpers = min(5, len(profitable_unpaired))
+                best_combination = None
+                best_profit = losing_pair['profit']
+                
+                for helper_count in range(1, max_helpers + 1):
+                    for helper_combo in itertools.combinations(profitable_unpaired, helper_count):
+                        if search_count >= max_searches:
+                            break
+                            
+                        search_count += 1
+                        helper_profit = sum(getattr(helper, 'profit', 0) for helper in helper_combo)
+                        total_profit = losing_pair['profit'] + helper_profit
+                        
+                        if total_profit >= self.min_net_profit and total_profit > best_profit:
+                            best_combination = [losing_pair['buy'], losing_pair['sell']] + list(helper_combo)
+                            best_profit = total_profit
+                            
+                            logger.info(f"   💡 Found multi-helper combination: {len(helper_combo)} helpers, total profit: ${total_profit:.2f}")
+                            
+                            # หยุดเมื่อพบ combination ที่ดีพอ
+                            if total_profit >= self.min_net_profit * 1.5:
+                                break
+                    
                     if search_count >= max_searches:
                         break
-                        
-                    search_count += 1
-                    total_profit = losing_pair['profit'] + getattr(helper_pos, 'profit', 0)
+                
+                if best_combination:
+                    combinations.append(HedgeCombination(
+                        positions=best_combination,
+                        total_profit=best_profit,
+                        combination_type="HELPING_HEDGED_MULTIPLE",
+                        size=len(best_combination),
+                        confidence_score=95.0,
+                        reason=f"Multi-helper hedged pair: ${losing_pair['profit']:.2f} + {len(best_combination)-2} helpers = ${best_profit:.2f}"
+                    ))
                     
-                    if total_profit >= self.min_net_profit:
-                        combinations.append(HedgeCombination(
-                            positions=[losing_pair['buy'], losing_pair['sell'], helper_pos],
-                            total_profit=total_profit,
-                            combination_type="HELPING_HEDGED",
-                            size=3,
-                            confidence_score=90.0,
-                            reason=f"Helping hedged pair: ${losing_pair['profit']:.2f} + Helper ${getattr(helper_pos, 'profit', 0):.2f}"
-                        ))
-                        
-                        # หยุดเมื่อพบ combination ที่ดีแล้ว
-                        if len(combinations) >= 3:
-                            break
+                    # หยุดเมื่อพบ combination ที่ดีแล้ว
+                    if len(combinations) >= 3:
+                        break
                 
                 if len(combinations) >= 3:
                     break
@@ -1824,19 +1846,22 @@ class HedgePairingCloser:
                     reason=f"Force Hedge Pairing: BUY {getattr(hedge_pair['buy'], 'ticket', 'N/A')} + SELL {getattr(hedge_pair['sell'], 'ticket', 'N/A')}"
                 ))
                 
-                # ถ้า hedge pair ติดลบ ให้หาไม้อื่นๆ มาช่วย
+                # ถ้า hedge pair ติดลบ ให้หาไม้อื่นๆ มาช่วย (หลายตัว)
                 if hedge_profit < 0:
-                    # หาไม้ช่วยสำหรับคู่ที่ติดลบ (เร็วขึ้น)
+                    # หาไม้ช่วยสำหรับคู่ที่ติดลบ (ใช้หลายตัว)
                     additional_positions = [pos for pos in positions 
                                           if getattr(pos, 'ticket', 'N/A') not in used_positions 
                                           and getattr(pos, 'profit', 0) > 0]
                     
-                    # ลองเพิ่มไม้ทีละตัวจนกว่าจะได้กำไร (เร็วขึ้น)
+                    logger.info(f"🔍 Looking for helping positions for losing hedge pair (${hedge_profit:.2f})")
+                    logger.info(f"   Available helpers: {len(additional_positions)} profitable positions")
+                    
+                    # ลองเพิ่มไม้หลายตัวจนกว่าจะได้กำไร (เพิ่มจำนวนการทดสอบ)
                     best_combination = None
                     best_profit = hedge_profit
                     
-                    # Early termination - ลดจำนวนการทดสอบ
-                    max_attempts = min(len(additional_positions), 2)  # ลดจาก 3 เป็น 2
+                    # เพิ่มจำนวนการทดสอบ - ใช้ไม้ช่วยได้หลายตัว
+                    max_attempts = min(len(additional_positions), 5)  # เพิ่มจาก 2 เป็น 5
                     
                     for i in range(1, min(len(additional_positions) + 1, max_attempts + 1)):
                         for combo in itertools.combinations(additional_positions, i):
@@ -1847,6 +1872,8 @@ class HedgePairingCloser:
                             if test_profit > best_profit and test_profit >= effective_min_profit:
                                 best_combination = test_positions
                                 best_profit = test_profit
+                                
+                                logger.info(f"   💡 Found helping combination: {len(combo)} helpers, total profit: ${test_profit:.2f}")
                                 
                                 # Early break - หยุดเมื่อพบ combination ที่ดีพอ
                                 if test_profit >= effective_min_profit * 1.5:  # กำไรมากกว่า 1.5 เท่าของ threshold
@@ -1860,15 +1887,16 @@ class HedgePairingCloser:
                         hedge_combinations.append(HedgeCombination(
                             positions=best_combination,
                             total_profit=best_profit,
-                            combination_type=f"HEDGE_{hedge_pair['type']}_WITH_ADDITIONAL",
+                            combination_type=f"HEDGE_WITH_MULTIPLE_HELPERS",
                             size=len(best_combination),
                             confidence_score=95.0,
-                            reason=f"Hedge: {hedge_pair['type']} with additional profitable positions"
+                            reason=f"Hedge pair with {len(best_combination)-2} helping positions (${hedge_profit:.2f} → ${best_profit:.2f})"
                         ))
-                        logger.info(f"✅ Complete hedge combination found: ${best_profit:.2f}")
+                        logger.info(f"✅ Complete hedge combination found: ${best_profit:.2f} with {len(best_combination)-2} helpers")
                     else:
-                        # ไม่พบการรวมที่กำไร - ข้าม Dynamic Re-pairing เพื่อความเร็ว
-                        pass
+                        # ไม่พบการรวมที่กำไร - รอไม้มาช่วยต่อไป
+                        logger.info(f"⏳ No helping positions found for losing hedge pair (${hedge_profit:.2f}) - waiting...")
+                        # ไม่เพิ่มเข้า hedge_combinations เพื่อรอไม้มาช่วย
                 else:
                     # ถ้า hedge pair กำไรแล้ว ให้จับคู่เดี่ยว
                     hedge_combinations.append(HedgeCombination(
