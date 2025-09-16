@@ -14,9 +14,9 @@ class SmartEntrySystem:
         self.zone_analyzer = zone_analyzer
         self.symbol = None  # จะถูกตั้งค่าจาก main system
         
-        # Entry Parameters
-        self.min_zone_strength = 50  # ความแข็งแรงขั้นต่ำ
-        self.max_zone_distance = 15.0  # ระยะห่างสูงสุดจาก Zone (points)
+        # Entry Parameters (ปรับให้ยืดหยุ่นกว่า)
+        self.min_zone_strength = 35  # ความแข็งแรงขั้นต่ำ (ลดจาก 50)
+        self.max_zone_distance = 25.0  # ระยะห่างสูงสุดจาก Zone (เพิ่มจาก 15)
         self.min_lot_size = 0.01
         self.max_lot_size = 1.0
         
@@ -95,8 +95,8 @@ class SmartEntrySystem:
                 # ตรวจสอบว่าราคาใกล้ Support หรือไม่ (Buy ที่ราคาต่ำ)
                 distance = abs(current_price - zone['price'])  # ระยะห่างจาก Support
                 
-                # ราคาต้องใกล้ Support (ต่ำกว่าหรือใกล้เคียง)
-                if current_price <= zone['price'] + 5.0 and distance <= self.max_zone_distance:
+                # ราคาต้องใกล้ Support (ต่ำกว่าหรือใกล้เคียง) - ปรับให้ยืดหยุ่นกว่า
+                if current_price <= zone['price'] + 10.0 and distance <= self.max_zone_distance:
                     # ตรวจสอบเงื่อนไขอื่นๆ
                     if self._is_valid_entry_zone(zone, current_price):
                         lot_size = self._calculate_lot_size(zone['strength'])
@@ -128,8 +128,8 @@ class SmartEntrySystem:
                 # ตรวจสอบว่าราคาใกล้ Resistance หรือไม่ (Sell ที่ราคาสูง)
                 distance = abs(current_price - zone['price'])  # ระยะห่างจาก Resistance
                 
-                # ราคาต้องใกล้ Resistance (สูงกว่าหรือใกล้เคียง)
-                if current_price >= zone['price'] - 5.0 and distance <= self.max_zone_distance:
+                # ราคาต้องใกล้ Resistance (สูงกว่าหรือใกล้เคียง) - ปรับให้ยืดหยุ่นกว่า
+                if current_price >= zone['price'] - 10.0 and distance <= self.max_zone_distance:
                     # ตรวจสอบเงื่อนไขอื่นๆ
                     if self._is_valid_entry_zone(zone, current_price):
                         lot_size = self._calculate_lot_size(zone['strength'])

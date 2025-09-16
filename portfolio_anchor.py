@@ -21,10 +21,10 @@ class PortfolioAnchor:
         self.anchor_risk_percent = 1.0  # เสี่ยง 1% ของ account balance
         self.max_anchor_age_hours = 48  # อายุสูงสุดของ anchor (ชั่วโมง)
         
-        # Portfolio Protection
-        self.portfolio_risk_threshold = -500.0  # เมื่อพอร์ตขาดทุนเกิน $500
-        self.anchor_profit_target = 100.0  # เป้าหมายกำไรของ anchor
-        self.emergency_anchor_trigger = -1000.0  # กำไรขาดทุนที่เปิด emergency anchor
+        # Portfolio Protection (ใช้ % แทน Fixed Amount)
+        self.portfolio_risk_threshold_percent = -15.0  # เมื่อพอร์ตขาดทุน 15% ของ balance
+        self.anchor_profit_target_percent = 5.0  # เป้าหมายกำไรของ anchor (5% ของ balance)
+        self.emergency_anchor_trigger_percent = -25.0  # ขาดทุน 25% ของ balance เปิด emergency anchor
         
         # Price Level Management
         self.support_anchor_enabled = True  # Buy anchor ที่ Support แข็งแรง
@@ -34,7 +34,7 @@ class PortfolioAnchor:
         # Anchor Tracking
         self.anchor_positions = {}  # {ticket: anchor_info}
         self.last_anchor_check = 0
-        self.anchor_check_interval = 300  # ตรวจสอบทุก 5 นาที
+        self.anchor_check_interval = 1800  # ตรวจสอบทุก 30 นาที (เพิ่มจาก 5 นาที)
         
     def analyze_anchor_needs(self, symbol: str, current_price: float, portfolio_profit: float, 
                            zones: Dict[str, List[Dict]], existing_positions: List) -> Optional[Dict]:
@@ -66,7 +66,8 @@ class PortfolioAnchor:
                 anchor_needs.append(strategic_anchor)
             
             # 2. Emergency Anchor (เฉพาะเมื่อพอร์ตขาดทุนหนัก + มี Zone ดี)
-            if portfolio_profit <= self.emergency_anchor_trigger:
+            emergency_threshold = self._calculate_threshold_amount(self.emergency_anchor_trigger_percent)
+            if portfolio_profit <= emergency_threshold:
                 emergency_anchor = self._analyze_emergency_anchor(current_price, zones, existing_positions)
                 if emergency_anchor:
                     # เพิ่มคะแนนฉุกเฉิน
@@ -74,7 +75,7 @@ class PortfolioAnchor:
                     anchor_needs.append(emergency_anchor)
             
             # 3. Portfolio Protection Anchor (เฉพาะเมื่อมี Zone ดี)
-            elif portfolio_profit <= self.portfolio_risk_threshold:
+            elif portfolio_profit <= self._calculate_threshold_amount(self.portfolio_risk_threshold_percent):
                 protection_anchor = self._analyze_protection_anchor(current_price, zones, existing_positions)
                 if protection_anchor:
                     # เพิ่มคะแนนป้องกัน
@@ -234,8 +235,8 @@ class PortfolioAnchor:
                 all_zones.sort(key=lambda x: x['strength'], reverse=True)
                 best_candidate = all_zones[0]
                 
-                # ออก Anchor เฉพาะ Zone ที่แข็งแรงพอ
-                if best_candidate['strength'] >= 40:  # ลดเกณฑ์ให้หา Zone ได้ง่ายขึ้น
+                # ออก Anchor เฉพาะ Zone ที่แข็งแรงมาก
+                if best_candidate['strength'] >= 80:  # เพิ่มเกณฑ์ให้เข้มงวดขึ้น (จาก 40)
                     # คำนวณ lot size จาก account balance
                     calculated_lot = self._calculate_lot_size_from_balance()
                     
@@ -293,6 +294,32 @@ class PortfolioAnchor:
         except Exception as e:
             logger.error(f"❌ Error calculating lot size: {e}")
             return self.anchor_lot_size
+    
+    def _calculate_threshold_amount(self, percentage: float) -> float:
+        """💰 คำนวณจำนวนเงินจาก % ของ account balance"""
+        try:
+            account_info = mt5.account_info()
+            if account_info and hasattr(account_info, 'equity'):
+                balance = float(account_info.equity)
+                threshold_amount = balance * (percentage / 100.0)
+                logger.debug(f"💰 Threshold calculation: {percentage}% of ${balance:.2f} = ${threshold_amount:.2f}")
+                return threshold_amount
+            else:
+                # Fallback: ใช้ค่าเก่าถ้าไม่สามารถดึง account info ได้
+                fallback_balance = 1000.0  # สมมติ balance $1000
+                threshold_amount = fallback_balance * (percentage / 100.0)
+                logger.warning(f"⚠️ Using fallback balance ${fallback_balance:.2f} for threshold calculation")
+                return threshold_amount
+                
+        except Exception as e:
+            logger.error(f"❌ Error calculating threshold amount: {e}")
+            # Fallback to old fixed values
+            if percentage == self.emergency_anchor_trigger_percent:
+                return -2000.0
+            elif percentage == self.portfolio_risk_threshold_percent:
+                return -1000.0
+            else:
+                return percentage * 10  # Simple fallback
     
     def _analyze_portfolio_bias(self, positions: List) -> str:
         """📊 วิเคราะห์ bias ของพอร์ต"""
