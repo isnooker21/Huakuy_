@@ -15,10 +15,10 @@ class ZoneAnalyzer:
         self.timeframes = [mt5.TIMEFRAME_M5, mt5.TIMEFRAME_M15, mt5.TIMEFRAME_M30, mt5.TIMEFRAME_H1]
         # ไม่ใช้ Daily timeframe เพราะมีปัญหา array comparison
         
-        # Zone Detection Parameters
-        self.min_touches = 2  # จำนวนครั้งที่ราคาต้องแตะ Zone
-        self.zone_tolerance = 5.0  # ความยืดหยุ่นของ Zone (points)
-        self.min_zone_strength = 30  # ความแข็งแรงขั้นต่ำ
+        # Zone Detection Parameters (ปรับให้แม่นยำกว่า)
+        self.min_touches = 1  # ลดเกณฑ์ให้หา Zone ได้มากขึ้น (จาก 2)
+        self.zone_tolerance = 15.0  # เพิ่มความยืดหยุ่น สำหรับ XAUUSD (จาก 5.0)
+        self.min_zone_strength = 20  # ลดเกณฑ์ความแข็งแรง (จาก 30)
         
         # Multi-TF Analysis
         self.tf_weights = {
@@ -134,7 +134,7 @@ class ZoneAnalyzer:
         """🔍 หา Pivot Points จากข้อมูลราคา"""
         try:
             pivots = []
-            window = 3  # ใช้ window 3 bars
+            window = 5  # เพิ่ม window เป็น 5 bars ให้แม่นยำกว่า
             
             for i in range(window, len(rates) - window):
                 current_high = float(rates[i]['high'])
@@ -150,12 +150,18 @@ class ZoneAnalyzer:
                 if is_support_pivot:
                     touches = self._count_touches(rates, current_low, 'support', i)
                     if touches >= self.min_touches:
+                        # เพิ่มการวิเคราะห์ Price Action
+                        rejection_strength = self._calculate_rejection_strength(rates, i, 'support')
+                        volume_factor = self._estimate_volume_factor(rates, i)
+                        
                         pivots.append({
                             'type': 'support',
                             'price': current_low,
                             'touches': touches,
                             'timestamp': float(rates[i]['time']),
-                            'index': i
+                            'index': i,
+                            'rejection_strength': rejection_strength,
+                            'volume_factor': volume_factor
                         })
                 
                 # ตรวจสอบ Resistance Pivot (High)
@@ -168,12 +174,18 @@ class ZoneAnalyzer:
                 if is_resistance_pivot:
                     touches = self._count_touches(rates, current_high, 'resistance', i)
                     if touches >= self.min_touches:
+                        # เพิ่มการวิเคราะห์ Price Action
+                        rejection_strength = self._calculate_rejection_strength(rates, i, 'resistance')
+                        volume_factor = self._estimate_volume_factor(rates, i)
+                        
                         pivots.append({
                             'type': 'resistance',
                             'price': current_high,
                             'touches': touches,
                             'timestamp': float(rates[i]['time']),
-                            'index': i
+                            'index': i,
+                            'rejection_strength': rejection_strength,
+                            'volume_factor': volume_factor
                         })
             
             return pivots
@@ -281,36 +293,48 @@ class ZoneAnalyzer:
             return zone_group[0]
     
     def _calculate_zone_strength(self, zone: Dict, zone_type: str) -> float:
-        """💪 คำนวณความแข็งแรงของ Zone"""
+        """💪 คำนวณความแข็งแรงของ Zone (ปรับปรุงใหม่)"""
         try:
             # Price Action Strength (จำนวนครั้งที่แตะ)
-            max_touches = 10
+            max_touches = 8  # ลดจาก 10
             price_action_score = min((zone['touches'] / max_touches) * 100, 100)
             
             # Multi-Timeframe Strength
-            tf_score = len(zone.get('timeframes', [zone.get('timeframe')])) * 25
+            tf_score = len(zone.get('timeframes', [zone.get('timeframe')])) * 30  # เพิ่มจาก 25
             tf_score = min(tf_score, 100)
             
             # Time Freshness (Zone ใหม่ = แข็งแรงกว่า)
             now = datetime.now().timestamp()
             zone_age_hours = (now - zone['timestamp']) / 3600
-            time_score = max(100 - (zone_age_hours / 24) * 20, 20)  # ลดลง 20 points ต่อวัน
+            time_score = max(100 - (zone_age_hours / 12) * 15, 30)  # ลดเร็วกว่าเดิม
             
             # Zone Count Bonus (ถ้ามีหลาย zones รวมกัน)
-            zone_count_bonus = min(zone.get('zone_count', 1) * 10, 30)
+            zone_count_bonus = min(zone.get('zone_count', 1) * 15, 40)  # เพิ่มโบนัส
             
-            # คำนวณ Zone Strength รวม
+            # Rejection Strength Bonus (ใหม่)
+            rejection_bonus = 0
+            if 'rejection_strength' in zone:
+                rejection_bonus = (zone['rejection_strength'] - 1.0) * 20  # 0-40 points
+            
+            # Volume Factor Bonus (ใหม่)
+            volume_bonus = 0
+            if 'volume_factor' in zone:
+                volume_bonus = (zone['volume_factor'] - 1.0) * 15  # 0-30 points
+            
+            # คำนวณ Zone Strength รวม (ปรับน้ำหนักใหม่)
             total_strength = (
-                price_action_score * self.price_action_weight +
-                tf_score * 0.3 +
-                time_score * self.time_weight +
-                zone_count_bonus * 0.1
+                price_action_score * 0.25 +  # ลดน้ำหนัก PA
+                tf_score * 0.35 +            # เพิ่มน้ำหนัก Multi-TF
+                time_score * 0.20 +          # ลดน้ำหนัก Time
+                zone_count_bonus * 0.10 +    # Zone count
+                rejection_bonus * 0.05 +     # Rejection strength
+                volume_bonus * 0.05          # Volume factor
             )
             
             final_strength = min(total_strength, 100)
             
             logger.debug(f"💪 Zone {zone['price']}: PA={price_action_score:.1f}, TF={tf_score:.1f}, "
-                        f"Time={time_score:.1f}, Bonus={zone_count_bonus:.1f} = {final_strength:.1f}")
+                        f"Time={time_score:.1f}, Reject={rejection_bonus:.1f}, Vol={volume_bonus:.1f} = {final_strength:.1f}")
             
             return round(final_strength, 1)
             
@@ -329,6 +353,75 @@ class ZoneAnalyzer:
         minutes = tf_minutes.get(timeframe, 5)
         logger.debug(f"🔍 Timeframe {timeframe} = {minutes} minutes")
         return minutes
+    
+    def _calculate_rejection_strength(self, rates, pivot_index: int, zone_type: str) -> float:
+        """💪 คำนวณความแรงของการ rejection ที่ Zone"""
+        try:
+            if pivot_index < 1 or pivot_index >= len(rates) - 1:
+                return 1.0
+            
+            current_bar = rates[pivot_index]
+            current_high = float(current_bar['high'])
+            current_low = float(current_bar['low'])
+            current_close = float(current_bar['close'])
+            current_open = float(current_bar['open'])
+            
+            if zone_type == 'support':
+                # วัดความแรงของ rejection จาก support
+                lower_wick = current_open - current_low if current_close > current_open else current_close - current_low
+                total_range = current_high - current_low
+                
+                if total_range > 0:
+                    wick_ratio = lower_wick / total_range
+                    rejection_strength = 1.0 + (wick_ratio * 2.0)  # 1.0 - 3.0
+                else:
+                    rejection_strength = 1.0
+                    
+            else:  # resistance
+                # วัดความแรงของ rejection จาก resistance
+                upper_wick = current_high - current_open if current_close < current_open else current_high - current_close
+                total_range = current_high - current_low
+                
+                if total_range > 0:
+                    wick_ratio = upper_wick / total_range
+                    rejection_strength = 1.0 + (wick_ratio * 2.0)  # 1.0 - 3.0
+                else:
+                    rejection_strength = 1.0
+            
+            return min(rejection_strength, 3.0)  # จำกัดไม่เกิน 3.0
+            
+        except Exception as e:
+            logger.error(f"❌ Error calculating rejection strength: {e}")
+            return 1.0
+    
+    def _estimate_volume_factor(self, rates, pivot_index: int) -> float:
+        """📊 ประมาณ volume factor จาก tick volume"""
+        try:
+            if pivot_index < 5 or pivot_index >= len(rates) - 5:
+                return 1.0
+            
+            # ใช้ tick volume ถ้ามี
+            current_volume = getattr(rates[pivot_index], 'tick_volume', 1)
+            
+            # คำนวณ average volume ของ bars ข้างเคียง
+            avg_volume = 0
+            count = 0
+            for i in range(pivot_index - 5, pivot_index + 6):
+                if 0 <= i < len(rates):
+                    vol = getattr(rates[i], 'tick_volume', 1)
+                    avg_volume += vol
+                    count += 1
+            
+            if count > 0 and avg_volume > 0:
+                avg_volume = avg_volume / count
+                volume_factor = current_volume / avg_volume
+                return min(max(volume_factor, 0.5), 3.0)  # จำกัด 0.5 - 3.0
+            else:
+                return 1.0
+                
+        except Exception as e:
+            logger.error(f"❌ Error estimating volume factor: {e}")
+            return 1.0
     
     def get_zone_at_price(self, price: float, zones: Dict[str, List[Dict]], tolerance: float = None) -> Optional[Dict]:
         """🎯 หา Zone ที่ราคาปัจจุบัน"""
