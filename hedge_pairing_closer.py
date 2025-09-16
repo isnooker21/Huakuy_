@@ -951,19 +951,45 @@ class HedgePairingCloser:
             buy_positions = [pos for pos in filtered_positions if getattr(pos, 'type', 0) == 0]
             sell_positions = [pos for pos in filtered_positions if getattr(pos, 'type', 0) == 1]
             
-            if self.force_hedge_pairing_only and (len(buy_positions) == 0 or len(sell_positions) == 0):
-                logger.info(f"🚫 FORCE HEDGE PAIRING: Need both BUY and SELL positions to close")
+            # อนุญาตให้ปิดไม้ฝั่งเดียวได้เฉพาะเมื่อมีไม้ฝั่งเดียวเท่านั้น
+            if self.force_hedge_pairing_only and len(buy_positions) > 0 and len(sell_positions) > 0:
+                # มีไม้ทั้งสองฝั่ง - ต้องใช้ Hedge Pairing เท่านั้น
+                logger.info(f"🎯 HEDGE PAIRING REQUIRED: Both BUY and SELL positions exist")
                 logger.info(f"   BUY positions: {len(buy_positions)}, SELL positions: {len(sell_positions)}")
+            elif self.force_hedge_pairing_only and len(buy_positions) == 0 and len(sell_positions) == 0:
+                # ไม่มีไม้เลย
+                logger.info(f"🚫 NO POSITIONS: No positions to close")
                 return None
+            else:
+                # มีไม้ฝั่งเดียว - อนุญาตให้ปิดได้
+                if len(buy_positions) > 0:
+                    logger.info(f"✅ SINGLE SIDE CLOSING: Only BUY positions ({len(buy_positions)}) - Allowed")
+                elif len(sell_positions) > 0:
+                    logger.info(f"✅ SINGLE SIDE CLOSING: Only SELL positions ({len(sell_positions)}) - Allowed")
             
             # 1. หาการจับคู่ไม้ที่มีอยู่
             logger.info(f"🔍 Starting profitable combinations search with {len(filtered_positions)} positions")
             profitable_combinations = self._find_profitable_combinations(filtered_positions)
             
+            # 1.5. ถ้าไม่มี Hedge Pairing และมีไม้ฝั่งเดียว ให้หาการปิดไม้ฝั่งเดียว
+            if not profitable_combinations and (len(buy_positions) == 0 or len(sell_positions) == 0):
+                logger.info(f"🔍 No hedge combinations found - checking single side closing")
+                single_side_combinations = self._find_single_side_profitable(filtered_positions)
+                if single_side_combinations:
+                    profitable_combinations = single_side_combinations
+            
             if profitable_combinations:
                 # มีการจับคู่ที่เหมาะสม → ปิดไม้
                 best_combination = profitable_combinations[0]
-                logger.info(f"✅ HEDGE COMBINATION FOUND: {best_combination.combination_type}")
+                
+                # ตรวจสอบว่าเป็น Hedge Pairing หรือ Single Side
+                if len(buy_positions) > 0 and len(sell_positions) > 0:
+                    method_name = "HEDGE_PAIRING"
+                    logger.info(f"✅ HEDGE COMBINATION FOUND: {best_combination.combination_type}")
+                else:
+                    method_name = "SINGLE_SIDE_CLOSING"
+                    logger.info(f"✅ SINGLE SIDE COMBINATION FOUND: {best_combination.combination_type}")
+                
                 logger.info(f"   Net P&L: ${best_combination.total_profit:.2f}")
                 logger.info(f"   Positions: {best_combination.size}")
                 
@@ -974,7 +1000,7 @@ class HedgePairingCloser:
                 return ClosingDecision(
                     should_close=True,
                     positions_to_close=best_combination.positions,
-                    method="HEDGE_PAIRING",
+                    method=method_name,
                     net_pnl=best_combination.total_profit,
                     expected_pnl=best_combination.total_profit,
                     position_count=best_combination.size,
@@ -1952,20 +1978,20 @@ class HedgePairingCloser:
             return []
     
     def _find_single_side_profitable(self, positions: List[Any]) -> List[HedgeCombination]:
-        """🔍 หาไม้ฝั่งเดียวที่ P&L รวมเป็นบวก (เฉพาะเมื่อไม่มีไม้ฝั่งตรงข้าม) - DISABLED"""
+        """🔍 หาไม้ฝั่งเดียวที่ P&L รวมเป็นบวก (เฉพาะเมื่อมีไม้ฝั่งเดียวเท่านั้น)"""
         try:
-            # 🚫 DISABLED: ห้ามปิดไม้ฝั่งเดียว - ต้องจับคู่ Hedge เสมอ
-            if not self.allow_single_side_closing:
-                logger.info("🚫 Single side closing DISABLED - Force Hedge Pairing only")
-                return []
-            
             # ตรวจสอบว่ามีไม้ฝั่งตรงข้ามหรือไม่
             buy_positions = [pos for pos in positions if getattr(pos, 'type', 0) == 0]
             sell_positions = [pos for pos in positions if getattr(pos, 'type', 0) == 1]
             
-            # ถ้ามีไม้ฝั่งตรงข้ามทั้งสองฝั่ง ให้ข้ามฟังก์ชันนี้
+            # ถ้ามีไม้ฝั่งตรงข้ามทั้งสองฝั่ง ให้ข้ามฟังก์ชันนี้ (ใช้ Hedge Pairing แทน)
             if len(buy_positions) > 0 and len(sell_positions) > 0:
-                logger.info("⚠️ Both BUY and SELL positions exist - skipping single side closing")
+                logger.info("⚠️ Both BUY and SELL positions exist - using Hedge Pairing instead")
+                return []
+            
+            # ตรวจสอบว่ามีไม้ฝั่งเดียวหรือไม่
+            if len(buy_positions) == 0 and len(sell_positions) == 0:
+                logger.info("⚠️ No positions found for single side closing")
                 return []
             
             # ถ้ามีไม้ฝั่งเดียวเท่านั้น ให้หาการรวมที่กำไร
