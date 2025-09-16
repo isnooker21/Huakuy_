@@ -1,16 +1,16 @@
 # -*- coding: utf-8 -*-
 """
-🚀 Simple Breakout Trading System with GUI
-==========================================
+🚀 Smart Entry Trading System with GUI
+=====================================
 2645542741b983d3a8dc3f660a0531af92a85a69 <<< commit file ที่ใช้งานสมบูณ
-NEW ENTRY LOGIC:
-✅ BUY: current.close > previous.high
-✅ SELL: current.close < previous.low
-✅ Multi-Timeframe: M5, M15, M30, H1
-✅ One Trade Per Candle Per TF
-✅ Support/Resistance Override
-✅ Dynamic Lot Sizing
-✅ Keep Original GUI
+NEW SMART ENTRY LOGIC:
+✅ Support BUY: เข้า BUY ที่ Support zone
+✅ Resistance SELL: เข้า SELL ที่ Resistance zone
+✅ Pivot Point Selection: เลือกตาม Pivot Point + Zone Strength
+✅ Dynamic Lot Sizing: คำนวณตามทุนและ lot size
+✅ Recovery System: แก้ไม้ที่ขาดทุน
+✅ 5 Second Loop: เข้าไม้ทุก 5 วินาที
+✅ Demand & Supply Trading
 
 AUTHOR: Advanced Trading System
 VERSION: 2.0.0
@@ -46,7 +46,7 @@ logging.basicConfig(
     level=logging.INFO,
     format='%(asctime)s - %(message)s',
     handlers=[
-        logging.FileHandler('simple_breakout_gui.log', encoding='utf-8'),
+        logging.FileHandler('smart_entry_gui.log', encoding='utf-8'),
         logging.StreamHandler()
     ]
 )
@@ -60,21 +60,21 @@ logging.getLogger('calculations').setLevel(logging.ERROR)
 
 logger = logging.getLogger(__name__)
 
-class SimpleBreakoutTradingSystemGUI:
+class SmartEntryTradingSystemGUI:
     """
-    🚀 Simple Breakout Trading System with GUI
+    🚀 Smart Entry Trading System with GUI
     
     FEATURES:
     ✅ Original GUI Interface
-    ✅ Simple Breakout Entry Logic
-    ✅ Multi-Timeframe Support
-    ✅ Dynamic Lot Sizing
-    ✅ Support/Resistance Override
+    ✅ Smart Entry Logic (Support/Resistance + Pivot Point)
+    ✅ Recovery System for Losing Positions
+    ✅ Dynamic Lot Sizing (based on account balance)
+    ✅ 5 Second Trading Loop
     ✅ Position Management Systems
     """
     
     def __init__(self, initial_balance: float = 10000.0, symbol: str = "XAUUSD"):
-        """Initialize Simple Breakout Trading System with GUI"""
+        """Initialize Smart Entry Trading System with GUI"""
         self.base_symbol = symbol
         self.actual_symbol = None
         self.initial_balance = initial_balance
@@ -286,8 +286,8 @@ class SimpleBreakoutTradingSystemGUI:
         logger.info("🛑 หยุดระบบเทรดแล้ว")
     
     def _trading_loop(self):
-        """Main trading loop with Simple Breakout Logic"""
-        logger.info("🔄 เริ่มลูปเทรด")
+        """Main trading loop with Smart Entry Logic"""
+        logger.info("🔄 เริ่มลูปเทรด Smart Entry System")
         
         # ลบ Performance Optimization Variables ออก - ใช้แบบเดิม
         
@@ -1160,7 +1160,7 @@ class SimpleBreakoutTradingSystemGUI:
     def _initialize_smart_systems(self):
         """🎯 Initialize Smart Trading Systems"""
         try:
-            logger.info("🎯 Initializing Smart Trading Systems...")
+            logger.info("🎯 Initializing Smart Entry Trading Systems...")
             
             # Initialize Zone Analyzer
             self.zone_analyzer = ZoneAnalyzer(self.mt5_connection)
@@ -1174,7 +1174,7 @@ class SimpleBreakoutTradingSystemGUI:
             self.portfolio_anchor = PortfolioAnchor(self.mt5_connection, self.zone_analyzer)
             logger.info("✅ Portfolio Anchor initialized")
             
-            logger.info("🎯 All Smart Trading Systems initialized successfully")
+            logger.info("🎯 All Smart Entry Trading Systems initialized successfully")
             
         except Exception as e:
             logger.error(f"❌ Error initializing smart systems: {e}")
@@ -1378,7 +1378,7 @@ class SimpleBreakoutTradingSystemGUI:
 def main():
     """Main function"""
     # Create trading system
-    system = SimpleBreakoutTradingSystemGUI(initial_balance=10000.0, symbol="XAUUSD")
+    system = SmartEntryTradingSystemGUI(initial_balance=10000.0, symbol="XAUUSD")
     
     try:
         # Initialize system
