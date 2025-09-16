@@ -13,6 +13,7 @@ class ZoneAnalyzer:
         self.mt5_connection = mt5_connection
         self.symbol = None  # จะถูกตั้งค่าใน analyze_zones
         self.timeframes = [mt5.TIMEFRAME_M5, mt5.TIMEFRAME_M15, mt5.TIMEFRAME_M30, mt5.TIMEFRAME_H1]
+        # ไม่ใช้ Daily timeframe เพราะมีปัญหา array comparison
         
         # Zone Detection Parameters
         self.min_touches = 2  # จำนวนครั้งที่ราคาต้องแตะ Zone

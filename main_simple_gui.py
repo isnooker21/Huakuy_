@@ -1064,7 +1064,7 @@ class SimpleBreakoutTradingSystemGUI:
             # ดึงข้อมูลพอร์ต
             positions = self.mt5_connection.get_positions()
             account_info = self.mt5_connection.get_account_info()
-            portfolio_profit = sum(pos.profit for pos in positions) if positions else 0
+            portfolio_profit = sum(getattr(pos, 'profit', 0) for pos in positions) if positions else 0
             
             # 1. Smart Entry System (respect SW Filter)
             entry_opportunity = None
