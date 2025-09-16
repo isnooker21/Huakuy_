@@ -1066,66 +1066,73 @@ class SimpleBreakoutTradingSystemGUI:
             account_info = self.mt5_connection.get_account_info()
             portfolio_profit = sum(getattr(pos, 'profit', 0) for pos in positions) if positions else 0
             
-            # 1. Smart Entry System (respect SW Filter)
-            entry_opportunity = None
-            try:
-                # Build a mock position with current price for SW filter
-                if hasattr(self, 'hedge_pairing_closer') and self.hedge_pairing_closer:
-                    mock_position = type('MockPosition', (), {
-                        'price': current_price,
-                        'price_open': current_price,
-                        'type': 0,  # direction decided later
-                        'volume': 0.01
-                    })()
-                    sw_ok, _ = self.hedge_pairing_closer._sw_filter_check(mock_position, positions)
-                    if sw_ok:
-                        entry_opportunity = self.smart_entry_system.analyze_entry_opportunity(
-                            self.actual_symbol, current_price, zones, positions
-                        )
-                else:
-                    entry_opportunity = self.smart_entry_system.analyze_entry_opportunity(
-                        self.actual_symbol, current_price, zones, positions
-                    )
-            except Exception as _:
-                entry_opportunity = self.smart_entry_system.analyze_entry_opportunity(
-                    self.actual_symbol, current_price, zones, positions
-                )
+            # 1. Smart Entry System (Background Thread - ไม่ให้ GUI ค้าง)
+            if hasattr(self, 'smart_entry_system') and self.smart_entry_system:
+                try:
+                    import threading
+                    def smart_entry_worker():
+                        try:
+                            # Build a mock position with current price for SW filter
+                            if hasattr(self, 'hedge_pairing_closer') and self.hedge_pairing_closer:
+                                mock_position = type('MockPosition', (), {
+                                    'price': current_price,
+                                    'price_open': current_price,
+                                    'type': 0,  # direction decided later
+                                    'volume': 0.01
+                                })()
+                                sw_ok, _ = self.hedge_pairing_closer._sw_filter_check(mock_position, positions)
+                                if sw_ok:
+                                    entry_opportunity = self.smart_entry_system.analyze_entry_opportunity(
+                                        self.actual_symbol, current_price, zones, positions
+                                    )
+                                    if entry_opportunity:
+                                        logger.info(f"🎯 Smart Entry Opportunity: {entry_opportunity['direction']} at {current_price}")
+                                        ticket = self.smart_entry_system.execute_entry(entry_opportunity)
+                                        if ticket:
+                                            logger.info(f"✅ Smart Entry executed: Ticket {ticket}")
+                        except Exception as e:
+                            logger.error(f"❌ Error in smart entry thread: {e}")
+                    
+                    # เริ่ม thread
+                    smart_thread = threading.Thread(target=smart_entry_worker, daemon=True)
+                    smart_thread.start()
+                    
+                except Exception as e:
+                    logger.error(f"❌ Error starting smart entry thread: {e}")
             
-            if entry_opportunity:
-                logger.info(f"🎯 Smart Entry Opportunity: {entry_opportunity['direction']} at {current_price}")
-                ticket = self.smart_entry_system.execute_entry(entry_opportunity)
-                if ticket:
-                    logger.info(f"✅ Smart Entry executed: Ticket {ticket}")
-            
-            # 2. Portfolio Anchor System (respect SW Filter)
-            anchor_need = None
-            try:
-                if hasattr(self, 'hedge_pairing_closer') and self.hedge_pairing_closer:
-                    mock_position = type('MockPosition', (), {
-                        'price': current_price,
-                        'price_open': current_price,
-                        'type': 0,
-                        'volume': 0.01
-                    })()
-                    sw_ok, _ = self.hedge_pairing_closer._sw_filter_check(mock_position, positions)
-                    if sw_ok:
-                        anchor_need = self.portfolio_anchor.analyze_anchor_needs(
-                            self.actual_symbol, current_price, portfolio_profit, zones, positions
-                        )
-                else:
-                    anchor_need = self.portfolio_anchor.analyze_anchor_needs(
-                        self.actual_symbol, current_price, portfolio_profit, zones, positions
-                    )
-            except Exception as _:
-                anchor_need = self.portfolio_anchor.analyze_anchor_needs(
-                    self.actual_symbol, current_price, portfolio_profit, zones, positions
-                )
-            
-            if anchor_need:
-                logger.info(f"⚓ Anchor Opportunity: {anchor_need['direction']} (Reason: {anchor_need['reason']})")
-                ticket = self.portfolio_anchor.execute_anchor(anchor_need, current_price)
-                if ticket:
-                    logger.info(f"✅ Anchor created: Ticket {ticket}")
+            # 2. Portfolio Anchor System (Background Thread - ไม่ให้ GUI ค้าง)
+            if hasattr(self, 'portfolio_anchor') and self.portfolio_anchor:
+                try:
+                    import threading
+                    def anchor_worker():
+                        try:
+                            # Build a mock position with current price for SW filter
+                            if hasattr(self, 'hedge_pairing_closer') and self.hedge_pairing_closer:
+                                mock_position = type('MockPosition', (), {
+                                    'price': current_price,
+                                    'price_open': current_price,
+                                    'type': 0,
+                                    'volume': 0.01
+                                })()
+                                sw_ok, _ = self.hedge_pairing_closer._sw_filter_check(mock_position, positions)
+                                if sw_ok:
+                                    anchor_need = self.portfolio_anchor.analyze_anchor_needs(
+                                        self.actual_symbol, current_price, portfolio_profit, zones, positions
+                                    )
+                                    if anchor_need:
+                                        logger.info(f"⚓ Anchor Opportunity: {anchor_need['direction']} (Reason: {anchor_need['reason']})")
+                                        ticket = self.portfolio_anchor.execute_anchor(anchor_need, current_price)
+                                        if ticket:
+                                            logger.info(f"✅ Anchor created: Ticket {ticket}")
+                        except Exception as e:
+                            logger.error(f"❌ Error in anchor thread: {e}")
+                    
+                    # เริ่ม thread
+                    anchor_thread = threading.Thread(target=anchor_worker, daemon=True)
+                    anchor_thread.start()
+                    
+                except Exception as e:
+                    logger.error(f"❌ Error starting anchor thread: {e}")
             
             # 3. Manage Existing Anchors
             anchor_actions = self.portfolio_anchor.manage_existing_anchors(current_price)
