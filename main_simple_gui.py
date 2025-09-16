@@ -136,6 +136,7 @@ class SimpleBreakoutTradingSystemGUI:
         self.smart_systems_enabled = True
         self.last_zone_analysis = 0
         self.zone_analysis_interval = 300  # ทุก 5 นาที
+        self._smart_systems_thread = None  # เพิ่ม thread tracking
         
         logger.info("🚀 SIMPLE BREAKOUT TRADING SYSTEM WITH GUI initialized")
         logger.info(f"💰 Initial Balance: ${initial_balance:,.2f}")
@@ -341,8 +342,10 @@ class SimpleBreakoutTradingSystemGUI:
                     self._handle_dynamic_closing(current_candle)
                     self._last_dynamic_closing_time = current_time
                 
-                # 🎯 Smart Trading Systems - Handle every 5 minutes
-                self._handle_smart_systems()
+                # 🎯 Smart Trading Systems - Handle every 5 minutes (เพิ่ม cooldown)
+                if current_time - getattr(self, '_last_smart_systems_time', 0) >= 300:  # 5 นาที
+                    self._handle_smart_systems()
+                    self._last_smart_systems_time = current_time
                 
                 # Sleep - ลดเวลาให้เหมาะสมกับการเทรดตามแท่งเทียน
                 time.sleep(0.1)  # ตรวจสอบแท่งเทียนทุก 0.1 วินาที
@@ -1067,6 +1070,11 @@ class SimpleBreakoutTradingSystemGUI:
             if not current_price:
                 return
             
+            # ตรวจสอบว่า Thread เก่าทำงานอยู่หรือไม่ (แก้ไข Thread Overlap)
+            if self._smart_systems_thread and self._smart_systems_thread.is_alive():
+                logger.debug("🎯 Smart Systems thread still running, skipping...")
+                return
+            
             # ย้าย Smart Systems ทั้งหมดไป Background Thread (รวม Zone Analysis)
             if hasattr(self, 'zone_analyzer') and self.zone_analyzer:
                 try:
@@ -1138,9 +1146,9 @@ class SimpleBreakoutTradingSystemGUI:
                         except Exception as e:
                             logger.error(f"❌ Error in smart systems worker: {e}")
                     
-                    # เริ่ม thread
-                    smart_thread = threading.Thread(target=smart_systems_worker, daemon=True)
-                    smart_thread.start()
+                    # เริ่ม thread และเก็บ reference
+                    self._smart_systems_thread = threading.Thread(target=smart_systems_worker, daemon=True)
+                    self._smart_systems_thread.start()
                     
                 except Exception as e:
                     logger.error(f"❌ Error starting smart systems thread: {e}")
