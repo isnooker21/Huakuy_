@@ -119,6 +119,14 @@ class HedgePairingCloser:
         self.smart_helper_selection = True  # เลือกไม้ช่วยอย่างฉลาด
         self.emergency_helper_mode = True  # โหมดช่วยเหลือฉุกเฉิน (ไม้เสียมาก)
         
+        # 🧹 Stale Position Clearing - ระบบเคลียร์ไม้ค้างพอร์ต
+        self.stale_clearing_enabled = True
+        self.stale_age_threshold_hours = 24  # อายุไม้ค้าง ≥ 24 ชั่วโมง
+        self.stale_loss_threshold = -5.0  # ขาดทุนหนัก ≤ -$5
+        self.stale_priority_bonus = 0.3  # โบนัสความสำคัญ +30%
+        self.stale_anchor_inclusion_enabled = True  # ใช้ Anchor ได้เมื่อไม้ค้างเยอะ
+        self.stale_anchor_threshold_avg = True  # ใช้ค่าเฉลี่ยไม้ค้าง
+        
         # 📊 Advanced Filtering - การกรองขั้นสูง
         self.advanced_filtering_enabled = True
         self.distance_based_pairing = True  # จับคู่ตามระยะห่างราคา
@@ -762,10 +770,19 @@ class HedgePairingCloser:
         try:
             # 🚫 Exclude Portfolio Anchor positions (magic 789012) from closing candidates
             original_count = len(positions) if positions else 0
+            anchor_positions = [pos for pos in (positions or []) if getattr(pos, 'magic', None) == 789012]
             positions = [pos for pos in (positions or []) if getattr(pos, 'magic', None) != 789012]
             excluded = original_count - len(positions)
             if excluded > 0:
                 logger.info(f"🛡️ Excluding {excluded} anchor positions from closing candidates")
+            
+            # 🧹 Analyze stale positions for potential inclusion of anchors
+            stale_positions = self._identify_stale_positions(positions) if self.stale_clearing_enabled else []
+            allow_anchor_inclusion = self._should_include_anchors_for_stale_clearing(stale_positions, positions)
+            
+            if allow_anchor_inclusion and anchor_positions:
+                logger.info(f"🧹 STALE CLEARING: Including {len(anchor_positions)} anchors for stale position clearing")
+                positions.extend(anchor_positions)  # Add anchors back to candidates
 
             if len(positions) < 1:
                 logger.info("⏸️ Need at least 1 position for analysis")
@@ -847,6 +864,31 @@ class HedgePairingCloser:
             #     logger.info(f"🛡️ SW Filter: Applied clustering protection")
             
             
+            # 0.4. Stale Position Clearing - ระบบเคลียร์ไม้ค้างพอร์ต
+            if self.stale_clearing_enabled and stale_positions:
+                stale_combinations = self._find_stale_clearing_combinations(filtered_positions, stale_positions)
+                if stale_combinations:
+                    logger.info(f"🧹 STALE CLEARING FOUND: {len(stale_combinations)} combinations")
+                    best_stale = stale_combinations[0]
+                    logger.info(f"   Best: {best_stale.combination_type}: ${best_stale.total_profit:.2f} ({best_stale.size} positions)")
+                    logger.info(f"   Clearing {len([p for p in best_stale.positions if self._is_stale_position(p)])} stale positions")
+                    
+                    processing_time = time.time() - start_time
+                    self._record_performance(True, best_stale.total_profit, processing_time)
+                    
+                    return ClosingDecision(
+                        should_close=True,
+                        positions_to_close=best_stale.positions,
+                        method="STALE_CLEARING",
+                        net_pnl=best_stale.total_profit,
+                        expected_pnl=best_stale.total_profit,
+                        position_count=best_stale.size,
+                        buy_count=sum(1 for p in best_stale.positions if getattr(p, 'type', 0) == 0),
+                        sell_count=sum(1 for p in best_stale.positions if getattr(p, 'type', 0) == 1),
+                        confidence_score=best_stale.confidence_score,
+                        reason=best_stale.reason
+                    )
+            
             # 0.5. Advanced Pairing - กลยุทธ์การจับคู่ขั้นสูง
             if self.advanced_pairing_enabled:
                 advanced_combinations = self._find_advanced_pairing_combinations(filtered_positions)
@@ -865,8 +907,8 @@ class HedgePairingCloser:
                         net_pnl=best_advanced.total_profit,
                         expected_pnl=best_advanced.total_profit,
                         position_count=best_advanced.size,
-                        buy_count=sum(1 for p in best_advanced.positions if p.type == 0),
-                        sell_count=sum(1 for p in best_advanced.positions if p.type == 1),
+                        buy_count=sum(1 for p in best_advanced.positions if getattr(p, 'type', 0) == 0),
+                        sell_count=sum(1 for p in best_advanced.positions if getattr(p, 'type', 0) == 1),
                         confidence_score=best_advanced.confidence_score,
                         reason=best_advanced.reason
                     )
@@ -2584,6 +2626,161 @@ class HedgePairingCloser:
         except Exception as e:
             logger.error(f"❌ Error creating opposite position: {e}")
             return None
+    
+    def _identify_stale_positions(self, positions: List[Any]) -> List[Any]:
+        """🧹 ระบุไม้ค้างพอร์ต"""
+        try:
+            stale_positions = []
+            current_time = time.time()
+            
+            for pos in positions:
+                # ตรวจสอบอายุไม้
+                pos_time = getattr(pos, 'time', current_time)
+                age_hours = (current_time - pos_time) / 3600
+                
+                # ตรวจสอบขาดทุน
+                profit = getattr(pos, 'profit', 0)
+                
+                # เงื่อนไขไม้ค้าง: อายุ ≥ threshold หรือ ขาดทุนหนัก
+                is_old = age_hours >= self.stale_age_threshold_hours
+                is_heavy_loss = profit <= self.stale_loss_threshold
+                
+                if is_old or is_heavy_loss:
+                    stale_positions.append(pos)
+                    logger.debug(f"🧹 Stale position: Ticket {getattr(pos, 'ticket', 'N/A')}, "
+                               f"Age: {age_hours:.1f}h, Profit: ${profit:.2f}")
+            
+            if stale_positions:
+                logger.info(f"🧹 Found {len(stale_positions)} stale positions")
+            
+            return stale_positions
+            
+        except Exception as e:
+            logger.error(f"❌ Error identifying stale positions: {e}")
+            return []
+    
+    def _should_include_anchors_for_stale_clearing(self, stale_positions: List[Any], all_positions: List[Any]) -> bool:
+        """🧹 ตรวจสอบว่าควรใช้ Anchor ช่วยเคลียร์ไม้ค้างหรือไม่"""
+        try:
+            if not self.stale_anchor_inclusion_enabled or not stale_positions:
+                return False
+            
+            if self.stale_anchor_threshold_avg:
+                # ใช้ค่าเฉลี่ยไม้ค้าง
+                avg_stale_loss = sum(getattr(pos, 'profit', 0) for pos in stale_positions) / len(stale_positions)
+                threshold_met = avg_stale_loss <= self.stale_loss_threshold
+                logger.info(f"🧹 Avg stale loss: ${avg_stale_loss:.2f}, threshold: ${self.stale_loss_threshold}")
+            else:
+                # ใช้จำนวนไม้ค้าง ≥ 5
+                threshold_met = len(stale_positions) >= 5
+                logger.info(f"🧹 Stale count: {len(stale_positions)}, threshold: 5")
+            
+            if threshold_met:
+                logger.info("🧹 Anchor inclusion approved for stale clearing")
+            
+            return threshold_met
+            
+        except Exception as e:
+            logger.error(f"❌ Error checking anchor inclusion: {e}")
+            return False
+    
+    def _is_stale_position(self, position: Any) -> bool:
+        """🧹 ตรวจสอบว่าเป็นไม้ค้างหรือไม่"""
+        try:
+            current_time = time.time()
+            pos_time = getattr(position, 'time', current_time)
+            age_hours = (current_time - pos_time) / 3600
+            profit = getattr(position, 'profit', 0)
+            
+            is_old = age_hours >= self.stale_age_threshold_hours
+            is_heavy_loss = profit <= self.stale_loss_threshold
+            
+            return is_old or is_heavy_loss
+            
+        except Exception as e:
+            logger.error(f"❌ Error checking if stale position: {e}")
+            return False
+    
+    def _find_stale_clearing_combinations(self, positions: List[Any], stale_positions: List[Any]) -> List[HedgeCombination]:
+        """🧹 หาการจับคู่เพื่อเคลียร์ไม้ค้างพอร์ต"""
+        try:
+            combinations = []
+            
+            # แยกไม้ตามประเภท
+            stale_pos = stale_positions[:10]  # จำกัดไม้ค้างสูงสุด 10 ตัว
+            profitable_pos = [p for p in positions if getattr(p, 'profit', 0) > 0]
+            anchor_pos = [p for p in positions if getattr(p, 'magic', None) == 789012]
+            
+            logger.info(f"🧹 Stale clearing: {len(stale_pos)} stale, {len(profitable_pos)} profitable, {len(anchor_pos)} anchors")
+            
+            # กลยุทธ์ 1: ไม้ค้าง + ไม้กำไร
+            for stale_combo_size in range(1, min(len(stale_pos) + 1, 6)):  # 1-5 ไม้ค้าง
+                for stale_combo in itertools.combinations(stale_pos, stale_combo_size):
+                    stale_loss = sum(getattr(p, 'profit', 0) for p in stale_combo)
+                    
+                    # หาไม้กำไรที่พอชดเชย
+                    for profit_combo_size in range(1, min(len(profitable_pos) + 1, 6)):
+                        for profit_combo in itertools.combinations(profitable_pos, profit_combo_size):
+                            profit_gain = sum(getattr(p, 'profit', 0) for p in profit_combo)
+                            total_profit = stale_loss + profit_gain
+                            
+                            if total_profit >= self.min_net_profit:
+                                combo_positions = list(stale_combo) + list(profit_combo)
+                                
+                                # คำนวณ priority score (โบนัสสำหรับไม้ค้าง)
+                                base_score = 60.0 + (total_profit * 10)
+                                stale_bonus = len(stale_combo) * self.stale_priority_bonus * 100
+                                priority_score = min(95.0, base_score + stale_bonus)
+                                
+                                combinations.append(HedgeCombination(
+                                    positions=combo_positions,
+                                    total_profit=total_profit,
+                                    combination_type=f"STALE_CLEAR_{len(stale_combo)}S+{len(profit_combo)}P",
+                                    size=len(combo_positions),
+                                    confidence_score=priority_score,
+                                    reason=f"Stale clearing: {len(stale_combo)} stale + {len(profit_combo)} profitable = ${total_profit:.2f}"
+                                ))
+            
+            # กลยุทธ์ 2: ไม้ค้าง + ไม้กำไร + Anchor (ถ้าได้รับอนุญาต)
+            if anchor_pos:
+                for stale_combo_size in range(2, min(len(stale_pos) + 1, 5)):  # 2-4 ไม้ค้าง
+                    for stale_combo in itertools.combinations(stale_pos, stale_combo_size):
+                        stale_loss = sum(getattr(p, 'profit', 0) for p in stale_combo)
+                        
+                        # รวมไม้กำไร + Anchor
+                        helper_positions = profitable_pos + anchor_pos
+                        for helper_combo_size in range(1, min(len(helper_positions) + 1, 6)):
+                            for helper_combo in itertools.combinations(helper_positions, helper_combo_size):
+                                helper_gain = sum(getattr(p, 'profit', 0) for p in helper_combo)
+                                total_profit = stale_loss + helper_gain
+                                
+                                if total_profit >= self.min_net_profit:
+                                    combo_positions = list(stale_combo) + list(helper_combo)
+                                    anchor_count = sum(1 for p in helper_combo if getattr(p, 'magic', None) == 789012)
+                                    
+                                    # คำนวณ priority score (โบนัสพิเศษสำหรับ Anchor)
+                                    base_score = 70.0 + (total_profit * 12)
+                                    stale_bonus = len(stale_combo) * self.stale_priority_bonus * 100
+                                    anchor_bonus = anchor_count * 20  # โบนัส Anchor
+                                    priority_score = min(98.0, base_score + stale_bonus + anchor_bonus)
+                                    
+                                    combinations.append(HedgeCombination(
+                                        positions=combo_positions,
+                                        total_profit=total_profit,
+                                        combination_type=f"STALE_CLEAR_{len(stale_combo)}S+{len(helper_combo)-anchor_count}P+{anchor_count}A",
+                                        size=len(combo_positions),
+                                        confidence_score=priority_score,
+                                        reason=f"Stale+Anchor clearing: {len(stale_combo)} stale + {anchor_count} anchors = ${total_profit:.2f}"
+                                    ))
+            
+            # เรียงตาม priority score (สูงสุดก่อน)
+            combinations.sort(key=lambda x: x.confidence_score, reverse=True)
+            
+            return combinations[:5]  # ส่งคืนแค่ 5 อันแรก
+            
+        except Exception as e:
+            logger.error(f"❌ Error finding stale clearing combinations: {e}")
+            return []
 
 def create_hedge_pairing_closer(symbol: str = "XAUUSD") -> HedgePairingCloser:
     """สร้าง Hedge Pairing Closer"""
