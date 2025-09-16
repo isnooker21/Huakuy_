@@ -92,11 +92,11 @@ class SmartEntrySystem:
             opportunities = []
             
             for zone in support_zones:
-                # ตรวจสอบว่าราคาใกล้ Support หรือไม่
-                distance = current_price - zone['price']  # ระยะห่างจาก Support
+                # ตรวจสอบว่าราคาใกล้ Support หรือไม่ (Buy ที่ราคาต่ำ)
+                distance = abs(current_price - zone['price'])  # ระยะห่างจาก Support
                 
-                # ราคาต้องอยู่เหนือ Support แต่ไม่ไกลเกินไป
-                if 0 < distance <= self.max_zone_distance:
+                # ราคาต้องใกล้ Support (ต่ำกว่าหรือใกล้เคียง)
+                if current_price <= zone['price'] + 5.0 and distance <= self.max_zone_distance:
                     # ตรวจสอบเงื่อนไขอื่นๆ
                     if self._is_valid_entry_zone(zone, current_price):
                         lot_size = self._calculate_lot_size(zone['strength'])
@@ -125,11 +125,11 @@ class SmartEntrySystem:
             opportunities = []
             
             for zone in resistance_zones:
-                # ตรวจสอบว่าราคาใกล้ Resistance หรือไม่
-                distance = zone['price'] - current_price  # ระยะห่างจาก Resistance
+                # ตรวจสอบว่าราคาใกล้ Resistance หรือไม่ (Sell ที่ราคาสูง)
+                distance = abs(current_price - zone['price'])  # ระยะห่างจาก Resistance
                 
-                # ราคาต้องอยู่ใต้ Resistance แต่ไม่ไกลเกินไป
-                if 0 < distance <= self.max_zone_distance:
+                # ราคาต้องใกล้ Resistance (สูงกว่าหรือใกล้เคียง)
+                if current_price >= zone['price'] - 5.0 and distance <= self.max_zone_distance:
                     # ตรวจสอบเงื่อนไขอื่นๆ
                     if self._is_valid_entry_zone(zone, current_price):
                         lot_size = self._calculate_lot_size(zone['strength'])
