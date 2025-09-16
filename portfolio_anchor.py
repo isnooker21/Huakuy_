@@ -308,8 +308,19 @@ class PortfolioAnchor:
                 "magic": 789012  # Magic number แยกจาก Smart Entry
             }
             
+            # 🔍 Debug Log
+            logger.info(f"🔍 PORTFOLIO ANCHOR DEBUG:")
+            logger.info(f"   Symbol: {self.symbol}")
+            logger.info(f"   Volume: {lot_size}")
+            logger.info(f"   Direction: {direction}")
+            logger.info(f"   Order Type: {order_type}")
+            logger.info(f"   MT5 Connected: {mt5.initialize()}")
+            logger.info(f"   Account Info: {mt5.account_info()}")
+            logger.info(f"   Symbol Info: {mt5.symbol_info(self.symbol)}")
+            
             # ส่ง order
             result = mt5.order_send(request)
+            logger.info(f"🔍 MT5 order_send result: {result}")
             
             if result is None:
                 logger.error(f"❌ Anchor creation failed: MT5 order_send returned None")

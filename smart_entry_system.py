@@ -322,8 +322,19 @@ class SmartEntrySystem:
                 "magic": 123456
             }
             
+            # 🔍 Debug Log
+            logger.info(f"🔍 SMART ENTRY DEBUG:")
+            logger.info(f"   Symbol: {symbol}")
+            logger.info(f"   Volume: {lot_size}")
+            logger.info(f"   Direction: {direction}")
+            logger.info(f"   Order Type: {order_type}")
+            logger.info(f"   MT5 Connected: {mt5.initialize()}")
+            logger.info(f"   Account Info: {mt5.account_info()}")
+            logger.info(f"   Symbol Info: {mt5.symbol_info(symbol)}")
+            
             # ส่ง order
             result = mt5.order_send(request)
+            logger.info(f"🔍 MT5 order_send result: {result}")
             
             if result is None:
                 logger.error(f"❌ Entry failed: MT5 order_send returned None")
