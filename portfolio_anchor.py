@@ -57,25 +57,29 @@ class PortfolioAnchor:
                 logger.debug(f"⚓ Max anchor positions reached: {current_anchor_count}")
                 return None
             
-            # วิเคราะห์ความจำเป็น
+            # วิเคราะห์ความจำเป็นตาม Zone Quality
             anchor_needs = []
             
-            # 1. Emergency Anchor (พอร์ตขาดทุนหนัก)
-            if portfolio_profit <= self.emergency_anchor_trigger:
-                emergency_anchor = self._analyze_emergency_anchor(current_price, zones, existing_positions)
-                if emergency_anchor:
-                    anchor_needs.append(emergency_anchor)
-            
-            # 2. Portfolio Protection Anchor
-            elif portfolio_profit <= self.portfolio_risk_threshold:
-                protection_anchor = self._analyze_protection_anchor(current_price, zones, existing_positions)
-                if protection_anchor:
-                    anchor_needs.append(protection_anchor)
-            
-            # 3. Strategic Anchor (ตาม Zone แข็งแรง)
+            # 1. Strategic Anchor (ตาม Zone แข็งแรง) - ลำดับแรก
             strategic_anchor = self._analyze_strategic_anchor(current_price, zones, existing_positions)
             if strategic_anchor:
                 anchor_needs.append(strategic_anchor)
+            
+            # 2. Emergency Anchor (เฉพาะเมื่อพอร์ตขาดทุนหนัก + มี Zone ดี)
+            if portfolio_profit <= self.emergency_anchor_trigger:
+                emergency_anchor = self._analyze_emergency_anchor(current_price, zones, existing_positions)
+                if emergency_anchor:
+                    # เพิ่มคะแนนฉุกเฉิน
+                    emergency_anchor['priority_score'] += 100
+                    anchor_needs.append(emergency_anchor)
+            
+            # 3. Portfolio Protection Anchor (เฉพาะเมื่อมี Zone ดี)
+            elif portfolio_profit <= self.portfolio_risk_threshold:
+                protection_anchor = self._analyze_protection_anchor(current_price, zones, existing_positions)
+                if protection_anchor:
+                    # เพิ่มคะแนนป้องกัน
+                    protection_anchor['priority_score'] += 50
+                    anchor_needs.append(protection_anchor)
             
             # เลือก Anchor ที่ดีที่สุด
             if anchor_needs:
@@ -199,52 +203,57 @@ class PortfolioAnchor:
                                 existing_positions: List) -> Optional[Dict]:
         """🎯 วิเคราะห์ Strategic Anchor"""
         try:
-            # หา Zone แข็งแรงที่สุดที่ไม่มี anchor อยู่แล้ว
-            strongest_zones = self.zone_analyzer.get_strongest_zones(zones, count=5)
+            # ใช้ Zone Analyzer โดยตรง - เลือก Zone ที่แข็งแรงที่สุด
+            all_zones = []
             
-            candidate_anchors = []
+            # รวม Support และ Resistance zones
+            for zone in zones.get('support', []):
+                distance = abs(current_price - zone['price'])
+                if distance <= 100.0:  # ขยายระยะให้หา Zone ได้มากขึ้น
+                    all_zones.append({
+                        'direction': 'buy',
+                        'zone': zone,
+                        'distance': distance,
+                        'strength': zone['strength'],
+                        'score': zone['strength'] - (distance * 0.2)  # ลดผลกระทบของระยะทาง
+                    })
             
-            # ตรวจสอบ Support Zones
-            if self.support_anchor_enabled:
-                for zone in strongest_zones.get('support', []):
-                    if not self._has_anchor_near_price(zone['price']):
-                        distance = current_price - zone['price']
-                        if 20 <= distance <= 80 and zone['strength'] >= 70:
-                            candidate_anchors.append({
-                                'direction': 'buy',
-                                'zone': zone,
-                                'distance': distance,
-                                'score': zone['strength']
-                            })
+            for zone in zones.get('resistance', []):
+                distance = abs(current_price - zone['price'])
+                if distance <= 100.0:  # ขยายระยะให้หา Zone ได้มากขึ้น
+                    all_zones.append({
+                        'direction': 'sell',
+                        'zone': zone,
+                        'distance': distance,
+                        'strength': zone['strength'],
+                        'score': zone['strength'] - (distance * 0.2)  # ลดผลกระทบของระยะทาง
+                    })
             
-            # ตรวจสอบ Resistance Zones
-            if self.resistance_anchor_enabled:
-                for zone in strongest_zones.get('resistance', []):
-                    if not self._has_anchor_near_price(zone['price']):
-                        distance = zone['price'] - current_price
-                        if 20 <= distance <= 80 and zone['strength'] >= 70:
-                            candidate_anchors.append({
-                                'direction': 'sell',
-                                'zone': zone,
-                                'distance': distance,
-                                'score': zone['strength']
-                            })
-            
-            # เลือกตัวที่ดีที่สุด
-            if candidate_anchors:
-                best_candidate = max(candidate_anchors, key=lambda x: x['score'])
-                # คำนวณ lot size จาก account balance
-                calculated_lot = self._calculate_lot_size_from_balance()
+            # เรียงตาม Zone Strength (ความแข็งแรงสำคัญที่สุด)
+            if all_zones:
+                all_zones.sort(key=lambda x: x['strength'], reverse=True)
+                best_candidate = all_zones[0]
                 
-                return {
-                    'direction': best_candidate['direction'],
-                    'zone': best_candidate['zone'],
-                    'lot_size': calculated_lot,
-                    'reason': f'Strategic Anchor at strong {best_candidate["zone"]["type"]}',
-                    'priority_score': best_candidate['score'],
-                    'anchor_type': 'strategic'
-                }
+                # ออก Anchor เฉพาะ Zone ที่แข็งแรงพอ
+                if best_candidate['strength'] >= 40:  # ลดเกณฑ์ให้หา Zone ได้ง่ายขึ้น
+                    # คำนวณ lot size จาก account balance
+                    calculated_lot = self._calculate_lot_size_from_balance()
+                    
+                    logger.info(f"⚓ Strategic anchor: {best_candidate['zone']['type']} at {best_candidate['zone']['price']:.2f} "
+                               f"(Strength: {best_candidate['strength']:.1f}, Distance: {best_candidate['distance']:.1f})")
+                    
+                    return {
+                        'direction': best_candidate['direction'],
+                        'zone': best_candidate['zone'],
+                        'lot_size': calculated_lot,
+                        'reason': f'Strategic Anchor at strong {best_candidate["zone"]["type"]} (Strength: {best_candidate["strength"]:.1f})',
+                        'priority_score': best_candidate['strength'],  # ใช้ strength เป็นคะแนนหลัก
+                        'anchor_type': 'strategic'
+                    }
+                else:
+                    logger.debug(f"⚓ Best zone strength {best_candidate['strength']:.1f} too weak for anchor")
             
+            logger.debug("⚓ No suitable strategic anchor zones found")
             return None
             
         except Exception as e:
