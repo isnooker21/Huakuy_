@@ -45,6 +45,184 @@ class SmartEntrySystem:
         self.breakout_entries = True      # เปิด Breakout entries เพื่อความสมดุล
         self.force_balance = True         # บังคับให้เปิดไม้ทั้งสองฝั่ง
         
+        # 🎯 Zone-Based Balance Strategy (ใหม่)
+        self.zone_balance_enabled = True  # เปิดระบบเติมไม้ตาม Zone
+        self.min_zone_strength_for_balance = 70  # ความแข็งแกร่งขั้นต่ำสำหรับเติมไม้
+        self.max_positions_per_side = 5  # จำนวนไม้สูงสุดต่อฝั่ง
+        self.balance_ratio_threshold = 0.3  # อัตราส่วนขั้นต่ำ (30% ของฝั่งตรงข้าม)
+        self.position_distribution_enabled = True  # เปิดระบบกระจายไม้
+        self.min_distance_between_positions = 10.0  # ระยะห่างขั้นต่ำระหว่างไม้ (pips)
+        
+    def analyze_position_balance(self, existing_positions: List = None) -> Dict:
+        """📊 วิเคราะห์ความสมดุลของไม้"""
+        try:
+            if not existing_positions:
+                return {
+                    'buy_count': 0,
+                    'sell_count': 0,
+                    'total_count': 0,
+                    'balance_ratio': 0.0,
+                    'needs_buy': False,
+                    'needs_sell': False,
+                    'is_balanced': True
+                }
+            
+            buy_positions = [pos for pos in existing_positions if getattr(pos, 'type', 0) == 0]
+            sell_positions = [pos for pos in existing_positions if getattr(pos, 'type', 0) == 1]
+            
+            buy_count = len(buy_positions)
+            sell_count = len(sell_positions)
+            total_count = buy_count + sell_count
+            
+            # คำนวณอัตราส่วน
+            if total_count > 0:
+                buy_ratio = buy_count / total_count
+                sell_ratio = sell_count / total_count
+            else:
+                buy_ratio = 0.0
+                sell_ratio = 0.0
+            
+            # ตรวจสอบว่าต้องการเติมไม้ฝั่งไหน
+            needs_buy = sell_count > 0 and buy_ratio < self.balance_ratio_threshold
+            needs_sell = buy_count > 0 and sell_ratio < self.balance_ratio_threshold
+            is_balanced = not needs_buy and not needs_sell
+            
+            logger.info(f"📊 Position Balance Analysis:")
+            logger.info(f"   BUY: {buy_count} ({buy_ratio:.1%})")
+            logger.info(f"   SELL: {sell_count} ({sell_ratio:.1%})")
+            logger.info(f"   Needs BUY: {needs_buy}, Needs SELL: {needs_sell}")
+            
+            return {
+                'buy_count': buy_count,
+                'sell_count': sell_count,
+                'total_count': total_count,
+                'buy_ratio': buy_ratio,
+                'sell_ratio': sell_ratio,
+                'needs_buy': needs_buy,
+                'needs_sell': needs_sell,
+                'is_balanced': is_balanced
+            }
+            
+        except Exception as e:
+            logger.error(f"❌ Error analyzing position balance: {e}")
+            return {
+                'buy_count': 0,
+                'sell_count': 0,
+                'total_count': 0,
+                'balance_ratio': 0.0,
+                'needs_buy': False,
+                'needs_sell': False,
+                'is_balanced': True
+            }
+    
+    def check_position_distribution(self, new_price: float, existing_positions: List = None) -> bool:
+        """🔍 ตรวจสอบการกระจายตัวของไม้"""
+        try:
+            if not existing_positions or not self.position_distribution_enabled:
+                return True
+            
+            # ตรวจสอบระยะห่างระหว่างไม้
+            for pos in existing_positions:
+                pos_price = getattr(pos, 'price_open', 0)
+                if pos_price > 0:
+                    distance = abs(new_price - pos_price) * 10000  # แปลงเป็น pips
+                    if distance < self.min_distance_between_positions:
+                        logger.info(f"⚠️ Position too close: {distance:.1f} pips < {self.min_distance_between_positions} pips")
+                        return False
+            
+            return True
+            
+        except Exception as e:
+            logger.error(f"❌ Error checking position distribution: {e}")
+            return True
+
+    def find_zone_balance_opportunity(self, symbol: str, current_price: float, zones: Dict[str, List[Dict]], 
+                                     existing_positions: List = None) -> Optional[Dict]:
+        """🎯 หาโอกาสเติมไม้ตาม Zone เพื่อความสมดุล"""
+        try:
+            if not self.zone_balance_enabled:
+                return None
+            
+            # วิเคราะห์ความสมดุลของไม้
+            balance_analysis = self.analyze_position_balance(existing_positions)
+            
+            if balance_analysis['is_balanced']:
+                logger.info("✅ Positions are balanced - no need to add more")
+                return None
+            
+            # หา Zone ที่เหมาะสมสำหรับเติมไม้
+            if balance_analysis['needs_buy']:
+                # ต้องการเติม BUY - หา Support Zones
+                support_zones = zones.get('support', [])
+                best_zone = self._find_best_zone_for_balance(support_zones, current_price, 'buy')
+                
+                if best_zone:
+                    # ตรวจสอบการกระจายตัว
+                    if self.check_position_distribution(best_zone['price'], existing_positions):
+                        return {
+                            'direction': 'buy',
+                            'zone': best_zone,
+                            'reason': f"Zone Balance: Add BUY at Support {best_zone['price']:.5f}",
+                            'zone_strength': best_zone['strength'],
+                            'zone_type': 'support'
+                        }
+            
+            elif balance_analysis['needs_sell']:
+                # ต้องการเติม SELL - หา Resistance Zones
+                resistance_zones = zones.get('resistance', [])
+                best_zone = self._find_best_zone_for_balance(resistance_zones, current_price, 'sell')
+                
+                if best_zone:
+                    # ตรวจสอบการกระจายตัว
+                    if self.check_position_distribution(best_zone['price'], existing_positions):
+                        return {
+                            'direction': 'sell',
+                            'zone': best_zone,
+                            'reason': f"Zone Balance: Add SELL at Resistance {best_zone['price']:.5f}",
+                            'zone_strength': best_zone['strength'],
+                            'zone_type': 'resistance'
+                        }
+            
+            return None
+            
+        except Exception as e:
+            logger.error(f"❌ Error finding zone balance opportunity: {e}")
+            return None
+    
+    def _find_best_zone_for_balance(self, zones: List[Dict], current_price: float, direction: str) -> Optional[Dict]:
+        """🔍 หา Zone ที่ดีที่สุดสำหรับเติมไม้"""
+        try:
+            if not zones:
+                return None
+            
+            # กรอง Zone ที่แข็งแกร่งพอ
+            strong_zones = [zone for zone in zones if zone.get('strength', 0) >= self.min_zone_strength_for_balance]
+            
+            if not strong_zones:
+                logger.info(f"⚠️ No strong zones found for {direction} (min strength: {self.min_zone_strength_for_balance})")
+                return None
+            
+            # หา Zone ที่ใกล้ราคาปัจจุบันที่สุด
+            best_zone = None
+            min_distance = float('inf')
+            
+            for zone in strong_zones:
+                zone_price = zone.get('price', 0)
+                if zone_price > 0:
+                    distance = abs(current_price - zone_price)
+                    if distance < min_distance:
+                        min_distance = distance
+                        best_zone = zone
+            
+            if best_zone:
+                logger.info(f"🎯 Best zone for {direction}: {best_zone['price']:.5f} (strength: {best_zone['strength']}, distance: {min_distance:.5f})")
+            
+            return best_zone
+            
+        except Exception as e:
+            logger.error(f"❌ Error finding best zone for balance: {e}")
+            return None
+
     def analyze_entry_opportunity(self, symbol: str, current_price: float, zones: Dict[str, List[Dict]], 
                                 existing_positions: List = None) -> Optional[Dict]:
         """🔍 วิเคราะห์โอกาสเข้าไม้"""
@@ -84,6 +262,26 @@ class SmartEntrySystem:
                 balance_ops = self._analyze_balance_entries(current_price, zones, existing_positions)
                 entry_opportunities.extend(balance_ops)
             
+            # 🎯 Zone-Based Balance Strategy (ใหม่)
+            if self.zone_balance_enabled and existing_positions:
+                zone_balance_ops = self.find_zone_balance_opportunity(symbol, current_price, zones, existing_positions)
+                if zone_balance_ops:
+                    # คำนวณ lot size สำหรับ Zone Balance entry
+                    lot_size = self._calculate_lot_size(zone_balance_ops['zone_strength'], is_balance_entry=True)
+                    
+                    # แปลงเป็นรูปแบบเดียวกับ entry_opportunities
+                    balance_entry = {
+                        'direction': zone_balance_ops['direction'],
+                        'entry_price': zone_balance_ops['zone']['price'],
+                        'zone': zone_balance_ops['zone'],
+                        'reason': zone_balance_ops['reason'],
+                        'priority_score': zone_balance_ops['zone_strength'] * 1.2,  # ให้คะแนนสูงกว่า
+                        'zone_type': zone_balance_ops['zone_type'],
+                        'lot_size': lot_size
+                    }
+                    entry_opportunities.append(balance_entry)
+                    logger.info(f"🎯 Zone Balance Opportunity: {balance_entry['direction']} at {balance_entry['entry_price']:.5f}")
+            
             # เลือกโอกาสที่ดีที่สุด
             if entry_opportunities:
                 best_opportunity = max(entry_opportunities, key=lambda x: x['priority_score'])
@@ -106,7 +304,7 @@ class SmartEntrySystem:
             for zone in zones.get('resistance', []):
                 if current_price > zone['price'] + 3.0:  # Breakout ขึ้น 3 จุด (แม่นยำขึ้น)
                     if self._is_valid_entry_zone(zone, current_price):
-                        lot_size = self._calculate_lot_size(zone['strength'])
+                        lot_size = self._calculate_lot_size(zone['strength'], is_balance_entry=False)
                         priority_score = self._calculate_priority_score(zone, 0, 'buy')
                         
                         opportunities.append({
@@ -124,7 +322,7 @@ class SmartEntrySystem:
             for zone in zones.get('support', []):
                 if current_price < zone['price'] - 3.0:  # Breakout ลง 3 จุด (แม่นยำขึ้น)
                     if self._is_valid_entry_zone(zone, current_price):
-                        lot_size = self._calculate_lot_size(zone['strength'])
+                        lot_size = self._calculate_lot_size(zone['strength'], is_balance_entry=False)
                         priority_score = self._calculate_priority_score(zone, 0, 'sell')
                         
                         opportunities.append({
@@ -160,7 +358,7 @@ class SmartEntrySystem:
                     distance = abs(current_price - zone['price'])
                     if distance <= self.max_zone_distance:
                         if self._is_valid_entry_zone(zone, current_price):
-                            lot_size = self._calculate_lot_size(zone['strength'])
+                            lot_size = self._calculate_lot_size(zone['strength'], is_balance_entry=False)
                             priority_score = self._calculate_priority_score(zone, distance, 'buy') + 20  # เพิ่มคะแนนสำหรับ balance
                             
                             opportunities.append({
@@ -181,7 +379,7 @@ class SmartEntrySystem:
                     distance = abs(current_price - zone['price'])
                     if distance <= self.max_zone_distance:
                         if self._is_valid_entry_zone(zone, current_price):
-                            lot_size = self._calculate_lot_size(zone['strength'])
+                            lot_size = self._calculate_lot_size(zone['strength'], is_balance_entry=False)
                             priority_score = self._calculate_priority_score(zone, distance, 'sell') + 20  # เพิ่มคะแนนสำหรับ balance
                             
                             opportunities.append({
@@ -215,7 +413,7 @@ class SmartEntrySystem:
                 if current_price <= zone['price'] + 5.0 and distance <= self.max_zone_distance:
                     # ตรวจสอบเงื่อนไขอื่นๆ
                     if self._is_valid_entry_zone(zone, current_price):
-                        lot_size = self._calculate_lot_size(zone['strength'])
+                        lot_size = self._calculate_lot_size(zone['strength'], is_balance_entry=False)
                         priority_score = self._calculate_priority_score(zone, distance, 'sell')
                         
                         opportunities.append({
@@ -248,7 +446,7 @@ class SmartEntrySystem:
                 if current_price >= zone['price'] - 5.0 and distance <= self.max_zone_distance:
                     # ตรวจสอบเงื่อนไขอื่นๆ
                     if self._is_valid_entry_zone(zone, current_price):
-                        lot_size = self._calculate_lot_size(zone['strength'])
+                        lot_size = self._calculate_lot_size(zone['strength'], is_balance_entry=False)
                         priority_score = self._calculate_priority_score(zone, distance, 'buy')
                         
                         opportunities.append({
@@ -288,13 +486,20 @@ class SmartEntrySystem:
             logger.error(f"❌ Error validating entry zone: {e}")
             return False
     
-    def _calculate_lot_size(self, zone_strength: float) -> float:
+    def _calculate_lot_size(self, zone_strength: float, is_balance_entry: bool = False) -> float:
         """📊 คำนวณ Lot Size ตาม Zone Strength และ Account Balance"""
         try:
             if self.use_balance_calculation:
-                return self._calculate_lot_size_from_balance(zone_strength)
+                lot_size = self._calculate_lot_size_from_balance(zone_strength)
             else:
-                return self._calculate_lot_size_from_strength(zone_strength)
+                lot_size = self._calculate_lot_size_from_strength(zone_strength)
+            
+            # สำหรับ Zone Balance entries ให้ใช้ lot size เล็กกว่า
+            if is_balance_entry:
+                lot_size *= 0.5  # ลดลง 50%
+                lot_size = max(self.min_lot_size, lot_size)  # จำกัดไม่ให้ต่ำกว่า min_lot_size
+            
+            return lot_size
                 
         except Exception as e:
             logger.error(f"❌ Error calculating lot size: {e}")
@@ -484,13 +689,16 @@ class SmartEntrySystem:
                 order_type = mt5.ORDER_TYPE_SELL
                 action = mt5.TRADE_ACTION_DEAL
             
+            # ตรวจสอบว่าเป็น Zone Balance entry หรือไม่
+            is_balance_entry = entry_plan.get('reason', '').startswith('Zone Balance')
+            
             # สร้าง request
             request = {
                 "action": action,
                 "symbol": symbol,
                 "volume": lot_size,
                 "type": order_type,
-                "comment": f"SmartEntry",
+                "comment": f"SmartEntry{'Balance' if is_balance_entry else ''}",
                 "type_time": mt5.ORDER_TIME_GTC,
                 "magic": 123456
             }
