@@ -412,7 +412,7 @@ class SimpleBreakoutTradingSystemGUI:
                 
         else:
             raise Exception(f"Failed to check status: {status_response.status_code}")
-        
+    
     def _get_current_candle(self) -> Optional[CandleData]:
         """Get current candle data (M1 for general use)"""
         try:
@@ -1080,15 +1080,15 @@ class SimpleBreakoutTradingSystemGUI:
                     sw_ok, _ = self.hedge_pairing_closer._sw_filter_check(mock_position, positions)
                     if sw_ok:
                         entry_opportunity = self.smart_entry_system.analyze_entry_opportunity(
-                            current_price, zones, positions
+                            self.actual_symbol, current_price, zones, positions
                         )
                 else:
                     entry_opportunity = self.smart_entry_system.analyze_entry_opportunity(
-                        current_price, zones, positions
+                        self.actual_symbol, current_price, zones, positions
                     )
             except Exception as _:
                 entry_opportunity = self.smart_entry_system.analyze_entry_opportunity(
-                    current_price, zones, positions
+                    self.actual_symbol, current_price, zones, positions
                 )
             
             if entry_opportunity:
@@ -1110,15 +1110,15 @@ class SimpleBreakoutTradingSystemGUI:
                     sw_ok, _ = self.hedge_pairing_closer._sw_filter_check(mock_position, positions)
                     if sw_ok:
                         anchor_need = self.portfolio_anchor.analyze_anchor_needs(
-                            current_price, portfolio_profit, zones, positions
+                            self.actual_symbol, current_price, portfolio_profit, zones, positions
                         )
                 else:
                     anchor_need = self.portfolio_anchor.analyze_anchor_needs(
-                        current_price, portfolio_profit, zones, positions
+                        self.actual_symbol, current_price, portfolio_profit, zones, positions
                     )
             except Exception as _:
                 anchor_need = self.portfolio_anchor.analyze_anchor_needs(
-                    current_price, portfolio_profit, zones, positions
+                    self.actual_symbol, current_price, portfolio_profit, zones, positions
                 )
             
             if anchor_need:

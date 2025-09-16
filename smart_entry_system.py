@@ -12,7 +12,7 @@ class SmartEntrySystem:
     def __init__(self, mt5_connection, zone_analyzer):
         self.mt5_connection = mt5_connection
         self.zone_analyzer = zone_analyzer
-        self.symbol = "XAUUSD"
+        self.symbol = None  # จะถูกตั้งค่าจาก main system
         
         # Entry Parameters
         self.min_zone_strength = 50  # ความแข็งแรงขั้นต่ำ
@@ -43,10 +43,11 @@ class SmartEntrySystem:
         self.resistance_sell_enabled = True  # Sell ที่ Resistance
         self.breakout_entries = False     # Breakout entries (ปิดไว้ก่อน)
         
-    def analyze_entry_opportunity(self, current_price: float, zones: Dict[str, List[Dict]], 
+    def analyze_entry_opportunity(self, symbol: str, current_price: float, zones: Dict[str, List[Dict]], 
                                 existing_positions: List = None) -> Optional[Dict]:
         """🔍 วิเคราะห์โอกาสเข้าไม้"""
         try:
+            self.symbol = symbol  # ตั้งค่า symbol ที่ถูกต้อง
             # รีเซ็ต daily counter
             self._reset_daily_counter()
             

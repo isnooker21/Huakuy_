@@ -12,7 +12,7 @@ class PortfolioAnchor:
     def __init__(self, mt5_connection, zone_analyzer):
         self.mt5_connection = mt5_connection
         self.zone_analyzer = zone_analyzer
-        self.symbol = "XAUUSD"
+        self.symbol = None  # จะถูกตั้งค่าจาก main system
         
         # Anchor Parameters
         self.max_anchor_positions = 4  # สูงสุด 4 ไม้ anchor
@@ -35,10 +35,11 @@ class PortfolioAnchor:
         self.last_anchor_check = 0
         self.anchor_check_interval = 300  # ตรวจสอบทุก 5 นาที
         
-    def analyze_anchor_needs(self, current_price: float, portfolio_profit: float, 
+    def analyze_anchor_needs(self, symbol: str, current_price: float, portfolio_profit: float, 
                            zones: Dict[str, List[Dict]], existing_positions: List) -> Optional[Dict]:
         """🔍 วิเคราะห์ความจำเป็นในการสร้าง Anchor"""
         try:
+            self.symbol = symbol  # ตั้งค่า symbol ที่ถูกต้อง
             # ตรวจสอบเวลา
             current_time = datetime.now().timestamp()
             if current_time - self.last_anchor_check < self.anchor_check_interval:
