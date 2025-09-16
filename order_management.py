@@ -209,8 +209,8 @@ class OrderManager:
                 logger.info(f"💎 BROKER DIRECT: {len(existing_tickets)} total positions from broker")
                 logger.info(f"🔍 Broker tickets sample: {existing_tickets[:5]}")
                 
-                # 🚨 BYPASS VALIDATION: ถ้ามี positions ใน MT5 → ให้ผ่านทุกตัว
-                logger.info(f"🚀 BYPASS VALIDATION: Allowing all {len(positions)} positions to close")
+                # ✅ VALIDATION: ตรวจสอบ positions ใน MT5 แต่ยังต้องผ่าน ZERO LOSS POLICY
+                logger.info(f"✅ VALIDATION: Found {len(existing_tickets)} positions from broker")
                 valid_positions = positions  # ใช้ทุกตัวที่ส่งมา
             else:
                 # If we can't get positions, assume all exist (fallback)
@@ -239,18 +239,19 @@ class OrderManager:
             logger.info(f"   Safety Buffer: ${safety_buffer:.2f}")
             logger.info(f"   Final Expected: ${net_profit_before_close - safety_buffer:.2f}")
             
-            # 🚨 STRICT ZERO LOSS CHECK
+            # 🚨 STRICT ZERO LOSS CHECK - บังคับตรวจสอบทุกครั้ง
             if net_profit_before_close < safety_buffer:
                 logger.warning(f"🚫 ZERO LOSS POLICY: Rejecting close - would result in loss")
                 logger.warning(f"   💰 Current Profit: ${net_profit_before_close:.2f}")
                 logger.warning(f"   🛡️ Required Buffer: ${safety_buffer:.2f}")
                 logger.warning(f"   📊 Positions: {len(valid_positions)}")
                 logger.warning(f"   📈 Total Volume: {sum(getattr(pos, 'volume', 0.01) for pos in valid_positions):.2f}")
+                logger.warning(f"   🚫 FORCE REJECT: No bypass allowed for loss-making positions")
                 return CloseResult(
                     success=False,
                     closed_tickets=[],
                     total_profit=0.0,
-                    error_message=f"Zero Loss Policy: Insufficient profit (${net_profit_before_close:.2f} < ${safety_buffer:.2f})"
+                    error_message=f"Zero Loss Policy: Insufficient profit (${net_profit_before_close:.2f} < ${safety_buffer:.2f}) - FORCE REJECT"
                 )
             else:
                 logger.info(f"✅ ZERO LOSS POLICY: APPROVED for closing")
@@ -306,6 +307,16 @@ class OrderManager:
                     success=False,
                     closed_tickets=[],
                     error_message=f"Spread check rejected - group losing {group_profit_percentage:.2f}%"
+                )
+            
+            # 🚫 ZERO LOSS POLICY: Double check before closing
+            if total_group_profit < 0:
+                logger.warning(f"🚫 ZERO LOSS POLICY: Group profit is negative (${total_group_profit:.2f})")
+                logger.warning(f"   🚫 FORCE REJECT: Cannot close loss-making group")
+                return CloseResult(
+                    success=False,
+                    closed_tickets=[],
+                    error_message=f"Zero Loss Policy: Group profit is negative (${total_group_profit:.2f}) - FORCE REJECT"
                 )
             
             # ✅ STEP 3: Execute raw group closing via MT5Connection
