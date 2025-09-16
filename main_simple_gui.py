@@ -326,6 +326,9 @@ class SimpleBreakoutTradingSystemGUI:
                 # Process Simple Breakout for all timeframes
                 self._process_simple_breakout(current_candle)
                 
+                # 🚀 Immediate Take Profit Check (ใหม่) - ตรวจสอบ TP ทันที
+                self._check_immediate_take_profit(current_candle)
+                
                 # Position Management (Keep original logic) - Throttle to every 20 seconds (เพิ่มจาก 10)
                 if not hasattr(self, '_last_position_management_time'):
                     self._last_position_management_time = 0
@@ -361,11 +364,11 @@ class SimpleBreakoutTradingSystemGUI:
                     threading.Thread(target=position_mgmt_worker, daemon=True).start()
                     self._last_position_management_time = current_time
                 
-                # Dynamic Closing (Keep original logic) - Throttle to every 15 seconds (เพิ่มจาก 8)
+                # Dynamic Closing (Keep original logic) - Throttle to every 5 seconds (เร็วขึ้น)
                 if not hasattr(self, '_last_dynamic_closing_time'):
                     self._last_dynamic_closing_time = 0
                 
-                if current_time - self._last_dynamic_closing_time >= 15:  # Every 15 seconds (เพิ่มขึ้น)
+                if current_time - self._last_dynamic_closing_time >= 5:  # Every 5 seconds (เร็วขึ้น)
                     # เรียกใน background thread เพื่อไม่ให้บล็อก main loop
                     def dynamic_closing_worker():
                         try:
@@ -630,6 +633,68 @@ class SimpleBreakoutTradingSystemGUI:
             
         except Exception as e:
             logger.error(f"❌ Error in simple breakout processing: {e}")
+    
+    def _check_immediate_take_profit(self, current_candle: CandleData):
+        """🚀 ตรวจสอบ Take Profit ทันที - ไม่รอ 15 วินาที"""
+        try:
+            if not self.order_manager:
+                return
+            
+            # ดึงข้อมูล Position จาก MT5
+            positions = self.order_manager.sync_positions_from_mt5()
+            if not positions:
+                return
+            
+            current_price = current_candle.close
+            positions_to_close = []
+            
+            for pos in positions:
+                try:
+                    # ตรวจสอบ Take Profit
+                    tp_price = getattr(pos, 'tp', 0)
+                    if tp_price > 0:
+                        pos_type = getattr(pos, 'type', 0)
+                        pos_profit = getattr(pos, 'profit', 0)
+                        
+                        # ตรวจสอบว่าไม้ถึง TP หรือไม่
+                        should_close = False
+                        if pos_type == 0:  # BUY
+                            if current_price >= tp_price:
+                                should_close = True
+                                logger.info(f"🎯 BUY TP reached: {current_price:.5f} >= {tp_price:.5f} (Profit: ${pos_profit:.2f})")
+                        elif pos_type == 1:  # SELL
+                            if current_price <= tp_price:
+                                should_close = True
+                                logger.info(f"🎯 SELL TP reached: {current_price:.5f} <= {tp_price:.5f} (Profit: ${pos_profit:.2f})")
+                        
+                        if should_close:
+                            positions_to_close.append(pos)
+                            
+                except Exception as e:
+                    logger.error(f"❌ Error checking TP for position: {e}")
+                    continue
+            
+            # ปิดไม้ที่ถึง TP แล้ว
+            if positions_to_close:
+                logger.info(f"🚀 IMMEDIATE TP CLOSING: {len(positions_to_close)} positions reached TP")
+                for pos in positions_to_close:
+                    try:
+                        ticket = getattr(pos, 'ticket', 0)
+                        pos_type = getattr(pos, 'type', 0)
+                        pos_profit = getattr(pos, 'profit', 0)
+                        
+                        # ปิดไม้ทันที
+                        result = self.order_manager.close_position(ticket)
+                        if result.success:
+                            logger.info(f"✅ IMMEDIATE TP CLOSED: Ticket {ticket} (Type: {'BUY' if pos_type == 0 else 'SELL'}, Profit: ${pos_profit:.2f})")
+                        else:
+                            logger.warning(f"⚠️ Failed to close TP position {ticket}: {result.error_message}")
+                            
+                    except Exception as e:
+                        logger.error(f"❌ Error closing TP position: {e}")
+                        
+        except Exception as e:
+            logger.error(f"❌ Error in immediate TP check: {e}")
     
     def _can_trade_timeframe(self, timeframe: str) -> bool:
         """Check if we can trade this timeframe (one trade per candle rule) - ตรวจสอบแท่งเทียนปิดจริง"""
