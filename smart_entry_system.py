@@ -30,6 +30,7 @@ class SmartEntrySystem:
         
         # Risk Management
         self.max_risk_per_trade = 0.02  # 2% ของบัญชี
+        self.use_balance_calculation = True  # ใช้การคำนวณจาก balance
         self.max_daily_trades = 15
         self.max_positions_per_zone = 1  # 1 ไม้ต่อ Zone
         
@@ -172,7 +173,63 @@ class SmartEntrySystem:
             return False
     
     def _calculate_lot_size(self, zone_strength: float) -> float:
-        """📊 คำนวณ Lot Size ตาม Zone Strength"""
+        """📊 คำนวณ Lot Size ตาม Zone Strength และ Account Balance"""
+        try:
+            if self.use_balance_calculation:
+                return self._calculate_lot_size_from_balance(zone_strength)
+            else:
+                return self._calculate_lot_size_from_strength(zone_strength)
+                
+        except Exception as e:
+            logger.error(f"❌ Error calculating lot size: {e}")
+            return self.min_lot_size
+    
+    def _calculate_lot_size_from_balance(self, zone_strength: float) -> float:
+        """💰 คำนวณ lot size จาก account balance"""
+        try:
+            # ดึงข้อมูล account
+            account_info = mt5.account_info()
+            if not account_info:
+                logger.warning("❌ Cannot get account info, using default lot size")
+                return self.min_lot_size
+            
+            balance = account_info.balance
+            equity = account_info.equity
+            
+            # ใช้ equity หรือ balance ที่น้อยกว่า
+            available_capital = min(balance, equity)
+            
+            # คำนวณ risk amount ตาม zone strength
+            # Zone แข็งแรง = เสี่ยงมากขึ้น (แต่ไม่เกิน 2%)
+            if zone_strength >= 85:
+                risk_percent = 2.0  # Very strong zone = 2%
+            elif zone_strength >= 70:
+                risk_percent = 1.5  # Strong zone = 1.5%
+            elif zone_strength >= 50:
+                risk_percent = 1.0  # Medium zone = 1%
+            else:
+                risk_percent = 0.5  # Weak zone = 0.5%
+            
+            risk_amount = available_capital * (risk_percent / 100.0)
+            
+            # คำนวณ lot size (สมมติ 1 lot = $1000 risk สำหรับ XAUUSD)
+            calculated_lot = risk_amount / 1000.0
+            
+            # จำกัด lot size สำหรับทุนเล็ก
+            min_lot = 0.01
+            max_lot = min(0.10, available_capital / 2000.0)  # ไม่เกิน balance/2000
+            final_lot = max(min_lot, min(calculated_lot, max_lot))
+            
+            logger.info(f"💰 Smart Entry lot: Balance=${balance:.0f}, Zone={zone_strength:.1f}, Risk={risk_percent}%, Lot={final_lot:.2f}")
+            
+            return round(final_lot, 2)
+            
+        except Exception as e:
+            logger.error(f"❌ Error calculating lot from balance: {e}")
+            return self.min_lot_size
+    
+    def _calculate_lot_size_from_strength(self, zone_strength: float) -> float:
+        """📊 คำนวณ Lot Size ตาม Zone Strength (วิธีเดิม)"""
         try:
             # กำหนดหมวดหมู่ความแข็งแรง
             if zone_strength < 50:
