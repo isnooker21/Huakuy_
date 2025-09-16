@@ -310,6 +310,10 @@ class PortfolioAnchor:
             # ส่ง order
             result = mt5.order_send(request)
             
+            if result is None:
+                logger.error(f"❌ Anchor creation failed: MT5 order_send returned None")
+                return None
+            
             if result.retcode == mt5.TRADE_RETCODE_DONE:
                 ticket = result.order
                 
@@ -329,7 +333,7 @@ class PortfolioAnchor:
                 
                 return ticket
             else:
-                logger.error(f"❌ Anchor creation failed: {result.comment} (Code: {result.retcode})")
+                logger.error(f"❌ Anchor creation failed: {getattr(result, 'comment', 'Unknown error')} (Code: {getattr(result, 'retcode', 'Unknown')})")
                 return None
                 
         except Exception as e:
