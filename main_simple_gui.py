@@ -1065,10 +1065,30 @@ class SimpleBreakoutTradingSystemGUI:
             account_info = self.mt5_connection.get_account_info()
             portfolio_profit = sum(pos.profit for pos in positions) if positions else 0
             
-            # 1. Smart Entry System
-            entry_opportunity = self.smart_entry_system.analyze_entry_opportunity(
-                current_price, zones, positions
-            )
+            # 1. Smart Entry System (respect SW Filter)
+            entry_opportunity = None
+            try:
+                # Build a mock position with current price for SW filter
+                if hasattr(self, 'hedge_pairing_closer') and self.hedge_pairing_closer:
+                    mock_position = type('MockPosition', (), {
+                        'price': current_price,
+                        'price_open': current_price,
+                        'type': 0,  # direction decided later
+                        'volume': 0.01
+                    })()
+                    sw_ok, _ = self.hedge_pairing_closer._sw_filter_check(mock_position, positions)
+                    if sw_ok:
+                        entry_opportunity = self.smart_entry_system.analyze_entry_opportunity(
+                            current_price, zones, positions
+                        )
+                else:
+                    entry_opportunity = self.smart_entry_system.analyze_entry_opportunity(
+                        current_price, zones, positions
+                    )
+            except Exception as _:
+                entry_opportunity = self.smart_entry_system.analyze_entry_opportunity(
+                    current_price, zones, positions
+                )
             
             if entry_opportunity:
                 logger.info(f"🎯 Smart Entry Opportunity: {entry_opportunity['direction']} at {current_price}")
@@ -1076,10 +1096,29 @@ class SimpleBreakoutTradingSystemGUI:
                 if ticket:
                     logger.info(f"✅ Smart Entry executed: Ticket {ticket}")
             
-            # 2. Portfolio Anchor System
-            anchor_need = self.portfolio_anchor.analyze_anchor_needs(
-                current_price, portfolio_profit, zones, positions
-            )
+            # 2. Portfolio Anchor System (respect SW Filter)
+            anchor_need = None
+            try:
+                if hasattr(self, 'hedge_pairing_closer') and self.hedge_pairing_closer:
+                    mock_position = type('MockPosition', (), {
+                        'price': current_price,
+                        'price_open': current_price,
+                        'type': 0,
+                        'volume': 0.01
+                    })()
+                    sw_ok, _ = self.hedge_pairing_closer._sw_filter_check(mock_position, positions)
+                    if sw_ok:
+                        anchor_need = self.portfolio_anchor.analyze_anchor_needs(
+                            current_price, portfolio_profit, zones, positions
+                        )
+                else:
+                    anchor_need = self.portfolio_anchor.analyze_anchor_needs(
+                        current_price, portfolio_profit, zones, positions
+                    )
+            except Exception as _:
+                anchor_need = self.portfolio_anchor.analyze_anchor_needs(
+                    current_price, portfolio_profit, zones, positions
+                )
             
             if anchor_need:
                 logger.info(f"⚓ Anchor Opportunity: {anchor_need['direction']} (Reason: {anchor_need['reason']})")

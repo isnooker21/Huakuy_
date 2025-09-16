@@ -760,6 +760,13 @@ class HedgePairingCloser:
         """
         start_time = time.time()
         try:
+            # 🚫 Exclude Portfolio Anchor positions (magic 789012) from closing candidates
+            original_count = len(positions) if positions else 0
+            positions = [pos for pos in (positions or []) if getattr(pos, 'magic', None) != 789012]
+            excluded = original_count - len(positions)
+            if excluded > 0:
+                logger.info(f"🛡️ Excluding {excluded} anchor positions from closing candidates")
+
             if len(positions) < 1:
                 logger.info("⏸️ Need at least 1 position for analysis")
                 return None
@@ -771,7 +778,7 @@ class HedgePairingCloser:
             # แสดงจำนวนไม้ทั้งหมดก่อนกรอง (เฉพาะเมื่อมีไม้)
             self.original_position_count = len(positions)
             if len(positions) > 0:
-                logger.info(f"📊 TOTAL POSITIONS: {len(positions)} positions")
+                logger.info(f"📊 TOTAL POSITIONS (ex-anchors): {len(positions)} positions")
             
             # ตรวจสอบการปิดไม้ทั้งหมดเมื่อพอร์ตเป็นบวก (เร็วขึ้น)
             account_balance = account_info.get('balance', 1000.0)
