@@ -2125,3 +2125,12 @@ class HedgePairingCloser:
 
     # ✅ Multi-Helper System - ระบบหลักสำหรับการจับคู่และไม้ช่วย
     # ระบบอื่นๆ (Advanced Pairing, Enhanced Helping, Stale Clearing) ถูกลบออกเพื่อไม่รบกวน Multi-Helper System
+
+
+def create_hedge_pairing_closer(symbol: str = "EURUSD") -> HedgePairingCloser:
+    """สร้าง HedgePairingCloser instance"""
+    try:
+        return HedgePairingCloser(symbol=symbol)
+    except Exception as e:
+        logger.error(f"❌ Failed to create HedgePairingCloser: {e}")
+        raise
