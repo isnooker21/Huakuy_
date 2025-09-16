@@ -175,38 +175,39 @@ class ZoneAnalyzer:
         try:
             pivots = []
             window = 5  # เพิ่ม window เป็น 5 bars ให้แม่นยำกว่า
+            logger.info(f"🔍 Finding pivot points from {len(rates)} bars with window={window}")
             
             for i in range(window, len(rates) - window):
                 current_high = float(rates[i]['high'])
                 current_low = float(rates[i]['low'])
                 
-            # ตรวจสอบ Support Pivot (Low) - ปรับให้หา Support ได้มากขึ้น
-            is_support_pivot = True
-            for j in range(i - window, i + window + 1):
-                if j != i and j < len(rates) and float(rates[j]['low']) < float(current_low) - 2.0:  # เพิ่ม tolerance
-                    is_support_pivot = False
-                    break
-            
-            if is_support_pivot:
-                touches = self._count_touches(rates, current_low, 'support', i)
-                if touches >= self.min_touches:
-                    # เพิ่มการวิเคราะห์ Price Action
-                    rejection_strength = self._calculate_rejection_strength(rates, i, 'support')
-                    volume_factor = self._estimate_volume_factor(rates, i)
-                    
-                    # เพิ่มคะแนนสำหรับ Support เพื่อให้หาได้มากขึ้น
-                    support_score = rejection_strength + volume_factor + (touches * 5)
-                    
-                    pivots.append({
-                        'type': 'support',
-                        'price': current_low,
-                        'touches': touches,
-                        'timestamp': float(rates[i]['time']),
-                        'index': i,
-                        'rejection_strength': rejection_strength,
-                        'volume_factor': volume_factor,
-                        'support_score': support_score
-                    })
+                # ตรวจสอบ Support Pivot (Low) - ปรับให้หา Support ได้มากขึ้น
+                is_support_pivot = True
+                for j in range(i - window, i + window + 1):
+                    if j != i and j < len(rates) and float(rates[j]['low']) < float(current_low) - 2.0:  # เพิ่ม tolerance
+                        is_support_pivot = False
+                        break
+                
+                if is_support_pivot:
+                    touches = self._count_touches(rates, current_low, 'support', i)
+                    if touches >= self.min_touches:
+                        # เพิ่มการวิเคราะห์ Price Action
+                        rejection_strength = self._calculate_rejection_strength(rates, i, 'support')
+                        volume_factor = self._estimate_volume_factor(rates, i)
+                        
+                        # เพิ่มคะแนนสำหรับ Support เพื่อให้หาได้มากขึ้น
+                        support_score = rejection_strength + volume_factor + (touches * 5)
+                        
+                        pivots.append({
+                            'type': 'support',
+                            'price': current_low,
+                            'touches': touches,
+                            'timestamp': float(rates[i]['time']),
+                            'index': i,
+                            'rejection_strength': rejection_strength,
+                            'volume_factor': volume_factor,
+                            'support_score': support_score
+                        })
                 
                 # ตรวจสอบ Resistance Pivot (High)
                 is_resistance_pivot = True
@@ -232,6 +233,7 @@ class ZoneAnalyzer:
                             'volume_factor': volume_factor
                         })
             
+            logger.info(f"🔍 Found {len(pivots)} pivot points")
             return pivots
             
         except Exception as e:
