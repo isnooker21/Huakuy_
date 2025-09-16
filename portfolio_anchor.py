@@ -17,7 +17,7 @@ class PortfolioAnchor:
         # Anchor Parameters
         self.max_anchor_positions = 4  # สูงสุด 4 ไม้ anchor
         self.min_anchor_distance = 50.0  # ระยะห่างขั้นต่ำระหว่าง anchors (points)
-        self.anchor_lot_size = 0.20  # ขนาด lot สำหรับ anchor
+        self.anchor_lot_size = 0.05  # ขนาด lot สำหรับ anchor (ลดลง)
         self.max_anchor_age_hours = 48  # อายุสูงสุดของ anchor (ชั่วโมง)
         
         # Portfolio Protection
