@@ -138,7 +138,7 @@ class ZoneAnalyzer:
                 # ตรวจสอบ Support Pivot (Low)
                 is_support_pivot = True
                 for j in range(i - window, i + window + 1):
-                    if j != i and rates[j]['low'] <= current_low:
+                    if j != i and j < len(rates) and rates[j]['low'] <= current_low:
                         is_support_pivot = False
                         break
                 
@@ -156,7 +156,7 @@ class ZoneAnalyzer:
                 # ตรวจสอบ Resistance Pivot (High)
                 is_resistance_pivot = True
                 for j in range(i - window, i + window + 1):
-                    if j != i and rates[j]['high'] >= current_high:
+                    if j != i and j < len(rates) and rates[j]['high'] >= current_high:
                         is_resistance_pivot = False
                         break
                 
@@ -185,22 +185,24 @@ class ZoneAnalyzer:
             
             # ตรวจสอบ bars หลัง pivot
             for i in range(pivot_index + 1, len(rates)):
-                if zone_type == 'support':
-                    if abs(rates[i]['low'] - price) <= tolerance:
-                        touches += 1
-                else:  # resistance
-                    if abs(rates[i]['high'] - price) <= tolerance:
-                        touches += 1
+                if i < len(rates):
+                    if zone_type == 'support':
+                        if abs(rates[i]['low'] - price) <= tolerance:
+                            touches += 1
+                    else:  # resistance
+                        if abs(rates[i]['high'] - price) <= tolerance:
+                            touches += 1
             
             # ตรวจสอบ bars ก่อน pivot (ในระยะใกล้)
             start_idx = max(0, pivot_index - 50)  # ย้อนหลัง 50 bars
             for i in range(start_idx, pivot_index):
-                if zone_type == 'support':
-                    if abs(rates[i]['low'] - price) <= tolerance:
-                        touches += 1
-                else:  # resistance
-                    if abs(rates[i]['high'] - price) <= tolerance:
-                        touches += 1
+                if i < len(rates):
+                    if zone_type == 'support':
+                        if abs(rates[i]['low'] - price) <= tolerance:
+                            touches += 1
+                    else:  # resistance
+                        if abs(rates[i]['high'] - price) <= tolerance:
+                            touches += 1
             
             return touches
             
