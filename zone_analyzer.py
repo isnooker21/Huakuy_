@@ -12,7 +12,7 @@ class ZoneAnalyzer:
     def __init__(self, mt5_connection):
         self.mt5_connection = mt5_connection
         self.symbol = None  # จะถูกตั้งค่าใน analyze_zones
-        self.timeframes = [mt5.TIMEFRAME_M5, mt5.TIMEFRAME_M15, mt5.TIMEFRAME_M30, mt5.TIMEFRAME_H1]
+        self.timeframes = [mt5.TIMEFRAME_M5]  # ใช้แค่ M5 เท่านั้น
         # ไม่ใช้ Daily timeframe เพราะมีปัญหา array comparison
         
         # Zone Detection Parameters (ปรับให้หา Support/Resistance ได้สมดุล)
@@ -20,12 +20,9 @@ class ZoneAnalyzer:
         self.zone_tolerance = 30.0  # เพิ่มความยืดหยุ่น สำหรับ XAUUSD (จาก 20.0)
         self.min_zone_strength = 10  # ลดเกณฑ์ความแข็งแรง (จาก 15) เพื่อหา Support มากขึ้น
         
-        # Multi-TF Analysis
+        # Multi-TF Analysis (ใช้แค่ M5)
         self.tf_weights = {
-            mt5.TIMEFRAME_M5: 0.1,
-            mt5.TIMEFRAME_M15: 0.2,
-            mt5.TIMEFRAME_M30: 0.3,
-            mt5.TIMEFRAME_H1: 0.4
+            mt5.TIMEFRAME_M5: 1.0  # ใช้แค่ M5 เท่านั้น
         }
         
         # Zone Strength Calculation
@@ -39,6 +36,7 @@ class ZoneAnalyzer:
             self.symbol = symbol  # ตั้งค่า symbol จาก parameter
             logger.info(f"🔍 Analyzing zones for {self.symbol} (lookback: {lookback_hours}h)")
             logger.info(f"🔧 Zone Detection Settings: tolerance={self.zone_tolerance}, min_strength={self.min_zone_strength}, min_touches={self.min_touches}")
+            logger.info(f"⏰ Timeframes: M5 ONLY (Single timeframe analysis)")
             
             support_zones = []
             resistance_zones = []
