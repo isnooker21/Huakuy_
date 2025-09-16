@@ -92,8 +92,9 @@ class ZoneAnalyzer:
                 logger.info(f"⏭️ Skipping problematic timeframe {timeframe} (Daily)")
                 return [], []
             
-            # ดึงข้อมูลราคา
+            # ดึงข้อมูลราคา - จำกัดจำนวน bars เพื่อลดเวลาประมวลผล
             bars_needed = int(lookback_hours * 60 / self._get_timeframe_minutes(timeframe))
+            bars_needed = min(bars_needed, 200)  # จำกัดสูงสุด 200 bars เพื่อลด CPU usage
             logger.debug(f"🔍 Requesting {bars_needed} bars for {timeframe} (lookback: {lookback_hours}h)")
             rates = mt5.copy_rates_from_pos(self.symbol, timeframe, 0, bars_needed)
             

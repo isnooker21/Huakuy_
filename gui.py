@@ -561,18 +561,18 @@ class TradingGUI:
                     self.root.after_idle(self.update_connection_status_light)
                     
                     # 🚀 OPTIMIZED: อัพเดทข้อมูลอื่นๆ แบบสลับกัน - ลดความถี่
-                    if update_counter % 3 == 0:  # ทุก 30 วินาที (เพิ่มจาก 20)
+                    if update_counter % 4 == 0:  # ทุก 80 วินาที (เพิ่มมากขึ้น)
                         self.root.after_idle(self.update_account_info)
                         self.root.after_idle(self.update_trading_status_data)
                     
-                    if update_counter % 4 == 0:  # ทุก 40 วินาที (เพิ่มจาก 30)
+                    if update_counter % 6 == 0:  # ทุก 120 วินาที (เพิ่มมากขึ้น)
                         self.root.after_idle(self.update_positions_display_light)
                     
-                    if update_counter % 6 == 0:  # ทุก 60 วินาที (เพิ่มจาก 30)
+                    if update_counter % 8 == 0:  # ทุก 160 วินาที (เพิ่มมากขึ้น)
                         self.root.after_idle(self.update_7d_closer_status)
                     
                     update_counter += 1
-                time.sleep(15)  # อัพเดททุก 15 วินาที (เพิ่มจาก 10)
+                time.sleep(20)  # อัพเดททุก 20 วินาที (เพิ่มจาก 15)
             except Exception as e:
                 logger.debug(f"Light update error: {str(e)}")
                 time.sleep(30)
@@ -584,7 +584,7 @@ class TradingGUI:
                 # 🚀 OPTIMIZED: อัพเดทข้อมูลใน main thread - ลดความถี่มากขึ้น
                 if not self.stop_update:  # ตรวจสอบอีกครั้ง
                     self.root.after_idle(self.safe_update_gui_data)  # ใช้ after_idle แทน after(0)
-                time.sleep(15)  # อัพเดททุก 15 วินาที (เพิ่มจาก 8 วินาที เพื่อลด GUI load)
+                time.sleep(30)  # อัพเดททุก 30 วินาที (เพิ่มจาก 15 วินาที เพื่อลด GUI load มากขึ้น)
             except Exception as e:
                 logger.error(f"เกิดข้อผิดพลาดในการอัพเดทข้อมูล: {str(e)}")
                 time.sleep(20)  # รอนานขึ้นเมื่อเกิดข้อผิดพลาด (เพิ่มจาก 15)
@@ -603,7 +603,7 @@ class TradingGUI:
                 
             # 🚀 OPTIMIZED: อัพเดทข้อมูลบัญชี (ลดความถี่มากขึ้น)
             if hasattr(self, '_last_account_update'):
-                if time.time() - self._last_account_update < 20:  # อัพเดททุก 20 วินาที (เพิ่มจาก 10)
+                if time.time() - self._last_account_update < 45:  # อัพเดททุก 45 วินาที (เพิ่มจาก 20)
                     return
             
             if self.mt5_connection.is_connected:  # ใช้ตัวแปรแทนการเรียกฟังก์ชัน
@@ -613,9 +613,9 @@ class TradingGUI:
             if self.stop_update:
                 return
                 
-            # 🚀 OPTIMIZED: อัพเดทข้อมูลพอร์ต (ลดความถี่)
+            # 🚀 OPTIMIZED: อัพเดทข้อมูลพอร์ต (ลดความถี่มากขึ้น)
             if hasattr(self, '_last_portfolio_update'):
-                if time.time() - self._last_portfolio_update < 30:  # อัพเดททุก 30 วินาที
+                if time.time() - self._last_portfolio_update < 60:  # อัพเดททุก 60 วินาที (เพิ่มจาก 30)
                     return
             else:
                 self._last_portfolio_update = 0
@@ -626,9 +626,9 @@ class TradingGUI:
             if self.stop_update:
                 return
                 
-            # 🚀 OPTIMIZED: อัพเดท Positions (ลดความถี่)
+            # 🚀 OPTIMIZED: อัพเดท Positions (ลดความถี่มากขึ้น)  
             if hasattr(self, '_last_positions_update'):
-                if time.time() - self._last_positions_update < 25:  # อัพเดททุก 25 วินาที
+                if time.time() - self._last_positions_update < 40:  # อัพเดททุก 40 วินาที (เพิ่มจาก 25)
                     return
             else:
                 self._last_positions_update = 0

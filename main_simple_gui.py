@@ -326,29 +326,86 @@ class SimpleBreakoutTradingSystemGUI:
                 # Process Simple Breakout for all timeframes
                 self._process_simple_breakout(current_candle)
                 
-                # Position Management (Keep original logic) - Throttle to every 5 seconds
+                # Position Management (Keep original logic) - Throttle to every 20 seconds (เพิ่มจาก 10)
                 if not hasattr(self, '_last_position_management_time'):
                     self._last_position_management_time = 0
                 
-                if current_time - self._last_position_management_time >= 10:  # Every 10 seconds
-                    self._handle_position_management(current_candle)
+                if current_time - self._last_position_management_time >= 20:  # Every 20 seconds (เพิ่มขึ้น)
+                    # เรียกใน background thread เพื่อไม่ให้บล็อก main loop
+                    def position_mgmt_worker():
+                        try:
+                            import signal
+                            def timeout_handler(signum, frame):
+                                raise TimeoutError("Position management timeout")
+                            
+                            # ตั้ง timeout 8 วินาที
+                            try:
+                                import platform
+                                if platform.system() != 'Windows':  # signal ไม่ทำงานดีใน Windows
+                                    signal.signal(signal.SIGALRM, timeout_handler)
+                                    signal.alarm(8)
+                            except:
+                                pass  # ถ้าใช้ signal ไม่ได้ก็ข้าม
+                            
+                            self._handle_position_management(current_candle)
+                            
+                            try:
+                                if platform.system() != 'Windows':
+                                    signal.alarm(0)  # ยกเลิก timeout
+                            except:
+                                pass
+                        except Exception as e:
+                            logger.warning(f"⚠️ Position management timeout/error: {e}")
+                    
+                    # รัน position management ใน background
+                    threading.Thread(target=position_mgmt_worker, daemon=True).start()
                     self._last_position_management_time = current_time
                 
-                # Dynamic Closing (Keep original logic) - Throttle to every 8 seconds
+                # Dynamic Closing (Keep original logic) - Throttle to every 15 seconds (เพิ่มจาก 8)
                 if not hasattr(self, '_last_dynamic_closing_time'):
                     self._last_dynamic_closing_time = 0
                 
-                if current_time - self._last_dynamic_closing_time >= 8:  # Every 8 seconds
-                    self._handle_dynamic_closing(current_candle)
+                if current_time - self._last_dynamic_closing_time >= 15:  # Every 15 seconds (เพิ่มขึ้น)
+                    # เรียกใน background thread เพื่อไม่ให้บล็อก main loop
+                    def dynamic_closing_worker():
+                        try:
+                            import signal
+                            def timeout_handler(signum, frame):
+                                raise TimeoutError("Dynamic closing timeout")
+                            
+                            # ตั้ง timeout 10 วินาที
+                            try:
+                                import platform
+                                if platform.system() != 'Windows':  # signal ไม่ทำงานดีใน Windows
+                                    signal.signal(signal.SIGALRM, timeout_handler)
+                                    signal.alarm(10)
+                            except:
+                                pass  # ถ้าใช้ signal ไม่ได้ก็ข้าม
+                            
+                            self._handle_dynamic_closing(current_candle)
+                            
+                            try:
+                                if platform.system() != 'Windows':
+                                    signal.alarm(0)  # ยกเลิก timeout
+                            except:
+                                pass
+                        except Exception as e:
+                            logger.warning(f"⚠️ Dynamic closing timeout/error: {e}")
+                    
+                    # รัน dynamic closing ใน background
+                    threading.Thread(target=dynamic_closing_worker, daemon=True).start()
                     self._last_dynamic_closing_time = current_time
                 
-                # 🎯 Smart Trading Systems - Handle every 5 minutes (เพิ่ม cooldown)
-                if current_time - getattr(self, '_last_smart_systems_time', 0) >= 300:  # 5 นาที
-                    self._handle_smart_systems()
-                    self._last_smart_systems_time = current_time
+                # 🎯 Smart Trading Systems - Handle every 10 minutes (เพิ่ม cooldown มากขึ้น)
+                if current_time - getattr(self, '_last_smart_systems_time', 0) >= 600:  # 10 นาที
+                    # ตรวจสอบว่า Smart Systems ทำงานอยู่หรือไม่ก่อนเริ่มใหม่
+                    if not hasattr(self, '_smart_systems_running') or not self._smart_systems_running:
+                        self._smart_systems_running = True
+                        self._handle_smart_systems()
+                        self._last_smart_systems_time = current_time
                 
-                # Sleep - ลดเวลาให้เหมาะสมกับการเทรดตามแท่งเทียน
-                time.sleep(0.1)  # ตรวจสอบแท่งเทียนทุก 0.1 วินาที
+                # Sleep - เพิ่มเป็น 2 วินาที เพื่อลด CPU usage
+                time.sleep(2.0)  # ตรวจสอบแท่งเทียนทุก 2 วินาที (ลด GUI freeze)
                 
             except Exception as e:
                 logger.error(f"❌ เกิดข้อผิดพลาดในลูปเทรด: {e}")
@@ -1090,16 +1147,18 @@ class SimpleBreakoutTradingSystemGUI:
                             import concurrent.futures
                             with concurrent.futures.ThreadPoolExecutor() as executor:
                                 # ส่ง Zone Analysis ไปทำใน thread pool พร้อม timeout
-                                future = executor.submit(self.zone_analyzer.analyze_zones, self.actual_symbol, 24)  # ลด lookback
+                                future = executor.submit(self.zone_analyzer.analyze_zones, self.actual_symbol, 12)  # ลด lookback เป็น 12 ชั่วโมง
                                 try:
-                                    zones = future.result(timeout=30)  # 30 วินาที timeout
+                                    zones = future.result(timeout=15)  # ลด timeout เป็น 15 วินาที
                                     zone_time = time.time() - start_time
                                     logger.info(f"🎯 Zone Analysis completed in {zone_time:.2f}s")
                                 except concurrent.futures.TimeoutError:
-                                    logger.warning("🎯 Zone analysis timeout, skipping...")
+                                    logger.warning("🎯 Zone analysis timeout (15s), skipping...")
+                                    self._smart_systems_running = False  # Reset flag
                                     return
                                 except Exception as e:
                                     logger.error(f"🎯 Zone analysis error: {e}")
+                                    self._smart_systems_running = False  # Reset flag
                                     return
                             
                             if not zones or (not zones['support'] and not zones['resistance']):
@@ -1179,6 +1238,9 @@ class SimpleBreakoutTradingSystemGUI:
                             
                         except Exception as e:
                             logger.error(f"❌ Error in smart systems worker: {e}")
+                        finally:
+                            # Reset flag เสมอ ไม่ว่าจะสำเร็จหรือ error
+                            self._smart_systems_running = False
                     
                     # เริ่ม thread และเก็บ reference
                     self._smart_systems_thread = threading.Thread(target=smart_systems_worker, daemon=True)
