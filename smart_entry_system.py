@@ -40,8 +40,8 @@ class SmartEntrySystem:
         self.last_reset_date = datetime.now().date()
         
         # Entry Logic Parameters (สลับการทำงาน)
-        self.support_buy_enabled = False   # ปิด Buy ที่ Support (เปลี่ยนเป็น Sell)
-        self.resistance_sell_enabled = False  # ปิด Sell ที่ Resistance (เปลี่ยนเป็น Buy)
+        self.support_buy_enabled = True   # เปิด Support entries (แต่เปลี่ยนเป็น Sell)
+        self.resistance_sell_enabled = True  # เปิด Resistance entries (แต่เปลี่ยนเป็น Buy)
         self.breakout_entries = True      # เปิด Breakout entries เพื่อความสมดุล
         self.force_balance = True         # บังคับให้เปิดไม้ทั้งสองฝั่ง
         
