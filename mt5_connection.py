@@ -863,6 +863,21 @@ class MT5Connection:
         logger.warning(f"ไม่สามารถตรวจสอบ filling type สำหรับ {symbol} ใช้ RETURN เป็นค่าเริ่มต้น")
         return mt5.ORDER_FILLING_RETURN
     
+    def get_current_price(self, symbol: str = None) -> Optional[float]:
+        """ดึงราคาปัจจุบัน (Bid) สำหรับ Smart Entry System"""
+        try:
+            if symbol is None:
+                symbol = self.default_symbol
+            
+            tick = mt5.symbol_info_tick(symbol)
+            if tick:
+                return tick.bid
+            return None
+            
+        except Exception as e:
+            logger.error(f"❌ Error getting current price for {symbol}: {e}")
+            return None
+    
     def get_current_tick(self, symbol: str = None) -> Optional[Dict]:
         """ดึงข้อมูล tick ปัจจุบัน รวม spread - OPTIMIZED with Caching"""
         try:
