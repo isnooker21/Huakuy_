@@ -42,7 +42,8 @@ class SmartEntrySystem:
         # Entry Logic Parameters
         self.support_buy_enabled = True   # Buy ที่ Support
         self.resistance_sell_enabled = True  # Sell ที่ Resistance
-        self.breakout_entries = False     # Breakout entries (ปิดไว้ก่อน)
+        self.breakout_entries = True      # เปิด Breakout entries เพื่อความสมดุล
+        self.force_balance = True         # บังคับให้เปิดไม้ทั้งสองฝั่ง
         
     def analyze_entry_opportunity(self, symbol: str, current_price: float, zones: Dict[str, List[Dict]], 
                                 existing_positions: List = None) -> Optional[Dict]:
@@ -73,6 +74,16 @@ class SmartEntrySystem:
                 resistance_ops = self._analyze_resistance_entries(current_price, zones.get('resistance', []))
                 entry_opportunities.extend(resistance_ops)
             
+            # ตรวจสอบ Breakout Entries (ทั้งสองฝั่ง)
+            if self.breakout_entries:
+                breakout_ops = self._analyze_breakout_entries(current_price, zones)
+                entry_opportunities.extend(breakout_ops)
+            
+            # บังคับให้เปิดไม้ทั้งสองฝั่ง (ถ้าเปิดไม้ฝั่งเดียวมากเกินไป)
+            if self.force_balance and existing_positions:
+                balance_ops = self._analyze_balance_entries(current_price, zones, existing_positions)
+                entry_opportunities.extend(balance_ops)
+            
             # เลือกโอกาสที่ดีที่สุด
             if entry_opportunities:
                 best_opportunity = max(entry_opportunities, key=lambda x: x['priority_score'])
@@ -85,6 +96,111 @@ class SmartEntrySystem:
         except Exception as e:
             logger.error(f"❌ Error analyzing entry opportunity: {e}")
             return None
+    
+    def _analyze_breakout_entries(self, current_price: float, zones: Dict[str, List[Dict]]) -> List[Dict]:
+        """🚀 วิเคราะห์โอกาส Breakout (ทั้งสองฝั่ง)"""
+        try:
+            opportunities = []
+            
+            # Breakout BUY - ราคาเหนือ Resistance
+            for zone in zones.get('resistance', []):
+                if current_price > zone['price'] + 5.0:  # Breakout ขึ้น 5 จุด
+                    if self._is_valid_entry_zone(zone, current_price):
+                        lot_size = self._calculate_lot_size(zone['strength'])
+                        priority_score = self._calculate_priority_score(zone, 0, 'buy')
+                        
+                        opportunities.append({
+                            'zone': zone,
+                            'direction': 'buy',
+                            'lot_size': lot_size,
+                            'entry_price': current_price,
+                            'zone_key': self._generate_zone_key(zone),
+                            'distance': 0,
+                            'priority_score': priority_score + 10,  # เพิ่มคะแนนสำหรับ breakout
+                            'entry_reason': f"Breakout BUY above resistance {zone['price']}"
+                        })
+            
+            # Breakout SELL - ราคาต่ำกว่า Support
+            for zone in zones.get('support', []):
+                if current_price < zone['price'] - 5.0:  # Breakout ลง 5 จุด
+                    if self._is_valid_entry_zone(zone, current_price):
+                        lot_size = self._calculate_lot_size(zone['strength'])
+                        priority_score = self._calculate_priority_score(zone, 0, 'sell')
+                        
+                        opportunities.append({
+                            'zone': zone,
+                            'direction': 'sell',
+                            'lot_size': lot_size,
+                            'entry_price': current_price,
+                            'zone_key': self._generate_zone_key(zone),
+                            'distance': 0,
+                            'priority_score': priority_score + 10,  # เพิ่มคะแนนสำหรับ breakout
+                            'entry_reason': f"Breakout SELL below support {zone['price']}"
+                        })
+            
+            return opportunities
+            
+        except Exception as e:
+            logger.error(f"❌ Error analyzing breakout entries: {e}")
+            return []
+    
+    def _analyze_balance_entries(self, current_price: float, zones: Dict[str, List[Dict]], existing_positions: List) -> List[Dict]:
+        """⚖️ วิเคราะห์โอกาสเพื่อสร้างความสมดุล (เปิดไม้ฝั่งตรงข้าม)"""
+        try:
+            opportunities = []
+            
+            # นับไม้แต่ละฝั่ง
+            buy_count = len([p for p in existing_positions if getattr(p, 'type', 0) == 0])
+            sell_count = len([p for p in existing_positions if getattr(p, 'type', 1) == 1])
+            
+            # ถ้าไม้ฝั่งใดฝั่งหนึ่งมากเกินไป ให้เปิดฝั่งตรงข้าม
+            if sell_count > buy_count + 2:  # SELL มากกว่า BUY เกิน 2 ตัว
+                # หาโอกาส BUY
+                for zone in zones.get('support', []):
+                    distance = abs(current_price - zone['price'])
+                    if distance <= self.max_zone_distance:
+                        if self._is_valid_entry_zone(zone, current_price):
+                            lot_size = self._calculate_lot_size(zone['strength'])
+                            priority_score = self._calculate_priority_score(zone, distance, 'buy') + 20  # เพิ่มคะแนนสำหรับ balance
+                            
+                            opportunities.append({
+                                'zone': zone,
+                                'direction': 'buy',
+                                'lot_size': lot_size,
+                                'entry_price': current_price,
+                                'zone_key': self._generate_zone_key(zone),
+                                'distance': distance,
+                                'priority_score': priority_score,
+                                'entry_reason': f"Balance BUY - SELL heavy ({sell_count} vs {buy_count})"
+                            })
+                            break  # หาแค่ 1 โอกาส
+            
+            elif buy_count > sell_count + 2:  # BUY มากกว่า SELL เกิน 2 ตัว
+                # หาโอกาส SELL
+                for zone in zones.get('resistance', []):
+                    distance = abs(current_price - zone['price'])
+                    if distance <= self.max_zone_distance:
+                        if self._is_valid_entry_zone(zone, current_price):
+                            lot_size = self._calculate_lot_size(zone['strength'])
+                            priority_score = self._calculate_priority_score(zone, distance, 'sell') + 20  # เพิ่มคะแนนสำหรับ balance
+                            
+                            opportunities.append({
+                                'zone': zone,
+                                'direction': 'sell',
+                                'lot_size': lot_size,
+                                'entry_price': current_price,
+                                'zone_key': self._generate_zone_key(zone),
+                                'distance': distance,
+                                'priority_score': priority_score,
+                                'entry_reason': f"Balance SELL - BUY heavy ({buy_count} vs {sell_count})"
+                            })
+                            break  # หาแค่ 1 โอกาส
+            
+            return opportunities
+            
+        except Exception as e:
+            logger.error(f"❌ Error analyzing balance entries: {e}")
+            return []
     
     def _analyze_support_entries(self, current_price: float, support_zones: List[Dict]) -> List[Dict]:
         """📈 วิเคราะห์โอกาส Buy ที่ Support"""

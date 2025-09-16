@@ -15,10 +15,10 @@ class ZoneAnalyzer:
         self.timeframes = [mt5.TIMEFRAME_M5, mt5.TIMEFRAME_M15, mt5.TIMEFRAME_M30, mt5.TIMEFRAME_H1]
         # ไม่ใช้ Daily timeframe เพราะมีปัญหา array comparison
         
-        # Zone Detection Parameters (ปรับให้แม่นยำกว่า)
+        # Zone Detection Parameters (ปรับให้หา Support/Resistance ได้สมดุล)
         self.min_touches = 1  # ลดเกณฑ์ให้หา Zone ได้มากขึ้น (จาก 2)
-        self.zone_tolerance = 15.0  # เพิ่มความยืดหยุ่น สำหรับ XAUUSD (จาก 5.0)
-        self.min_zone_strength = 20  # ลดเกณฑ์ความแข็งแรง (จาก 30)
+        self.zone_tolerance = 20.0  # เพิ่มความยืดหยุ่น สำหรับ XAUUSD (จาก 15.0)
+        self.min_zone_strength = 15  # ลดเกณฑ์ความแข็งแรง (จาก 20) เพื่อหา Support มากขึ้น
         
         # Multi-TF Analysis
         self.tf_weights = {
@@ -164,29 +164,33 @@ class ZoneAnalyzer:
                 current_high = float(rates[i]['high'])
                 current_low = float(rates[i]['low'])
                 
-                # ตรวจสอบ Support Pivot (Low)
-                is_support_pivot = True
-                for j in range(i - window, i + window + 1):
-                    if j != i and j < len(rates) and float(rates[j]['low']) <= float(current_low):
-                        is_support_pivot = False
-                        break
-                
-                if is_support_pivot:
-                    touches = self._count_touches(rates, current_low, 'support', i)
-                    if touches >= self.min_touches:
-                        # เพิ่มการวิเคราะห์ Price Action
-                        rejection_strength = self._calculate_rejection_strength(rates, i, 'support')
-                        volume_factor = self._estimate_volume_factor(rates, i)
-                        
-                        pivots.append({
-                            'type': 'support',
-                            'price': current_low,
-                            'touches': touches,
-                            'timestamp': float(rates[i]['time']),
-                            'index': i,
-                            'rejection_strength': rejection_strength,
-                            'volume_factor': volume_factor
-                        })
+            # ตรวจสอบ Support Pivot (Low) - ปรับให้หา Support ได้มากขึ้น
+            is_support_pivot = True
+            for j in range(i - window, i + window + 1):
+                if j != i and j < len(rates) and float(rates[j]['low']) < float(current_low) - 2.0:  # เพิ่ม tolerance
+                    is_support_pivot = False
+                    break
+            
+            if is_support_pivot:
+                touches = self._count_touches(rates, current_low, 'support', i)
+                if touches >= self.min_touches:
+                    # เพิ่มการวิเคราะห์ Price Action
+                    rejection_strength = self._calculate_rejection_strength(rates, i, 'support')
+                    volume_factor = self._estimate_volume_factor(rates, i)
+                    
+                    # เพิ่มคะแนนสำหรับ Support เพื่อให้หาได้มากขึ้น
+                    support_score = rejection_strength + volume_factor + (touches * 5)
+                    
+                    pivots.append({
+                        'type': 'support',
+                        'price': current_low,
+                        'touches': touches,
+                        'timestamp': float(rates[i]['time']),
+                        'index': i,
+                        'rejection_strength': rejection_strength,
+                        'volume_factor': volume_factor,
+                        'support_score': support_score
+                    })
                 
                 # ตรวจสอบ Resistance Pivot (High)
                 is_resistance_pivot = True
