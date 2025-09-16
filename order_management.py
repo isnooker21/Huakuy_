@@ -700,17 +700,17 @@ class OrderManager:
             total_volume = sum(getattr(pos, 'volume', 0.01) for pos in positions)
             position_count = len(positions)
             
-            # 🔧 ULTRA LOW COSTS สำหรับ XAUUSD - FIGHT MODE!
-            spread_cost = total_volume * 0.5   # ลดมาก: ~$0.5 per lot
-            commission_cost = total_volume * 0.2  # ลดมาก: ~$0.2 per lot  
-            slippage_cost = position_count * 0.2  # ลดมาก: ~$0.2 per position
+            # 🔧 ULTRA LOW COSTS สำหรับ XAUUSD - AGGRESSIVE MODE!
+            spread_cost = total_volume * 0.3   # ลดเพิ่ม: ~$0.3 per lot
+            commission_cost = total_volume * 0.1  # ลดเพิ่ม: ~$0.1 per lot  
+            slippage_cost = position_count * 0.1  # ลดเพิ่ม: ~$0.1 per position
             
             # Safety buffer = ต้นทุนรวม + buffer 5% เท่านั้น!
             total_cost = spread_cost + commission_cost + slippage_cost
             safety_buffer = total_cost * 1.05  # เพิ่ม 5% buffer เท่านั้น
             
-            # 🔧 ขั้นต่ำ $0.5 per position - FIGHT MODE!
-            minimum_buffer = position_count * 0.5
+            # 🔧 ขั้นต่ำ $0.20 per position - AGGRESSIVE MODE!
+            minimum_buffer = position_count * 0.20
             
             final_buffer = max(safety_buffer, minimum_buffer)
             
@@ -723,4 +723,4 @@ class OrderManager:
             
         except Exception as e:
             logger.error(f"❌ Error calculating safety buffer: {e}")
-            return len(positions) * 0.5  # Fallback: $0.5 per position - FIGHT MODE!
+            return len(positions) * 0.20  # Fallback: $0.20 per position - AGGRESSIVE MODE!
