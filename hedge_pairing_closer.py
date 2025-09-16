@@ -449,7 +449,7 @@ class HedgePairingCloser:
                     existing_price = getattr(pos, 'price_current', 0)
                 
                 distance = abs(new_price - existing_price)
-                logger.info(f"   Position {i+1}: price_open={getattr(pos, 'price_open', 'N/A')}, price_current={getattr(pos, 'price_current', 'N/A')}, used={existing_price} (distance: {distance:.2f} points)")
+                logger.debug(f"   Position {i+1}: price_open={getattr(pos, 'price_open', 'N/A')}, price_current={getattr(pos, 'price_current', 'N/A')}, used={existing_price} (distance: {distance:.2f} points)")
                 
                 if distance <= self.clustering_threshold:
                     nearby_positions += 1
@@ -550,8 +550,8 @@ class HedgePairingCloser:
             if not self.sw_filter_enabled:
                 return True, "SW filter disabled"
             
-            logger.info(f"🔍 SW FILTER: Checking new position against {len(existing_positions)} existing positions")
-            logger.info(f"🔍 SW FILTER: New position price: {getattr(new_position, 'price', 'N/A')} | price_open: {getattr(new_position, 'price_open', 'N/A')} | price_current: {getattr(new_position, 'price_current', 'N/A')}")
+            logger.debug(f"🔍 SW FILTER: Checking new position against {len(existing_positions)} existing positions")
+            logger.debug(f"🔍 SW FILTER: New position price: {getattr(new_position, 'price', 'N/A')} | price_open: {getattr(new_position, 'price_open', 'N/A')} | price_current: {getattr(new_position, 'price_current', 'N/A')}")
             
             # ตรวจสอบการกองกระจุก
             clustering_ok, clustering_msg = self._check_position_clustering(new_position, existing_positions)
