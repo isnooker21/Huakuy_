@@ -133,7 +133,7 @@ class SimpleBreakoutTradingSystemGUI:
         self.zone_analyzer = None
         self.smart_entry_system = None
         self.portfolio_anchor = None
-        self.smart_systems_enabled = True
+        self.smart_systems_enabled = False  # ปิดชั่วคราวเพื่อแก้ไข GUI ค้าง
         self.last_zone_analysis = 0
         self.zone_analysis_interval = 300  # ทุก 5 นาที
         self._smart_systems_thread = None  # เพิ่ม thread tracking
@@ -976,46 +976,46 @@ class SimpleBreakoutTradingSystemGUI:
                 import threading
                 def closing_analysis_worker():
                     try:
-                        account_info = self.mt5_connection.get_account_info()
+            account_info = self.mt5_connection.get_account_info()
                         
                         # 🔄 ซิงค์ข้อมูล Position จาก MT5 ก่อนวิเคราะห์
                         positions = self.order_manager.sync_positions_from_mt5()
-                        
-                        if not positions:
-                            return
-                        
+            
+            if not positions:
+                return
+            
                         # 🚀 Use Hedge Pairing Closer for comprehensive analysis
-                        market_conditions = {
-                            'current_price': candle.close,
-                            'volatility': 'medium',  # Could be enhanced with real volatility calculation
-                            'trend': 'neutral',      # Could be enhanced with real trend analysis
-                            'market_open': market_status.get('is_market_open', False),
-                            'active_sessions': market_status.get('active_sessions', []),
-                            'london_ny_overlap': market_status.get('london_ny_overlap', False)
-                        }
-                        
+            market_conditions = {
+                'current_price': candle.close,
+                'volatility': 'medium',  # Could be enhanced with real volatility calculation
+                'trend': 'neutral',      # Could be enhanced with real trend analysis
+                'market_open': market_status.get('is_market_open', False),
+                'active_sessions': market_status.get('active_sessions', []),
+                'london_ny_overlap': market_status.get('london_ny_overlap', False)
+            }
+            
                         closing_result = self.hedge_pairing_closer.find_optimal_closing(
-                            positions=positions,
-                            account_info=account_info or {},
-                            market_conditions=market_conditions
-                        )
-                        
-                        if closing_result and closing_result.should_close:
+                positions=positions,
+                account_info=account_info or {},
+                market_conditions=market_conditions
+            )
+            
+            if closing_result and closing_result.should_close:
                             logger.info(f"🚀 HEDGE CLOSING RECOMMENDED: {len(closing_result.positions_to_close)} positions")
-                            logger.info(f"   Net P&L: ${closing_result.net_pnl:.2f}, Confidence: {closing_result.confidence_score:.1f}%")
+                logger.info(f"   Net P&L: ${closing_result.net_pnl:.2f}, Confidence: {closing_result.confidence_score:.1f}%")
                             logger.info(f"   Method: {closing_result.method}")
-                            logger.info(f"   Reason: {closing_result.reason}")
-                            
-                            # Execute closing
-                            result = self.order_manager.close_positions_group(closing_result.positions_to_close)
-                            if result:
+                logger.info(f"   Reason: {closing_result.reason}")
+                
+                # Execute closing
+                result = self.order_manager.close_positions_group(closing_result.positions_to_close)
+                if result:
                                 logger.info(f"✅ HEDGE GROUP CLOSED successfully")
-                            else:
+                else:
                                 logger.warning(f"❌ HEDGE GROUP CLOSE FAILED")
-                        else:
+            else:
                             logger.debug(f"💤 HEDGE No closing recommended - waiting for better opportunity")
                             
-                    except Exception as e:
+        except Exception as e:
                         logger.error(f"❌ Error in closing analysis worker: {e}")
                 
                 # เริ่ม thread
