@@ -86,11 +86,15 @@ class HedgePairingCloser:
         # self.bar_close_wait_enabled = True
         # self.timeframes = ['M5', 'M15', 'M30', 'H1']  # TF ที่ใช้
         
-        # 💰 Close All When Portfolio Profitable - ปิดไม้ทั้งหมดเมื่อพอร์ตเป็นบวก
-        self.close_all_when_profitable = True
-        self.profitable_threshold_percentage = 1.0  # 1% ของเงินทุน (ลดลง)
-        self.min_profit_for_close_all = 5.0  # กำไรขั้นต่ำ $5 (ลดลง)
-        self.urgent_profit_threshold = 50.0  # กำไรเร่งด่วน $50
+        # 💰 Close All When Portfolio Profitable - ปิดไม้ทั้งหมดเมื่อพอร์ตเป็นบวก (ต้องจับคู่ Hedge ก่อน)
+        self.close_all_when_profitable = False  # ปิดการปิดไม้ทั้งหมด - ใช้ Hedge Pairing แทน
+        self.profitable_threshold_percentage = 2.0  # เพิ่มเป็น 2% ของเงินทุน (ยากขึ้น)
+        self.min_profit_for_close_all = 20.0  # เพิ่มเป็น $20 (ยากขึ้น)
+        self.urgent_profit_threshold = 100.0  # เพิ่มเป็น $100 (ยากขึ้น)
+        
+        # 🎯 Force Hedge Pairing - บังคับให้จับคู่ Hedge เสมอ
+        self.force_hedge_pairing = True  # บังคับให้จับคู่ Hedge ก่อนปิด
+        self.allow_single_side_closing = False  # ห้ามปิดไม้ฝั่งเดียว
         
         # 🚨 Emergency Mode Parameters (สำหรับพอร์ตที่แย่มาก)
         self.emergency_min_net_profit = 0.01  # กำไรขั้นต่ำในโหมดฉุกเฉิน $0.01
@@ -645,36 +649,41 @@ class HedgePairingCloser:
             return False  # ถ้า error ให้ไม่รอ
     
     def _check_close_all_profitable(self, positions: List[Any], account_balance: float) -> bool:
-        """💰 ตรวจสอบว่าควรปิดไม้ทั้งหมดเมื่อพอร์ตเป็นบวกหรือไม่ (เร็วขึ้น)"""
+        """💰 ตรวจสอบว่าควรปิดไม้ทั้งหมดเมื่อพอร์ตเป็นบวกหรือไม่ (ต้องจับคู่ Hedge ก่อน)"""
         try:
+            # 🚫 DISABLED: ปิดการปิดไม้ทั้งหมด - ใช้ Hedge Pairing แทน
             if not self.close_all_when_profitable:
-                return False  # ไม่เปิดใช้ฟีเจอร์นี้
+                logger.info("🚫 Close All When Profitable DISABLED - Using Hedge Pairing instead")
+                return False
             
             if len(positions) < 1:
                 return False  # ไม่มีไม้ให้ปิด
             
+            # ตรวจสอบว่ามีไม้ทั้งสองฝั่งหรือไม่
+            buy_positions = [pos for pos in positions if getattr(pos, 'type', 0) == 0]
+            sell_positions = [pos for pos in positions if getattr(pos, 'type', 0) == 1]
+            
+            # ถ้ามีไม้ทั้งสองฝั่ง ให้ใช้ Hedge Pairing แทน
+            if len(buy_positions) > 0 and len(sell_positions) > 0:
+                logger.info("🎯 Both BUY and SELL positions exist - Using Hedge Pairing instead of Close All")
+                return False
+            
             # คำนวณกำไรรวมของพอร์ต (เร็วขึ้น)
             total_profit = sum(getattr(pos, 'profit', 0) for pos in positions)
             
-            # ตรวจสอบเงื่อนไขการปิดไม้ทั้งหมด (เร็วขึ้น)
+            # ตรวจสอบเงื่อนไขการปิดไม้ทั้งหมด (ยากขึ้นมาก)
             
-            # เงื่อนไข 1: กำไรรวมมากกว่าเปอร์เซ็นต์ที่กำหนด
+            # เงื่อนไข 1: กำไรรวมมากกว่าเปอร์เซ็นต์ที่กำหนด (ยากขึ้น)
             if account_balance > 0:
                 profit_percentage = (total_profit / account_balance) * 100
                 if profit_percentage >= self.profitable_threshold_percentage:
                     logger.info(f"💰 Portfolio profitable: {profit_percentage:.2f}% >= {self.profitable_threshold_percentage}%")
                     return True
             
-            # เงื่อนไข 2: กำไรรวมมากกว่าจำนวนเงินขั้นต่ำ
+            # เงื่อนไข 2: กำไรรวมมากกว่าจำนวนเงินขั้นต่ำ (ยากขึ้น)
             if total_profit >= self.min_profit_for_close_all:
                 logger.info(f"💰 Portfolio profitable: ${total_profit:.2f} >= ${self.min_profit_for_close_all}")
                 return True
-            
-            # เงื่อนไข 3: กำไรรวมมากกว่าเกณฑ์เร่งด่วน (ปิดทันที)
-            # ลบออกเพราะซ้ำซ้อนกับ Close All System
-            # if total_profit >= self.urgent_profit_threshold:
-            #     logger.info(f"🚨 URGENT: Portfolio very profitable: ${total_profit:.2f} >= ${self.urgent_profit_threshold}")
-            #     return True
             
             return False
             
@@ -1933,8 +1942,13 @@ class HedgePairingCloser:
             return []
     
     def _find_single_side_profitable(self, positions: List[Any]) -> List[HedgeCombination]:
-        """🔍 หาไม้ฝั่งเดียวที่ P&L รวมเป็นบวก (เฉพาะเมื่อไม่มีไม้ฝั่งตรงข้าม)"""
+        """🔍 หาไม้ฝั่งเดียวที่ P&L รวมเป็นบวก (เฉพาะเมื่อไม่มีไม้ฝั่งตรงข้าม) - DISABLED"""
         try:
+            # 🚫 DISABLED: ห้ามปิดไม้ฝั่งเดียว - ต้องจับคู่ Hedge เสมอ
+            if not self.allow_single_side_closing:
+                logger.info("🚫 Single side closing DISABLED - Force Hedge Pairing only")
+                return []
+            
             # ตรวจสอบว่ามีไม้ฝั่งตรงข้ามหรือไม่
             buy_positions = [pos for pos in positions if getattr(pos, 'type', 0) == 0]
             sell_positions = [pos for pos in positions if getattr(pos, 'type', 0) == 1]
