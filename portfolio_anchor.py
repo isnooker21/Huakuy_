@@ -18,6 +18,7 @@ class PortfolioAnchor:
         self.max_anchor_positions = 4  # สูงสุด 4 ไม้ anchor
         self.min_anchor_distance = 50.0  # ระยะห่างขั้นต่ำระหว่าง anchors (points)
         self.anchor_lot_size = 0.05  # ขนาด lot สำหรับ anchor (ลดลง)
+        self.anchor_risk_percent = 1.0  # เสี่ยง 1% ของ account balance
         self.max_anchor_age_hours = 48  # อายุสูงสุดของ anchor (ชั่วโมง)
         
         # Portfolio Protection
@@ -176,10 +177,13 @@ class PortfolioAnchor:
             # เลือก Zone ที่ดีที่สุด
             if suitable_zones:
                 best_zone = max(suitable_zones, key=lambda x: x['score'])
+                # คำนวณ lot size จาก account balance
+                calculated_lot = self._calculate_lot_size_from_balance()
+                
                 return {
                     'direction': best_zone['direction'],
                     'zone': best_zone['zone'],
-                    'lot_size': self.anchor_lot_size,
+                    'lot_size': calculated_lot,
                     'reason': f'Portfolio Protection ({portfolio_bias} bias)',
                     'priority_score': best_zone['score'] + 30,  # Protection bonus
                     'anchor_type': 'protection'
@@ -229,10 +233,13 @@ class PortfolioAnchor:
             # เลือกตัวที่ดีที่สุด
             if candidate_anchors:
                 best_candidate = max(candidate_anchors, key=lambda x: x['score'])
+                # คำนวณ lot size จาก account balance
+                calculated_lot = self._calculate_lot_size_from_balance()
+                
                 return {
                     'direction': best_candidate['direction'],
                     'zone': best_candidate['zone'],
-                    'lot_size': self.anchor_lot_size,
+                    'lot_size': calculated_lot,
                     'reason': f'Strategic Anchor at strong {best_candidate["zone"]["type"]}',
                     'priority_score': best_candidate['score'],
                     'anchor_type': 'strategic'
@@ -243,6 +250,40 @@ class PortfolioAnchor:
         except Exception as e:
             logger.error(f"❌ Error analyzing strategic anchor: {e}")
             return None
+    
+    def _calculate_lot_size_from_balance(self) -> float:
+        """💰 คำนวณ lot size จาก account balance"""
+        try:
+            # ดึงข้อมูล account
+            account_info = mt5.account_info()
+            if not account_info:
+                logger.warning("❌ Cannot get account info, using default lot size")
+                return self.anchor_lot_size
+            
+            balance = account_info.balance
+            equity = account_info.equity
+            
+            # ใช้ equity หรือ balance ที่น้อยกว่า
+            available_capital = min(balance, equity)
+            
+            # คำนวณ lot size จาก % ของเงินทุน
+            risk_amount = available_capital * (self.anchor_risk_percent / 100.0)
+            
+            # คำนวณ lot size (สมมติ 1 lot = $1000 risk)
+            calculated_lot = risk_amount / 1000.0
+            
+            # จำกัด lot size
+            min_lot = 0.01
+            max_lot = 0.50
+            final_lot = max(min_lot, min(calculated_lot, max_lot))
+            
+            logger.info(f"💰 Calculated anchor lot: Balance=${balance:.0f}, Risk={self.anchor_risk_percent}%, Lot={final_lot:.2f}")
+            
+            return round(final_lot, 2)
+            
+        except Exception as e:
+            logger.error(f"❌ Error calculating lot size: {e}")
+            return self.anchor_lot_size
     
     def _analyze_portfolio_bias(self, positions: List) -> str:
         """📊 วิเคราะห์ bias ของพอร์ต"""
