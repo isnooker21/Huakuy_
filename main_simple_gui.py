@@ -968,44 +968,59 @@ class SimpleBreakoutTradingSystemGUI:
                 logger.debug(f"💤 Market is closed - skipping closing analysis")
                 return
             
-            account_info = self.mt5_connection.get_account_info()
-            
-            # 🔄 ซิงค์ข้อมูล Position จาก MT5 ก่อนวิเคราะห์
-            positions = self.order_manager.sync_positions_from_mt5()
-            
-            if not positions:
-                return
-            
-            # 🚀 Use Hedge Pairing Closer for comprehensive analysis
-            market_conditions = {
-                'current_price': candle.close,
-                'volatility': 'medium',  # Could be enhanced with real volatility calculation
-                'trend': 'neutral',      # Could be enhanced with real trend analysis
-                'market_open': market_status.get('is_market_open', False),
-                'active_sessions': market_status.get('active_sessions', []),
-                'london_ny_overlap': market_status.get('london_ny_overlap', False)
-            }
-            
-            closing_result = self.hedge_pairing_closer.find_optimal_closing(
-                positions=positions,
-                account_info=account_info or {},
-                market_conditions=market_conditions
-            )
-            
-            if closing_result and closing_result.should_close:
-                logger.info(f"🚀 HEDGE CLOSING RECOMMENDED: {len(closing_result.positions_to_close)} positions")
-                logger.info(f"   Net P&L: ${closing_result.net_pnl:.2f}, Confidence: {closing_result.confidence_score:.1f}%")
-                logger.info(f"   Method: {closing_result.method}")
-                logger.info(f"   Reason: {closing_result.reason}")
+            # ย้ายการดึงข้อมูลไป Background Thread เพื่อไม่ให้ GUI ค้าง
+            try:
+                import threading
+                def closing_analysis_worker():
+                    try:
+                        account_info = self.mt5_connection.get_account_info()
+                        
+                        # 🔄 ซิงค์ข้อมูล Position จาก MT5 ก่อนวิเคราะห์
+                        positions = self.order_manager.sync_positions_from_mt5()
+                        
+                        if not positions:
+                            return
+                        
+                        # 🚀 Use Hedge Pairing Closer for comprehensive analysis
+                        market_conditions = {
+                            'current_price': candle.close,
+                            'volatility': 'medium',  # Could be enhanced with real volatility calculation
+                            'trend': 'neutral',      # Could be enhanced with real trend analysis
+                            'market_open': market_status.get('is_market_open', False),
+                            'active_sessions': market_status.get('active_sessions', []),
+                            'london_ny_overlap': market_status.get('london_ny_overlap', False)
+                        }
+                        
+                        closing_result = self.hedge_pairing_closer.find_optimal_closing(
+                            positions=positions,
+                            account_info=account_info or {},
+                            market_conditions=market_conditions
+                        )
+                        
+                        if closing_result and closing_result.should_close:
+                            logger.info(f"🚀 HEDGE CLOSING RECOMMENDED: {len(closing_result.positions_to_close)} positions")
+                            logger.info(f"   Net P&L: ${closing_result.net_pnl:.2f}, Confidence: {closing_result.confidence_score:.1f}%")
+                            logger.info(f"   Method: {closing_result.method}")
+                            logger.info(f"   Reason: {closing_result.reason}")
+                            
+                            # Execute closing
+                            result = self.order_manager.close_positions_group(closing_result.positions_to_close)
+                            if result:
+                                logger.info(f"✅ HEDGE GROUP CLOSED successfully")
+                            else:
+                                logger.warning(f"❌ HEDGE GROUP CLOSE FAILED")
+                        else:
+                            logger.debug(f"💤 HEDGE No closing recommended - waiting for better opportunity")
+                            
+                    except Exception as e:
+                        logger.error(f"❌ Error in closing analysis worker: {e}")
                 
-                # Execute closing
-                result = self.order_manager.close_positions_group(closing_result.positions_to_close)
-                if result:
-                    logger.info(f"✅ HEDGE GROUP CLOSED successfully")
-                else:
-                    logger.warning(f"❌ HEDGE GROUP CLOSE FAILED")
-            else:
-                logger.debug(f"💤 HEDGE No closing recommended - waiting for better opportunity")
+                # เริ่ม thread
+                closing_thread = threading.Thread(target=closing_analysis_worker, daemon=True)
+                closing_thread.start()
+                
+            except Exception as e:
+                logger.error(f"❌ Error starting closing analysis thread: {e}")
                             
         except Exception as e:
             logger.error(f"❌ Error in Hedge dynamic closing: {e}")
@@ -1130,20 +1145,34 @@ class SimpleBreakoutTradingSystemGUI:
                 except Exception as e:
                     logger.error(f"❌ Error starting smart systems thread: {e}")
             
-            # 3. Manage Existing Anchors
-            anchor_actions = self.portfolio_anchor.manage_existing_anchors(current_price)
-            for action in anchor_actions:
-                if action['action'] == 'close':
-                    success = self.portfolio_anchor.close_anchor(action['ticket'], action['reason'])
-                    if success:
-                        logger.info(f"✅ Anchor {action['ticket']} closed: {action['reason']}")
-            
-            # Log Statistics
-            entry_stats = self.smart_entry_system.get_entry_statistics()
-            anchor_stats = self.portfolio_anchor.get_anchor_statistics()
-            
-            logger.info(f"📊 Smart Systems Status: Entry trades: {entry_stats.get('daily_trades', 0)}/{entry_stats.get('max_daily_trades', 0)}, "
-                       f"Anchors: {anchor_stats.get('active_anchors', 0)}/{anchor_stats.get('max_anchors', 0)}")
+            # 3. Manage Existing Anchors (Background Thread)
+            if hasattr(self, 'portfolio_anchor') and self.portfolio_anchor:
+                try:
+                    import threading
+                    def anchor_management_worker():
+                        try:
+                            anchor_actions = self.portfolio_anchor.manage_existing_anchors(current_price)
+                            for action in anchor_actions:
+                                if action['action'] == 'close':
+                                    success = self.portfolio_anchor.close_anchor(action['ticket'], action['reason'])
+                                    if success:
+                                        logger.info(f"✅ Anchor {action['ticket']} closed: {action['reason']}")
+                            
+                            # Log Statistics
+                            entry_stats = self.smart_entry_system.get_entry_statistics() if hasattr(self, 'smart_entry_system') else {}
+                            anchor_stats = self.portfolio_anchor.get_anchor_statistics()
+                            
+                            logger.info(f"📊 Smart Systems Status: Entry trades: {entry_stats.get('daily_trades', 0)}/{entry_stats.get('max_daily_trades', 0)}, "
+                                       f"Anchors: {anchor_stats.get('active_anchors', 0)}/{anchor_stats.get('max_anchors', 0)}")
+                        except Exception as e:
+                            logger.error(f"❌ Error in anchor management worker: {e}")
+                    
+                    # เริ่ม thread
+                    anchor_mgmt_thread = threading.Thread(target=anchor_management_worker, daemon=True)
+                    anchor_mgmt_thread.start()
+                    
+                except Exception as e:
+                    logger.error(f"❌ Error starting anchor management thread: {e}")
             
         except Exception as e:
             logger.error(f"❌ Error in smart systems: {e}")
