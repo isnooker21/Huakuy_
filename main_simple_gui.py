@@ -133,7 +133,7 @@ class SimpleBreakoutTradingSystemGUI:
         self.zone_analyzer = None
         self.smart_entry_system = None
         self.portfolio_anchor = None
-        self.smart_systems_enabled = False  # ปิดชั่วคราวเพื่อแก้ไข GUI ค้าง
+        self.smart_systems_enabled = True
         self.last_zone_analysis = 0
         self.zone_analysis_interval = 300  # ทุก 5 นาที
         self._smart_systems_thread = None  # เพิ่ม thread tracking
@@ -1081,9 +1081,24 @@ class SimpleBreakoutTradingSystemGUI:
                     import threading
                     def smart_systems_worker():
                         try:
-                            # วิเคราะห์ Zones ใน background
+                            # เพิ่ม timeout เพื่อป้องกันการค้าง
+                            import signal
+                            def timeout_handler(signum, frame):
+                                raise TimeoutError("Zone analysis timeout")
+                            
+                            # วิเคราะห์ Zones ใน background (เพิ่ม timeout 30 วินาที)
                             logger.info("🎯 Starting Zone Analysis...")
-                            zones = self.zone_analyzer.analyze_zones(self.actual_symbol, lookback_hours=48)
+                            signal.signal(signal.SIGALRM, timeout_handler)
+                            signal.alarm(30)  # 30 วินาที timeout
+                            
+                            try:
+                                zones = self.zone_analyzer.analyze_zones(self.actual_symbol, lookback_hours=24)  # ลด lookback
+                                signal.alarm(0)  # ยกเลิก timeout
+                            except TimeoutError:
+                                logger.warning("🎯 Zone analysis timeout, skipping...")
+                                signal.alarm(0)
+                                return
+                            
                             if not zones or (not zones['support'] and not zones['resistance']):
                                 logger.warning("🎯 No zones found for smart systems")
                                 return
