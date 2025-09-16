@@ -92,7 +92,7 @@ class ZoneAnalyzer:
             logger.debug(f"🔍 Requesting {bars_needed} bars for {timeframe} (lookback: {lookback_hours}h)")
             rates = mt5.copy_rates_from_pos(self.symbol, timeframe, 0, bars_needed)
             
-            if rates is None or len(rates) < 50:
+            if rates is None or (hasattr(rates, '__len__') and len(rates) < 50):
                 logger.warning(f"⚠️ Insufficient data for timeframe {timeframe} (got {len(rates) if rates else 0} bars, need 50+)")
                 return [], []
             
@@ -132,13 +132,13 @@ class ZoneAnalyzer:
             window = 3  # ใช้ window 3 bars
             
             for i in range(window, len(rates) - window):
-                current_high = rates[i]['high']
-                current_low = rates[i]['low']
+                current_high = float(rates[i]['high'])
+                current_low = float(rates[i]['low'])
                 
                 # ตรวจสอบ Support Pivot (Low)
                 is_support_pivot = True
                 for j in range(i - window, i + window + 1):
-                    if j != i and j < len(rates) and float(rates[j]['low']) <= float(current_low):
+                    if j != i and j < len(rates) and float(rates[j]['low']) <= current_low:
                         is_support_pivot = False
                         break
                 
@@ -149,14 +149,14 @@ class ZoneAnalyzer:
                             'type': 'support',
                             'price': current_low,
                             'touches': touches,
-                            'timestamp': rates[i]['time'],
+                            'timestamp': float(rates[i]['time']),
                             'index': i
                         })
                 
                 # ตรวจสอบ Resistance Pivot (High)
                 is_resistance_pivot = True
                 for j in range(i - window, i + window + 1):
-                    if j != i and j < len(rates) and float(rates[j]['high']) >= float(current_high):
+                    if j != i and j < len(rates) and float(rates[j]['high']) >= current_high:
                         is_resistance_pivot = False
                         break
                 
@@ -167,7 +167,7 @@ class ZoneAnalyzer:
                             'type': 'resistance',
                             'price': current_high,
                             'touches': touches,
-                            'timestamp': rates[i]['time'],
+                            'timestamp': float(rates[i]['time']),
                             'index': i
                         })
             
