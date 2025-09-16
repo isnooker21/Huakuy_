@@ -317,7 +317,7 @@ class SmartEntrySystem:
                 "symbol": symbol,
                 "volume": lot_size,
                 "type": order_type,
-                "comment": f"Smart Entry: {entry_plan['entry_reason']}",
+                "comment": f"SmartEntry",
                 "type_time": mt5.ORDER_TIME_GTC,
                 "magic": 123456
             }

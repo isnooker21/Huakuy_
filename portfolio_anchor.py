@@ -303,7 +303,7 @@ class PortfolioAnchor:
                 "symbol": self.symbol,
                 "volume": lot_size,
                 "type": order_type,
-                "comment": f"Anchor: {anchor_plan['reason']}",
+                "comment": f"Anchor",
                 "type_time": mt5.ORDER_TIME_GTC,
                 "magic": 789012  # Magic number แยกจาก Smart Entry
             }
