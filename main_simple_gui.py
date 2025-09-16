@@ -36,6 +36,11 @@ from gui import TradingGUI
 from dynamic_position_modifier import create_dynamic_position_modifier
 # 🚫 REMOVED: dynamic_adaptive_closer - Replaced by Enhanced 7D Smart Closer
 
+# 🎯 NEW SMART TRADING SYSTEMS
+from zone_analyzer import ZoneAnalyzer
+from smart_entry_system import SmartEntrySystem
+from portfolio_anchor import PortfolioAnchor
+
 # 🚀 SIMPLE & CLEAN LOGGING CONFIGURATION
 logging.basicConfig(
     level=logging.INFO,
@@ -124,10 +129,19 @@ class SimpleBreakoutTradingSystemGUI:
         self.last_closing_time = None
         self.closing_cooldown_seconds = 30
         
+        # 🎯 NEW SMART TRADING SYSTEMS (Initialize later)
+        self.zone_analyzer = None
+        self.smart_entry_system = None
+        self.portfolio_anchor = None
+        self.smart_systems_enabled = True
+        self.last_zone_analysis = 0
+        self.zone_analysis_interval = 300  # ทุก 5 นาที
+        
         logger.info("🚀 SIMPLE BREAKOUT TRADING SYSTEM WITH GUI initialized")
         logger.info(f"💰 Initial Balance: ${initial_balance:,.2f}")
         logger.info(f"📊 Target Symbol: {symbol}")
         logger.info(f"⏰ Monitoring Timeframes: {self.timeframes}")
+        logger.info("🎯 Smart Trading Systems will be initialized after MT5 connection")
     
     @property
     def is_trading(self):
@@ -141,6 +155,10 @@ class SimpleBreakoutTradingSystemGUI:
             if not self.mt5_connection.connect_mt5():
                 logger.error("❌ ไม่สามารถเชื่อมต่อ MT5 ได้")
                 return False
+            
+            # 🎯 Initialize Smart Trading Systems
+            if self.smart_systems_enabled:
+                self._initialize_smart_systems()
             
             # 🔍 Auto-detect gold symbol
             logger.info("🔍 กำลังตรวจหาสัญลักษณ์ทองคำที่เหมาะสม...")
@@ -322,6 +340,9 @@ class SimpleBreakoutTradingSystemGUI:
                 if current_time - self._last_dynamic_closing_time >= 8:  # Every 8 seconds
                     self._handle_dynamic_closing(current_candle)
                     self._last_dynamic_closing_time = current_time
+                
+                # 🎯 Smart Trading Systems - Handle every 5 minutes
+                self._handle_smart_systems()
                 
                 # Sleep - ลดเวลาให้เหมาะสมกับการเทรดตามแท่งเทียน
                 time.sleep(0.1)  # ตรวจสอบแท่งเทียนทุก 0.1 วินาที
@@ -988,6 +1009,101 @@ class SimpleBreakoutTradingSystemGUI:
                             
         except Exception as e:
             logger.error(f"❌ Error in Hedge dynamic closing: {e}")
+    
+    def _initialize_smart_systems(self):
+        """🎯 Initialize Smart Trading Systems"""
+        try:
+            logger.info("🎯 Initializing Smart Trading Systems...")
+            
+            # Initialize Zone Analyzer
+            self.zone_analyzer = ZoneAnalyzer(self.mt5_connection)
+            logger.info("✅ Zone Analyzer initialized")
+            
+            # Initialize Smart Entry System
+            self.smart_entry_system = SmartEntrySystem(self.mt5_connection, self.zone_analyzer)
+            logger.info("✅ Smart Entry System initialized")
+            
+            # Initialize Portfolio Anchor
+            self.portfolio_anchor = PortfolioAnchor(self.mt5_connection, self.zone_analyzer)
+            logger.info("✅ Portfolio Anchor initialized")
+            
+            logger.info("🎯 All Smart Trading Systems initialized successfully")
+            
+        except Exception as e:
+            logger.error(f"❌ Error initializing smart systems: {e}")
+            self.smart_systems_enabled = False
+    
+    def _handle_smart_systems(self):
+        """🎯 Handle Smart Trading Systems"""
+        try:
+            if not self.smart_systems_enabled or not all([self.zone_analyzer, self.smart_entry_system, self.portfolio_anchor]):
+                return
+            
+            current_time = time.time()
+            
+            # ตรวจสอบเวลาสำหรับ Zone Analysis
+            if current_time - self.last_zone_analysis < self.zone_analysis_interval:
+                return
+            
+            self.last_zone_analysis = current_time
+            
+            # ดึงราคาปัจจุบัน
+            current_price = self.mt5_connection.get_current_price(self.actual_symbol)
+            if not current_price:
+                return
+            
+            # วิเคราะห์ Zones
+            zones = self.zone_analyzer.analyze_zones(lookback_hours=48)
+            if not zones or (not zones['support'] and not zones['resistance']):
+                logger.debug("🎯 No zones found for smart systems")
+                return
+            
+            logger.info(f"🎯 Zone Analysis: {len(zones['support'])} support, {len(zones['resistance'])} resistance zones")
+            
+            # ดึงข้อมูลพอร์ต
+            positions = self.mt5_connection.get_positions()
+            account_info = self.mt5_connection.get_account_info()
+            portfolio_profit = sum(pos.profit for pos in positions) if positions else 0
+            
+            # 1. Smart Entry System
+            entry_opportunity = self.smart_entry_system.analyze_entry_opportunity(
+                current_price, zones, positions
+            )
+            
+            if entry_opportunity:
+                logger.info(f"🎯 Smart Entry Opportunity: {entry_opportunity['direction']} at {current_price}")
+                ticket = self.smart_entry_system.execute_entry(entry_opportunity)
+                if ticket:
+                    logger.info(f"✅ Smart Entry executed: Ticket {ticket}")
+            
+            # 2. Portfolio Anchor System
+            anchor_need = self.portfolio_anchor.analyze_anchor_needs(
+                current_price, portfolio_profit, zones, positions
+            )
+            
+            if anchor_need:
+                logger.info(f"⚓ Anchor Opportunity: {anchor_need['direction']} (Reason: {anchor_need['reason']})")
+                ticket = self.portfolio_anchor.execute_anchor(anchor_need, current_price)
+                if ticket:
+                    logger.info(f"✅ Anchor created: Ticket {ticket}")
+            
+            # 3. Manage Existing Anchors
+            anchor_actions = self.portfolio_anchor.manage_existing_anchors(current_price)
+            for action in anchor_actions:
+                if action['action'] == 'close':
+                    success = self.portfolio_anchor.close_anchor(action['ticket'], action['reason'])
+                    if success:
+                        logger.info(f"✅ Anchor {action['ticket']} closed: {action['reason']}")
+            
+            # Log Statistics
+            entry_stats = self.smart_entry_system.get_entry_statistics()
+            anchor_stats = self.portfolio_anchor.get_anchor_statistics()
+            
+            logger.info(f"📊 Smart Systems Status: Entry trades: {entry_stats.get('daily_trades', 0)}/{entry_stats.get('max_daily_trades', 0)}, "
+                       f"Anchors: {anchor_stats.get('active_anchors', 0)}/{anchor_stats.get('max_anchors', 0)}")
+            
+        except Exception as e:
+            logger.error(f"❌ Error in smart systems: {e}")
     
     def start_gui(self):
         """Start GUI (Same as original)"""
