@@ -53,25 +53,47 @@ class SmartEntrySystem:
         self.position_distribution_enabled = True  # เปิดระบบกระจายไม้
         self.min_distance_between_positions = 10.0  # ระยะห่างขั้นต่ำระหว่างไม้ (pips)
         
-    def analyze_position_balance(self, existing_positions: List = None) -> Dict:
-        """📊 วิเคราะห์ความสมดุลของไม้"""
+    def analyze_position_balance(self, existing_positions: List = None, current_price: float = None, radius_pips: float = 50.0) -> Dict:
+        """📊 วิเคราะห์ความสมดุลของไม้ในรัศมีรอบๆ ราคาปัจจุบัน"""
         try:
             if not existing_positions:
                 return {
                     'buy_count': 0,
                     'sell_count': 0,
                     'total_count': 0,
-                    'balance_ratio': 0.0,
+                    'buy_ratio': 0.0,
+                    'sell_ratio': 0.0,
                     'needs_buy': False,
                     'needs_sell': False,
-                    'is_balanced': True
+                    'is_balanced': True,
+                    'radius_pips': radius_pips
                 }
             
-            buy_positions = [pos for pos in existing_positions if getattr(pos, 'type', 0) == 0]
-            sell_positions = [pos for pos in existing_positions if getattr(pos, 'type', 0) == 1]
+            # คำนวณรัศมี (50 pips = 500 points)
+            radius_points = radius_pips * 10  # 50 pips = 500 points
+            min_price = current_price - radius_points if current_price else 0
+            max_price = current_price + radius_points if current_price else float('inf')
             
-            buy_count = len(buy_positions)
-            sell_count = len(sell_positions)
+            # นับไม้ในรัศมี
+            buy_in_zone = []
+            sell_in_zone = []
+            
+            for pos in existing_positions:
+                try:
+                    pos_price = getattr(pos, 'price', 0)
+                    pos_type = getattr(pos, 'type', 0)
+                    
+                    if min_price <= pos_price <= max_price:
+                        if pos_type == 0:  # BUY
+                            buy_in_zone.append(pos)
+                        elif pos_type == 1:  # SELL
+                            sell_in_zone.append(pos)
+                except Exception as e:
+                    logger.error(f"❌ Error processing position: {e}")
+                    continue
+            
+            buy_count = len(buy_in_zone)
+            sell_count = len(sell_in_zone)
             total_count = buy_count + sell_count
             
             # คำนวณอัตราส่วน
@@ -82,14 +104,16 @@ class SmartEntrySystem:
                 buy_ratio = 0.0
                 sell_ratio = 0.0
             
-            # ตรวจสอบว่าต้องการเติมไม้ฝั่งไหน
-            needs_buy = sell_count > 0 and buy_ratio < self.balance_ratio_threshold
-            needs_sell = buy_count > 0 and sell_ratio < self.balance_ratio_threshold
+            # ตรวจสอบว่าต้องการเติมไม้ฝั่งไหน (ใช้เงื่อนไขที่เข้มกว่า)
+            needs_buy = sell_count > buy_count + 1  # SELL มากกว่า BUY มากกว่า 1 ตัว
+            needs_sell = buy_count > sell_count + 1  # BUY มากกว่า SELL มากกว่า 1 ตัว
             is_balanced = not needs_buy and not needs_sell
             
-            logger.info(f"📊 Position Balance Analysis:")
-            logger.info(f"   BUY: {buy_count} ({buy_ratio:.1%})")
-            logger.info(f"   SELL: {sell_count} ({sell_ratio:.1%})")
+            logger.info(f"📊 Zone Balance Analysis (รัศมี {radius_pips} pips):")
+            logger.info(f"   ราคาปัจจุบัน: {current_price:.2f}")
+            logger.info(f"   รัศมี: {min_price:.2f} - {max_price:.2f}")
+            logger.info(f"   BUY ในรัศมี: {buy_count} ({buy_ratio:.1%})")
+            logger.info(f"   SELL ในรัศมี: {sell_count} ({sell_ratio:.1%})")
             logger.info(f"   Needs BUY: {needs_buy}, Needs SELL: {needs_sell}")
             
             return {
@@ -100,7 +124,10 @@ class SmartEntrySystem:
                 'sell_ratio': sell_ratio,
                 'needs_buy': needs_buy,
                 'needs_sell': needs_sell,
-                'is_balanced': is_balanced
+                'is_balanced': is_balanced,
+                'radius_pips': radius_pips,
+                'min_price': min_price,
+                'max_price': max_price
             }
             
         except Exception as e:
@@ -143,8 +170,8 @@ class SmartEntrySystem:
             if not self.zone_balance_enabled:
                 return None
             
-            # วิเคราะห์ความสมดุลของไม้
-            balance_analysis = self.analyze_position_balance(existing_positions)
+            # วิเคราะห์ความสมดุลของไม้ในรัศมี 50 pips
+            balance_analysis = self.analyze_position_balance(existing_positions, current_price, 50.0)
             
             if balance_analysis['is_balanced']:
                 logger.info("✅ Positions are balanced - no need to add more")
