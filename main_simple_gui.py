@@ -1053,12 +1053,13 @@ class SimpleBreakoutTradingSystemGUI:
                 return
             
             # วิเคราะห์ Zones
+            logger.info("🎯 Starting Zone Analysis...")
             zones = self.zone_analyzer.analyze_zones(lookback_hours=48)
             if not zones or (not zones['support'] and not zones['resistance']):
-                logger.debug("🎯 No zones found for smart systems")
+                logger.warning("🎯 No zones found for smart systems")
                 return
             
-            logger.info(f"🎯 Zone Analysis: {len(zones['support'])} support, {len(zones['resistance'])} resistance zones")
+            logger.info(f"🎯 Zone Analysis Complete: {len(zones['support'])} support, {len(zones['resistance'])} resistance zones")
             
             # ดึงข้อมูลพอร์ต
             positions = self.mt5_connection.get_positions()

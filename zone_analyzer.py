@@ -60,7 +60,16 @@ class ZoneAnalyzer:
             merged_support.sort(key=lambda x: x['strength'], reverse=True)
             merged_resistance.sort(key=lambda x: x['strength'], reverse=True)
             
-            logger.info(f"🔍 Found {len(merged_support)} support zones, {len(merged_resistance)} resistance zones")
+            logger.info(f"🔍 ZONE ANALYSIS COMPLETE: {len(merged_support)} support zones, {len(merged_resistance)} resistance zones")
+            
+            # Log details of strongest zones
+            if merged_support:
+                strongest_support = merged_support[0]
+                logger.info(f"🔍 Strongest Support: {strongest_support['price']:.2f} (Strength: {strongest_support['strength']:.1f})")
+            
+            if merged_resistance:
+                strongest_resistance = merged_resistance[0]
+                logger.info(f"🔍 Strongest Resistance: {strongest_resistance['price']:.2f} (Strength: {strongest_resistance['strength']:.1f})")
             
             return {
                 'support': merged_support,
