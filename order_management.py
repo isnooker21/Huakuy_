@@ -685,9 +685,9 @@ class OrderManager:
                 total_profit += net_pos_profit
                 
                 # Debug log เพื่อตรวจสอบ
-                logger.info(f"🔍 Position {ticket}: profit=${pos_profit:.2f}, swap=${pos_swap:.2f}, comm=${pos_commission:.2f}")
+                logger.debug(f"🔍 Position {ticket}: profit=${pos_profit:.2f}, swap=${pos_swap:.2f}, comm=${pos_commission:.2f}")
                 
-            logger.info(f"🔍 Total calculated profit: ${total_profit:.2f}")
+            logger.debug(f"🔍 Total calculated profit: ${total_profit:.2f}")
             return total_profit
             
         except Exception as e:
