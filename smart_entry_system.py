@@ -333,8 +333,11 @@ class SmartEntrySystem:
             logger.info(f"   Symbol Info: {mt5.symbol_info(symbol)}")
             
             # ส่ง order
+            logger.info(f"🔍 Order Request: {request}")
+            logger.info(f"🔍 MT5 Last Error before send: {mt5.last_error()}")
             result = mt5.order_send(request)
             logger.info(f"🔍 MT5 order_send result: {result}")
+            logger.info(f"🔍 MT5 Last Error after send: {mt5.last_error()}")
             
             if result is None:
                 logger.error(f"❌ Entry failed: MT5 order_send returned None")
