@@ -87,6 +87,11 @@ class ZoneAnalyzer:
     def _analyze_timeframe_zones(self, timeframe, lookback_hours: int) -> Tuple[List[Dict], List[Dict]]:
         """🔍 วิเคราะห์ Zones ใน Timeframe เดียว"""
         try:
+            # 🚫 Skip problematic timeframes (Daily = 16385)
+            if timeframe == 16385:
+                logger.info(f"⏭️ Skipping problematic timeframe {timeframe} (Daily)")
+                return [], []
+            
             # ดึงข้อมูลราคา
             bars_needed = int(lookback_hours * 60 / self._get_timeframe_minutes(timeframe))
             logger.debug(f"🔍 Requesting {bars_needed} bars for {timeframe} (lookback: {lookback_hours}h)")
