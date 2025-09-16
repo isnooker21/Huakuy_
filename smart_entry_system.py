@@ -36,7 +36,7 @@ class SmartEntrySystem:
         self.used_zones = {}  # {zone_key: {'timestamp': time, 'ticket': ticket}}
         self.daily_trade_count = 0
         self.last_reset_date = datetime.now().date()
-    
+        
     def calculate_dynamic_profit_target(self, lot_size: float) -> float:
         """🎯 คำนวณเป้าหมายกำไรตาม lot size"""
         try:
@@ -65,7 +65,11 @@ class SmartEntrySystem:
             if not account_info:
                 return self.min_lot_size
             
-            balance = account_info.balance
+            # ตรวจสอบว่า account_info เป็น dict หรือ object
+            if isinstance(account_info, dict):
+                balance = account_info.get('balance', 1000.0)
+            else:
+                balance = getattr(account_info, 'balance', 1000.0)
             
             # คำนวณ lot size ตาม % ของ balance
             risk_amount = balance * self.risk_percent_per_trade
@@ -397,7 +401,7 @@ class SmartEntrySystem:
             
             # จำกัด lot size
             return max(self.min_lot_size, min(self.max_lot_size, recovery_lot_size))
-            
+                
         except Exception as e:
             logger.error(f"❌ Error calculating recovery lot size: {e}")
             return self.min_lot_size  # fallback
@@ -443,6 +447,11 @@ class SmartEntrySystem:
             # ส่งคำสั่ง
             result = mt5.order_send(request)
             
+            # ตรวจสอบว่า result เป็น None หรือไม่
+            if result is None:
+                logger.error(f"❌ Failed to execute entry: mt5.order_send returned None")
+                return None
+            
             if result.retcode != mt5.TRADE_RETCODE_DONE:
                 logger.error(f"❌ Failed to execute entry: {result.retcode} - {result.comment}")
                 return None
@@ -461,7 +470,7 @@ class SmartEntrySystem:
                        f"(TP: {tp_price:.5f}, SL: {sl_price:.5f}) - {reason}")
             
             return result.order
-            
+                
         except Exception as e:
             logger.error(f"❌ Error executing entry: {e}")
             return None
