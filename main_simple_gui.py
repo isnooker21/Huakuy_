@@ -404,8 +404,8 @@ class SimpleBreakoutTradingSystemGUI:
                         self._handle_smart_systems()
                         self._last_smart_systems_time = current_time
                 
-                # Sleep - เพิ่มเป็น 2 วินาที เพื่อลด CPU usage
-                time.sleep(2.0)  # ตรวจสอบแท่งเทียนทุก 2 วินาที (ลด GUI freeze)
+                # Sleep - เพิ่มเป็น 5 วินาที เพื่อลด CPU usage มากขึ้น
+                time.sleep(5.0)  # ตรวจสอบแท่งเทียนทุก 5 วินาที (ลด GUI freeze มากขึ้น)
                 
             except Exception as e:
                 logger.error(f"❌ เกิดข้อผิดพลาดในลูปเทรด: {e}")

@@ -212,14 +212,16 @@ class MT5Connection:
         try:
             account_info = mt5.account_info()
             if account_info:
-                # เตือนเมื่อใช้บัญชีจริง
+                # เตือนเมื่อใช้บัญชีจริง (แสดงครั้งเดียวเท่านั้น)
                 if hasattr(account_info, 'trade_mode'):
-                    if account_info.trade_mode == 0:  # Real account
-                        logger.warning("🚨 กำลังใช้บัญชีจริง (REAL ACCOUNT) - เงินจริง!")
-                    elif account_info.trade_mode == 1:  # Demo account  
-                        logger.info("✅ กำลังใช้บัญชีทดลอง (DEMO ACCOUNT)")
-                    elif account_info.trade_mode == 2:  # Contest account
-                        logger.info("🏆 กำลังใช้บัญชีแข่งขัน (CONTEST ACCOUNT)")
+                    if not hasattr(self, '_account_mode_logged'):
+                        self._account_mode_logged = True
+                        if account_info.trade_mode == 0:  # Real account
+                            logger.warning("🚨 กำลังใช้บัญชีจริง (REAL ACCOUNT) - เงินจริง!")
+                        elif account_info.trade_mode == 1:  # Demo account  
+                            logger.info("✅ กำลังใช้บัญชีทดลอง (DEMO ACCOUNT)")
+                        elif account_info.trade_mode == 2:  # Contest account
+                            logger.info("🏆 กำลังใช้บัญชีแข่งขัน (CONTEST ACCOUNT)")
                 
                 return {
                     'login': account_info.login,
