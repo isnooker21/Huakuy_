@@ -39,9 +39,9 @@ class SmartEntrySystem:
         self.daily_trade_count = 0
         self.last_reset_date = datetime.now().date()
         
-        # Entry Logic Parameters
-        self.support_buy_enabled = True   # Buy ที่ Support
-        self.resistance_sell_enabled = True  # Sell ที่ Resistance
+        # Entry Logic Parameters (สลับการทำงาน)
+        self.support_buy_enabled = False   # ปิด Buy ที่ Support (เปลี่ยนเป็น Sell)
+        self.resistance_sell_enabled = False  # ปิด Sell ที่ Resistance (เปลี่ยนเป็น Buy)
         self.breakout_entries = True      # เปิด Breakout entries เพื่อความสมดุล
         self.force_balance = True         # บังคับให้เปิดไม้ทั้งสองฝั่ง
         
@@ -203,12 +203,12 @@ class SmartEntrySystem:
             return []
     
     def _analyze_support_entries(self, current_price: float, support_zones: List[Dict]) -> List[Dict]:
-        """📈 วิเคราะห์โอกาส Buy ที่ Support"""
+        """📉 วิเคราะห์โอกาส Sell ที่ Support (สลับการทำงาน)"""
         try:
             opportunities = []
             
             for zone in support_zones:
-                # ตรวจสอบว่าราคาใกล้ Support หรือไม่ (Buy ที่ราคาต่ำ)
+                # ตรวจสอบว่าราคาใกล้ Support หรือไม่ (Sell ที่ราคาต่ำ - สลับ)
                 distance = abs(current_price - zone['price'])  # ระยะห่างจาก Support
                 
                 # ราคาต้องใกล้ Support (ต่ำกว่าหรือใกล้เคียง) - ปรับให้แม่นยำขึ้น
@@ -216,17 +216,17 @@ class SmartEntrySystem:
                     # ตรวจสอบเงื่อนไขอื่นๆ
                     if self._is_valid_entry_zone(zone, current_price):
                         lot_size = self._calculate_lot_size(zone['strength'])
-                        priority_score = self._calculate_priority_score(zone, distance, 'buy')
+                        priority_score = self._calculate_priority_score(zone, distance, 'sell')
                         
                         opportunities.append({
                             'zone': zone,
-                            'direction': 'buy',
+                            'direction': 'sell',  # เปลี่ยนเป็น sell
                             'lot_size': lot_size,
                             'entry_price': current_price,
                             'zone_key': self._generate_zone_key(zone),
                             'distance': distance,
                             'priority_score': priority_score,
-                            'entry_reason': f"Support bounce at {zone['price']}"
+                            'entry_reason': f"Support rejection at {zone['price']}"  # เปลี่ยนเป็น rejection
                         })
             
             return opportunities
@@ -236,12 +236,12 @@ class SmartEntrySystem:
             return []
     
     def _analyze_resistance_entries(self, current_price: float, resistance_zones: List[Dict]) -> List[Dict]:
-        """📉 วิเคราะห์โอกาส Sell ที่ Resistance"""
+        """📈 วิเคราะห์โอกาส Buy ที่ Resistance (สลับการทำงาน)"""
         try:
             opportunities = []
             
             for zone in resistance_zones:
-                # ตรวจสอบว่าราคาใกล้ Resistance หรือไม่ (Sell ที่ราคาสูง)
+                # ตรวจสอบว่าราคาใกล้ Resistance หรือไม่ (Buy ที่ราคาสูง - สลับ)
                 distance = abs(current_price - zone['price'])  # ระยะห่างจาก Resistance
                 
                 # ราคาต้องใกล้ Resistance (สูงกว่าหรือใกล้เคียง) - ปรับให้แม่นยำขึ้น
@@ -249,17 +249,17 @@ class SmartEntrySystem:
                     # ตรวจสอบเงื่อนไขอื่นๆ
                     if self._is_valid_entry_zone(zone, current_price):
                         lot_size = self._calculate_lot_size(zone['strength'])
-                        priority_score = self._calculate_priority_score(zone, distance, 'sell')
+                        priority_score = self._calculate_priority_score(zone, distance, 'buy')
                         
                         opportunities.append({
                             'zone': zone,
-                            'direction': 'sell',
+                            'direction': 'buy',  # เปลี่ยนเป็น buy
                             'lot_size': lot_size,
                             'entry_price': current_price,
                             'zone_key': self._generate_zone_key(zone),
                             'distance': distance,
                             'priority_score': priority_score,
-                            'entry_reason': f"Resistance rejection at {zone['price']}"
+                            'entry_reason': f"Resistance bounce at {zone['price']}"  # เปลี่ยนเป็น bounce
                         })
             
             return opportunities

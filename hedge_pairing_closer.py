@@ -95,6 +95,7 @@ class HedgePairingCloser:
         # 🎯 Force Hedge Pairing - บังคับให้จับคู่ Hedge เสมอ
         self.force_hedge_pairing = True  # บังคับให้จับคู่ Hedge ก่อนปิด
         self.allow_single_side_closing = False  # ห้ามปิดไม้ฝั่งเดียว
+        self.force_hedge_pairing_only = True  # บังคับให้ใช้ Hedge Pairing เท่านั้น
         
         # 🚨 Emergency Mode Parameters (สำหรับพอร์ตที่แย่มาก)
         self.emergency_min_net_profit = 0.01  # กำไรขั้นต่ำในโหมดฉุกเฉิน $0.01
@@ -817,11 +818,11 @@ class HedgePairingCloser:
             #     logger.info(f"🎯 Total Profit: ${total_profit:.2f} | Positions: {len(positions)}")
             #     return self._create_close_all_decision(positions, total_profit)
             
-            # ตรวจสอบการปิดไม้ทั้งหมดเมื่อพอร์ตเป็นบวก (เร็วขึ้น)
-            if self._check_close_all_profitable(positions, account_balance):
-                logger.info("💰 CLOSE ALL POSITIONS - PORTFOLIO PROFITABLE")
-                logger.info(f"🎯 Total Profit: ${total_profit:.2f} | Positions: {len(positions)}")
-                return self._create_close_all_decision(positions, total_profit)
+            # 🚫 DISABLED: ตรวจสอบการปิดไม้ทั้งหมดเมื่อพอร์ตเป็นบวก - ใช้ Hedge Pairing แทน
+            # if self._check_close_all_profitable(positions, account_balance):
+            #     logger.info("💰 CLOSE ALL POSITIONS - PORTFOLIO PROFITABLE")
+            #     logger.info(f"🎯 Total Profit: ${total_profit:.2f} | Positions: {len(positions)}")
+            #     return self._create_close_all_decision(positions, total_profit)
             
             # Step 1: วิเคราะห์สุขภาพพอร์ตก่อน
             account_balance = account_info.get('balance', 1000.0)
@@ -945,6 +946,15 @@ class HedgePairingCloser:
                         confidence_score=best_helping.confidence_score,
                         reason=best_helping.reason
                     )
+            
+            # 1. ตรวจสอบว่ามีไม้ทั้งสองฝั่งหรือไม่ (บังคับ Hedge Pairing)
+            buy_positions = [pos for pos in filtered_positions if getattr(pos, 'type', 0) == 0]
+            sell_positions = [pos for pos in filtered_positions if getattr(pos, 'type', 0) == 1]
+            
+            if self.force_hedge_pairing_only and (len(buy_positions) == 0 or len(sell_positions) == 0):
+                logger.info(f"🚫 FORCE HEDGE PAIRING: Need both BUY and SELL positions to close")
+                logger.info(f"   BUY positions: {len(buy_positions)}, SELL positions: {len(sell_positions)}")
+                return None
             
             # 1. หาการจับคู่ไม้ที่มีอยู่
             logger.info(f"🔍 Starting profitable combinations search with {len(filtered_positions)} positions")
