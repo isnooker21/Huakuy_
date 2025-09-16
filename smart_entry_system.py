@@ -51,7 +51,7 @@ class SmartEntrySystem:
         self.max_positions_per_side = 5  # จำนวนไม้สูงสุดต่อฝั่ง
         self.balance_ratio_threshold = 0.3  # อัตราส่วนขั้นต่ำ (30% ของฝั่งตรงข้าม)
         self.position_distribution_enabled = True  # เปิดระบบกระจายไม้
-        self.min_distance_between_positions = 10.0  # ระยะห่างขั้นต่ำระหว่างไม้ (pips)
+        self.min_distance_between_positions = 5.0  # ระยะห่างขั้นต่ำระหว่างไม้ (pips)
         
     def analyze_position_balance(self, existing_positions: List = None, current_price: float = None, radius_pips: float = 50.0) -> Dict:
         """📊 วิเคราะห์ความสมดุลของไม้ในรัศมีรอบๆ ราคาปัจจุบัน"""
@@ -142,20 +142,29 @@ class SmartEntrySystem:
                 'is_balanced': True
             }
     
-    def check_position_distribution(self, new_price: float, existing_positions: List = None) -> bool:
-        """🔍 ตรวจสอบการกระจายตัวของไม้"""
+    def check_position_distribution(self, new_price: float, existing_positions: List = None, is_balance_entry: bool = False) -> bool:
+        """🔍 ตรวจสอบการกระจายตัวของไม้ (ไม่บังคับกับไม้ Zone-Based Balance)"""
         try:
             if not existing_positions or not self.position_distribution_enabled:
                 return True
             
-            # ตรวจสอบระยะห่างระหว่างไม้
+            # ไม่บังคับระยะห่างกับไม้ Zone-Based Balance
+            if is_balance_entry:
+                logger.info("🎯 Zone Balance entry - skipping distance check")
+                return True
+            
+            # ตรวจสอบระยะห่างระหว่างไม้ (เฉพาะไม้ปกติ)
             for pos in existing_positions:
-                pos_price = getattr(pos, 'price_open', 0)
-                if pos_price > 0:
-                    distance = abs(new_price - pos_price) * 10000  # แปลงเป็น pips
-                    if distance < self.min_distance_between_positions:
-                        logger.info(f"⚠️ Position too close: {distance:.1f} pips < {self.min_distance_between_positions} pips")
-                        return False
+                try:
+                    pos_price = getattr(pos, 'price_open', 0)
+                    if pos_price > 0:
+                        distance = abs(new_price - pos_price) * 10000  # แปลงเป็น pips
+                        if distance < self.min_distance_between_positions:
+                            logger.info(f"⚠️ Position too close: {distance:.1f} pips < {self.min_distance_between_positions} pips")
+                            return False
+                except Exception as e:
+                    logger.error(f"❌ Error checking position distance: {e}")
+                    continue
             
             return True
             
@@ -184,8 +193,8 @@ class SmartEntrySystem:
                 best_zone = self._find_best_zone_for_balance(support_zones, current_price, 'buy')
                 
                 if best_zone:
-                    # ตรวจสอบการกระจายตัว
-                    if self.check_position_distribution(best_zone['price'], existing_positions):
+                    # ตรวจสอบการกระจายตัว (ไม่บังคับกับไม้ Zone Balance)
+                    if self.check_position_distribution(best_zone['price'], existing_positions, is_balance_entry=True):
                         return {
                             'direction': 'buy',
                             'zone': best_zone,
@@ -200,8 +209,8 @@ class SmartEntrySystem:
                 best_zone = self._find_best_zone_for_balance(resistance_zones, current_price, 'sell')
                 
                 if best_zone:
-                    # ตรวจสอบการกระจายตัว
-                    if self.check_position_distribution(best_zone['price'], existing_positions):
+                    # ตรวจสอบการกระจายตัว (ไม่บังคับกับไม้ Zone Balance)
+                    if self.check_position_distribution(best_zone['price'], existing_positions, is_balance_entry=True):
                         return {
                             'direction': 'sell',
                             'zone': best_zone,
@@ -249,7 +258,7 @@ class SmartEntrySystem:
         except Exception as e:
             logger.error(f"❌ Error finding best zone for balance: {e}")
             return None
-
+        
     def analyze_entry_opportunity(self, symbol: str, current_price: float, zones: Dict[str, List[Dict]], 
                                 existing_positions: List = None) -> Optional[Dict]:
         """🔍 วิเคราะห์โอกาสเข้าไม้"""
