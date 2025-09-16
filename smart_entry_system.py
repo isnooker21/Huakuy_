@@ -324,6 +324,10 @@ class SmartEntrySystem:
             # ส่ง order
             result = mt5.order_send(request)
             
+            if result is None:
+                logger.error(f"❌ Entry failed: MT5 order_send returned None")
+                return None
+            
             if result.retcode == mt5.TRADE_RETCODE_DONE:
                 ticket = result.order
                 logger.info(f"🚀 Entry executed: {direction.upper()} {lot_size} lots at {entry_price} "
@@ -334,7 +338,7 @@ class SmartEntrySystem:
                 
                 return ticket
             else:
-                logger.error(f"❌ Entry failed: {result.comment} (Code: {result.retcode})")
+                logger.error(f"❌ Entry failed: {getattr(result, 'comment', 'Unknown error')} (Code: {getattr(result, 'retcode', 'Unknown')})")
                 return None
                 
         except Exception as e:
