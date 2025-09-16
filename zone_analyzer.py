@@ -138,7 +138,7 @@ class ZoneAnalyzer:
                 # ตรวจสอบ Support Pivot (Low)
                 is_support_pivot = True
                 for j in range(i - window, i + window + 1):
-                    if j != i and j < len(rates) and rates[j]['low'] <= current_low:
+                    if j != i and j < len(rates) and float(rates[j]['low']) <= float(current_low):
                         is_support_pivot = False
                         break
                 
@@ -156,7 +156,7 @@ class ZoneAnalyzer:
                 # ตรวจสอบ Resistance Pivot (High)
                 is_resistance_pivot = True
                 for j in range(i - window, i + window + 1):
-                    if j != i and j < len(rates) and rates[j]['high'] >= current_high:
+                    if j != i and j < len(rates) and float(rates[j]['high']) >= float(current_high):
                         is_resistance_pivot = False
                         break
                 
@@ -187,10 +187,10 @@ class ZoneAnalyzer:
             for i in range(pivot_index + 1, len(rates)):
                 if i < len(rates):
                     if zone_type == 'support':
-                        if abs(rates[i]['low'] - price) <= tolerance:
+                        if abs(float(rates[i]['low']) - float(price)) <= tolerance:
                             touches += 1
                     else:  # resistance
-                        if abs(rates[i]['high'] - price) <= tolerance:
+                        if abs(float(rates[i]['high']) - float(price)) <= tolerance:
                             touches += 1
             
             # ตรวจสอบ bars ก่อน pivot (ในระยะใกล้)
@@ -198,10 +198,10 @@ class ZoneAnalyzer:
             for i in range(start_idx, pivot_index):
                 if i < len(rates):
                     if zone_type == 'support':
-                        if abs(rates[i]['low'] - price) <= tolerance:
+                        if abs(float(rates[i]['low']) - float(price)) <= tolerance:
                             touches += 1
                     else:  # resistance
-                        if abs(rates[i]['high'] - price) <= tolerance:
+                        if abs(float(rates[i]['high']) - float(price)) <= tolerance:
                             touches += 1
             
             return touches
