@@ -1054,7 +1054,7 @@ class SimpleBreakoutTradingSystemGUI:
             
             # วิเคราะห์ Zones
             logger.info("🎯 Starting Zone Analysis...")
-            zones = self.zone_analyzer.analyze_zones(lookback_hours=48)
+            zones = self.zone_analyzer.analyze_zones(self.actual_symbol, lookback_hours=48)
             if not zones or (not zones['support'] and not zones['resistance']):
                 logger.warning("🎯 No zones found for smart systems")
                 return

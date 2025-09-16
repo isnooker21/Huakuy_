@@ -11,7 +11,7 @@ class ZoneAnalyzer:
     
     def __init__(self, mt5_connection):
         self.mt5_connection = mt5_connection
-        self.symbol = "XAUUSD"
+        self.symbol = None  # จะถูกตั้งค่าใน analyze_zones
         self.timeframes = [mt5.TIMEFRAME_M5, mt5.TIMEFRAME_M15, mt5.TIMEFRAME_M30, mt5.TIMEFRAME_H1]
         
         # Zone Detection Parameters
@@ -32,9 +32,12 @@ class ZoneAnalyzer:
         self.volume_weight = 0.3
         self.time_weight = 0.3
         
-    def analyze_zones(self, lookback_hours: int = 24) -> Dict[str, List[Dict]]:
+    def analyze_zones(self, symbol: str, lookback_hours: int = 24) -> Dict[str, List[Dict]]:
         """🔍 วิเคราะห์ Support/Resistance Zones จากหลาย Timeframe"""
         try:
+            self.symbol = symbol  # ตั้งค่า symbol จาก parameter
+            logger.info(f"🔍 Analyzing zones for {self.symbol} (lookback: {lookback_hours}h)")
+            
             support_zones = []
             resistance_zones = []
             
