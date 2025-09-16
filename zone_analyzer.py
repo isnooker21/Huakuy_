@@ -17,8 +17,8 @@ class ZoneAnalyzer:
         
         # Zone Detection Parameters (ปรับให้หา Support/Resistance ได้สมดุล)
         self.min_touches = 1  # ลดเกณฑ์ให้หา Zone ได้มากขึ้น (จาก 2)
-        self.zone_tolerance = 20.0  # เพิ่มความยืดหยุ่น สำหรับ XAUUSD (จาก 15.0)
-        self.min_zone_strength = 15  # ลดเกณฑ์ความแข็งแรง (จาก 20) เพื่อหา Support มากขึ้น
+        self.zone_tolerance = 30.0  # เพิ่มความยืดหยุ่น สำหรับ XAUUSD (จาก 20.0)
+        self.min_zone_strength = 10  # ลดเกณฑ์ความแข็งแรง (จาก 15) เพื่อหา Support มากขึ้น
         
         # Multi-TF Analysis
         self.tf_weights = {
@@ -38,6 +38,7 @@ class ZoneAnalyzer:
         try:
             self.symbol = symbol  # ตั้งค่า symbol จาก parameter
             logger.info(f"🔍 Analyzing zones for {self.symbol} (lookback: {lookback_hours}h)")
+        logger.info(f"🔧 Zone Detection Settings: tolerance={self.zone_tolerance}, min_strength={self.min_zone_strength}, min_touches={self.min_touches}")
             
             support_zones = []
             resistance_zones = []

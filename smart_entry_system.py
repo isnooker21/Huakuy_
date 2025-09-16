@@ -22,7 +22,7 @@ class SmartEntrySystem:
         self.profit_target_pips = 50  # เป้าหมายกำไร 50 pips ต่อ lot
         self.loss_threshold_pips = 50  # เกณฑ์ขาดทุน 50 pips ต่อ lot
         self.recovery_zone_strength = 80  # Zone strength สำหรับ Recovery
-        self.min_zone_strength = 50  # Zone strength ขั้นต่ำสำหรับเข้าไม้
+        self.min_zone_strength = 10  # Zone strength ขั้นต่ำสำหรับเข้าไม้ (ลดจาก 50)
         
         # Risk Management (Dynamic)
         self.risk_percent_per_trade = 0.01  # 1% ของ balance ต่อ trade
