@@ -1081,6 +1081,9 @@ class SimpleBreakoutTradingSystemGUI:
                     import threading
                     def smart_systems_worker():
                         try:
+                            import time
+                            start_time = time.time()
+                            
                             # วิเคราะห์ Zones ใน background (ใช้ threading timeout แทน signal)
                             logger.info("🎯 Starting Zone Analysis...")
                             
@@ -1090,8 +1093,13 @@ class SimpleBreakoutTradingSystemGUI:
                                 future = executor.submit(self.zone_analyzer.analyze_zones, self.actual_symbol, 24)  # ลด lookback
                                 try:
                                     zones = future.result(timeout=30)  # 30 วินาที timeout
+                                    zone_time = time.time() - start_time
+                                    logger.info(f"🎯 Zone Analysis completed in {zone_time:.2f}s")
                                 except concurrent.futures.TimeoutError:
                                     logger.warning("🎯 Zone analysis timeout, skipping...")
+                                    return
+                                except Exception as e:
+                                    logger.error(f"🎯 Zone analysis error: {e}")
                                     return
                             
                             if not zones or (not zones['support'] and not zones['resistance']):
@@ -1106,6 +1114,7 @@ class SimpleBreakoutTradingSystemGUI:
                             portfolio_profit = sum(getattr(pos, 'profit', 0) for pos in positions) if positions else 0
                             
                             # 1. Smart Entry System
+                            entry_start = time.time()
                             if hasattr(self, 'smart_entry_system') and self.smart_entry_system:
                                 try:
                                     # Build a mock position with current price for SW filter
@@ -1126,10 +1135,16 @@ class SimpleBreakoutTradingSystemGUI:
                                                 ticket = self.smart_entry_system.execute_entry(entry_opportunity)
                                                 if ticket:
                                                     logger.info(f"✅ Smart Entry executed: Ticket {ticket}")
+                                        else:
+                                            logger.debug("🚫 SW Filter blocked Smart Entry")
                                 except Exception as e:
                                     logger.error(f"❌ Error in smart entry: {e}")
                             
+                            entry_time = time.time() - entry_start
+                            logger.debug(f"⏱️ Smart Entry processed in {entry_time:.2f}s")
+                            
                             # 2. Portfolio Anchor System
+                            anchor_start = time.time()
                             if hasattr(self, 'portfolio_anchor') and self.portfolio_anchor:
                                 try:
                                     # Build a mock position with current price for SW filter
@@ -1150,9 +1165,18 @@ class SimpleBreakoutTradingSystemGUI:
                                                 ticket = self.portfolio_anchor.execute_anchor(anchor_need, current_price)
                                                 if ticket:
                                                     logger.info(f"✅ Anchor created: Ticket {ticket}")
+                                        else:
+                                            logger.debug("🚫 SW Filter blocked Portfolio Anchor")
                                 except Exception as e:
                                     logger.error(f"❌ Error in portfolio anchor: {e}")
+                            
+                            anchor_time = time.time() - anchor_start
+                            logger.debug(f"⏱️ Portfolio Anchor processed in {anchor_time:.2f}s")
                                     
+                            # Log total processing time
+                            total_time = time.time() - start_time
+                            logger.info(f"🎯 Smart Systems completed in {total_time:.2f}s")
+                            
                         except Exception as e:
                             logger.error(f"❌ Error in smart systems worker: {e}")
                     

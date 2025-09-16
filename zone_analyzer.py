@@ -97,8 +97,18 @@ class ZoneAnalyzer:
             logger.debug(f"🔍 Requesting {bars_needed} bars for {timeframe} (lookback: {lookback_hours}h)")
             rates = mt5.copy_rates_from_pos(self.symbol, timeframe, 0, bars_needed)
             
-            if rates is None or (hasattr(rates, '__len__') and len(rates) < 50):
-                logger.warning(f"⚠️ Insufficient data for timeframe {timeframe} (got {len(rates) if rates else 0} bars, need 50+)")
+            if rates is None:
+                logger.warning(f"⚠️ No data received for timeframe {timeframe}")
+                return [], []
+            
+            # ตรวจสอบชนิดของ rates และแปลงเป็น list ถ้าจำเป็น
+            if hasattr(rates, 'dtype'):  # NumPy array
+                rates_list = rates.tolist()
+                logger.debug(f"🔄 Converted NumPy array to list: {len(rates_list)} bars")
+                rates = rates_list  # ใช้ list แทน NumPy array
+            
+            if len(rates) < 50:
+                logger.warning(f"⚠️ Insufficient data for timeframe {timeframe} (got {len(rates)} bars, need 50+)")
                 return [], []
             
             # หา Pivot Points
@@ -143,7 +153,7 @@ class ZoneAnalyzer:
                 # ตรวจสอบ Support Pivot (Low)
                 is_support_pivot = True
                 for j in range(i - window, i + window + 1):
-                    if j != i and j < len(rates) and float(rates[j]['low']) <= current_low:
+                    if j != i and j < len(rates) and float(rates[j]['low']) <= float(current_low):
                         is_support_pivot = False
                         break
                 
@@ -167,7 +177,7 @@ class ZoneAnalyzer:
                 # ตรวจสอบ Resistance Pivot (High)
                 is_resistance_pivot = True
                 for j in range(i - window, i + window + 1):
-                    if j != i and j < len(rates) and float(rates[j]['high']) >= current_high:
+                    if j != i and j < len(rates) and float(rates[j]['high']) >= float(current_high):
                         is_resistance_pivot = False
                         break
                 
