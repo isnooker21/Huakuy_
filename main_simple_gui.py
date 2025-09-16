@@ -1234,7 +1234,9 @@ class SmartEntryTradingSystemGUI:
                                     return
                             
                             if not zones or (not zones['support'] and not zones['resistance']):
-                                logger.warning("🎯 No zones found for smart systems")
+                                logger.warning("🎯 NO ZONES FOUND FOR SMART SYSTEMS")
+                                logger.warning("   📊 ระบบไม่พบ Support หรือ Resistance zones")
+                                logger.warning("   🔧 ปรับแต่ง: ลด zone_tolerance หรือ min_zone_strength ใน Zone Analyzer")
                                 return
                             
                             logger.info(f"🎯 Zone Analysis Complete: {len(zones['support'])} support, {len(zones['resistance'])} resistance zones")

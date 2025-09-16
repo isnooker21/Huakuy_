@@ -70,10 +70,20 @@ class ZoneAnalyzer:
             if merged_support:
                 strongest_support = merged_support[0]
                 logger.info(f"🔍 Strongest Support: {strongest_support['price']:.2f} (Strength: {strongest_support['strength']:.1f})")
+            else:
+                logger.warning("🚫 NO SUPPORT ZONES FOUND - อาจเป็นเพราะตลาดไม่มี Support ที่แข็งแกร่งเพียงพอ")
             
             if merged_resistance:
                 strongest_resistance = merged_resistance[0]
                 logger.info(f"🔍 Strongest Resistance: {strongest_resistance['price']:.2f} (Strength: {strongest_resistance['strength']:.1f})")
+            else:
+                logger.warning("🚫 NO RESISTANCE ZONES FOUND - อาจเป็นเพราะตลาดไม่มี Resistance ที่แข็งแกร่งเพียงพอ")
+            
+            # Log warning if no zones at all
+            if not merged_support and not merged_resistance:
+                logger.warning("🚫 NO ZONES FOUND AT ALL - ระบบไม่พบ Support หรือ Resistance zones เลย")
+                logger.warning("   📊 ตรวจสอบ: ข้อมูลราคา, เกณฑ์ zone_tolerance, min_zone_strength")
+                logger.warning("   🔧 ปรับแต่ง: ลด zone_tolerance หรือ min_zone_strength เพื่อหา zones ได้มากขึ้น")
             
             return {
                 'support': merged_support,

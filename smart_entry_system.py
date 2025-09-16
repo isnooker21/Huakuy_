@@ -232,7 +232,9 @@ class SmartEntrySystem:
             zone_type, selected_zone = self.select_zone_by_pivot_and_strength(current_price, zones)
             
             if not zone_type or not selected_zone:
-                logger.debug("🚫 No suitable zone found")
+                logger.warning("🚫 NO SUITABLE ZONE FOUND FOR ENTRY")
+                logger.warning("   📊 ตรวจสอบ: Support/Resistance zones, Zone Strength ≥ 50, ระยะห่าง ≤ 15 pips")
+                logger.warning("   🔧 ปรับแต่ง: ลด min_zone_strength หรือเพิ่ม zone_tolerance")
                 return None
             
             # ตรวจสอบว่า Zone ใช้ได้หรือไม่
