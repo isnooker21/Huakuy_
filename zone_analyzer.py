@@ -85,10 +85,11 @@ class ZoneAnalyzer:
         try:
             # ดึงข้อมูลราคา
             bars_needed = int(lookback_hours * 60 / self._get_timeframe_minutes(timeframe))
+            logger.debug(f"🔍 Requesting {bars_needed} bars for {timeframe} (lookback: {lookback_hours}h)")
             rates = mt5.copy_rates_from_pos(self.symbol, timeframe, 0, bars_needed)
             
             if rates is None or len(rates) < 50:
-                logger.warning(f"⚠️ Insufficient data for timeframe {timeframe}")
+                logger.warning(f"⚠️ Insufficient data for timeframe {timeframe} (got {len(rates) if rates else 0} bars, need 50+)")
                 return [], []
             
             # หา Pivot Points
@@ -314,7 +315,9 @@ class ZoneAnalyzer:
             mt5.TIMEFRAME_M30: 30,
             mt5.TIMEFRAME_H1: 60
         }
-        return tf_minutes.get(timeframe, 5)
+        minutes = tf_minutes.get(timeframe, 5)
+        logger.debug(f"🔍 Timeframe {timeframe} = {minutes} minutes")
+        return minutes
     
     def get_zone_at_price(self, price: float, zones: Dict[str, List[Dict]], tolerance: float = None) -> Optional[Dict]:
         """🎯 หา Zone ที่ราคาปัจจุบัน"""
