@@ -110,22 +110,22 @@ class HedgePairingCloser:
         self.enable_position_generation = True  # เปิดใช้งานการออกไม้เพิ่มเติม
         self.max_additional_positions = 3
         
-        # 🧠 Advanced Pairing Strategies - กลยุทธ์การจับคู่ขั้นสูง
-        self.advanced_pairing_enabled = True
-        self.multi_level_pairing = True  # จับคู่หลายระดับ (2-3-4-5 ไม้)
-        self.cascade_pairing = True  # จับคู่แบบต่อเนื่อง (A+B, A+B+C, A+B+C+D)
-        self.reverse_pairing = True  # จับคู่ย้อนกลับ (หาไม้ช่วยจากไม้ที่เสียมาก)
-        self.smart_priority_pairing = True  # จับคู่ตามความสำคัญ (ไม้เสียมากก่อน)
+        # 🧠 Advanced Pairing Strategies - กลยุทธ์การจับคู่ขั้นสูง (DISABLED)
+        self.advanced_pairing_enabled = False  # ปิดเพื่อไม่รบกวน Multi-Helper System
+        self.multi_level_pairing = False  # จับคู่หลายระดับ (2-3-4-5 ไม้)
+        self.cascade_pairing = False  # จับคู่แบบต่อเนื่อง (A+B, A+B+C, A+B+C+D)
+        self.reverse_pairing = False  # จับคู่ย้อนกลับ (หาไม้ช่วยจากไม้ที่เสียมาก)
+        self.smart_priority_pairing = False  # จับคู่ตามความสำคัญ (ไม้เสียมากก่อน)
         
-        # 🎯 Enhanced Helping System - ระบบช่วยเหลือขั้นสูง
-        self.enhanced_helping_enabled = True
-        self.multi_helper_system = True  # ไม้ช่วยหลายตัว (Helper1+Helper2+Main)
-        self.cascade_helping = True  # ช่วยแบบต่อเนื่อง (Helper→Main→Helper2)
-        self.smart_helper_selection = True  # เลือกไม้ช่วยอย่างฉลาด
-        self.emergency_helper_mode = True  # โหมดช่วยเหลือฉุกเฉิน (ไม้เสียมาก)
+        # 🎯 Enhanced Helping System - ระบบช่วยเหลือขั้นสูง (DISABLED)
+        self.enhanced_helping_enabled = False  # ปิดเพื่อไม่รบกวน Multi-Helper System
+        self.multi_helper_system = False  # ไม้ช่วยหลายตัว (Helper1+Helper2+Main)
+        self.cascade_helping = False  # ช่วยแบบต่อเนื่อง (Helper→Main→Helper2)
+        self.smart_helper_selection = False  # เลือกไม้ช่วยอย่างฉลาด
+        self.emergency_helper_mode = False  # โหมดช่วยเหลือฉุกเฉิน (ไม้เสียมาก)
         
-        # 🧹 Stale Position Clearing - ระบบเคลียร์ไม้ค้างพอร์ต
-        self.stale_clearing_enabled = True
+        # 🧹 Stale Position Clearing - ระบบเคลียร์ไม้ค้างพอร์ต (DISABLED)
+        self.stale_clearing_enabled = False  # ปิดเพื่อไม่รบกวน Multi-Helper System
         self.stale_age_threshold_hours = 24  # อายุไม้ค้าง ≥ 24 ชั่วโมง
         self.stale_loss_threshold = -5.0  # ขาดทุนหนัก ≤ -$5
         self.stale_priority_bonus = 0.3  # โบนัสความสำคัญ +30%
@@ -874,8 +874,10 @@ class HedgePairingCloser:
             #     logger.info(f"🛡️ SW Filter: Applied clustering protection")
             
             
-            # 0.4. Stale Position Clearing - ระบบเคลียร์ไม้ค้างพอร์ต
-            if self.stale_clearing_enabled and stale_positions:
+            # 0.4. Stale Position Clearing - ระบบเคลียร์ไม้ค้างพอร์ต (DISABLED)
+            if not self.stale_clearing_enabled:
+                logger.debug("🚫 Stale Clearing DISABLED - Using Multi-Helper System instead")
+            elif self.stale_clearing_enabled and stale_positions:
                 stale_combinations = self._find_stale_clearing_combinations(filtered_positions, stale_positions)
                 if stale_combinations:
                     logger.info(f"🧹 STALE CLEARING FOUND: {len(stale_combinations)} combinations")
@@ -899,8 +901,10 @@ class HedgePairingCloser:
                         reason=best_stale.reason
                     )
             
-            # 0.5. Advanced Pairing - กลยุทธ์การจับคู่ขั้นสูง
-            if self.advanced_pairing_enabled:
+            # 0.5. Advanced Pairing - กลยุทธ์การจับคู่ขั้นสูง (DISABLED)
+            if not self.advanced_pairing_enabled:
+                logger.debug("🚫 Advanced Pairing DISABLED - Using Multi-Helper System instead")
+            elif self.advanced_pairing_enabled:
                 advanced_combinations = self._find_advanced_pairing_combinations(filtered_positions)
                 if advanced_combinations:
                     logger.info(f"🧠 ADVANCED PAIRING FOUND: {len(advanced_combinations)} combinations")
@@ -923,8 +927,10 @@ class HedgePairingCloser:
                         reason=best_advanced.reason
                     )
             
-            # 0.6. Enhanced Helping - ระบบช่วยเหลือขั้นสูง
-            if self.enhanced_helping_enabled:
+            # 0.6. Enhanced Helping - ระบบช่วยเหลือขั้นสูง (DISABLED)
+            if not self.enhanced_helping_enabled:
+                logger.debug("🚫 Enhanced Helping DISABLED - Using Multi-Helper System instead")
+            elif self.enhanced_helping_enabled:
                 enhanced_helping = self._find_enhanced_helping_combinations(filtered_positions)
                 if enhanced_helping:
                     logger.info(f"🎯 ENHANCED HELPING FOUND: {len(enhanced_helping)} combinations")
