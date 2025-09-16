@@ -101,11 +101,24 @@ class ZoneAnalyzer:
                 logger.warning(f"⚠️ No data received for timeframe {timeframe}")
                 return [], []
             
-            # ตรวจสอบชนิดของ rates และแปลงเป็น list ถ้าจำเป็น
-            if hasattr(rates, 'dtype'):  # NumPy array
-                rates_list = rates.tolist()
-                logger.debug(f"🔄 Converted NumPy array to list: {len(rates_list)} bars")
-                rates = rates_list  # ใช้ list แทน NumPy array
+            # ตรวจสอบชนิดของ rates - ถ้าเป็น NumPy structured array ให้แปลงเป็น dict
+            if hasattr(rates, 'dtype'):  # NumPy structured array
+                rates_list = []
+                for rate in rates:
+                    # แปลง structured array record เป็น dict
+                    rate_dict = {
+                        'time': float(rate['time']),
+                        'open': float(rate['open']),
+                        'high': float(rate['high']),
+                        'low': float(rate['low']),
+                        'close': float(rate['close']),
+                        'tick_volume': int(rate['tick_volume']) if 'tick_volume' in rate.dtype.names else 0,
+                        'spread': int(rate['spread']) if 'spread' in rate.dtype.names else 0,
+                        'real_volume': int(rate['real_volume']) if 'real_volume' in rate.dtype.names else 0
+                    }
+                    rates_list.append(rate_dict)
+                rates = rates_list
+                logger.debug(f"🔄 Converted NumPy structured array to dict list: {len(rates)} bars")
             
             if len(rates) < 50:
                 logger.warning(f"⚠️ Insufficient data for timeframe {timeframe} (got {len(rates)} bars, need 50+)")
