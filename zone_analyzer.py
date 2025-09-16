@@ -17,8 +17,8 @@ class ZoneAnalyzer:
         
         # Zone Detection Parameters (ปรับให้หา Support/Resistance ได้สมดุล)
         self.min_touches = 1  # ลดเกณฑ์ให้หา Zone ได้มากขึ้น (จาก 2)
-        self.zone_tolerance = 30.0  # เพิ่มความยืดหยุ่น สำหรับ XAUUSD (จาก 20.0)
-        self.min_zone_strength = 10  # ลดเกณฑ์ความแข็งแรง (จาก 15) เพื่อหา Support มากขึ้น
+        self.zone_tolerance = 50.0  # เพิ่มความยืดหยุ่น สำหรับ XAUUSD (จาก 30.0)
+        self.min_zone_strength = 5  # ลดเกณฑ์ความแข็งแรง (จาก 10) เพื่อหา Support มากขึ้น
         
         # Multi-TF Analysis (ใช้แค่ M5)
         self.tf_weights = {
