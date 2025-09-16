@@ -232,8 +232,20 @@ class SmartEntrySystem:
             zone_type, selected_zone = self.select_zone_by_pivot_and_strength(current_price, zones)
             
             if not zone_type or not selected_zone:
+                # Log all available zones for debugging
+                support_zones = zones.get('support', [])
+                resistance_zones = zones.get('resistance', [])
+                
                 logger.warning("🚫 NO SUITABLE ZONE FOUND FOR ENTRY")
-                logger.warning("   📊 ตรวจสอบ: Support/Resistance zones, Zone Strength ≥ 50, ระยะห่าง ≤ 15 pips")
+                logger.warning(f"   📊 Current Price: {current_price:.2f}")
+                logger.warning(f"   📈 Available Support Zones: {len(support_zones)}")
+                for i, zone in enumerate(support_zones[:3], 1):
+                    logger.warning(f"      {i}. {zone['price']:.2f} (Strength: {zone['strength']:.1f})")
+                
+                logger.warning(f"   📉 Available Resistance Zones: {len(resistance_zones)}")
+                for i, zone in enumerate(resistance_zones[:3], 1):
+                    logger.warning(f"      {i}. {zone['price']:.2f} (Strength: {zone['strength']:.1f})")
+                
                 logger.warning("   🔧 ปรับแต่ง: ลด min_zone_strength หรือเพิ่ม zone_tolerance")
                 return None
             
@@ -252,9 +264,11 @@ class SmartEntrySystem:
             if zone_type == 'support':
                 direction = 'buy'  # BUY ที่ Support
                 entry_reason = f"Support BUY at {selected_zone['price']:.5f} (Strength: {selected_zone['strength']})"
+                logger.info(f"🎯 SELECTED SUPPORT ZONE: {selected_zone['price']:.2f} (Strength: {selected_zone['strength']:.1f})")
             else:  # resistance
                 direction = 'sell'  # SELL ที่ Resistance
                 entry_reason = f"Resistance SELL at {selected_zone['price']:.5f} (Strength: {selected_zone['strength']})"
+                logger.info(f"🎯 SELECTED RESISTANCE ZONE: {selected_zone['price']:.2f} (Strength: {selected_zone['strength']:.1f})")
             
             entry_opportunity = {
                 'direction': direction,

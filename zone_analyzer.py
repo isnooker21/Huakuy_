@@ -66,16 +66,23 @@ class ZoneAnalyzer:
             
             logger.info(f"🔍 ZONE ANALYSIS COMPLETE: {len(merged_support)} support zones, {len(merged_resistance)} resistance zones")
             
-            # Log details of strongest zones
+            # Log all Support zones with prices
             if merged_support:
-                strongest_support = merged_support[0]
-                logger.info(f"🔍 Strongest Support: {strongest_support['price']:.2f} (Strength: {strongest_support['strength']:.1f})")
+                logger.info("📈 SUPPORT ZONES FOUND:")
+                for i, zone in enumerate(merged_support[:5], 1):  # แสดง 5 zones ที่แข็งแกร่งที่สุด
+                    logger.info(f"   {i}. Support: {zone['price']:.2f} (Strength: {zone['strength']:.1f})")
+                if len(merged_support) > 5:
+                    logger.info(f"   ... และอีก {len(merged_support) - 5} zones")
             else:
                 logger.warning("🚫 NO SUPPORT ZONES FOUND - อาจเป็นเพราะตลาดไม่มี Support ที่แข็งแกร่งเพียงพอ")
             
+            # Log all Resistance zones with prices
             if merged_resistance:
-                strongest_resistance = merged_resistance[0]
-                logger.info(f"🔍 Strongest Resistance: {strongest_resistance['price']:.2f} (Strength: {strongest_resistance['strength']:.1f})")
+                logger.info("📉 RESISTANCE ZONES FOUND:")
+                for i, zone in enumerate(merged_resistance[:5], 1):  # แสดง 5 zones ที่แข็งแกร่งที่สุด
+                    logger.info(f"   {i}. Resistance: {zone['price']:.2f} (Strength: {zone['strength']:.1f})")
+                if len(merged_resistance) > 5:
+                    logger.info(f"   ... และอีก {len(merged_resistance) - 5} zones")
             else:
                 logger.warning("🚫 NO RESISTANCE ZONES FOUND - อาจเป็นเพราะตลาดไม่มี Resistance ที่แข็งแกร่งเพียงพอ")
             

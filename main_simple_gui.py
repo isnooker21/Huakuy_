@@ -1240,6 +1240,16 @@ class SmartEntryTradingSystemGUI:
                                 return
                             
                             logger.info(f"🎯 Zone Analysis Complete: {len(zones['support'])} support, {len(zones['resistance'])} resistance zones")
+                            logger.info(f"📊 Current Price: {current_price:.2f}")
+                            
+                            # Log current price vs zones
+                            if zones['support']:
+                                nearest_support = min(zones['support'], key=lambda x: abs(x['price'] - current_price))
+                                logger.info(f"📈 Nearest Support: {nearest_support['price']:.2f} (Distance: {abs(current_price - nearest_support['price']):.2f})")
+                            
+                            if zones['resistance']:
+                                nearest_resistance = min(zones['resistance'], key=lambda x: abs(x['price'] - current_price))
+                                logger.info(f"📉 Nearest Resistance: {nearest_resistance['price']:.2f} (Distance: {abs(current_price - nearest_resistance['price']):.2f})")
                             
                             # ดึงข้อมูลพอร์ต
                             positions = self.mt5_connection.get_positions()
