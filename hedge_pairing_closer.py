@@ -1618,20 +1618,30 @@ class HedgePairingCloser:
                 return helping_combinations
             
             # Step 2.5: หาไม้ฝั่งเดียวที่ P&L รวมเป็นบวก (เฉพาะเมื่อไม่มีไม้ฝั่งตรงข้าม)
-            logger.info("🔍 STEP 2.5: SINGLE SIDE PROFITABLE CLOSING")
-            single_side_combinations = self._find_single_side_profitable(priority_positions)
+            # ตรวจสอบว่ามีไม้ทั้งสองฝั่งหรือไม่
+            buy_count = sum(1 for p in priority_positions if getattr(p, 'type', 0) == 0)
+            sell_count = sum(1 for p in priority_positions if getattr(p, 'type', 0) == 1)
             
-            if single_side_combinations:
-                logger.info("-" * 40)
-                logger.info("✅ SINGLE SIDE PROFITABLE FOUND")
-                logger.info("-" * 40)
-                logger.info(f"🎯 Total combinations: {len(single_side_combinations)}")
-                for i, combo in enumerate(single_side_combinations[:3]):  # แสดงแค่ 3 อันแรก
-                    logger.info(f"   {i+1}. {combo.combination_type}: ${combo.total_profit:.2f} ({combo.size} positions)")
-                if len(single_side_combinations) > 3:
-                    logger.info(f"   ... and {len(single_side_combinations) - 3} more combinations")
-                logger.info("=" * 60)
-                return single_side_combinations
+            if buy_count > 0 and sell_count > 0:
+                # มีไม้ทั้งสองฝั่ง - ห้ามใช้ Single Side Closing
+                logger.info("🚫 FORCE HEDGE PAIRING: Both BUY and SELL exist - Single side closing disabled")
+                logger.info(f"   BUY positions: {buy_count}, SELL positions: {sell_count}")
+            else:
+                # มีไม้ฝั่งเดียว - อนุญาตให้ใช้ Single Side Closing
+                logger.info("🔍 STEP 2.5: SINGLE SIDE PROFITABLE CLOSING")
+                single_side_combinations = self._find_single_side_profitable(priority_positions)
+                
+                if single_side_combinations:
+                    logger.info("-" * 40)
+                    logger.info("✅ SINGLE SIDE PROFITABLE FOUND")
+                    logger.info("-" * 40)
+                    logger.info(f"🎯 Total combinations: {len(single_side_combinations)}")
+                    for i, combo in enumerate(single_side_combinations[:3]):  # แสดงแค่ 3 อันแรก
+                        logger.info(f"   {i+1}. {combo.combination_type}: ${combo.total_profit:.2f} ({combo.size} positions)")
+                    if len(single_side_combinations) > 3:
+                        logger.info(f"   ... and {len(single_side_combinations) - 3} more combinations")
+                    logger.info("=" * 60)
+                    return single_side_combinations
             
             # Step 3-4: Advanced Search (ทุก 5 นาที)
             current_time = time.time()
@@ -1764,56 +1774,32 @@ class HedgePairingCloser:
             logger.info("=" * 60)
             logger.info(f"📊 Positions: {len(buy_positions)} Buy, {len(sell_positions)} Sell (Total: {len(positions)})")
             
-            # Step 1: จับคู่ตรงข้ามก่อนเสมอ (เร็วขึ้น - O(n log n))
+            # Step 1: จับคู่ตรงข้ามก่อนเสมอ (บังคับ Hedge Pairing)
             hedge_pairs = []
             used_positions = set()  # ติดตามไม้ที่ใช้แล้ว
             
-            # เรียงไม้ตามกำไร (เร็วขึ้น)
-            buy_loss = [p for p in buy_positions if getattr(p, 'profit', 0) < 0]
-            buy_profit = [p for p in buy_positions if getattr(p, 'profit', 0) > 0]
-            sell_loss = [p for p in sell_positions if getattr(p, 'profit', 0) < 0]
-            sell_profit = [p for p in sell_positions if getattr(p, 'profit', 0) > 0]
+            # บังคับจับคู่ BUY + SELL โดยไม่สนใจกำไร/ขาดทุน
+            logger.info("🎯 FORCE HEDGE PAIRING: Matching BUY + SELL regardless of profit/loss")
             
-            # หา Buy ติดลบ + Sell กำไร (เร็วขึ้น)
-            for buy_pos in buy_loss:
+            # จับคู่ BUY กับ SELL ทุกคู่ที่เป็นไปได้
+            for buy_pos in buy_positions:
                 buy_ticket = getattr(buy_pos, 'ticket', 'N/A')
                 if buy_ticket in used_positions:
                     continue
                 
-                for sell_pos in sell_profit:
+                for sell_pos in sell_positions:
                     sell_ticket = getattr(sell_pos, 'ticket', 'N/A')
                     if sell_ticket in used_positions:
                         continue
                     
-                    # จับคู่ไม้ที่ยังไม่ได้ใช้
+                    # จับคู่ไม้ที่ยังไม่ได้ใช้ (ไม่สนใจกำไร/ขาดทุน)
                     hedge_pairs.append({
                         'buy': buy_pos,
                         'sell': sell_pos,
-                        'type': 'BUY_LOSS_SELL_PROFIT'
+                        'type': 'FORCE_HEDGE_PAIRING'
                     })
                     used_positions.add(buy_ticket)
                     used_positions.add(sell_ticket)
-                    break  # หยุดเมื่อจับคู่แล้ว
-            
-            # หา Sell ติดลบ + Buy กำไร (เร็วขึ้น)
-            for sell_pos in sell_loss:
-                sell_ticket = getattr(sell_pos, 'ticket', 'N/A')
-                if sell_ticket in used_positions:
-                    continue
-                
-                for buy_pos in buy_profit:
-                    buy_ticket = getattr(buy_pos, 'ticket', 'N/A')
-                    if buy_ticket in used_positions:
-                        continue
-                    
-                    # จับคู่ไม้ที่ยังไม่ได้ใช้
-                    hedge_pairs.append({
-                        'buy': buy_pos,
-                        'sell': sell_pos,
-                        'type': 'SELL_LOSS_BUY_PROFIT'
-                    })
-                    used_positions.add(sell_ticket)
-                    used_positions.add(buy_ticket)
                     break  # หยุดเมื่อจับคู่แล้ว
             
             # แสดงสรุปการจับคู่ (เร็วขึ้น)
@@ -1824,9 +1810,19 @@ class HedgePairingCloser:
             logger.info(f"📋 Used positions: {len(used_positions)}")
             logger.info(f"📋 Unused positions: {len(positions) - len(used_positions)}")
             
-            # Step 2: หาไม้อื่นๆ มาจับคู่เพิ่มเติม (เร็วขึ้น)
+            # Step 2: สร้าง HedgeCombination สำหรับทุกคู่ (บังคับ Hedge Pairing)
             for hedge_pair in hedge_pairs:
                 hedge_profit = getattr(hedge_pair['buy'], 'profit', 0) + getattr(hedge_pair['sell'], 'profit', 0)
+                
+                # สร้าง HedgeCombination ทุกคู่ (ไม่สนใจกำไร/ขาดทุน)
+                hedge_combinations.append(HedgeCombination(
+                    positions=[hedge_pair['buy'], hedge_pair['sell']],
+                    total_profit=hedge_profit,
+                    combination_type="FORCE_HEDGE_PAIRING",
+                    size=2,
+                    confidence_score=100.0,  # ให้คะแนนสูงสุดสำหรับ Hedge Pairing
+                    reason=f"Force Hedge Pairing: BUY {getattr(hedge_pair['buy'], 'ticket', 'N/A')} + SELL {getattr(hedge_pair['sell'], 'ticket', 'N/A')}"
+                ))
                 
                 # ถ้า hedge pair ติดลบ ให้หาไม้อื่นๆ มาช่วย
                 if hedge_profit < 0:
@@ -1884,8 +1880,11 @@ class HedgePairingCloser:
                         reason=f"Hedge: {hedge_pair['type']} (profitable pair)"
                     ))
             
-            # เรียงตามผลรวมกำไร (มากสุดก่อน)
-            hedge_combinations.sort(key=lambda x: x.total_profit, reverse=True)
+            # เรียงตามความสำคัญ: Hedge Pairing ก่อน แล้วค่อยเรียงตามกำไร
+            hedge_combinations.sort(key=lambda x: (
+                x.combination_type != "FORCE_HEDGE_PAIRING",  # Hedge Pairing ก่อน
+                -x.total_profit  # กำไรมากก่อน
+            ))
             
             return hedge_combinations
             
