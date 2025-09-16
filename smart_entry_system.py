@@ -322,22 +322,13 @@ class SmartEntrySystem:
                 "magic": 123456
             }
             
-            # 🔍 Debug Log
-            logger.info(f"🔍 SMART ENTRY DEBUG:")
-            logger.info(f"   Symbol: {symbol}")
-            logger.info(f"   Volume: {lot_size}")
-            logger.info(f"   Direction: {direction}")
-            logger.info(f"   Order Type: {order_type}")
-            logger.info(f"   MT5 Connected: {mt5.initialize()}")
-            logger.info(f"   Account Info: {mt5.account_info()}")
-            logger.info(f"   Symbol Info: {mt5.symbol_info(symbol)}")
-            
             # ส่ง order
-            logger.info(f"🔍 Order Request: {request}")
-            logger.info(f"🔍 MT5 Last Error before send: {mt5.last_error()}")
             result = mt5.order_send(request)
-            logger.info(f"🔍 MT5 order_send result: {result}")
-            logger.info(f"🔍 MT5 Last Error after send: {mt5.last_error()}")
+            
+            # Debug เฉพาะเมื่อมี error
+            if result is None:
+                logger.error(f"🔍 MT5 Error: {mt5.last_error()}")
+                logger.error(f"🔍 Request was: {request}")
             
             if result is None:
                 logger.error(f"❌ Entry failed: MT5 order_send returned None")
