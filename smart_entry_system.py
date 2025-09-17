@@ -25,7 +25,7 @@ class SmartEntrySystem:
         self.min_zone_strength = 0.05  # Zone strength ขั้นต่ำสำหรับเข้าไม้ (เพิ่มเพื่อคุณภาพ)
         
         # Risk Management (Dynamic) - ปรับให้เหมาะสมกับ XAUUSD
-        self.risk_percent_per_trade = 0.01  # ลดเป็น 1% ของ balance ต่อ trade (ปลอดภัยขึ้น)
+        self.risk_percent_per_trade = 0.02  # เพิ่มเป็น 2% ของ balance ต่อ trade (เพิ่ม lot size)
         self.max_daily_trades = 30  # ลดจำนวน trade ต่อวัน (คุณภาพเหนือปริมาณ)
         
         # Lot Size Management
@@ -83,22 +83,22 @@ class SmartEntrySystem:
             # ใช้การคำนวณแบบต่อเนื่องแทนการแบ่งช่วง
             if zone_strength >= 90:
                 # Zone แข็งแกร่งมาก (90-100): ใช้ lot มากที่สุด
-                final_multiplier = 0.8 + (zone_strength - 90) * 0.02  # 0.8-1.0
+                final_multiplier = 1.2 + (zone_strength - 90) * 0.02  # 1.2-1.4
             elif zone_strength >= 80:
                 # Zone แข็งแกร่ง (80-89): ใช้ lot มาก
-                final_multiplier = 0.6 + (zone_strength - 80) * 0.02  # 0.6-0.8
+                final_multiplier = 1.0 + (zone_strength - 80) * 0.02  # 1.0-1.2
             elif zone_strength >= 70:
                 # Zone ปานกลาง (70-79): ใช้ lot ปานกลาง
-                final_multiplier = 0.4 + (zone_strength - 70) * 0.02  # 0.4-0.6
+                final_multiplier = 0.8 + (zone_strength - 70) * 0.02  # 0.8-1.0
             elif zone_strength >= 60:
                 # Zone อ่อน (60-69): ใช้ lot น้อย
-                final_multiplier = 0.2 + (zone_strength - 60) * 0.02  # 0.2-0.4
+                final_multiplier = 0.6 + (zone_strength - 60) * 0.02  # 0.6-0.8
             elif zone_strength >= 50:
                 # Zone อ่อนมาก (50-59): ใช้ lot น้อยมาก
-                final_multiplier = 0.1 + (zone_strength - 50) * 0.01  # 0.1-0.2
+                final_multiplier = 0.4 + (zone_strength - 50) * 0.02  # 0.4-0.6
             else:
                 # Zone อ่อนเกินไป (<50): ใช้ lot ขั้นต่ำ
-                final_multiplier = 0.05
+                final_multiplier = 0.3
             
             # ปรับเพิ่มเติมตามปัจจัยอื่นๆ (ถ้ามี zone data)
             additional_multiplier = 1.0
@@ -107,32 +107,32 @@ class SmartEntrySystem:
                 # ปรับตามจำนวน touches ของ zone
                 touches = zone.get('touches', 1)
                 if touches >= 5:
-                    additional_multiplier *= 1.2  # Zone ที่แตะบ่อย = แข็งแกร่ง
+                    additional_multiplier *= 1.3  # Zone ที่แตะบ่อย = แข็งแกร่ง (เพิ่มจาก 1.2)
                 elif touches >= 3:
-                    additional_multiplier *= 1.1
+                    additional_multiplier *= 1.15  # เพิ่มจาก 1.1
                 elif touches <= 1:
-                    additional_multiplier *= 0.8  # Zone ที่แตะน้อย = อ่อน
+                    additional_multiplier *= 0.9  # Zone ที่แตะน้อย = อ่อน (เพิ่มจาก 0.8)
                 
                 # ปรับตามจำนวน algorithms ที่พบ zone นี้
                 algorithms_used = zone.get('algorithms_used', [])
                 if isinstance(algorithms_used, list) and len(algorithms_used) >= 3:
-                    additional_multiplier *= 1.15  # Zone ที่พบจากหลายวิธี = แข็งแกร่ง
+                    additional_multiplier *= 1.25  # Zone ที่พบจากหลายวิธี = แข็งแกร่ง (เพิ่มจาก 1.15)
                 elif len(algorithms_used) >= 2:
-                    additional_multiplier *= 1.05
+                    additional_multiplier *= 1.1  # เพิ่มจาก 1.05
                 
                 # ปรับตาม zone count (zones ที่รวมกัน)
                 zone_count = zone.get('zone_count', 1)
                 if zone_count >= 3:
-                    additional_multiplier *= 1.1  # Zone ที่รวมกันหลายตัว = แข็งแกร่ง
+                    additional_multiplier *= 1.2  # Zone ที่รวมกันหลายตัว = แข็งแกร่ง (เพิ่มจาก 1.1)
                 
                 # ปรับตาม market condition (ถ้ามีข้อมูล)
                 market_condition = zone.get('market_condition', 'normal')
                 if market_condition == 'trending':
-                    additional_multiplier *= 1.1  # ตลาด trending = ใช้ lot มากกว่า
+                    additional_multiplier *= 1.2  # ตลาด trending = ใช้ lot มากกว่า (เพิ่มจาก 1.1)
                 elif market_condition == 'sideways':
-                    additional_multiplier *= 0.9  # ตลาด sideways = ใช้ lot น้อยกว่า
+                    additional_multiplier *= 1.0  # ตลาด sideways = ใช้ lot ปกติ (เพิ่มจาก 0.9)
                 elif market_condition == 'volatile':
-                    additional_multiplier *= 0.8  # ตลาดผันผวน = ใช้ lot น้อยกว่า
+                    additional_multiplier *= 0.9  # ตลาดผันผวน = ใช้ lot น้อยกว่า (เพิ่มจาก 0.8)
                 
                 # ปรับตามระยะห่างจาก current price
                 current_price = zone.get('current_price', 0)
@@ -140,11 +140,11 @@ class SmartEntrySystem:
                 if current_price > 0 and zone_price > 0:
                     distance_pips = abs(current_price - zone_price) * 10000  # แปลงเป็น pips
                     if distance_pips <= 10:
-                        additional_multiplier *= 1.2  # Zone ใกล้ราคาปัจจุบัน = แข็งแกร่ง
+                        additional_multiplier *= 1.3  # Zone ใกล้ราคาปัจจุบัน = แข็งแกร่ง (เพิ่มจาก 1.2)
                     elif distance_pips <= 20:
-                        additional_multiplier *= 1.1
+                        additional_multiplier *= 1.15  # เพิ่มจาก 1.1
                     elif distance_pips >= 50:
-                        additional_multiplier *= 0.9  # Zone ไกลราคาปัจจุบัน = อ่อน
+                        additional_multiplier *= 1.0  # Zone ไกลราคาปัจจุบัน = ปกติ (เพิ่มจาก 0.9)
             
             final_lot_size = base_lot_size * final_multiplier * additional_multiplier
             
