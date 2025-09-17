@@ -42,7 +42,7 @@ class ZoneAnalyzer:
         self.enable_swing_levels = True      # วิธีที่ 5: Swing High/Low Levels (Key Reversal Points)
         
         # ปรับให้หา zones ได้มากขึ้นและแม่นยำขึ้น
-        self.zone_tolerance = 0.5            # ความยืดหยุ่นในการรวม zones (ลดจาก 5.0 เพื่อให้มี zones มากขึ้น)
+        self.zone_tolerance = 0.1            # ความยืดหยุ่นในการรวม zones (ลดจาก 0.5 เพื่อให้มี zones มากขึ้น)
         self.min_zone_strength = 0.1         # ความแข็งแรงขั้นต่ำของ zone (ลดจาก 1)
         self.max_zones_per_type = 100        # จำนวน zone สูงสุดต่อประเภท (เพิ่มจาก 25)
         
@@ -233,6 +233,8 @@ class ZoneAnalyzer:
                 all_support_zones.extend(pivot_support)
                 all_resistance_zones.extend(pivot_resistance)
                 logger.info(f"✅ [METHOD 1] Found {len(pivot_support)} support, {len(pivot_resistance)} resistance zones")
+                logger.info(f"🔍 [DEBUG] Pivot Support zones: {[f\"{z['price']:.2f}({z['strength']:.1f})\" for z in pivot_support[:3]]}")
+                logger.info(f"🔍 [DEBUG] Pivot Resistance zones: {[f\"{z['price']:.2f}({z['strength']:.1f})\" for z in pivot_resistance[:3]]}")
             
             # วิธีที่ 2: Fibonacci Levels (Volatile markets) - ใช้ข้อมูลจากทุก timeframe
             if self.enable_fibonacci:
@@ -241,6 +243,8 @@ class ZoneAnalyzer:
                 all_support_zones.extend(fib_support)
                 all_resistance_zones.extend(fib_resistance)
                 logger.info(f"✅ [METHOD 2] Found {len(fib_support)} support, {len(fib_resistance)} resistance zones")
+                logger.info(f"🔍 [DEBUG] Fib Support zones: {[f\"{z['price']:.2f}({z['strength']:.1f})\" for z in fib_support[:3]]}")
+                logger.info(f"🔍 [DEBUG] Fib Resistance zones: {[f\"{z['price']:.2f}({z['strength']:.1f})\" for z in fib_resistance[:3]]}")
             
             # วิธีที่ 3: Volume Profile (Consolidation markets) - ใช้ข้อมูลจากทุก timeframe
             if self.enable_volume_profile:
@@ -249,6 +253,8 @@ class ZoneAnalyzer:
                 all_support_zones.extend(volume_support)
                 all_resistance_zones.extend(volume_resistance)
                 logger.info(f"✅ [METHOD 3] Found {len(volume_support)} support, {len(volume_resistance)} resistance zones")
+                logger.info(f"🔍 [DEBUG] Volume Support zones: {[f\"{z['price']:.2f}({z['strength']:.1f})\" for z in volume_support[:3]]}")
+                logger.info(f"🔍 [DEBUG] Volume Resistance zones: {[f\"{z['price']:.2f}({z['strength']:.1f})\" for z in volume_resistance[:3]]}")
             
             # วิธีที่ 4: Price Levels (เลขกลม) - ใช้ข้อมูลจากทุก timeframe
             if self.enable_price_levels:
@@ -257,6 +263,8 @@ class ZoneAnalyzer:
                 all_support_zones.extend(price_support)
                 all_resistance_zones.extend(price_resistance)
                 logger.info(f"✅ [METHOD 4] Found {len(price_support)} support, {len(price_resistance)} resistance zones")
+                logger.info(f"🔍 [DEBUG] Price Support zones: {[f\"{z['price']:.2f}({z['strength']:.1f})\" for z in price_support[:3]]}")
+                logger.info(f"🔍 [DEBUG] Price Resistance zones: {[f\"{z['price']:.2f}({z['strength']:.1f})\" for z in price_resistance[:3]]}")
             
             # วิธีที่ 5: Swing Levels (จุดกลับตัว) - ใช้ข้อมูลจากทุก timeframe
             if self.enable_swing_levels:
@@ -265,8 +273,11 @@ class ZoneAnalyzer:
                 all_support_zones.extend(swing_support)
                 all_resistance_zones.extend(swing_resistance)
                 logger.info(f"✅ [METHOD 5] Found {len(swing_support)} support, {len(swing_resistance)} resistance zones")
+                logger.info(f"🔍 [DEBUG] Swing Support zones: {[f\"{z['price']:.2f}({z['strength']:.1f})\" for z in swing_support[:3]]}")
+                logger.info(f"🔍 [DEBUG] Swing Resistance zones: {[f\"{z['price']:.2f}({z['strength']:.1f})\" for z in swing_resistance[:3]]}")
             
             # รวมและจัดเรียง zones ตาม strength
+            logger.info(f"🔍 [DEBUG] Before consolidation: {len(all_support_zones)} support, {len(all_resistance_zones)} resistance zones")
             final_support = self._consolidate_zones(all_support_zones, 'support')
             final_resistance = self._consolidate_zones(all_resistance_zones, 'resistance')
             
