@@ -1110,8 +1110,8 @@ class AdaptiveTradingSystemGUI:
             # ส่ง order_manager ไปยัง SmartEntrySystem
             self.smart_entry_system.order_manager = self.order_manager
             
-            # Initialize Portfolio Anchor
-            self.portfolio_anchor = PortfolioAnchor(self.mt5_connection, self.zone_analyzer)
+            # 🚫 Portfolio Anchor REMOVED - Using Edge Priority Closing only
+            self.portfolio_anchor = None
             
         except Exception as e:
             logger.error(f"❌ Error initializing smart systems: {e}")
@@ -1136,9 +1136,8 @@ class AdaptiveTradingSystemGUI:
                 logger.warning("🚫 Smart Entry System not available - skipping")
                 return
                 
-            if not self.portfolio_anchor:
-                logger.warning("🚫 Portfolio Anchor not available - skipping")
-                return
+            # 🚫 Portfolio Anchor REMOVED - Using Edge Priority Closing only
+            logger.debug("🚫 Portfolio Anchor removed - Using Edge Priority Closing only")
                 
             
             current_time = time.time()
