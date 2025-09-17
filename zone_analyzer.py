@@ -68,16 +68,16 @@ class ZoneAnalyzer:
         self.swing_tolerance = 5.0           # ความยืดหยุ่นสำหรับ swing levels (ลดจาก 15.0)
         
         # Adaptive Market Detection (การตรวจจับสภาวะตลาด)
-        self.enable_adaptive_mode = False    # ปิดโหมดปรับตัวอัตโนมัติ (เพื่อให้ใช้ zone_tolerance คงที่)
+        self.enable_adaptive_mode = True     # เปิดโหมดปรับตัวอัตโนมัติ (ปรับตามความผันผวนของตลาด)
         self.market_analysis_period = 50     # จำนวน bars สำหรับวิเคราะห์สภาวะตลาด
-        self.volatility_threshold = 0.02     # เกณฑ์ความผันผวน (2%)
-        self.trend_strength_threshold = 0.6  # เกณฑ์ความแข็งแรงของเทรนด์
+        self.volatility_threshold = 0.01     # เกณฑ์ความผันผวน (1% - ต่ำลงเพื่อตรวจจับความผันผวนได้เร็วขึ้น)
+        self.trend_strength_threshold = 0.4  # เกณฑ์ความแข็งแรงของเทรนด์ (ลดลงเพื่อตรวจจับเทรนด์ได้ง่ายขึ้น)
         
         # Market Condition Weights (น้ำหนักตามสภาวะตลาด)
         self.market_weights = {
-            'trending': {'pivot_points': 1.2, 'swing_levels': 1.3, 'price_levels': 0.8, 'fibonacci': 0.9, 'volume_profile': 0.7},
-            'sideways': {'pivot_points': 0.9, 'swing_levels': 0.8, 'price_levels': 1.3, 'fibonacci': 0.8, 'volume_profile': 1.2},
-            'volatile': {'pivot_points': 1.0, 'swing_levels': 1.1, 'price_levels': 1.1, 'fibonacci': 1.3, 'volume_profile': 0.9}
+            'trending': {'pivot_points': 1.5, 'swing_levels': 1.8, 'price_levels': 1.0, 'fibonacci': 1.2, 'volume_profile': 0.8},
+            'sideways': {'pivot_points': 1.2, 'swing_levels': 1.0, 'price_levels': 1.8, 'fibonacci': 1.0, 'volume_profile': 1.5},
+            'volatile': {'pivot_points': 2.0, 'swing_levels': 2.0, 'price_levels': 1.5, 'fibonacci': 2.0, 'volume_profile': 1.8}  # เพิ่มน้ำหนักมากสำหรับตลาดผันผวน
         }
         
     def analyze_zones(self, symbol: str, lookback_hours: int = 24) -> Dict[str, List[Dict]]:
@@ -1603,27 +1603,27 @@ class ZoneAnalyzer:
         try:
             if market_condition == 'trending':
                 # Trending Market: เพิ่มความยืดหยุ่น, ลดเกณฑ์
-                self.zone_tolerance = 40.0
-                self.min_zone_strength = 0.5
-                self.price_level_tolerance = 25.0
-                self.swing_tolerance = 20.0
+                self.zone_tolerance = 0.5
+                self.min_zone_strength = 0.01
+                self.price_level_tolerance = 2.0
+                self.swing_tolerance = 1.0
                 logger.info("📈 [ADAPTIVE] Trending market detected - Increased flexibility")
                 
             elif market_condition == 'sideways':
                 # Sideways Market: ลดความยืดหยุ่น, เพิ่มเกณฑ์
-                self.zone_tolerance = 25.0
-                self.min_zone_strength = 1.5
-                self.price_level_tolerance = 15.0
-                self.swing_tolerance = 10.0
+                self.zone_tolerance = 0.1
+                self.min_zone_strength = 0.05
+                self.price_level_tolerance = 1.0
+                self.swing_tolerance = 0.5
                 logger.info("📊 [ADAPTIVE] Sideways market detected - Increased precision")
                 
             elif market_condition == 'volatile':
-                # Volatile Market: ปรับให้เหมาะสมกับความผันผวน
-                self.zone_tolerance = 35.0
-                self.min_zone_strength = 1.0
-                self.price_level_tolerance = 20.0
-                self.swing_tolerance = 15.0
-                logger.info("⚡ [ADAPTIVE] Volatile market detected - Balanced settings")
+                # Volatile Market: ปรับให้เหมาะสมกับความผันผวน - หา zones เยอะมาก
+                self.zone_tolerance = 0.01  # ลดมากเพื่อหา zones เยอะ
+                self.min_zone_strength = 0.001  # ลดมากเพื่อเข้าไม้ได้ง่าย
+                self.price_level_tolerance = 0.5
+                self.swing_tolerance = 0.1
+                logger.info("⚡ [ADAPTIVE] Volatile market detected - Maximum zones and entries")
                 
         except Exception as e:
             logger.error(f"❌ Error adjusting parameters: {e}")
