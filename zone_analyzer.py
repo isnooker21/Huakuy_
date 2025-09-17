@@ -15,11 +15,11 @@ class ZoneAnalyzer:
         self.timeframes = [mt5.TIMEFRAME_M1, mt5.TIMEFRAME_M5, mt5.TIMEFRAME_M15, mt5.TIMEFRAME_H1]  # ใช้หลาย timeframe
         # ไม่ใช้ Daily timeframe เพราะมีปัญหา array comparison
         
-        # Multi-Algorithm Zone Detection Parameters - ปรับให้หา zones ได้มากขึ้น
-        self.min_touches = 1  # เกณฑ์ขั้นต่ำสำหรับการแตะ zone
-        self.zone_tolerance = 0.01  # ความยืดหยุ่นในการรวม zones (ลดจาก 5.0 เพื่อให้มี zones ละเอียดขึ้น)
-        self.min_zone_strength = 0.01  # ความแข็งแรงขั้นต่ำของ zone (ลดจาก 1)
-        self.max_zones_per_type = 200  # จำนวน zone สูงสุดต่อประเภท (เพิ่มจาก 25)
+        # Multi-Algorithm Zone Detection Parameters - ปรับให้หา zones ได้แม่นยำขึ้น
+        self.min_touches = 2  # เกณฑ์ขั้นต่ำสำหรับการแตะ zone (เพิ่มจาก 1 เพื่อความแม่นยำ)
+        self.zone_tolerance = 0.005  # ความยืดหยุ่นในการรวม zones (ลดจาก 0.01 เพื่อความแม่นยำ)
+        self.min_zone_strength = 0.05  # ความแข็งแรงขั้นต่ำของ zone (เพิ่มจาก 0.01 เพื่อคุณภาพ)
+        self.max_zones_per_type = 150  # จำนวน zone สูงสุดต่อประเภท (ลดจาก 200 เพื่อคุณภาพ)
         
         # Multi-TF Analysis (ใช้หลาย timeframe)
         self.tf_weights = {
@@ -29,10 +29,10 @@ class ZoneAnalyzer:
             mt5.TIMEFRAME_H1: 0.7    # H1 - ระยะยาว (long-term)
         }
         
-        # Zone Strength Calculation
-        self.price_action_weight = 0.4
+        # Zone Strength Calculation - ปรับให้แม่นยำขึ้น
+        self.price_action_weight = 0.5  # เพิ่มน้ำหนัก price action
         self.volume_weight = 0.3
-        self.time_weight = 0.3
+        self.time_weight = 0.2  # ลดน้ำหนัก time
         
         # Multi-Method Zone Detection - ใช้หลายวิธีพร้อมกัน
         self.enable_pivot_points = True      # วิธีที่ 1: Pivot Points (Sideways markets)
@@ -41,31 +41,31 @@ class ZoneAnalyzer:
         self.enable_price_levels = True      # วิธีที่ 4: Price Levels (Round Numbers, Psychological Levels)
         self.enable_swing_levels = True      # วิธีที่ 5: Swing High/Low Levels (Key Reversal Points)
         
-        # ปรับให้หา zones ได้มากขึ้นและแม่นยำขึ้น
-        self.zone_tolerance = 0.01           # ความยืดหยุ่นในการรวม zones (ลดจาก 0.1 เพื่อให้มี zones ละเอียดขึ้น)
-        self.min_zone_strength = 0.01        # ความแข็งแรงขั้นต่ำของ zone (ลดจาก 0.1)
-        self.max_zones_per_type = 200        # จำนวน zone สูงสุดต่อประเภท (เพิ่มจาก 100)
+        # ปรับให้หา zones ได้แม่นยำขึ้นและมีคุณภาพ
+        self.zone_tolerance = 0.005          # ความยืดหยุ่นในการรวม zones (ลดจาก 0.01 เพื่อความแม่นยำ)
+        self.min_zone_strength = 0.05        # ความแข็งแรงขั้นต่ำของ zone (เพิ่มจาก 0.01 เพื่อคุณภาพ)
+        self.max_zones_per_type = 150        # จำนวน zone สูงสุดต่อประเภท (ลดจาก 200 เพื่อคุณภาพ)
         
         # Moving Average Settings (REMOVED - ไม่ใช้แล้ว)
         # self.ma_periods = [10, 20, 50, 100, 200]  # ระยะเวลา Moving Average (เพิ่ม 10)
         # self.ma_tolerance = 15.0              # ความยืดหยุ่นสำหรับ MA levels (เพิ่มจาก 8.0)
         
         # Fibonacci Settings
-        self.fib_levels = [0.1, 0.2, 0.236, 0.3, 0.382, 0.4, 0.5, 0.6, 0.618, 0.7, 0.786, 0.8, 0.886, 0.9, 1.0, 1.1, 1.2, 1.272, 1.3, 1.4, 1.5, 1.618, 1.7, 1.8, 2.0]  # Fibonacci levels (เพิ่มมาก)
+        self.fib_levels = [0.236, 0.382, 0.5, 0.618, 0.786, 0.886, 1.0, 1.272, 1.414, 1.618]  # Fibonacci levels (ปรับให้แม่นยำ)
         self.fib_lookback = 30               # จำนวน bars สำหรับหา swing high/low (ลดจาก 50)
         
-        # Volume Profile Settings (ปรับปรุง)
-        self.volume_profile_bins = 50        # จำนวน bins สำหรับ volume profile (เพิ่มจาก 30)
-        self.volume_threshold = 0.1          # เกณฑ์ volume (ลดจาก 0.3)
+        # Volume Profile Settings (ปรับให้แม่นยำขึ้น)
+        self.volume_profile_bins = 100       # เพิ่ม bins เพื่อความละเอียด
+        self.volume_threshold = 0.05         # ลด threshold เพื่อความแม่นยำ
         
-        # Price Levels Settings (เลขกลม)
-        self.price_level_intervals = [10, 20, 50, 100, 200, 500, 1000]  # ช่วงเลขกลม (points) - เพิ่มมาก
-        self.price_level_tolerance = 5.0     # ความยืดหยุ่นสำหรับ price levels (ลดจาก 20.0)
+        # Price Levels Settings (เลขกลม) - ปรับให้แม่นยำขึ้น
+        self.price_level_intervals = [5, 10, 20, 50, 100, 200, 500]  # ช่วงเลขกลม (points) - ปรับให้ละเอียดขึ้น
+        self.price_level_tolerance = 2.0     # ลด tolerance เพื่อความแม่นยำ
         
-        # Swing Levels Settings (จุดกลับตัว)
-        self.swing_lookback = 10             # จำนวน bars สำหรับหา swing (ลดจาก 20)
-        self.swing_min_strength = 1          # ความแข็งแรงขั้นต่ำของ swing (ลดจาก 2)
-        self.swing_tolerance = 5.0           # ความยืดหยุ่นสำหรับ swing levels (ลดจาก 15.0)
+        # Swing Levels Settings (จุดกลับตัว) - ปรับให้แม่นยำขึ้น
+        self.swing_lookback = 5              # ลด lookback เพื่อความแม่นยำ
+        self.swing_min_strength = 2          # เพิ่มความแข็งแรงขั้นต่ำ
+        self.swing_tolerance = 2.0           # ลด tolerance เพื่อความแม่นยำ
         
         # Adaptive Market Detection (การตรวจจับสภาวะตลาด)
         self.enable_adaptive_mode = True     # เปิดโหมดปรับตัวอัตโนมัติ (ปรับตามความผันผวนของตลาด)
@@ -915,21 +915,30 @@ class ZoneAnalyzer:
                         continue
                     
                     price_diff = abs(zone['price'] - other_zone['price'])
-                    if price_diff <= self.zone_tolerance:
+                    # ใช้ tolerance ที่ปรับตาม strength ของ zone
+                    dynamic_tolerance = self.zone_tolerance * (1 + zone['strength'] / 100)
+                    if price_diff <= dynamic_tolerance:
                         nearby_zones.append(other_zone)
                         used_indices.add(j)
                 
                 # รวม zones ที่ใกล้เคียงกัน
                 if len(nearby_zones) > 1:
-                    # คำนวณค่าเฉลี่ย
-                    avg_price = sum(z['price'] for z in nearby_zones) / len(nearby_zones)
+                    # คำนวณค่าเฉลี่ยแบบถ่วงน้ำหนัก
+                    total_strength = sum(z['strength'] for z in nearby_zones)
                     total_touches = sum(z['touches'] for z in nearby_zones)
-                    max_strength = max(z['strength'] for z in nearby_zones)
+                    
+                    # คำนวณราคาเฉลี่ยแบบถ่วงน้ำหนักตาม strength
+                    weighted_price = sum(z['price'] * z['strength'] for z in nearby_zones) / total_strength
+                    
+                    # คำนวณ strength รวมแบบปรับปรุง
+                    avg_strength = total_strength / len(nearby_zones)
+                    consolidation_bonus = min(len(nearby_zones) * 2, 10)  # ลดโบนัส
+                    final_strength = min(avg_strength + consolidation_bonus, 100)
                     
                     consolidated_zone = {
-                        'price': avg_price,
+                        'price': weighted_price,
                         'touches': total_touches,
-                        'strength': max_strength,
+                        'strength': final_strength,
                         'timestamp': max(z['timestamp'] for z in nearby_zones),
                         'algorithm': 'consolidated',
                         'zone_count': len(nearby_zones),
@@ -952,17 +961,17 @@ class ZoneAnalyzer:
         """🔍 หา Pivot Points จากข้อมูลราคา"""
         try:
             pivots = []
-            window = 1  # ใช้ window = 1 bar เพื่อหา pivot มากที่สุด
+            window = 2  # เพิ่ม window เป็น 2 bars เพื่อความแม่นยำ
             logger.info(f"🔍 Finding pivot points from {len(rates)} bars with window={window}")
             
             for i in range(window, len(rates) - window):
                 current_high = float(rates[i]['high'])
                 current_low = float(rates[i]['low'])
                 
-                # ตรวจสอบ Support Pivot (Low) - ปรับให้หา Support ได้มากขึ้น
+                # ตรวจสอบ Support Pivot (Low) - ปรับให้แม่นยำขึ้น
                 is_support_pivot = True
                 for j in range(i - window, i + window + 1):
-                    if j != i and j < len(rates) and float(rates[j]['low']) < float(current_low) - 0.5:  # ลด tolerance จาก 1.0 เป็น 0.5
+                    if j != i and j < len(rates) and float(rates[j]['low']) < float(current_low) - 0.3:  # ลด tolerance เป็น 0.3 เพื่อความแม่นยำ
                         is_support_pivot = False
                         break
                 
@@ -987,10 +996,10 @@ class ZoneAnalyzer:
                             'support_score': support_score
                         })
                 
-                # ตรวจสอบ Resistance Pivot (High) - ปรับให้หา Resistance ได้มากขึ้น
+                # ตรวจสอบ Resistance Pivot (High) - ปรับให้แม่นยำขึ้น
                 is_resistance_pivot = True
                 for j in range(i - window, i + window + 1):
-                    if j != i and j < len(rates) and float(rates[j]['high']) > float(current_high) + 0.5:  # ลด tolerance จาก 1.0 เป็น 0.5
+                    if j != i and j < len(rates) and float(rates[j]['high']) > float(current_high) + 0.3:  # ลด tolerance เป็น 0.3 เพื่อความแม่นยำ
                         is_resistance_pivot = False
                         break
                 
@@ -1133,8 +1142,8 @@ class ZoneAnalyzer:
     def _calculate_zone_strength(self, zone: Dict, zone_type: str) -> float:
         """💪 คำนวณความแข็งแรงของ Zone (ปรับปรุงใหม่)"""
         try:
-            # Price Action Strength (จำนวนครั้งที่แตะ)
-            max_touches = 8  # ลดจาก 10
+            # Price Action Strength (จำนวนครั้งที่แตะ) - ปรับให้แม่นยำขึ้น
+            max_touches = 5  # ลดจาก 8 เพื่อความแม่นยำ
             price_action_score = min((zone['touches'] / max_touches) * 100, 100)
             
             # Multi-Timeframe Strength
@@ -1159,14 +1168,14 @@ class ZoneAnalyzer:
             if 'volume_factor' in zone:
                 volume_bonus = (zone['volume_factor'] - 1.0) * 15  # 0-30 points
             
-            # คำนวณ Zone Strength รวม (ปรับน้ำหนักใหม่)
+            # คำนวณ Zone Strength รวม (ปรับน้ำหนักใหม่ให้แม่นยำขึ้น)
             total_strength = (
-                price_action_score * 0.25 +  # ลดน้ำหนัก PA
-                tf_score * 0.35 +            # เพิ่มน้ำหนัก Multi-TF
-                time_score * 0.20 +          # ลดน้ำหนัก Time
-                zone_count_bonus * 0.10 +    # Zone count
-                rejection_bonus * 0.05 +     # Rejection strength
-                volume_bonus * 0.05          # Volume factor
+                price_action_score * 0.40 +  # เพิ่มน้ำหนัก Price Action (สำคัญที่สุด)
+                tf_score * 0.30 +            # Multi-TF (สำคัญรอง)
+                time_score * 0.15 +          # Time (ลดน้ำหนัก)
+                zone_count_bonus * 0.08 +    # Zone count
+                rejection_bonus * 0.04 +     # Rejection strength
+                volume_bonus * 0.03          # Volume factor
             )
             
             final_strength = min(total_strength, 100)

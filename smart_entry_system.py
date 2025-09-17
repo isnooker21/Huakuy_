@@ -18,11 +18,11 @@ class SmartEntrySystem:
         self.support_buy_enabled = True      # เปิด Support entries (BUY ที่ Support)
         self.resistance_sell_enabled = True  # เปิด Resistance entries (SELL ที่ Resistance)
         
-        # Dynamic Calculation Parameters
-        self.profit_target_pips = 30  # เป้าหมายกำไร 30 pips ต่อ lot (ลดจาก 50)
-        self.loss_threshold_pips = 30  # เกณฑ์ขาดทุน 30 pips ต่อ lot (ลดจาก 50)
-        self.recovery_zone_strength = 5  # Zone strength สำหรับ Recovery (ลดจาก 10)
-        self.min_zone_strength = 0.001  # Zone strength ขั้นต่ำสำหรับเข้าไม้ (ลดจาก 0.01 เพื่อเข้าไม้ได้ง่ายขึ้น)
+        # Dynamic Calculation Parameters - ปรับให้แม่นยำขึ้น
+        self.profit_target_pips = 25  # เป้าหมายกำไร 25 pips ต่อ lot (ลดเพื่อความแม่นยำ)
+        self.loss_threshold_pips = 25  # เกณฑ์ขาดทุน 25 pips ต่อ lot (ลดเพื่อความแม่นยำ)
+        self.recovery_zone_strength = 8  # Zone strength สำหรับ Recovery (เพิ่มเพื่อคุณภาพ)
+        self.min_zone_strength = 0.05  # Zone strength ขั้นต่ำสำหรับเข้าไม้ (เพิ่มเพื่อคุณภาพ)
         
         # Risk Management (Dynamic)
         self.risk_percent_per_trade = 0.02  # 2% ของ balance ต่อ trade (เพิ่มจาก 1%)
