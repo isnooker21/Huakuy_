@@ -36,6 +36,7 @@ class SmartEntrySystem:
         self.used_zones = {}  # {zone_key: {'timestamp': time, 'ticket': ticket}}
         self.daily_trade_count = 0
         self.last_reset_date = datetime.now().date()
+        self.last_trade_time = None  # เวลาคำสั่งล่าสุด
         
     def calculate_dynamic_profit_target(self, lot_size: float) -> float:
         """🎯 คำนวณเป้าหมายกำไรตาม lot size"""
@@ -57,7 +58,7 @@ class SmartEntrySystem:
             logger.error(f"❌ Error calculating dynamic loss threshold: {e}")
             return -5.0  # fallback
     
-    def calculate_dynamic_lot_size(self, zone_strength: float) -> float:
+    def calculate_dynamic_lot_size(self, zone_strength: float, zone: dict = None) -> float:
         """📊 คำนวณ lot size ตาม zone strength และ balance"""
         try:
             # ดึงข้อมูลบัญชี
@@ -99,50 +100,51 @@ class SmartEntrySystem:
                 # Zone อ่อนเกินไป (<50): ใช้ lot ขั้นต่ำ
                 final_multiplier = 0.05
             
-            # ปรับเพิ่มเติมตามปัจจัยอื่นๆ
+            # ปรับเพิ่มเติมตามปัจจัยอื่นๆ (ถ้ามี zone data)
             additional_multiplier = 1.0
             
-            # ปรับตามจำนวน touches ของ zone
-            touches = zone.get('touches', 1)
-            if touches >= 5:
-                additional_multiplier *= 1.2  # Zone ที่แตะบ่อย = แข็งแกร่ง
-            elif touches >= 3:
-                additional_multiplier *= 1.1
-            elif touches <= 1:
-                additional_multiplier *= 0.8  # Zone ที่แตะน้อย = อ่อน
-            
-            # ปรับตามจำนวน algorithms ที่พบ zone นี้
-            algorithms_used = zone.get('algorithms_used', [])
-            if isinstance(algorithms_used, list) and len(algorithms_used) >= 3:
-                additional_multiplier *= 1.15  # Zone ที่พบจากหลายวิธี = แข็งแกร่ง
-            elif len(algorithms_used) >= 2:
-                additional_multiplier *= 1.05
-            
-            # ปรับตาม zone count (zones ที่รวมกัน)
-            zone_count = zone.get('zone_count', 1)
-            if zone_count >= 3:
-                additional_multiplier *= 1.1  # Zone ที่รวมกันหลายตัว = แข็งแกร่ง
-            
-            # ปรับตาม market condition (ถ้ามีข้อมูล)
-            market_condition = zone.get('market_condition', 'normal')
-            if market_condition == 'trending':
-                additional_multiplier *= 1.1  # ตลาด trending = ใช้ lot มากกว่า
-            elif market_condition == 'sideways':
-                additional_multiplier *= 0.9  # ตลาด sideways = ใช้ lot น้อยกว่า
-            elif market_condition == 'volatile':
-                additional_multiplier *= 0.8  # ตลาดผันผวน = ใช้ lot น้อยกว่า
-            
-            # ปรับตามระยะห่างจาก current price
-            current_price = zone.get('current_price', 0)
-            zone_price = zone.get('price', 0)
-            if current_price > 0 and zone_price > 0:
-                distance_pips = abs(current_price - zone_price) * 10000  # แปลงเป็น pips
-                if distance_pips <= 10:
-                    additional_multiplier *= 1.2  # Zone ใกล้ราคาปัจจุบัน = แข็งแกร่ง
-                elif distance_pips <= 20:
+            if zone:
+                # ปรับตามจำนวน touches ของ zone
+                touches = zone.get('touches', 1)
+                if touches >= 5:
+                    additional_multiplier *= 1.2  # Zone ที่แตะบ่อย = แข็งแกร่ง
+                elif touches >= 3:
                     additional_multiplier *= 1.1
-                elif distance_pips >= 50:
-                    additional_multiplier *= 0.9  # Zone ไกลราคาปัจจุบัน = อ่อน
+                elif touches <= 1:
+                    additional_multiplier *= 0.8  # Zone ที่แตะน้อย = อ่อน
+                
+                # ปรับตามจำนวน algorithms ที่พบ zone นี้
+                algorithms_used = zone.get('algorithms_used', [])
+                if isinstance(algorithms_used, list) and len(algorithms_used) >= 3:
+                    additional_multiplier *= 1.15  # Zone ที่พบจากหลายวิธี = แข็งแกร่ง
+                elif len(algorithms_used) >= 2:
+                    additional_multiplier *= 1.05
+                
+                # ปรับตาม zone count (zones ที่รวมกัน)
+                zone_count = zone.get('zone_count', 1)
+                if zone_count >= 3:
+                    additional_multiplier *= 1.1  # Zone ที่รวมกันหลายตัว = แข็งแกร่ง
+                
+                # ปรับตาม market condition (ถ้ามีข้อมูล)
+                market_condition = zone.get('market_condition', 'normal')
+                if market_condition == 'trending':
+                    additional_multiplier *= 1.1  # ตลาด trending = ใช้ lot มากกว่า
+                elif market_condition == 'sideways':
+                    additional_multiplier *= 0.9  # ตลาด sideways = ใช้ lot น้อยกว่า
+                elif market_condition == 'volatile':
+                    additional_multiplier *= 0.8  # ตลาดผันผวน = ใช้ lot น้อยกว่า
+                
+                # ปรับตามระยะห่างจาก current price
+                current_price = zone.get('current_price', 0)
+                zone_price = zone.get('price', 0)
+                if current_price > 0 and zone_price > 0:
+                    distance_pips = abs(current_price - zone_price) * 10000  # แปลงเป็น pips
+                    if distance_pips <= 10:
+                        additional_multiplier *= 1.2  # Zone ใกล้ราคาปัจจุบัน = แข็งแกร่ง
+                    elif distance_pips <= 20:
+                        additional_multiplier *= 1.1
+                    elif distance_pips >= 50:
+                        additional_multiplier *= 0.9  # Zone ไกลราคาปัจจุบัน = อ่อน
             
             final_lot_size = base_lot_size * final_multiplier * additional_multiplier
             
@@ -151,7 +153,15 @@ class SmartEntrySystem:
             logger.info(f"📊 [LOT CALCULATION] Risk Amount: ${risk_amount:.2f}, Pip Value: {pip_value}")
             logger.info(f"📊 [LOT CALCULATION] Base Lot: {base_lot_size:.4f}, Zone Strength: {zone_strength:.1f}")
             logger.info(f"📊 [LOT CALCULATION] Strength Multiplier: {final_multiplier:.3f}")
-            logger.info(f"📊 [LOT CALCULATION] Touches: {touches}, Algorithms: {len(algorithms_used)}, Zone Count: {zone_count}")
+            
+            if zone:
+                touches = zone.get('touches', 1)
+                algorithms_used = zone.get('algorithms_used', [])
+                zone_count = zone.get('zone_count', 1)
+                logger.info(f"📊 [LOT CALCULATION] Touches: {touches}, Algorithms: {len(algorithms_used)}, Zone Count: {zone_count}")
+            else:
+                logger.info(f"📊 [LOT CALCULATION] No zone data available")
+            
             logger.info(f"📊 [LOT CALCULATION] Additional Multiplier: {additional_multiplier:.3f}")
             logger.info(f"📊 [LOT CALCULATION] Final Lot: {final_lot_size:.4f}")
             
@@ -193,7 +203,7 @@ class SmartEntrySystem:
             return current_price  # fallback
     
     def select_zone_by_pivot_and_strength(self, current_price: float, zones: Dict[str, List[Dict]]) -> Tuple[Optional[str], Optional[Dict]]:
-        """🎯 เลือก Zone ตาม Pivot Point + Zone Strength (วิธี C)"""
+        """🎯 เลือก Zone ตาม Pivot Point + Zone Strength (วิธี C) - ปรับปรุงให้ตรวจสอบระยะห่าง"""
         try:
             # คำนวณ Pivot Point
             pivot_point = self.calculate_pivot_point(current_price, zones)
@@ -218,6 +228,20 @@ class SmartEntrySystem:
             if not support_zones or not resistance_zones:
                 logger.warning("🚫 [ZONE SELECTION] No support or resistance zones available")
                 return None, None
+            
+            # ตรวจสอบระยะห่างระหว่าง support และ resistance ที่ใกล้ที่สุด
+            min_distance_pips = 50.0  # ระยะห่างขั้นต่ำ 50 pips
+            if support_zones and resistance_zones:
+                closest_support_price = min(support_zones, key=lambda x: abs(x['price'] - current_price))['price']
+                closest_resistance_price = min(resistance_zones, key=lambda x: abs(x['price'] - current_price))['price']
+                distance_between_zones = abs(closest_support_price - closest_resistance_price) * 10000  # แปลงเป็น pips
+                
+                logger.info(f"🔍 [ZONE SELECTION] Distance between closest zones: {distance_between_zones:.1f} pips")
+                
+                if distance_between_zones < min_distance_pips:
+                    logger.warning(f"🚫 [ZONE SELECTION] Zones too close: {distance_between_zones:.1f} pips < {min_distance_pips} pips")
+                    logger.warning(f"🚫 [ZONE SELECTION] Support: {closest_support_price:.5f}, Resistance: {closest_resistance_price:.5f}")
+                    return None, None
             
             # เลือก Zone ตาม Pivot Point (ปรับให้เลือกที่ใกล้ที่สุด)
             if current_price < pivot_point:
@@ -271,6 +295,19 @@ class SmartEntrySystem:
             if distance > max_distance:
                 logger.info(f"🚫 Zone {zone['price']} too far: {distance:.1f} pips (max: {max_distance})")
                 return False
+            
+            # ตรวจสอบระยะห่างจากคำสั่งที่เปิดอยู่แล้ว (ป้องกันการเปิดคำสั่งใกล้กันเกินไป)
+            min_distance_from_existing = 20.0  # ระยะห่างขั้นต่ำ 20 pips จากคำสั่งที่มีอยู่
+            if hasattr(self, 'order_manager') and self.order_manager:
+                existing_positions = self.order_manager.get_positions()
+                for position in existing_positions:
+                    if position.get('symbol') == self.symbol:
+                        existing_price = position.get('price', 0)
+                        if existing_price > 0:
+                            distance_from_existing = abs(zone['price'] - existing_price) * 10000  # แปลงเป็น pips
+                            if distance_from_existing < min_distance_from_existing:
+                                logger.warning(f"🚫 Zone {zone['price']} too close to existing position at {existing_price}: {distance_from_existing:.1f} pips < {min_distance_from_existing} pips")
+                                return False
             
             return True
             
@@ -331,6 +368,14 @@ class SmartEntrySystem:
             # ทำความสะอาด used_zones (ลบ zones เก่า)
             self._cleanup_used_zones()
             
+            # ตรวจสอบเวลาระหว่างคำสั่งซื้อและขาย (ป้องกันการเปิดคำสั่งใกล้กันเกินไป)
+            if hasattr(self, 'last_trade_time'):
+                time_since_last_trade = (datetime.now() - self.last_trade_time).total_seconds()
+                min_time_between_trades = 30.0  # ระยะเวลาขั้นต่ำ 30 วินาที
+                if time_since_last_trade < min_time_between_trades:
+                    logger.debug(f"🚫 Too soon since last trade: {time_since_last_trade:.1f}s < {min_time_between_trades}s")
+                    return None
+            
             # 🎯 เลือก Zone ตาม Pivot Point + Zone Strength (วิธี C)
             zone_type, selected_zone = self.select_zone_by_pivot_and_strength(current_price, zones)
             
@@ -364,7 +409,7 @@ class SmartEntrySystem:
                 return None
             
             # คำนวณ lot size แบบ dynamic
-            lot_size = self.calculate_dynamic_lot_size(selected_zone['strength'])
+            lot_size = self.calculate_dynamic_lot_size(selected_zone['strength'], selected_zone)
             
             # คำนวณเป้าหมายกำไรแบบ dynamic
             profit_target = self.calculate_dynamic_profit_target(lot_size)
@@ -641,6 +686,9 @@ class SmartEntrySystem:
                     
                     # อัปเดต daily counter
                     self.daily_trade_count += 1
+                    
+                    # อัปเดตเวลาคำสั่งล่าสุด
+                    self.last_trade_time = datetime.now()
                 
                     return ticket
                 else:
