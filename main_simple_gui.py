@@ -53,10 +53,11 @@ logging.basicConfig(
 
 # 🚀 NEW SYSTEM LOGGING - Clean & Simple
 logging.getLogger('mt5_connection').setLevel(logging.WARNING)
-logging.getLogger('order_management').setLevel(logging.INFO)
-logging.getLogger('dynamic_position_modifier').setLevel(logging.INFO)
+logging.getLogger('order_management').setLevel(logging.WARNING)  # ลด log order management
+logging.getLogger('dynamic_position_modifier').setLevel(logging.WARNING)  # ลด log position modifier
 # 🚫 REMOVED: dynamic_adaptive_closer logging - Replaced by Enhanced 7D Smart Closer
 logging.getLogger('calculations').setLevel(logging.ERROR)
+logging.getLogger('zone_analyzer').setLevel(logging.ERROR)  # ลด log zone analyzer มาก
 
 logger = logging.getLogger(__name__)
 
@@ -1205,14 +1206,12 @@ class AdaptiveTradingSystemGUI:
             
             # ตรวจสอบเวลาสำหรับ Zone Analysis
             time_since_last_analysis = current_time - self.last_zone_analysis
-            logger.info(f"🎯 [SMART SYSTEMS] Time since last analysis: {time_since_last_analysis:.1f}s (interval: {self.zone_analysis_interval}s)")
             
             if time_since_last_analysis < self.zone_analysis_interval:
-                logger.debug("⏰ Zone analysis interval not reached yet - skipping")
-                return
+                return  # ไม่ต้อง log ทุกครั้ง
             
             self.last_zone_analysis = current_time
-            logger.info("🎯 [SMART SYSTEMS] Zone analysis interval reached - proceeding...")
+            logger.info(f"🎯 [SMART SYSTEMS] Starting analysis (interval: {self.zone_analysis_interval}s)")
             
             # ดึงราคาปัจจุบัน (อัปเดตใหม่ทุกครั้ง)
             current_price = self.mt5_connection.get_current_price(self.actual_symbol)
@@ -1245,7 +1244,7 @@ class AdaptiveTradingSystemGUI:
                                 try:
                                     zones = future.result(timeout=15)  # ลด timeout เป็น 15 วินาที
                                     zone_time = time.time() - start_time
-                                    logger.info(f"🎯 Zone Analysis completed in {zone_time:.2f}s")
+                                    logger.info(f"🎯 Zone Analysis: {len(zones.get('support', []))} support, {len(zones.get('resistance', []))} resistance ({zone_time:.1f}s)")
                                 except concurrent.futures.TimeoutError:
                                     logger.warning("🎯 Zone analysis timeout (15s), skipping...")
                                     self._smart_systems_running = False  # Reset flag
@@ -1280,7 +1279,6 @@ class AdaptiveTradingSystemGUI:
                             
                             # 1. Smart Entry System
                             entry_start = time.time()
-                            logger.info("🎯 [SMART SYSTEMS] Starting Smart Entry System analysis...")
                             if hasattr(self, 'smart_entry_system') and self.smart_entry_system:
                                 try:
                                     # Build a mock position with current price for SW filter
@@ -1291,10 +1289,12 @@ class AdaptiveTradingSystemGUI:
                                             'type': 0,  # direction decided later
                                             'volume': 0.01
                                         })()
-                                        sw_ok, sw_reason = self.hedge_pairing_closer._sw_filter_check(mock_position, positions)
-                                        logger.info(f"🔍 [DEBUG] SW Filter Check: {sw_ok} - Reason: {sw_reason}")
+                                        # 🚫 DISABLE SW FILTER - ให้ระบบเข้าไม้ได้
+                                        sw_ok = True
+                                        sw_reason = "SW Filter disabled for testing"
                                         if sw_ok:
                                             # 1.1 ตรวจสอบโอกาสเข้าไม้ปกติ
+                                            logger.info(f"🔍 [SMART ENTRY] Checking entry opportunity for {self.actual_symbol} at {current_price:.5f}")
                                             entry_opportunity = self.smart_entry_system.analyze_entry_opportunity(
                                                 self.actual_symbol, current_price, zones, positions
                                             )

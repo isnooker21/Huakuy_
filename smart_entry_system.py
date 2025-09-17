@@ -134,20 +134,23 @@ class SmartEntrySystem:
         try:
             # คำนวณ Pivot Point
             pivot_point = self.calculate_pivot_point(current_price, zones)
-            logger.info(f"🔍 [ZONE SELECTION] Current price: {current_price:.5f}, Pivot: {pivot_point:.5f}")
-            
             support_zones = zones.get('support', [])
             resistance_zones = zones.get('resistance', [])
             
-            logger.info(f"🔍 [ZONE SELECTION] Available zones: {len(support_zones)} support, {len(resistance_zones)} resistance")
-            
-            # แสดงราคาใกล้เคียงกับ current_price
+            # แสดงราคาใกล้เคียงกับ current_price (ลด log)
             if support_zones:
                 closest_support = min(support_zones, key=lambda x: abs(x['price'] - current_price))
-                logger.info(f"🔍 [ZONE SELECTION] Closest support: {closest_support['price']:.5f} (distance: {abs(closest_support['price'] - current_price):.5f})")
+                distance_support = abs(closest_support['price'] - current_price)
             if resistance_zones:
                 closest_resistance = min(resistance_zones, key=lambda x: abs(x['price'] - current_price))
-                logger.info(f"🔍 [ZONE SELECTION] Closest resistance: {closest_resistance['price']:.5f} (distance: {abs(closest_resistance['price'] - current_price):.5f})")
+                distance_resistance = abs(closest_resistance['price'] - current_price)
+            
+            logger.info(f"🔍 [ZONE SELECTION] Price: {current_price:.5f}, Pivot: {pivot_point:.5f}")
+            logger.info(f"🔍 [ZONE SELECTION] Zones: {len(support_zones)} support, {len(resistance_zones)} resistance")
+            if support_zones:
+                logger.info(f"🔍 [ZONE SELECTION] Closest support: {closest_support['price']:.5f} (distance: {distance_support:.5f})")
+            if resistance_zones:
+                logger.info(f"🔍 [ZONE SELECTION] Closest resistance: {closest_resistance['price']:.5f} (distance: {distance_resistance:.5f})")
             
             if not support_zones or not resistance_zones:
                 logger.warning("🚫 [ZONE SELECTION] No support or resistance zones available")
@@ -159,16 +162,10 @@ class SmartEntrySystem:
                 valid_supports = [zone for zone in support_zones if zone['strength'] >= self.min_zone_strength]
                 logger.info(f"🔍 [ZONE SELECTION] Looking for SUPPORT zones. Valid: {len(valid_supports)} (min_strength: {self.min_zone_strength})")
                 
-                # Debug: แสดง zones ที่มี
-                if valid_supports:
-                    logger.info(f"🔍 [ZONE SELECTION] Available SUPPORT zones:")
-                    for i, zone in enumerate(valid_supports[:5], 1):
-                        logger.info(f"   {i}. {zone['price']:.2f} (strength: {zone['strength']:.1f})")
-                
                 if valid_supports:
                     # เลือก Support ที่ใกล้ที่สุดและแข็งแกร่งพอ
                     best_support = min(valid_supports, key=lambda x: abs(current_price - x['price']))
-                    logger.info(f"✅ [ZONE SELECTION] Selected SUPPORT: {best_support['price']:.2f} (strength: {best_support['strength']:.1f})")
+                    logger.info(f"✅ [ZONE SELECTION] Selected SUPPORT: {best_support['price']:.5f} (strength: {best_support['strength']:.1f})")
                     return 'support', best_support
                 else:
                     logger.warning("🚫 [ZONE SELECTION] No valid SUPPORT zones found")
@@ -177,16 +174,10 @@ class SmartEntrySystem:
                 valid_resistances = [zone for zone in resistance_zones if zone['strength'] >= self.min_zone_strength]
                 logger.info(f"🔍 [ZONE SELECTION] Looking for RESISTANCE zones. Valid: {len(valid_resistances)} (min_strength: {self.min_zone_strength})")
                 
-                # Debug: แสดง zones ที่มี
-                if valid_resistances:
-                    logger.info(f"🔍 [ZONE SELECTION] Available RESISTANCE zones:")
-                    for i, zone in enumerate(valid_resistances[:5], 1):
-                        logger.info(f"   {i}. {zone['price']:.2f} (strength: {zone['strength']:.1f})")
-                
                 if valid_resistances:
                     # เลือก Resistance ที่ใกล้ที่สุดและแข็งแกร่งพอ
                     best_resistance = min(valid_resistances, key=lambda x: abs(current_price - x['price']))
-                    logger.info(f"✅ [ZONE SELECTION] Selected RESISTANCE: {best_resistance['price']:.2f} (strength: {best_resistance['strength']:.1f})")
+                    logger.info(f"✅ [ZONE SELECTION] Selected RESISTANCE: {best_resistance['price']:.5f} (strength: {best_resistance['strength']:.1f})")
                     return 'resistance', best_resistance
                 else:
                     logger.warning("🚫 [ZONE SELECTION] No valid RESISTANCE zones found")
