@@ -704,15 +704,29 @@ class ZoneAnalyzer:
             # หา timestamp ล่าสุด
             latest_timestamp = max(z['timestamp'] for z in zone_group)
             
-            # รวม timeframes
-            timeframes = list(set(z['timeframe'] for z in zone_group))
+            # รวม timeframes (ถ้ามี)
+            timeframes = []
+            for z in zone_group:
+                if 'timeframe' in z:
+                    timeframes.append(z['timeframe'])
+                elif 'timeframes' in z:
+                    timeframes.extend(z['timeframes'])
+            
+            # รวม algorithms ที่ใช้
+            algorithms_used = list(set(z.get('algorithm', 'unknown') for z in zone_group))
+            
+            # คำนวณ strength สูงสุด
+            max_strength = max(z.get('strength', 0) for z in zone_group)
             
             return {
                 'price': round(avg_price, 2),
                 'touches': total_touches,
+                'strength': max_strength,
                 'timestamp': latest_timestamp,
-                'timeframes': timeframes,
-                'zone_count': len(zone_group)
+                'timeframes': list(set(timeframes)) if timeframes else [],
+                'zone_count': len(zone_group),
+                'algorithm': 'consolidated',
+                'algorithms_used': algorithms_used
             }
             
         except Exception as e:
