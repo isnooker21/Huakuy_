@@ -15,11 +15,11 @@ class ZoneAnalyzer:
         self.timeframes = [mt5.TIMEFRAME_M5]  # ใช้แค่ M5 เท่านั้น
         # ไม่ใช้ Daily timeframe เพราะมีปัญหา array comparison
         
-        # Zone Detection Parameters (ปรับให้หา Support/Resistance ได้ละเอียดมากขึ้น)
-        self.min_touches = 1  # ลดเกณฑ์ให้หา Zone ได้มากขึ้น (จาก 2)
-        self.zone_tolerance = 30.0  # ลดจาก 50.0 เป็น 30.0 เพื่อหา zone ที่ละเอียดกว่า
-        self.min_zone_strength = 3  # ลดจาก 5 เป็น 3 เพื่อหา zone ที่อ่อนแอกว่าได้
-        self.max_zones_per_type = 10  # เพิ่มจำนวน zone สูงสุดต่อประเภท
+        # Multi-Algorithm Zone Detection Parameters
+        self.min_touches = 1  # เกณฑ์ขั้นต่ำสำหรับการแตะ zone
+        self.zone_tolerance = 20.0  # ความยืดหยุ่นในการรวม zones
+        self.min_zone_strength = 2  # ความแข็งแรงขั้นต่ำของ zone
+        self.max_zones_per_type = 15  # จำนวน zone สูงสุดต่อประเภท
         
         # Multi-TF Analysis (ใช้แค่ M5)
         self.tf_weights = {
@@ -31,19 +31,33 @@ class ZoneAnalyzer:
         self.volume_weight = 0.3
         self.time_weight = 0.3
         
+        # Multi-Algorithm Settings
+        self.enable_pivot_points = True      # วิธีที่ 1: Pivot Points
+        self.enable_volume_profile = True    # วิธีที่ 2: Volume Profile
+        self.enable_price_patterns = True    # วิธีที่ 3: Price Action Patterns
+        
+        # Volume Profile Settings
+        self.volume_profile_bins = 20        # จำนวน bins สำหรับ volume profile
+        self.volume_threshold = 0.7          # เกณฑ์ volume (70% ของ volume สูงสุด)
+        
+        # Price Pattern Settings
+        self.pattern_tolerance = 15.0        # ความยืดหยุ่นในการหา patterns
+        self.min_pattern_strength = 0.6      # ความแข็งแรงขั้นต่ำของ pattern
+        
     def analyze_zones(self, symbol: str, lookback_hours: int = 24) -> Dict[str, List[Dict]]:
-        """🔍 วิเคราะห์ Support/Resistance Zones จากหลาย Timeframe"""
+        """🔍 วิเคราะห์ Support/Resistance Zones ด้วย Multi-Algorithm"""
         try:
             self.symbol = symbol  # ตั้งค่า symbol จาก parameter
-            logger.info(f"🔍 Analyzing zones for {self.symbol} (lookback: {lookback_hours}h)")
-            logger.info(f"🔧 Zone Detection Settings: tolerance={self.zone_tolerance}, min_strength={self.min_zone_strength}, min_touches={self.min_touches}")
-            logger.info(f"⏰ Timeframes: M5 ONLY (Single timeframe analysis)")
+            logger.info(f"🔍 [MULTI-ALGORITHM] Analyzing zones for {self.symbol} (lookback: {lookback_hours}h)")
+            logger.info(f"🔧 [MULTI-ALGORITHM] Settings: tolerance={self.zone_tolerance}, min_strength={self.min_zone_strength}")
+            logger.info(f"🎯 [MULTI-ALGORITHM] Algorithms: Pivot={self.enable_pivot_points}, Volume={self.enable_volume_profile}, Patterns={self.enable_price_patterns}")
             
             support_zones = []
             resistance_zones = []
             
             for tf in self.timeframes:
-                tf_support, tf_resistance = self._analyze_timeframe_zones(tf, lookback_hours)
+                # ใช้ Multi-Algorithm หา zones
+                tf_support, tf_resistance = self._analyze_timeframe_zones_multi_algorithm(tf, lookback_hours)
                 support_zones.extend(tf_support)
                 resistance_zones.extend(tf_resistance)
             
@@ -70,27 +84,48 @@ class ZoneAnalyzer:
             if len(merged_resistance) > self.max_zones_per_type:
                 merged_resistance = merged_resistance[:self.max_zones_per_type]
             
-            logger.info(f"🔍 ZONE ANALYSIS COMPLETE: {len(merged_support)} support zones, {len(merged_resistance)} resistance zones")
+            logger.info("=" * 80)
+            logger.info(f"🎯 [MULTI-ALGORITHM] ZONE ANALYSIS COMPLETE")
+            logger.info("=" * 80)
+            logger.info(f"📊 [RESULTS] Support: {len(merged_support)} zones, Resistance: {len(merged_resistance)} zones")
             
-            # Log all Support zones with prices
+            # Log Support zones with algorithm info
             if merged_support:
-                logger.info("📈 SUPPORT ZONES FOUND:")
-                for i, zone in enumerate(merged_support[:10], 1):  # แสดง 10 zones ที่แข็งแกร่งที่สุด
-                    logger.info(f"   {i}. Support: {zone['price']:.2f} (Strength: {zone['strength']:.1f})")
+                logger.info("📈 [SUPPORT ZONES] Found:")
+                for i, zone in enumerate(merged_support[:10], 1):
+                    algorithm = zone.get('algorithm', 'unknown')
+                    algorithms_used = zone.get('algorithms_used', [algorithm])
+                    zone_count = zone.get('zone_count', 1)
+                    
+                    if algorithm == 'consolidated':
+                        logger.info(f"   {i}. Support: {zone['price']:.2f} (Strength: {zone['strength']:.1f}) [CONSOLIDATED: {zone_count} zones from {', '.join(algorithms_used)}]")
+                    else:
+                        logger.info(f"   {i}. Support: {zone['price']:.2f} (Strength: {zone['strength']:.1f}) [{algorithm.upper()}]")
+                
                 if len(merged_support) > 10:
                     logger.info(f"   ... และอีก {len(merged_support) - 10} zones")
             else:
-                logger.warning("🚫 NO SUPPORT ZONES FOUND - อาจเป็นเพราะตลาดไม่มี Support ที่แข็งแกร่งเพียงพอ")
+                logger.warning("🚫 [SUPPORT ZONES] NO ZONES FOUND - ลองปรับ volume_threshold หรือ pattern_tolerance")
             
-            # Log all Resistance zones with prices
+            # Log Resistance zones with algorithm info
             if merged_resistance:
-                logger.info("📉 RESISTANCE ZONES FOUND:")
-                for i, zone in enumerate(merged_resistance[:10], 1):  # แสดง 10 zones ที่แข็งแกร่งที่สุด
-                    logger.info(f"   {i}. Resistance: {zone['price']:.2f} (Strength: {zone['strength']:.1f})")
+                logger.info("📉 [RESISTANCE ZONES] Found:")
+                for i, zone in enumerate(merged_resistance[:10], 1):
+                    algorithm = zone.get('algorithm', 'unknown')
+                    algorithms_used = zone.get('algorithms_used', [algorithm])
+                    zone_count = zone.get('zone_count', 1)
+                    
+                    if algorithm == 'consolidated':
+                        logger.info(f"   {i}. Resistance: {zone['price']:.2f} (Strength: {zone['strength']:.1f}) [CONSOLIDATED: {zone_count} zones from {', '.join(algorithms_used)}]")
+                    else:
+                        logger.info(f"   {i}. Resistance: {zone['price']:.2f} (Strength: {zone['strength']:.1f}) [{algorithm.upper()}]")
+                
                 if len(merged_resistance) > 10:
                     logger.info(f"   ... และอีก {len(merged_resistance) - 10} zones")
             else:
-                logger.warning("🚫 NO RESISTANCE ZONES FOUND - อาจเป็นเพราะตลาดไม่มี Resistance ที่แข็งแกร่งเพียงพอ")
+                logger.warning("🚫 [RESISTANCE ZONES] NO ZONES FOUND - ลองปรับ volume_threshold หรือ pattern_tolerance")
+            
+            logger.info("=" * 80)
             
             # Log warning if no zones at all
             if not merged_support and not merged_resistance:
@@ -107,6 +142,55 @@ class ZoneAnalyzer:
             logger.error(f"❌ Error analyzing zones: {e}")
             return {'support': [], 'resistance': []}
     
+    def _analyze_timeframe_zones_multi_algorithm(self, timeframe, lookback_hours: int) -> Tuple[List[Dict], List[Dict]]:
+        """🎯 Multi-Algorithm Zone Detection - ใช้ 3 วิธีหา zones พร้อมกัน"""
+        try:
+            logger.info(f"🎯 [MULTI-ALGORITHM] Starting multi-algorithm analysis for timeframe {timeframe}")
+            
+            # ดึงข้อมูลราคา
+            rates = self._get_rates(timeframe, lookback_hours)
+            if not rates or len(rates) < 50:
+                logger.warning(f"❌ [MULTI-ALGORITHM] Insufficient data for timeframe {timeframe}")
+                return [], []
+            
+            all_support_zones = []
+            all_resistance_zones = []
+            
+            # วิธีที่ 1: Pivot Points (เดิม)
+            if self.enable_pivot_points:
+                logger.info("🔍 [ALGORITHM 1] Pivot Points Analysis...")
+                pivot_support, pivot_resistance = self._find_zones_from_pivots(rates)
+                all_support_zones.extend(pivot_support)
+                all_resistance_zones.extend(pivot_resistance)
+                logger.info(f"✅ [ALGORITHM 1] Found {len(pivot_support)} support, {len(pivot_resistance)} resistance zones")
+            
+            # วิธีที่ 2: Volume Profile
+            if self.enable_volume_profile:
+                logger.info("📊 [ALGORITHM 2] Volume Profile Analysis...")
+                volume_support, volume_resistance = self._find_zones_from_volume_profile(rates)
+                all_support_zones.extend(volume_support)
+                all_resistance_zones.extend(volume_resistance)
+                logger.info(f"✅ [ALGORITHM 2] Found {len(volume_support)} support, {len(volume_resistance)} resistance zones")
+            
+            # วิธีที่ 3: Price Action Patterns
+            if self.enable_price_patterns:
+                logger.info("📈 [ALGORITHM 3] Price Action Patterns Analysis...")
+                pattern_support, pattern_resistance = self._find_zones_from_patterns(rates)
+                all_support_zones.extend(pattern_support)
+                all_resistance_zones.extend(pattern_resistance)
+                logger.info(f"✅ [ALGORITHM 3] Found {len(pattern_support)} support, {len(pattern_resistance)} resistance zones")
+            
+            # รวมและจัดเรียง zones ตาม strength
+            final_support = self._consolidate_zones(all_support_zones, 'support')
+            final_resistance = self._consolidate_zones(all_resistance_zones, 'resistance')
+            
+            logger.info(f"🎯 [MULTI-ALGORITHM] Final Results: {len(final_support)} support, {len(final_resistance)} resistance zones")
+            return final_support, final_resistance
+            
+        except Exception as e:
+            logger.error(f"❌ [MULTI-ALGORITHM] Error in multi-algorithm analysis: {e}")
+            return [], []
+
     def _analyze_timeframe_zones(self, timeframe, lookback_hours: int) -> Tuple[List[Dict], List[Dict]]:
         """🔍 วิเคราะห์ Zones ใน Timeframe เดียว"""
         try:
@@ -177,6 +261,267 @@ class ZoneAnalyzer:
             logger.error(f"❌ Error analyzing timeframe {timeframe}: {e}")
             return [], []
     
+    def _find_zones_from_pivots(self, rates) -> Tuple[List[Dict], List[Dict]]:
+        """🔍 Algorithm 1: หา zones จาก Pivot Points (เดิม)"""
+        try:
+            pivots = self._find_pivot_points(rates)
+            support_zones = []
+            resistance_zones = []
+            
+            for pivot in pivots:
+                if pivot['type'] == 'support':
+                    zone = {
+                        'price': pivot['price'],
+                        'touches': pivot['touches'],
+                        'strength': pivot.get('support_score', pivot['touches'] * 10),
+                        'timestamp': pivot['timestamp'],
+                        'algorithm': 'pivot_points',
+                        'rejection_strength': pivot.get('rejection_strength', 1.0),
+                        'volume_factor': pivot.get('volume_factor', 1.0)
+                    }
+                    support_zones.append(zone)
+                else:
+                    zone = {
+                        'price': pivot['price'],
+                        'touches': pivot['touches'],
+                        'strength': pivot.get('resistance_score', pivot['touches'] * 10),
+                        'timestamp': pivot['timestamp'],
+                        'algorithm': 'pivot_points',
+                        'rejection_strength': pivot.get('rejection_strength', 1.0),
+                        'volume_factor': pivot.get('volume_factor', 1.0)
+                    }
+                    resistance_zones.append(zone)
+            
+            return support_zones, resistance_zones
+        except Exception as e:
+            logger.error(f"❌ [ALGORITHM 1] Error in pivot points analysis: {e}")
+            return [], []
+
+    def _find_zones_from_volume_profile(self, rates) -> Tuple[List[Dict], List[Dict]]:
+        """📊 Algorithm 2: หา zones จาก Volume Profile"""
+        try:
+            if len(rates) < 20:
+                return [], []
+            
+            # สร้าง Volume Profile
+            prices = [float(rate['close']) for rate in rates]
+            volumes = [float(rate.get('tick_volume', 1)) for rate in rates]
+            
+            min_price = min(prices)
+            max_price = max(prices)
+            price_range = max_price - min_price
+            
+            if price_range == 0:
+                return [], []
+            
+            # สร้าง bins สำหรับ volume profile
+            bin_size = price_range / self.volume_profile_bins
+            volume_bins = {}
+            
+            for i, (price, volume) in enumerate(zip(prices, volumes)):
+                bin_index = int((price - min_price) / bin_size)
+                bin_index = min(bin_index, self.volume_profile_bins - 1)
+                
+                if bin_index not in volume_bins:
+                    volume_bins[bin_index] = {'volume': 0, 'prices': []}
+                volume_bins[bin_index]['volume'] += volume
+                volume_bins[bin_index]['prices'].append(price)
+            
+            # หา zones ที่มี volume สูง
+            max_volume = max(bin_data['volume'] for bin_data in volume_bins.values())
+            volume_threshold = max_volume * self.volume_threshold
+            
+            support_zones = []
+            resistance_zones = []
+            
+            for bin_index, bin_data in volume_bins.items():
+                if bin_data['volume'] >= volume_threshold:
+                    avg_price = sum(bin_data['prices']) / len(bin_data['prices'])
+                    volume_strength = (bin_data['volume'] / max_volume) * 100
+                    
+                    # กำหนดว่าเป็น support หรือ resistance ตามตำแหน่ง
+                    price_position = (avg_price - min_price) / price_range
+                    
+                    zone = {
+                        'price': avg_price,
+                        'touches': len(bin_data['prices']),
+                        'strength': volume_strength,
+                        'timestamp': float(rates[-1]['time']),
+                        'algorithm': 'volume_profile',
+                        'volume': bin_data['volume']
+                    }
+                    
+                    if price_position < 0.3:  # ราคาต่ำ = Support
+                        support_zones.append(zone)
+                    elif price_position > 0.7:  # ราคาสูง = Resistance
+                        resistance_zones.append(zone)
+            
+            return support_zones, resistance_zones
+        except Exception as e:
+            logger.error(f"❌ [ALGORITHM 2] Error in volume profile analysis: {e}")
+            return [], []
+
+    def _find_zones_from_patterns(self, rates) -> Tuple[List[Dict], List[Dict]]:
+        """📈 Algorithm 3: หา zones จาก Price Action Patterns"""
+        try:
+            if len(rates) < 20:
+                return [], []
+            
+            support_zones = []
+            resistance_zones = []
+            
+            # หา Double/Triple Tops และ Bottoms
+            highs = [float(rate['high']) for rate in rates]
+            lows = [float(rate['low']) for rate in rates]
+            
+            # หา Double/Triple Bottoms (Support)
+            bottoms = self._find_double_triple_bottoms(lows, rates)
+            for bottom in bottoms:
+                zone = {
+                    'price': bottom['price'],
+                    'touches': bottom['touches'],
+                    'strength': bottom['strength'],
+                    'timestamp': bottom['timestamp'],
+                    'algorithm': 'price_patterns',
+                    'pattern_type': bottom['pattern_type']
+                }
+                support_zones.append(zone)
+            
+            # หา Double/Triple Tops (Resistance)
+            tops = self._find_double_triple_tops(highs, rates)
+            for top in tops:
+                zone = {
+                    'price': top['price'],
+                    'touches': top['touches'],
+                    'strength': top['strength'],
+                    'timestamp': top['timestamp'],
+                    'algorithm': 'price_patterns',
+                    'pattern_type': top['pattern_type']
+                }
+                resistance_zones.append(zone)
+            
+            return support_zones, resistance_zones
+        except Exception as e:
+            logger.error(f"❌ [ALGORITHM 3] Error in price patterns analysis: {e}")
+            return [], []
+
+    def _find_double_triple_bottoms(self, lows, rates) -> List[Dict]:
+        """🔍 หา Double/Triple Bottoms"""
+        bottoms = []
+        tolerance = self.pattern_tolerance
+        
+        for i in range(2, len(lows) - 2):
+            current_low = lows[i]
+            
+            # หา lows ที่ใกล้เคียงกัน
+            similar_lows = []
+            for j in range(max(0, i-10), min(len(lows), i+10)):
+                if j != i and abs(lows[j] - current_low) <= tolerance:
+                    similar_lows.append(j)
+            
+            if len(similar_lows) >= 1:  # Double Bottom หรือมากกว่า
+                touches = len(similar_lows) + 1
+                pattern_type = f"{'Triple' if touches >= 3 else 'Double'} Bottom"
+                
+                # คำนวณ strength
+                strength = min(touches * 25, 100)
+                
+                bottoms.append({
+                    'price': current_low,
+                    'touches': touches,
+                    'strength': strength,
+                    'timestamp': float(rates[i]['time']),
+                    'pattern_type': pattern_type
+                })
+        
+        return bottoms
+
+    def _find_double_triple_tops(self, highs, rates) -> List[Dict]:
+        """🔍 หา Double/Triple Tops"""
+        tops = []
+        tolerance = self.pattern_tolerance
+        
+        for i in range(2, len(highs) - 2):
+            current_high = highs[i]
+            
+            # หา highs ที่ใกล้เคียงกัน
+            similar_highs = []
+            for j in range(max(0, i-10), min(len(highs), i+10)):
+                if j != i and abs(highs[j] - current_high) <= tolerance:
+                    similar_highs.append(j)
+            
+            if len(similar_highs) >= 1:  # Double Top หรือมากกว่า
+                touches = len(similar_highs) + 1
+                pattern_type = f"{'Triple' if touches >= 3 else 'Double'} Top"
+                
+                # คำนวณ strength
+                strength = min(touches * 25, 100)
+                
+                tops.append({
+                    'price': current_high,
+                    'touches': touches,
+                    'strength': strength,
+                    'timestamp': float(rates[i]['time']),
+                    'pattern_type': pattern_type
+                })
+        
+        return tops
+
+    def _consolidate_zones(self, zones, zone_type) -> List[Dict]:
+        """🔄 รวม zones ที่ใกล้เคียงกันและจัดเรียงตาม strength"""
+        try:
+            if not zones:
+                return []
+            
+            # จัดเรียงตาม strength
+            zones.sort(key=lambda x: x['strength'], reverse=True)
+            
+            # รวม zones ที่ใกล้เคียงกัน
+            consolidated = []
+            used_indices = set()
+            
+            for i, zone in enumerate(zones):
+                if i in used_indices:
+                    continue
+                
+                # หา zones ที่ใกล้เคียงกัน
+                nearby_zones = [zone]
+                for j, other_zone in enumerate(zones[i+1:], i+1):
+                    if j in used_indices:
+                        continue
+                    
+                    price_diff = abs(zone['price'] - other_zone['price'])
+                    if price_diff <= self.zone_tolerance:
+                        nearby_zones.append(other_zone)
+                        used_indices.add(j)
+                
+                # รวม zones ที่ใกล้เคียงกัน
+                if len(nearby_zones) > 1:
+                    # คำนวณค่าเฉลี่ย
+                    avg_price = sum(z['price'] for z in nearby_zones) / len(nearby_zones)
+                    total_touches = sum(z['touches'] for z in nearby_zones)
+                    max_strength = max(z['strength'] for z in nearby_zones)
+                    
+                    consolidated_zone = {
+                        'price': avg_price,
+                        'touches': total_touches,
+                        'strength': max_strength,
+                        'timestamp': max(z['timestamp'] for z in nearby_zones),
+                        'algorithm': 'consolidated',
+                        'zone_count': len(nearby_zones),
+                        'algorithms_used': list(set(z.get('algorithm', 'unknown') for z in nearby_zones))
+                    }
+                    consolidated.append(consolidated_zone)
+                else:
+                    consolidated.append(zone)
+            
+            # จำกัดจำนวน zones
+            return consolidated[:self.max_zones_per_type]
+            
+        except Exception as e:
+            logger.error(f"❌ Error consolidating {zone_type} zones: {e}")
+            return zones[:self.max_zones_per_type]
+
     def _find_pivot_points(self, rates) -> List[Dict]:
         """🔍 หา Pivot Points จากข้อมูลราคา"""
         try:
