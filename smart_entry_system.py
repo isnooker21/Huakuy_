@@ -19,14 +19,14 @@ class SmartEntrySystem:
         self.resistance_sell_enabled = True  # เปิด Resistance entries (SELL ที่ Resistance)
         
         # Dynamic Calculation Parameters
-        self.profit_target_pips = 50  # เป้าหมายกำไร 50 pips ต่อ lot
-        self.loss_threshold_pips = 50  # เกณฑ์ขาดทุน 50 pips ต่อ lot
-        self.recovery_zone_strength = 10  # Zone strength สำหรับ Recovery (ลดจาก 20 เพื่อหาโอกาสได้มากขึ้น)
-        self.min_zone_strength = 1  # Zone strength ขั้นต่ำสำหรับเข้าไม้ (ลดจาก 3 เพื่อหาโอกาสได้มากขึ้น)
+        self.profit_target_pips = 30  # เป้าหมายกำไร 30 pips ต่อ lot (ลดจาก 50)
+        self.loss_threshold_pips = 30  # เกณฑ์ขาดทุน 30 pips ต่อ lot (ลดจาก 50)
+        self.recovery_zone_strength = 5  # Zone strength สำหรับ Recovery (ลดจาก 10)
+        self.min_zone_strength = 0.5  # Zone strength ขั้นต่ำสำหรับเข้าไม้ (ลดจาก 1)
         
         # Risk Management (Dynamic)
-        self.risk_percent_per_trade = 0.01  # 1% ของ balance ต่อ trade
-        self.max_daily_trades = 10  # ลดจำนวน trade ต่อวัน
+        self.risk_percent_per_trade = 0.02  # 2% ของ balance ต่อ trade (เพิ่มจาก 1%)
+        self.max_daily_trades = 20  # เพิ่มจำนวน trade ต่อวัน (เพิ่มจาก 10)
         
         # Lot Size Management
         self.min_lot_size = 0.01
@@ -135,18 +135,20 @@ class SmartEntrySystem:
             if not support_zones or not resistance_zones:
                 return None, None
             
-            # เลือก Zone ตาม Pivot Point
+            # เลือก Zone ตาม Pivot Point (ปรับให้เลือกที่ใกล้ที่สุด)
             if current_price < pivot_point:
-                # ราคาต่ำกว่า Pivot → หา Support ที่แข็งแกร่ง
-                strong_supports = [zone for zone in support_zones if zone['strength'] >= self.min_zone_strength]
-                if strong_supports:
-                    best_support = max(strong_supports, key=lambda x: x['strength'])
+                # ราคาต่ำกว่า Pivot → หา Support ที่ใกล้ที่สุด
+                valid_supports = [zone for zone in support_zones if zone['strength'] >= self.min_zone_strength]
+                if valid_supports:
+                    # เลือก Support ที่ใกล้ที่สุดและแข็งแกร่งพอ
+                    best_support = min(valid_supports, key=lambda x: abs(current_price - x['price']))
                     return 'support', best_support
             else:
-                # ราคาสูงกว่า Pivot → หา Resistance ที่แข็งแกร่ง
-                strong_resistances = [zone for zone in resistance_zones if zone['strength'] >= self.min_zone_strength]
-                if strong_resistances:
-                    best_resistance = max(strong_resistances, key=lambda x: x['strength'])
+                # ราคาสูงกว่า Pivot → หา Resistance ที่ใกล้ที่สุด
+                valid_resistances = [zone for zone in resistance_zones if zone['strength'] >= self.min_zone_strength]
+                if valid_resistances:
+                    # เลือก Resistance ที่ใกล้ที่สุดและแข็งแกร่งพอ
+                    best_resistance = min(valid_resistances, key=lambda x: abs(current_price - x['price']))
                     return 'resistance', best_resistance
             
             return None, None
@@ -171,7 +173,7 @@ class SmartEntrySystem:
             
             # ตรวจสอบระยะห่างจากราคาปัจจุบัน
             distance = abs(current_price - zone['price'])
-            if distance > 15.0:  # ระยะห่างสูงสุด 15 pips
+            if distance > 30.0:  # ระยะห่างสูงสุด 30 pips (เพิ่มจาก 15)
                 logger.debug(f"🚫 Zone {zone['price']} too far: {distance}")
                 return False
             

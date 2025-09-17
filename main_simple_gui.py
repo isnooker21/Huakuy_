@@ -1291,7 +1291,15 @@ class AdaptiveTradingSystemGUI:
                                             )
                                             if entry_opportunity:
                                                 logger.info(f"🎯 Smart Entry Opportunity: {entry_opportunity['direction']} at {current_price}")
-                                                ticket = self.smart_entry_system.execute_entry(entry_opportunity)
+                                                # สร้าง Signal จาก entry_opportunity
+                                                signal = Signal(
+                                                    symbol=self.actual_symbol,
+                                                    action=entry_opportunity['direction'],
+                                                    price=current_price,
+                                                    lot_size=entry_opportunity['lot_size'],
+                                                    comment=entry_opportunity['reason']
+                                                )
+                                                ticket = self.smart_entry_system.execute_entry(signal)
                                                 if ticket:
                                                     logger.info(f"✅ Smart Entry executed: Ticket {ticket}")
                                             
