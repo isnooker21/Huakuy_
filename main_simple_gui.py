@@ -134,7 +134,7 @@ class SmartEntryTradingSystemGUI:
         self.portfolio_anchor = None
         self.smart_systems_enabled = True
         self.last_zone_analysis = 0
-        self.zone_analysis_interval = 5  # ทุก 5 วินาที (ปรับให้เร็วขึ้น)
+        self.zone_analysis_interval = 3  # ทุก 3 วินาที (ปรับให้เร็วขึ้น)
         self._smart_systems_thread = None  # เพิ่ม thread tracking
         
     
@@ -386,7 +386,7 @@ class SmartEntryTradingSystemGUI:
                     self._last_dynamic_closing_time = current_time
                 
                 # 🎯 Smart Trading Systems - Handle every 10 minutes (เพิ่ม cooldown มากขึ้น)
-                if current_time - getattr(self, '_last_smart_systems_time', 0) >= 5:  # 5 วินาที (Smart Entry เป็นหลัก)
+                if current_time - getattr(self, '_last_smart_systems_time', 0) >= 3:  # 3 วินาที (Smart Entry เป็นหลัก)
                     # ตรวจสอบว่า Smart Systems ทำงานอยู่หรือไม่ก่อนเริ่มใหม่
                     if not hasattr(self, '_smart_systems_running') or not self._smart_systems_running:
                         self._smart_systems_running = True

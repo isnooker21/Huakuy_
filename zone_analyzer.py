@@ -17,9 +17,9 @@ class ZoneAnalyzer:
         
         # Multi-Algorithm Zone Detection Parameters - ปรับให้หา zones ได้มากขึ้น
         self.min_touches = 1  # เกณฑ์ขั้นต่ำสำหรับการแตะ zone
-        self.zone_tolerance = 25.0  # ความยืดหยุ่นในการรวม zones (เพิ่มจาก 20.0)
-        self.min_zone_strength = 2  # ความแข็งแรงขั้นต่ำของ zone
-        self.max_zones_per_type = 15  # จำนวน zone สูงสุดต่อประเภท
+        self.zone_tolerance = 35.0  # ความยืดหยุ่นในการรวม zones (เพิ่มจาก 25.0)
+        self.min_zone_strength = 1  # ความแข็งแรงขั้นต่ำของ zone (ลดจาก 2)
+        self.max_zones_per_type = 25  # จำนวน zone สูงสุดต่อประเภท (เพิ่มจาก 15)
         
         # Multi-TF Analysis (ใช้หลาย timeframe)
         self.tf_weights = {
@@ -41,21 +41,21 @@ class ZoneAnalyzer:
         self.enable_volume_profile = True    # วิธีที่ 4: Volume Profile (Consolidation markets)
         
         # ปรับให้หา zones ได้มากขึ้นและแม่นยำขึ้น
-        self.zone_tolerance = 12.0           # ความยืดหยุ่นในการรวม zones (ลดจาก 25.0)
-        self.min_zone_strength = 2           # ความแข็งแรงขั้นต่ำของ zone
-        self.max_zones_per_type = 20         # จำนวน zone สูงสุดต่อประเภท (เพิ่มจาก 15)
+        self.zone_tolerance = 35.0           # ความยืดหยุ่นในการรวม zones (เพิ่มจาก 12.0)
+        self.min_zone_strength = 1           # ความแข็งแรงขั้นต่ำของ zone (ลดจาก 2)
+        self.max_zones_per_type = 25         # จำนวน zone สูงสุดต่อประเภท (เพิ่มจาก 20)
         
         # Moving Average Settings
-        self.ma_periods = [20, 50, 100, 200]  # ระยะเวลา Moving Average
-        self.ma_tolerance = 8.0              # ความยืดหยุ่นสำหรับ MA levels
+        self.ma_periods = [10, 20, 50, 100, 200]  # ระยะเวลา Moving Average (เพิ่ม 10)
+        self.ma_tolerance = 15.0              # ความยืดหยุ่นสำหรับ MA levels (เพิ่มจาก 8.0)
         
         # Fibonacci Settings
-        self.fib_levels = [0.236, 0.382, 0.5, 0.618, 0.786]  # Fibonacci levels
-        self.fib_lookback = 50               # จำนวน bars สำหรับหา swing high/low
+        self.fib_levels = [0.236, 0.382, 0.5, 0.618, 0.786, 0.886, 1.0, 1.272, 1.618]  # Fibonacci levels (เพิ่ม)
+        self.fib_lookback = 30               # จำนวน bars สำหรับหา swing high/low (ลดจาก 50)
         
         # Volume Profile Settings (ปรับปรุง)
-        self.volume_profile_bins = 25        # จำนวน bins สำหรับ volume profile
-        self.volume_threshold = 0.5          # เกณฑ์ volume (ลดจาก 0.7)
+        self.volume_profile_bins = 30        # จำนวน bins สำหรับ volume profile (เพิ่มจาก 25)
+        self.volume_threshold = 0.3          # เกณฑ์ volume (ลดจาก 0.5)
         
     def analyze_zones(self, symbol: str, lookback_hours: int = 24) -> Dict[str, List[Dict]]:
         """🔍 วิเคราะห์ Support/Resistance Zones ด้วย Multi-Algorithm"""
@@ -922,7 +922,7 @@ class ZoneAnalyzer:
         """🔍 หา Pivot Points จากข้อมูลราคา"""
         try:
             pivots = []
-            window = 2  # ลด window เป็น 2 bars เพื่อหา pivot มากขึ้น
+            window = 1  # ลด window เป็น 1 bar เพื่อหา pivot มากขึ้น
             logger.info(f"🔍 Finding pivot points from {len(rates)} bars with window={window}")
             
             for i in range(window, len(rates) - window):
