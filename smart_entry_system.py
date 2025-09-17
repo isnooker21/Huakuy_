@@ -441,6 +441,10 @@ class SmartEntrySystem:
                 comment = f"SMART_ENTRY: {reason}" if reason else f"SMART_ENTRY: {direction.upper()} at {entry_price:.5f}"
                 logger.info(f"🎯 Smart Entry Comment: {comment}")
             
+            # ตรวจสอบ comment ก่อนสร้าง Signal
+            if not comment or comment is None:
+                comment = f"SMART_ENTRY: {direction.upper()} at {entry_price:.5f}"
+            
             signal = Signal(
                 direction=direction.upper(),
                 symbol=self.symbol,
@@ -448,7 +452,7 @@ class SmartEntrySystem:
                 confidence=80.0,
                 timestamp=datetime.now(),
                 price=entry_price,
-                comment=comment,
+                comment=str(comment),  # แปลงเป็น string เสมอ
                 stop_loss=0.0,  # ไม่ตั้ง SL
                 take_profit=0.0  # ไม่ตั้ง TP
             )

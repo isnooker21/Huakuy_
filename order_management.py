@@ -61,7 +61,7 @@ class OrderManager:
             logger.info(f"📥 OrderManager รับคำสั่งจาก SmartEntrySystem")
             logger.info(f"   Signal: {signal.direction} {signal.symbol} at {signal.price}")
             logger.info(f"   Lot Size: {lot_size}, Account Balance: {account_balance}")
-            logger.info(f"   Comment: {signal.comment}")
+            logger.info(f"   Comment: {signal.comment} (Type: {type(signal.comment)})")
             
             # ตรวจสอบการเชื่อมต่อ
             if not self.mt5.check_connection_health():
@@ -98,11 +98,17 @@ class OrderManager:
                 price = signal.price
                 
             # ส่ง Order
-            # ปรับปรุง comment ให้ชัดเจน
-            if signal.comment and len(str(signal.comment)) > 0:
-                order_comment = str(signal.comment)
-            else:
+            # ปรับปรุง comment ให้ชัดเจน - ตรวจสอบอย่างปลอดภัย
+            try:
+                if signal.comment is not None and str(signal.comment).strip():
+                    order_comment = str(signal.comment).strip()
+                else:
+                    order_comment = f"SmartEntry_{signal.direction}"
+            except Exception as e:
+                logger.warning(f"⚠️ Error processing comment: {e}")
                 order_comment = f"SmartEntry_{signal.direction}"
+            
+            logger.info(f"📝 Final Order Comment: {order_comment}")
             
             result = self.mt5.place_order(
                 symbol=signal.symbol,
