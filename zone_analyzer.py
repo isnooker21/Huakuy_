@@ -58,21 +58,37 @@ class ZoneAnalyzer:
         self.volume_threshold = 0.3          # เกณฑ์ volume (ลดจาก 0.5)
         
     def analyze_zones(self, symbol: str, lookback_hours: int = 24) -> Dict[str, List[Dict]]:
-        """🔍 วิเคราะห์ Support/Resistance Zones ด้วย Multi-Algorithm"""
+        """🔍 วิเคราะห์ Support/Resistance Zones ด้วย Multi-Algorithm + Multi-Timeframe"""
         try:
             self.symbol = symbol  # ตั้งค่า symbol จาก parameter
             logger.info(f"🔍 [MULTI-METHOD] Analyzing zones for {self.symbol} (lookback: {lookback_hours}h)")
             logger.info(f"🔧 [MULTI-METHOD] Settings: tolerance={self.zone_tolerance}, min_strength={self.min_zone_strength}")
             logger.info(f"🎯 [MULTI-METHOD] Methods: Pivot={self.enable_pivot_points}, MA={self.enable_moving_averages}, Fib={self.enable_fibonacci}, Volume={self.enable_volume_profile}")
+            logger.info(f"⏰ [MULTI-TIMEFRAME] Using timeframes: M1, M5, M15, H1")
             
             support_zones = []
             resistance_zones = []
             
+            # เก็บข้อมูลจากทุก timeframe
+            all_rates = {}
             for tf in self.timeframes:
-                # ใช้ Multi-Algorithm หา zones
-                tf_support, tf_resistance = self._analyze_timeframe_zones_multi_algorithm(tf, lookback_hours)
-                support_zones.extend(tf_support)
-                resistance_zones.extend(tf_resistance)
+                rates = self._get_rates(tf, lookback_hours)
+                if rates and len(rates) >= 50:
+                    all_rates[tf] = rates
+                    logger.info(f"📊 [MULTI-TF] Loaded {len(rates)} bars for timeframe {tf}")
+                else:
+                    logger.warning(f"❌ [MULTI-TF] Insufficient data for timeframe {tf}")
+            
+            if not all_rates:
+                logger.error("❌ [MULTI-TF] No valid timeframe data available")
+                return {'support': [], 'resistance': []}
+            
+            # ใช้ Multi-Algorithm หา zones จากทุก timeframe
+            for tf in self.timeframes:
+                if tf in all_rates:
+                    tf_support, tf_resistance = self._analyze_timeframe_zones_multi_algorithm(tf, lookback_hours, all_rates[tf], all_rates)
+                    support_zones.extend(tf_support)
+                    resistance_zones.extend(tf_resistance)
             
             # รวม Zones ที่ใกล้เคียงกัน
             merged_support = self._merge_nearby_zones(support_zones)
@@ -155,17 +171,19 @@ class ZoneAnalyzer:
             logger.error(f"❌ Error analyzing zones: {e}")
             return {'support': [], 'resistance': []}
     
-    def _analyze_timeframe_zones_multi_algorithm(self, timeframe, lookback_hours: int) -> Tuple[List[Dict], List[Dict]]:
-        """🎯 Multi-Algorithm Zone Detection - ใช้ 3 วิธีหา zones พร้อมกัน"""
+    def _analyze_timeframe_zones_multi_algorithm(self, timeframe, lookback_hours: int, rates=None, all_rates=None) -> Tuple[List[Dict], List[Dict]]:
+        """🎯 Multi-Algorithm Zone Detection - ใช้ 4 วิธีหา zones พร้อมกัน"""
         try:
             logger.info(f"🎯 [ZONE ANALYSIS] Starting zone analysis for timeframe {timeframe}")
-            logger.info(f"🔧 [ZONE ANALYSIS] Using Pivot Points only (simple and effective)")
             
-            # ดึงข้อมูลราคา
-            rates = self._get_rates(timeframe, lookback_hours)
-            if not rates or len(rates) < 50:
-                logger.warning(f"❌ [ZONE ANALYSIS] Insufficient data for timeframe {timeframe}")
-                return [], []
+            # ใช้ข้อมูลที่ส่งมาหรือดึงใหม่
+            if rates is None:
+                rates = self._get_rates(timeframe, lookback_hours)
+                if not rates or len(rates) < 50:
+                    logger.warning(f"❌ [ZONE ANALYSIS] Insufficient data for timeframe {timeframe}")
+                    return [], []
+            else:
+                logger.info(f"📊 [ZONE ANALYSIS] Using provided rates data: {len(rates)} bars")
             
             all_support_zones = []
             all_resistance_zones = []
@@ -178,26 +196,26 @@ class ZoneAnalyzer:
                 all_resistance_zones.extend(pivot_resistance)
                 logger.info(f"✅ [METHOD 1] Found {len(pivot_support)} support, {len(pivot_resistance)} resistance zones")
             
-            # วิธีที่ 2: Moving Average Levels (Trending markets)
+            # วิธีที่ 2: Moving Average Levels (Trending markets) - ใช้ข้อมูลจากทุก timeframe
             if self.enable_moving_averages:
-                logger.info("📈 [METHOD 2] Moving Average Levels Analysis...")
-                ma_support, ma_resistance = self._find_zones_from_moving_averages(rates)
+                logger.info("📈 [METHOD 2] Moving Average Levels Analysis (Multi-Timeframe)...")
+                ma_support, ma_resistance = self._find_zones_from_moving_averages_multi_tf(all_rates)
                 all_support_zones.extend(ma_support)
                 all_resistance_zones.extend(ma_resistance)
                 logger.info(f"✅ [METHOD 2] Found {len(ma_support)} support, {len(ma_resistance)} resistance zones")
             
-            # วิธีที่ 3: Fibonacci Levels (Volatile markets)
+            # วิธีที่ 3: Fibonacci Levels (Volatile markets) - ใช้ข้อมูลจากทุก timeframe
             if self.enable_fibonacci:
-                logger.info("📊 [METHOD 3] Fibonacci Levels Analysis...")
-                fib_support, fib_resistance = self._find_zones_from_fibonacci(rates)
+                logger.info("📊 [METHOD 3] Fibonacci Levels Analysis (Multi-Timeframe)...")
+                fib_support, fib_resistance = self._find_zones_from_fibonacci_multi_tf(all_rates)
                 all_support_zones.extend(fib_support)
                 all_resistance_zones.extend(fib_resistance)
                 logger.info(f"✅ [METHOD 3] Found {len(fib_support)} support, {len(fib_resistance)} resistance zones")
             
-            # วิธีที่ 4: Volume Profile (Consolidation markets)
+            # วิธีที่ 4: Volume Profile (Consolidation markets) - ใช้ข้อมูลจากทุก timeframe
             if self.enable_volume_profile:
-                logger.info("📊 [METHOD 4] Volume Profile Analysis...")
-                volume_support, volume_resistance = self._find_zones_from_volume_profile(rates, self.volume_threshold)
+                logger.info("📊 [METHOD 4] Volume Profile Analysis (Multi-Timeframe)...")
+                volume_support, volume_resistance = self._find_zones_from_volume_profile_multi_tf(all_rates)
                 all_support_zones.extend(volume_support)
                 all_resistance_zones.extend(volume_resistance)
                 logger.info(f"✅ [METHOD 4] Found {len(volume_support)} support, {len(volume_resistance)} resistance zones")
@@ -1254,6 +1272,93 @@ class ZoneAnalyzer:
         except Exception as e:
             logger.error(f"❌ Error getting zone at price: {e}")
             return None
+    
+    def _find_zones_from_moving_averages_multi_tf(self, all_rates: Dict) -> Tuple[List[Dict], List[Dict]]:
+        """📈 หา Moving Average Levels จากทุก timeframe"""
+        try:
+            support_zones = []
+            resistance_zones = []
+            
+            for tf, rates in all_rates.items():
+                if not rates or len(rates) < 50:
+                    continue
+                    
+                tf_support, tf_resistance = self._find_zones_from_moving_averages(rates)
+                
+                # เพิ่ม timeframe info
+                for zone in tf_support:
+                    zone['timeframe'] = tf
+                    zone['algorithm'] = 'moving_averages'
+                for zone in tf_resistance:
+                    zone['timeframe'] = tf
+                    zone['algorithm'] = 'moving_averages'
+                
+                support_zones.extend(tf_support)
+                resistance_zones.extend(tf_resistance)
+            
+            return support_zones, resistance_zones
+            
+        except Exception as e:
+            logger.error(f"❌ Error in multi-TF Moving Average analysis: {e}")
+            return [], []
+    
+    def _find_zones_from_fibonacci_multi_tf(self, all_rates: Dict) -> Tuple[List[Dict], List[Dict]]:
+        """📊 หา Fibonacci Levels จากทุก timeframe"""
+        try:
+            support_zones = []
+            resistance_zones = []
+            
+            for tf, rates in all_rates.items():
+                if not rates or len(rates) < 50:
+                    continue
+                    
+                tf_support, tf_resistance = self._find_zones_from_fibonacci(rates)
+                
+                # เพิ่ม timeframe info
+                for zone in tf_support:
+                    zone['timeframe'] = tf
+                    zone['algorithm'] = 'fibonacci'
+                for zone in tf_resistance:
+                    zone['timeframe'] = tf
+                    zone['algorithm'] = 'fibonacci'
+                
+                support_zones.extend(tf_support)
+                resistance_zones.extend(tf_resistance)
+            
+            return support_zones, resistance_zones
+            
+        except Exception as e:
+            logger.error(f"❌ Error in multi-TF Fibonacci analysis: {e}")
+            return [], []
+    
+    def _find_zones_from_volume_profile_multi_tf(self, all_rates: Dict) -> Tuple[List[Dict], List[Dict]]:
+        """📊 หา Volume Profile จากทุก timeframe"""
+        try:
+            support_zones = []
+            resistance_zones = []
+            
+            for tf, rates in all_rates.items():
+                if not rates or len(rates) < 50:
+                    continue
+                    
+                tf_support, tf_resistance = self._find_zones_from_volume_profile(rates, self.volume_threshold)
+                
+                # เพิ่ม timeframe info
+                for zone in tf_support:
+                    zone['timeframe'] = tf
+                    zone['algorithm'] = 'volume_profile'
+                for zone in tf_resistance:
+                    zone['timeframe'] = tf
+                    zone['algorithm'] = 'volume_profile'
+                
+                support_zones.extend(tf_support)
+                resistance_zones.extend(tf_resistance)
+            
+            return support_zones, resistance_zones
+            
+        except Exception as e:
+            logger.error(f"❌ Error in multi-TF Volume Profile analysis: {e}")
+            return [], []
     
     def get_strongest_zones(self, zones: Dict[str, List[Dict]], count: int = 5) -> Dict[str, List[Dict]]:
         """🏆 หา Zones ที่แข็งแรงที่สุด"""
