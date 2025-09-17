@@ -255,10 +255,29 @@ class SmartEntrySystem:
                     logger.warning(f"🚫 [ZONE SELECTION] Support: {closest_support_price:.5f}, Resistance: {closest_resistance_price:.5f}")
                     return None, None
             
-            # เลือก Zone ตาม Pivot Point (ปรับให้เลือกที่ใกล้ที่สุด)
+            # เลือก Zone ตาม Pivot Point (ปรับให้เลือกที่ใกล้ที่สุด + กรองตามระยะห่าง)
             if current_price < pivot_point:
                 # ราคาต่ำกว่า Pivot → หา Support ที่ใกล้ที่สุด
-                valid_supports = [zone for zone in support_zones if zone['strength'] >= self.min_zone_strength]
+                valid_supports = []
+                for zone in support_zones:
+                    if zone['strength'] >= self.min_zone_strength:
+                        # ตรวจสอบระยะห่างด้วย Dynamic Distance
+                        distance = abs(current_price - zone['price'])
+                        zone_strength = zone.get('strength', 0)
+                        
+                        # Dynamic Distance ตาม Zone Strength
+                        if zone_strength >= 0.8:
+                            max_distance = 150.0  # Zone แข็งแกร่งมาก = 150 pips
+                        elif zone_strength >= 0.5:
+                            max_distance = 100.0  # Zone แข็งแกร่ง = 100 pips
+                        elif zone_strength >= 0.2:
+                            max_distance = 75.0   # Zone ปานกลาง = 75 pips
+                        else:
+                            max_distance = 50.0   # Zone อ่อนแอ = 50 pips
+                        
+                        if distance <= max_distance:
+                            valid_supports.append(zone)
+                
                 logger.info(f"🔍 [ZONE SELECTION] Looking for SUPPORT zones. Valid: {len(valid_supports)} (min_strength: {self.min_zone_strength})")
                 
                 if valid_supports:
@@ -270,7 +289,26 @@ class SmartEntrySystem:
                     logger.warning("🚫 [ZONE SELECTION] No valid SUPPORT zones found")
             else:
                 # ราคาสูงกว่า Pivot → หา Resistance ที่ใกล้ที่สุด
-                valid_resistances = [zone for zone in resistance_zones if zone['strength'] >= self.min_zone_strength]
+                valid_resistances = []
+                for zone in resistance_zones:
+                    if zone['strength'] >= self.min_zone_strength:
+                        # ตรวจสอบระยะห่างด้วย Dynamic Distance
+                        distance = abs(current_price - zone['price'])
+                        zone_strength = zone.get('strength', 0)
+                        
+                        # Dynamic Distance ตาม Zone Strength
+                        if zone_strength >= 0.8:
+                            max_distance = 150.0  # Zone แข็งแกร่งมาก = 150 pips
+                        elif zone_strength >= 0.5:
+                            max_distance = 100.0  # Zone แข็งแกร่ง = 100 pips
+                        elif zone_strength >= 0.2:
+                            max_distance = 75.0   # Zone ปานกลาง = 75 pips
+                        else:
+                            max_distance = 50.0   # Zone อ่อนแอ = 50 pips
+                        
+                        if distance <= max_distance:
+                            valid_resistances.append(zone)
+                
                 logger.info(f"🔍 [ZONE SELECTION] Looking for RESISTANCE zones. Valid: {len(valid_resistances)} (min_strength: {self.min_zone_strength})")
                 
                 if valid_resistances:
