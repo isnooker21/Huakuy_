@@ -805,45 +805,87 @@ class ZoneAnalyzer:
         try:
             opportunities = []
             
-            # หา Support zones สำหรับ BUY
+            # หา Support zones สำหรับ BUY - กรองตามระยะห่างก่อน
             support_zones = zones.get('support', [])
-            for zone in support_zones[:5]:  # เอา 5 zones ที่แข็งแกร่งที่สุด
-                zone_price = zone['price']
-                distance = abs(current_price - zone_price)
-                
-                # ตรวจสอบว่าใกล้พอสำหรับ entry (เพิ่มระยะห่างเพื่อหาโอกาสได้มากขึ้น)
-                if distance <= 50.0:  # เพิ่มเป็น 50 points เพื่อหาโอกาสได้มากขึ้น
-                    timeframe_name = self._get_timeframe_name(zone)
-                    comment = self._create_trade_comment(zone, 'BUY', timeframe_name)
-                    
-                    opportunities.append({
-                        'type': 'BUY',
-                        'price': zone_price,
-                        'strength': zone['strength'],
-                        'distance': distance,
-                        'comment': comment,
-                        'zone': zone
-                    })
+            filtered_support_zones = []
             
-            # หา Resistance zones สำหรับ SELL
-            resistance_zones = zones.get('resistance', [])
-            for zone in resistance_zones[:5]:  # เอา 5 zones ที่แข็งแกร่งที่สุด
+            # 🔍 Pre-filter zones ตามระยะห่างเพื่อไม่ให้ log zones ที่ไกลเกินไป
+            for zone in support_zones:
                 zone_price = zone['price']
                 distance = abs(current_price - zone_price)
                 
-                # ตรวจสอบว่าใกล้พอสำหรับ entry (เพิ่มระยะห่างเพื่อหาโอกาสได้มากขึ้น)
-                if distance <= 50.0:  # เพิ่มเป็น 50 points เพื่อหาโอกาสได้มากขึ้น
-                    timeframe_name = self._get_timeframe_name(zone)
-                    comment = self._create_trade_comment(zone, 'SELL', timeframe_name)
-                    
-                    opportunities.append({
-                        'type': 'SELL',
-                        'price': zone_price,
-                        'strength': zone['strength'],
-                        'distance': distance,
-                        'comment': comment,
-                        'zone': zone
-                    })
+                # ตรวจสอบว่าใกล้พอสำหรับ entry - Dynamic Distance ตาม Zone Strength
+                zone_strength = zone.get('strength', 0)
+                if zone_strength >= 0.8:
+                    max_distance = 150.0  # Zone แข็งแกร่งมาก = 150 pips
+                elif zone_strength >= 0.5:
+                    max_distance = 100.0  # Zone แข็งแกร่ง = 100 pips
+                elif zone_strength >= 0.2:
+                    max_distance = 75.0   # Zone ปานกลาง = 75 pips
+                else:
+                    max_distance = 50.0   # Zone อ่อนแอ = 50 pips
+                
+                # กรองเฉพาะ zones ที่อยู่ในระยะห่างที่เหมาะสม
+                if distance <= max_distance:
+                    filtered_support_zones.append(zone)
+            
+            # เอา 5 zones ที่แข็งแกร่งที่สุดจากที่กรองแล้ว
+            filtered_support_zones.sort(key=lambda x: x.get('strength', 0), reverse=True)
+            for zone in filtered_support_zones[:5]:
+                zone_price = zone['price']
+                distance = abs(current_price - zone_price)
+                timeframe_name = self._get_timeframe_name(zone)
+                comment = self._create_trade_comment(zone, 'BUY', timeframe_name)
+                
+                opportunities.append({
+                    'type': 'BUY',
+                    'price': zone_price,
+                    'strength': zone['strength'],
+                    'distance': distance,
+                    'comment': comment,
+                    'zone': zone
+                })
+            
+            # หา Resistance zones สำหรับ SELL - กรองตามระยะห่างก่อน
+            resistance_zones = zones.get('resistance', [])
+            filtered_resistance_zones = []
+            
+            # 🔍 Pre-filter zones ตามระยะห่างเพื่อไม่ให้ log zones ที่ไกลเกินไป
+            for zone in resistance_zones:
+                zone_price = zone['price']
+                distance = abs(current_price - zone_price)
+                
+                # ตรวจสอบว่าใกล้พอสำหรับ entry - Dynamic Distance ตาม Zone Strength
+                zone_strength = zone.get('strength', 0)
+                if zone_strength >= 0.8:
+                    max_distance = 150.0  # Zone แข็งแกร่งมาก = 150 pips
+                elif zone_strength >= 0.5:
+                    max_distance = 100.0  # Zone แข็งแกร่ง = 100 pips
+                elif zone_strength >= 0.2:
+                    max_distance = 75.0   # Zone ปานกลาง = 75 pips
+                else:
+                    max_distance = 50.0   # Zone อ่อนแอ = 50 pips
+                
+                # กรองเฉพาะ zones ที่อยู่ในระยะห่างที่เหมาะสม
+                if distance <= max_distance:
+                    filtered_resistance_zones.append(zone)
+            
+            # เอา 5 zones ที่แข็งแกร่งที่สุดจากที่กรองแล้ว
+            filtered_resistance_zones.sort(key=lambda x: x.get('strength', 0), reverse=True)
+            for zone in filtered_resistance_zones[:5]:
+                zone_price = zone['price']
+                distance = abs(current_price - zone_price)
+                timeframe_name = self._get_timeframe_name(zone)
+                comment = self._create_trade_comment(zone, 'SELL', timeframe_name)
+                
+                opportunities.append({
+                    'type': 'SELL',
+                    'price': zone_price,
+                    'strength': zone['strength'],
+                    'distance': distance,
+                    'comment': comment,
+                    'zone': zone
+                })
             
             # จัดเรียงตาม strength
             opportunities.sort(key=lambda x: x['strength'], reverse=True)

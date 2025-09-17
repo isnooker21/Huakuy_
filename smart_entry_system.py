@@ -301,11 +301,22 @@ class SmartEntrySystem:
                 logger.info(f"🚫 Zone {zone['price']} already used")
                 return False
             
-            # ตรวจสอบระยะห่างจากราคาปัจจุบัน
+            # ตรวจสอบระยะห่างจากราคาปัจจุบัน - Dynamic Distance ตาม Zone Strength
             distance = abs(current_price - zone['price'])
-            max_distance = 200.0  # ระยะห่างสูงสุด 200 pips (เพิ่มจาก 50)
+            
+            # 🎯 Dynamic Distance: Zone แข็งแกร่ง = ระยะห่างมากขึ้น
+            zone_strength = zone.get('strength', 0)
+            if zone_strength >= 0.8:
+                max_distance = 150.0  # Zone แข็งแกร่งมาก = 150 pips
+            elif zone_strength >= 0.5:
+                max_distance = 100.0  # Zone แข็งแกร่ง = 100 pips  
+            elif zone_strength >= 0.2:
+                max_distance = 75.0   # Zone ปานกลาง = 75 pips
+            else:
+                max_distance = 50.0   # Zone อ่อนแอ = 50 pips
+                
             if distance > max_distance:
-                logger.info(f"🚫 Zone {zone['price']} too far: {distance:.1f} pips (max: {max_distance})")
+                logger.info(f"🚫 Zone {zone['price']} too far: {distance:.1f} pips (max: {max_distance}, strength: {zone_strength:.2f})")
                 return False
             
             # ตรวจสอบระยะห่างจากคำสั่งที่เปิดอยู่แล้ว (ป้องกันการเปิดคำสั่งใกล้กันเกินไป)
