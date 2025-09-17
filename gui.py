@@ -69,9 +69,6 @@ class TradingGUI:
             # สร้าง bottom frame สำหรับ positions และ log
             self.create_bottom_panel(main_frame)
             
-            # 🧠 สร้าง AI Intelligence Tab
-            self.create_ai_intelligence_tab(main_frame)
-            
         except Exception as e:
             logger.error(f"เกิดข้อผิดพลาดในการสร้าง widgets: {str(e)}")
             
