@@ -397,10 +397,11 @@ class AdaptiveTradingSystemGUI:
                     threading.Thread(target=dynamic_closing_worker, daemon=True).start()
                     self._last_dynamic_closing_time = current_time
                 
-                # 🎯 Smart Trading Systems - Handle every 10 minutes (เพิ่ม cooldown มากขึ้น)
+                # 🎯 Smart Trading Systems - Handle every 3 seconds (Smart Entry เป็นหลัก)
                 if current_time - getattr(self, '_last_smart_systems_time', 0) >= 3:  # 3 วินาที (Smart Entry เป็นหลัก)
                     # ตรวจสอบว่า Smart Systems ทำงานอยู่หรือไม่ก่อนเริ่มใหม่
                     if not hasattr(self, '_smart_systems_running') or not self._smart_systems_running:
+                        logger.info(f"🎯 Starting Smart Systems (interval: {current_time - getattr(self, '_last_smart_systems_time', 0):.1f}s)")
                         self._smart_systems_running = True
                         self._handle_smart_systems()
                         self._last_smart_systems_time = current_time
@@ -1179,6 +1180,7 @@ class AdaptiveTradingSystemGUI:
     def _handle_smart_systems(self):
         """🎯 Handle Smart Trading Systems"""
         try:
+            logger.info("🎯 [SMART SYSTEMS] Starting Smart Systems processing...")
             
             # ตรวจสอบ smart_systems_enabled
             if not self.smart_systems_enabled:
@@ -1203,12 +1205,14 @@ class AdaptiveTradingSystemGUI:
             
             # ตรวจสอบเวลาสำหรับ Zone Analysis
             time_since_last_analysis = current_time - self.last_zone_analysis
+            logger.info(f"🎯 [SMART SYSTEMS] Time since last analysis: {time_since_last_analysis:.1f}s (interval: {self.zone_analysis_interval}s)")
             
             if time_since_last_analysis < self.zone_analysis_interval:
                 logger.debug("⏰ Zone analysis interval not reached yet - skipping")
                 return
             
             self.last_zone_analysis = current_time
+            logger.info("🎯 [SMART SYSTEMS] Zone analysis interval reached - proceeding...")
             
             # ดึงราคาปัจจุบัน
             current_price = self.mt5_connection.get_current_price(self.actual_symbol)
@@ -1273,6 +1277,7 @@ class AdaptiveTradingSystemGUI:
                             
                             # 1. Smart Entry System
                             entry_start = time.time()
+                            logger.info("🎯 [SMART SYSTEMS] Starting Smart Entry System analysis...")
                             if hasattr(self, 'smart_entry_system') and self.smart_entry_system:
                                 try:
                                     # Build a mock position with current price for SW filter
