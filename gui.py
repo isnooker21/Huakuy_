@@ -1745,6 +1745,20 @@ class TradingGUI:
             if not ai_stats:
                 return
             
+            # Check if AI labels exist before updating
+            if not hasattr(self, 'ai_position_stats_labels'):
+                logger.debug("AI position stats labels not initialized yet")
+                return
+            if not hasattr(self, 'ai_entry_stats_labels'):
+                logger.debug("AI entry stats labels not initialized yet")
+                return
+            if not hasattr(self, 'ai_learning_stats_labels'):
+                logger.debug("AI learning stats labels not initialized yet")
+                return
+            if not hasattr(self, 'ai_decision_stats_labels'):
+                logger.debug("AI decision stats labels not initialized yet")
+                return
+            
             # Update Position Intelligence
             if 'position_intelligence' in ai_stats:
                 pos_stats = ai_stats['position_intelligence']
@@ -1789,8 +1803,8 @@ class TradingGUI:
                         else:
                             label.config(text=str(value))
             
-            # Update AI Status
-            if 'ai_status' in ai_stats:
+            # Update AI Status (if label exists)
+            if hasattr(self, 'ai_status_label') and 'ai_status' in ai_stats:
                 status = ai_stats['ai_status']
                 self.ai_status_label.config(text=f"AI Status: {status}", fg='#00ff88')
                 
