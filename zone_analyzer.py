@@ -142,51 +142,34 @@ class ZoneAnalyzer:
     def _analyze_timeframe_zones_multi_algorithm(self, timeframe, lookback_hours: int) -> Tuple[List[Dict], List[Dict]]:
         """🎯 Multi-Algorithm Zone Detection - ใช้ 3 วิธีหา zones พร้อมกัน"""
         try:
-            logger.info(f"🎯 [MULTI-ALGORITHM] Starting multi-algorithm analysis for timeframe {timeframe}")
-            logger.info(f"🔧 [MULTI-ALGORITHM] Mode: {self.algorithm_mode.upper()}, Adaptive: {self.adaptive_thresholds}")
+            logger.info(f"🎯 [ZONE ANALYSIS] Starting zone analysis for timeframe {timeframe}")
+            logger.info(f"🔧 [ZONE ANALYSIS] Using Pivot Points only (simple and effective)")
             
             # ดึงข้อมูลราคา
             rates = self._get_rates(timeframe, lookback_hours)
             if not rates or len(rates) < 50:
-                logger.warning(f"❌ [MULTI-ALGORITHM] Insufficient data for timeframe {timeframe}")
+                logger.warning(f"❌ [ZONE ANALYSIS] Insufficient data for timeframe {timeframe}")
                 return [], []
             
             all_support_zones = []
             all_resistance_zones = []
             
-            # วิธีที่ 1: Pivot Points (เดิม)
-            if self.enable_pivot_points:
-                logger.info("🔍 [ALGORITHM 1] Pivot Points Analysis...")
-                pivot_support, pivot_resistance = self._find_zones_from_pivots(rates)
-                all_support_zones.extend(pivot_support)
-                all_resistance_zones.extend(pivot_resistance)
-                logger.info(f"✅ [ALGORITHM 1] Found {len(pivot_support)} support, {len(pivot_resistance)} resistance zones")
-            
-            # วิธีที่ 2: Volume Profile (Dynamic)
-            if self.enable_volume_profile:
-                logger.info("📊 [ALGORITHM 2] Volume Profile Analysis...")
-                volume_support, volume_resistance = self._find_zones_from_volume_profile_adaptive(rates)
-                all_support_zones.extend(volume_support)
-                all_resistance_zones.extend(volume_resistance)
-                logger.info(f"✅ [ALGORITHM 2] Found {len(volume_support)} support, {len(volume_resistance)} resistance zones")
-            
-            # วิธีที่ 3: Price Action Patterns (Dynamic)
-            if self.enable_price_patterns:
-                logger.info("📈 [ALGORITHM 3] Price Action Patterns Analysis...")
-                pattern_support, pattern_resistance = self._find_zones_from_patterns_adaptive(rates)
-                all_support_zones.extend(pattern_support)
-                all_resistance_zones.extend(pattern_resistance)
-                logger.info(f"✅ [ALGORITHM 3] Found {len(pattern_support)} support, {len(pattern_resistance)} resistance zones")
+            # ใช้แค่ Pivot Points (วิธีเดียวที่ทำงานได้ดี)
+            logger.info("🔍 [PIVOT POINTS] Starting analysis...")
+            pivot_support, pivot_resistance = self._find_zones_from_pivots(rates)
+            all_support_zones.extend(pivot_support)
+            all_resistance_zones.extend(pivot_resistance)
+            logger.info(f"✅ [PIVOT POINTS] Found {len(pivot_support)} support, {len(pivot_resistance)} resistance zones")
             
             # รวมและจัดเรียง zones ตาม strength
             final_support = self._consolidate_zones(all_support_zones, 'support')
             final_resistance = self._consolidate_zones(all_resistance_zones, 'resistance')
             
-            logger.info(f"🎯 [MULTI-ALGORITHM] Final Results: {len(final_support)} support, {len(final_resistance)} resistance zones")
+            logger.info(f"🎯 [ZONE ANALYSIS] Final Results: {len(final_support)} support, {len(final_resistance)} resistance zones")
             return final_support, final_resistance
             
         except Exception as e:
-            logger.error(f"❌ [MULTI-ALGORITHM] Error in multi-algorithm analysis: {e}")
+            logger.error(f"❌ [ZONE ANALYSIS] Error in zone analysis: {e}")
             return [], []
 
     def _analyze_timeframe_zones(self, timeframe, lookback_hours: int) -> Tuple[List[Dict], List[Dict]]:
