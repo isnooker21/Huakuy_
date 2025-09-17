@@ -702,37 +702,20 @@ class HedgePairingCloser:
             )
     
     def _find_smart_hedge_combination(self, target_positions: List[Any], all_statuses: List[PositionStatus]) -> Optional[ClosingDecision]:
-        """🧠 หาการจับคู่ไม้ที่ฉลาดที่สุด - เน้นกำไรรวมเป็นบวก"""
+        """🧠 หาการจับคู่ไม้ที่ฉลาดที่สุด - ต้องมีไม้ Helper เสมอ"""
         try:
-            # แยกไม้ตามประเภท
-            target_buy = [pos for pos in target_positions if getattr(pos, 'type', 0) == 0]
-            target_sell = [pos for pos in target_positions if getattr(pos, 'type', 0) == 1]
-            
             # หาไม้ช่วยที่กำไร
             profitable_helpers = [s for s in all_statuses if s.status == "WINNER" and s.profit > 0]
             
             if not profitable_helpers:
-                logger.warning("🚫 No profitable helpers available")
+                logger.warning("🚫 No profitable helpers available - Cannot close without helpers")
                 return None
             
             best_combination = None
             best_profit = -999999.0
             
-            # วิธีที่ 1: จับคู่ไม้ตรงข้ามกัน (BUY + SELL)
-            if target_buy and target_sell:
-                for buy_pos in target_buy:
-                    for sell_pos in target_sell:
-                        combined_profit = getattr(buy_pos, 'profit', 0) + getattr(sell_pos, 'profit', 0)
-                        if combined_profit > best_profit:
-                            best_profit = combined_profit
-                            best_combination = {
-                                'positions': [buy_pos, sell_pos],
-                                'total_profit': combined_profit,
-                                'method': 'OPPOSITE_PAIRING',
-                                'reason': f"จับคู่ตรงข้าม: BUY {getattr(buy_pos, 'ticket', 'N/A')} + SELL {getattr(sell_pos, 'ticket', 'N/A')}"
-                            }
-            
-            # วิธีที่ 2: ใช้ไม้ช่วยมาช่วยไม้ติดลบ
+            # 🚫 ห้ามปิดคู่ไม้ที่ติดลบโดยไม่มีไม้ Helper
+            # วิธีที่ 1: ใช้ไม้ช่วยมาช่วยไม้ติดลบ (ต้องมี Helper เสมอ)
             for target_pos in target_positions:
                 target_profit = getattr(target_pos, 'profit', 0)
                 target_type = getattr(target_pos, 'type', 0)
@@ -751,7 +734,7 @@ class HedgePairingCloser:
                             'reason': f"ไม้ช่วย: {getattr(target_pos, 'ticket', 'N/A')} + Helper {getattr(helper.position, 'ticket', 'N/A')}"
                         }
             
-            # วิธีที่ 3: ใช้ไม้ช่วยหลายตัวมาช่วยไม้ติดลบ
+            # วิธีที่ 2: ใช้ไม้ช่วยหลายตัวมาช่วยไม้ติดลบ
             if len(profitable_helpers) >= 2:
                 for target_pos in target_positions:
                     target_profit = getattr(target_pos, 'profit', 0)
@@ -775,11 +758,39 @@ class HedgePairingCloser:
                                     'reason': f"ไม้ช่วยหลายตัว: {getattr(target_pos, 'ticket', 'N/A')} + {num_helpers} helpers"
                                 }
             
-            # ตรวจสอบว่าพบการจับคู่ที่ดีหรือไม่
+            # วิธีที่ 3: ใช้ไม้ช่วยหลายตัวมาช่วยไม้หลายตัวที่ติดลบ
+            if len(profitable_helpers) >= 2 and len(target_positions) >= 2:
+                # ลองใช้ไม้ช่วย 2-4 ตัวมาช่วยไม้ติดลบ 2-3 ตัว
+                for num_targets in range(2, min(4, len(target_positions) + 1)):
+                    for target_combination in itertools.combinations(target_positions, num_targets):
+                        target_profit = sum(getattr(pos, 'profit', 0) for pos in target_combination)
+                        
+                        # หาไม้ช่วยที่ตรงข้ามกัน
+                        target_types = [getattr(pos, 'type', 0) for pos in target_combination]
+                        opposite_helpers = [h for h in profitable_helpers if h.position.type not in target_types]
+                        
+                        if opposite_helpers:
+                            for num_helpers in range(2, min(5, len(opposite_helpers) + 1)):
+                                for helpers in itertools.combinations(opposite_helpers, num_helpers):
+                                    helpers_profit = sum(h.profit for h in helpers)
+                                    combined_profit = target_profit + helpers_profit
+                                    
+                                    if combined_profit > best_profit:
+                                        best_profit = combined_profit
+                                        best_combination = {
+                                            'positions': list(target_combination) + [h.position for h in helpers],
+                                            'total_profit': combined_profit,
+                                            'method': 'MULTI_TARGET_MULTI_HELPER',
+                                            'reason': f"ไม้หลายตัว + ไม้ช่วยหลายตัว: {num_targets} targets + {num_helpers} helpers"
+                                        }
+            
+            # ตรวจสอบว่าพบการจับคู่ที่ดีหรือไม่ (ต้องมีไม้ Helper)
             if best_combination and best_profit > 0:
                 positions_to_close = best_combination['positions']
                 buy_count = len([p for p in positions_to_close if getattr(p, 'type', 0) == 0])
                 sell_count = len([p for p in positions_to_close if getattr(p, 'type', 0) == 1])
+                
+                logger.info(f"✅ SMART HEDGE WITH HELPERS: {best_combination['reason']} = ${best_profit:.2f}")
                 
                 return ClosingDecision(
                     should_close=True,
@@ -790,10 +801,11 @@ class HedgePairingCloser:
                     position_count=len(positions_to_close),
                     buy_count=buy_count,
                     sell_count=sell_count,
-                    confidence_score=90.0,
+                    confidence_score=95.0,
                     reason=best_combination['reason']
                 )
             
+            logger.warning("🚫 No profitable combination found with helpers")
             return None
             
         except Exception as e:
@@ -960,44 +972,23 @@ class HedgePairingCloser:
             )
     
     def _close_smallest_losers(self, losers: List[PositionStatus]) -> ClosingDecision:
-        """📉 ปิดไม้ที่ขาดทุนน้อยที่สุด"""
+        """📉 ปิดไม้ที่ขาดทุนน้อยที่สุด - ต้องมีไม้ Helper เสมอ"""
         try:
-            # เรียงตามกำไร (ขาดทุนน้อยที่สุดก่อน)
-            losers.sort(key=lambda x: x.profit, reverse=True)
-            
-            # ปิดไม้ที่ขาดทุนน้อยที่สุด 1-2 ตัว
-            positions_to_close = losers[:2]  # ปิด 2 ตัวแรก
-            
-            total_profit = sum(pos.profit for pos in positions_to_close)
-            
-            # 🚫 ตรวจสอบว่าไม้ติดลบหรือไม่ - ถ้าติดลบให้ข้าม
-            if total_profit < 0:
-                logger.info(f"🚫 SMALLEST LOSERS: All positions are losing (${total_profit:.2f}) - Skipping")
-                logger.info(f"   ZERO LOSS POLICY: Cannot close losing positions without helpers")
-                return ClosingDecision(
-                    should_close=False,
-                    positions_to_close=[],
-                    method="SKIP_LOSING_POSITIONS",
-                    net_pnl=total_profit,
-                    expected_pnl=total_profit,
-                    position_count=len(positions_to_close),
-                    buy_count=len([pos for pos in positions_to_close if getattr(pos.position, 'type', 0) == 0]),
-                    sell_count=len([pos for pos in positions_to_close if getattr(pos.position, 'type', 0) == 1]),
-                    confidence_score=0.0,
-                    reason=f"Skip losing positions: {len(positions_to_close)} positions (${total_profit:.2f}) - Need helpers"
-                )
+            # 🚫 ห้ามปิดไม้ที่ติดลบโดยไม่มีไม้ Helper
+            logger.warning("🚫 SMALLEST LOSERS: Cannot close losing positions without helpers")
+            logger.warning("   HELPER REQUIRED POLICY: All closing must include profitable helpers")
             
             return ClosingDecision(
-                should_close=True,
-                positions_to_close=[pos.position for pos in positions_to_close],
-                method="SMALLEST_LOSERS",
-                net_pnl=total_profit,
-                expected_pnl=total_profit,
-                position_count=len(positions_to_close),
-                buy_count=len([pos for pos in positions_to_close if getattr(pos.position, 'type', 0) == 0]),
-                sell_count=len([pos for pos in positions_to_close if getattr(pos.position, 'type', 0) == 1]),
-                confidence_score=0.7,
-                reason=f"Close Smallest Losers: {len(positions_to_close)} positions (${total_profit:.2f})"
+                should_close=False,
+                positions_to_close=[],
+                method="HELPER_REQUIRED",
+                net_pnl=0.0,
+                expected_pnl=0.0,
+                position_count=0,
+                buy_count=0,
+                sell_count=0,
+                confidence_score=0.0,
+                reason="ไม้ติดลบต้องมีไม้ Helper มาช่วย - ห้ามปิดคู่ไม้ติดลบ"
             )
             
         except Exception as e:
@@ -1016,31 +1007,45 @@ class HedgePairingCloser:
             )
     
     def _close_some_winners(self, winners: List[PositionStatus], portfolio_health: str) -> ClosingDecision:
-        """💰 ปิดไม้กำไรบางตัวเมื่อจำเป็น"""
+        """💰 ปิดไม้กำไรบางตัวเมื่อจำเป็น - ใช้ไม้กำไรเป็น Helper"""
         try:
             # เรียงตามกำไร (กำไรมากที่สุดก่อน)
             winners.sort(key=lambda x: x.profit, reverse=True)
             
-            # ปิดไม้กำไร 1-2 ตัว (เฉพาะเมื่อพอร์ตแย่)
-            if portfolio_health == "แย่มาก":
-                positions_to_close = winners[:2]  # ปิด 2 ตัว
+            # ใช้ไม้กำไรเป็น Helper มาช่วยไม้ติดลบ
+            if len(winners) >= 2:
+                # ใช้ไม้กำไร 1-2 ตัวเป็น Helper มาช่วยไม้ติดลบ
+                helper_positions = winners[:2]  # ไม้กำไร 2 ตัวแรก
+                total_profit = sum(pos.profit for pos in helper_positions)
+                
+                logger.info(f"💰 USING WINNERS AS HELPERS: {len(helper_positions)} winners (${total_profit:.2f})")
+                
+                return ClosingDecision(
+                    should_close=True,
+                    positions_to_close=[pos.position for pos in helper_positions],
+                    method="WINNERS_AS_HELPERS",
+                    net_pnl=total_profit,
+                    expected_pnl=total_profit,
+                    position_count=len(helper_positions),
+                    buy_count=len([pos for pos in helper_positions if getattr(pos.position, 'type', 0) == 0]),
+                    sell_count=len([pos for pos in helper_positions if getattr(pos.position, 'type', 0) == 1]),
+                    confidence_score=0.8,
+                    reason=f"ใช้ไม้กำไรเป็น Helper: {len(helper_positions)} positions (${total_profit:.2f}) - Portfolio Health: {portfolio_health}"
+                )
             else:
-                positions_to_close = winners[:1]  # ปิด 1 ตัว
-            
-            total_profit = sum(pos.profit for pos in positions_to_close)
-            
-            return ClosingDecision(
-                should_close=True,
-                positions_to_close=[pos.position for pos in positions_to_close],
-                method="SOME_WINNERS",
-                net_pnl=total_profit,
-                expected_pnl=total_profit,
-                position_count=len(positions_to_close),
-                buy_count=len([pos for pos in positions_to_close if getattr(pos.position, 'type', 0) == 0]),
-                sell_count=len([pos for pos in positions_to_close if getattr(pos.position, 'type', 0) == 1]),
-                confidence_score=0.6,
-                reason=f"Close Some Winners: {len(positions_to_close)} positions (${total_profit:.2f}) - Portfolio Health: {portfolio_health}"
-            )
+                logger.warning("🚫 Not enough winners to use as helpers")
+                return ClosingDecision(
+                    should_close=False,
+                    positions_to_close=[],
+                    method="NOT_ENOUGH_WINNERS",
+                    net_pnl=0.0,
+                    expected_pnl=0.0,
+                    position_count=0,
+                    buy_count=0,
+                    sell_count=0,
+                    confidence_score=0.0,
+                    reason="ไม้กำไรไม่เพียงพอสำหรับใช้เป็น Helper"
+                )
             
         except Exception as e:
             logger.error(f"❌ Error closing some winners: {e}")
