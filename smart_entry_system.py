@@ -107,16 +107,22 @@ class SmartEntrySystem:
             support_zones = zones.get('support', [])
             resistance_zones = zones.get('resistance', [])
             
+            logger.info(f"🔍 [PIVOT] Support zones: {len(support_zones)}, Resistance zones: {len(resistance_zones)}")
+            
             if not support_zones or not resistance_zones:
+                logger.warning(f"🚫 [PIVOT] Missing zones - using current price: {current_price}")
                 return current_price
             
             # หา Support และ Resistance ที่ใกล้ราคาปัจจุบันที่สุด
             nearest_support = min(support_zones, key=lambda x: abs(x['price'] - current_price))
             nearest_resistance = min(resistance_zones, key=lambda x: abs(x['price'] - current_price))
             
+            logger.info(f"🔍 [PIVOT] Nearest Support: {nearest_support['price']:.2f}, Resistance: {nearest_resistance['price']:.2f}")
+            
             # คำนวณ Pivot Point
             pivot_point = (current_price + nearest_support['price'] + nearest_resistance['price']) / 3
             
+            logger.info(f"🔍 [PIVOT] Calculated Pivot Point: {pivot_point:.2f}")
             return pivot_point
             
         except Exception as e:
@@ -144,6 +150,13 @@ class SmartEntrySystem:
                 # ราคาต่ำกว่า Pivot → หา Support ที่ใกล้ที่สุด
                 valid_supports = [zone for zone in support_zones if zone['strength'] >= self.min_zone_strength]
                 logger.info(f"🔍 [ZONE SELECTION] Looking for SUPPORT zones. Valid: {len(valid_supports)} (min_strength: {self.min_zone_strength})")
+                
+                # Debug: แสดง zones ที่มี
+                if valid_supports:
+                    logger.info(f"🔍 [ZONE SELECTION] Available SUPPORT zones:")
+                    for i, zone in enumerate(valid_supports[:5], 1):
+                        logger.info(f"   {i}. {zone['price']:.2f} (strength: {zone['strength']:.1f})")
+                
                 if valid_supports:
                     # เลือก Support ที่ใกล้ที่สุดและแข็งแกร่งพอ
                     best_support = min(valid_supports, key=lambda x: abs(current_price - x['price']))
@@ -155,6 +168,13 @@ class SmartEntrySystem:
                 # ราคาสูงกว่า Pivot → หา Resistance ที่ใกล้ที่สุด
                 valid_resistances = [zone for zone in resistance_zones if zone['strength'] >= self.min_zone_strength]
                 logger.info(f"🔍 [ZONE SELECTION] Looking for RESISTANCE zones. Valid: {len(valid_resistances)} (min_strength: {self.min_zone_strength})")
+                
+                # Debug: แสดง zones ที่มี
+                if valid_resistances:
+                    logger.info(f"🔍 [ZONE SELECTION] Available RESISTANCE zones:")
+                    for i, zone in enumerate(valid_resistances[:5], 1):
+                        logger.info(f"   {i}. {zone['price']:.2f} (strength: {zone['strength']:.1f})")
+                
                 if valid_resistances:
                     # เลือก Resistance ที่ใกล้ที่สุดและแข็งแกร่งพอ
                     best_resistance = min(valid_resistances, key=lambda x: abs(current_price - x['price']))
@@ -174,19 +194,20 @@ class SmartEntrySystem:
         try:
             # ตรวจสอบ Zone Strength
             if zone.get('strength', 0) < self.min_zone_strength:
-                logger.debug(f"🚫 Zone {zone['price']} too weak: {zone.get('strength', 0)}")
+                logger.info(f"🚫 Zone {zone['price']} too weak: {zone.get('strength', 0)} < {self.min_zone_strength}")
                 return False
             
             # ตรวจสอบว่าใช้ Zone นี้แล้วหรือยัง
             zone_key = self._generate_zone_key(zone)
             if zone_key in self.used_zones:
-                logger.debug(f"🚫 Zone {zone['price']} already used")
+                logger.info(f"🚫 Zone {zone['price']} already used")
                 return False
             
             # ตรวจสอบระยะห่างจากราคาปัจจุบัน
             distance = abs(current_price - zone['price'])
-            if distance > 50.0:  # ระยะห่างสูงสุด 50 pips (เพิ่มจาก 30)
-                logger.debug(f"🚫 Zone {zone['price']} too far: {distance}")
+            max_distance = 200.0  # ระยะห่างสูงสุด 200 pips (เพิ่มจาก 50)
+            if distance > max_distance:
+                logger.info(f"🚫 Zone {zone['price']} too far: {distance:.1f} pips (max: {max_distance})")
                 return False
             
             return True
@@ -272,7 +293,8 @@ class SmartEntrySystem:
             
             # ตรวจสอบว่า Zone ใช้ได้หรือไม่
             if not self._is_valid_entry_zone(selected_zone, current_price):
-                logger.debug(f"🚫 Zone {selected_zone['price']} is not valid")
+                logger.warning(f"🚫 Zone {selected_zone['price']} is not valid for entry")
+                logger.warning(f"   Current Price: {current_price:.2f}, Zone Price: {selected_zone['price']:.2f}")
                 return None
             
             # คำนวณ lot size แบบ dynamic
@@ -307,6 +329,7 @@ class SmartEntrySystem:
                        f"(Zone: {selected_zone['price']:.5f}, Strength: {selected_zone['strength']}, "
                        f"Lot: {lot_size:.2f}, Target: ${profit_target:.2f})")
             
+            logger.info(f"✅ [SMART ENTRY] Entry opportunity created successfully - Ready for execution")
             return entry_opportunity
             
         except Exception as e:

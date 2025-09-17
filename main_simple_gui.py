@@ -1283,8 +1283,8 @@ class AdaptiveTradingSystemGUI:
                                             'type': 0,  # direction decided later
                                             'volume': 0.01
                                         })()
-                                        sw_ok, _ = self.hedge_pairing_closer._sw_filter_check(mock_position, positions)
-                                        logger.info(f"🔍 [DEBUG] SW Filter Check: {sw_ok}")
+                                        sw_ok, sw_reason = self.hedge_pairing_closer._sw_filter_check(mock_position, positions)
+                                        logger.info(f"🔍 [DEBUG] SW Filter Check: {sw_ok} - Reason: {sw_reason}")
                                         if sw_ok:
                                             # 1.1 ตรวจสอบโอกาสเข้าไม้ปกติ
                                             entry_opportunity = self.smart_entry_system.analyze_entry_opportunity(
@@ -1292,20 +1292,15 @@ class AdaptiveTradingSystemGUI:
                                             )
                                             if entry_opportunity:
                                                 logger.info(f"🎯 Smart Entry Opportunity: {entry_opportunity['direction']} at {current_price}")
-                                                # สร้าง Signal จาก entry_opportunity
-                                                signal = Signal(
-                                                    symbol=self.actual_symbol,
-                                                    direction=entry_opportunity['direction'].upper(),  # เปลี่ยน action เป็น direction และแปลงเป็นตัวใหญ่
-                                                    price=current_price,
-                                                    volume_suggestion=entry_opportunity['lot_size'],
-                                                    comment=entry_opportunity['reason'],
-                                                    strength=entry_opportunity['zone']['strength'],
-                                                    confidence=80.0,  # ความมั่นใจ 80%
-                                                    timestamp=datetime.now()
-                                                )
-                                                ticket = self.smart_entry_system.execute_entry(signal)
+                                                logger.info(f"   Zone: {entry_opportunity['zone']['price']:.2f} (Strength: {entry_opportunity['zone']['strength']:.1f})")
+                                                logger.info(f"   Lot Size: {entry_opportunity['lot_size']:.2f}")
+                                                
+                                                # เรียก execute_entry ด้วย entry_opportunity (ไม่ใช่ signal)
+                                                ticket = self.smart_entry_system.execute_entry(entry_opportunity)
                                                 if ticket:
                                                     logger.info(f"✅ Smart Entry executed: Ticket {ticket}")
+                                                else:
+                                                    logger.warning("❌ Smart Entry failed to execute")
                                             
                                             # 1.2 ตรวจสอบโอกาสแก้ไม้ (Recovery System)
                                             recovery_opportunities = self.smart_entry_system.find_recovery_opportunity(
@@ -1321,7 +1316,7 @@ class AdaptiveTradingSystemGUI:
                                             else:
                                                 logger.debug("🚫 No recovery opportunities found")
                                         else:
-                                            logger.debug("🚫 SW Filter blocked Smart Entry")
+                                            logger.warning(f"🚫 SW Filter blocked Smart Entry: {sw_reason}")
                                 except Exception as e:
                                     logger.error(f"❌ Error in smart entry: {e}")
                             
