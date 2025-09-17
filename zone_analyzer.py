@@ -46,9 +46,9 @@ class ZoneAnalyzer:
         self.min_zone_strength = 1           # ความแข็งแรงขั้นต่ำของ zone (ลดจาก 2)
         self.max_zones_per_type = 25         # จำนวน zone สูงสุดต่อประเภท (เพิ่มจาก 20)
         
-        # Moving Average Settings
-        self.ma_periods = [10, 20, 50, 100, 200]  # ระยะเวลา Moving Average (เพิ่ม 10)
-        self.ma_tolerance = 15.0              # ความยืดหยุ่นสำหรับ MA levels (เพิ่มจาก 8.0)
+        # Moving Average Settings (REMOVED - ไม่ใช้แล้ว)
+        # self.ma_periods = [10, 20, 50, 100, 200]  # ระยะเวลา Moving Average (เพิ่ม 10)
+        # self.ma_tolerance = 15.0              # ความยืดหยุ่นสำหรับ MA levels (เพิ่มจาก 8.0)
         
         # Fibonacci Settings
         self.fib_levels = [0.236, 0.382, 0.5, 0.618, 0.786, 0.886, 1.0, 1.272, 1.618]  # Fibonacci levels (เพิ่ม)
@@ -86,7 +86,7 @@ class ZoneAnalyzer:
             self.symbol = symbol  # ตั้งค่า symbol จาก parameter
             logger.info(f"🔍 [MULTI-METHOD] Analyzing zones for {self.symbol} (lookback: {lookback_hours}h)")
             logger.info(f"🔧 [MULTI-METHOD] Settings: tolerance={self.zone_tolerance}, min_strength={self.min_zone_strength}")
-            logger.info(f"🎯 [MULTI-METHOD] Methods: Pivot={self.enable_pivot_points}, MA={self.enable_moving_averages}, Fib={self.enable_fibonacci}, Volume={self.enable_volume_profile}")
+            logger.info(f"🎯 [MULTI-METHOD] Methods: Pivot={self.enable_pivot_points}, Fib={self.enable_fibonacci}, Volume={self.enable_volume_profile}, Price={self.enable_price_levels}, Swing={self.enable_swing_levels}")
             logger.info(f"⏰ [MULTI-TIMEFRAME] Using timeframes: M1, M5, M15, H1")
             
             support_zones = []
@@ -747,9 +747,10 @@ class ZoneAnalyzer:
             # กำหนดชื่อ algorithm
             algorithm_names = {
                 'pivot_points': 'PIVOT',
-                'moving_averages': 'MA',
                 'fibonacci': 'FIB',
                 'volume_profile': 'VOL',
+                'price_levels': 'PRICE',
+                'swing_levels': 'SWING',
                 'consolidated': 'MULTI'
             }
             
