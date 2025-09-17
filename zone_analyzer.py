@@ -31,38 +31,23 @@ class ZoneAnalyzer:
         self.volume_weight = 0.3
         self.time_weight = 0.3
         
-        # Multi-Algorithm Settings
-        self.enable_pivot_points = True      # วิธีที่ 1: Pivot Points
-        self.enable_volume_profile = True    # วิธีที่ 2: Volume Profile
-        self.enable_price_patterns = True    # วิธีที่ 3: Price Action Patterns
+        # Multi-Algorithm Settings - ใช้แค่ Pivot Points ที่ทำงานได้ดี
+        self.enable_pivot_points = True      # วิธีที่ 1: Pivot Points (หลัก)
+        self.enable_volume_profile = False   # วิธีที่ 2: Volume Profile (ปิด - หา zones น้อย)
+        self.enable_price_patterns = False   # วิธีที่ 3: Price Action Patterns (ปิด - หา zones มากเกินไป)
         
-        # Algorithm Mode (Conservative, Balanced, Aggressive)
-        self.algorithm_mode = "balanced"     # default mode
-        
-        # Dynamic Threshold Settings
-        self.adaptive_thresholds = True      # เปิดใช้การปรับเกณฑ์แบบอัตโนมัติ
-        self.min_zones_per_algorithm = 3     # จำนวน zones ขั้นต่ำต่อ algorithm (ลดจาก 5)
-        self.max_attempts = 2                # จำนวนครั้งที่ลองปรับเกณฑ์ (ลดจาก 3)
-        
-        # Volume Profile Settings (Dynamic) - ปรับให้เร็วขึ้น
-        self.volume_profile_bins = 15        # จำนวน bins สำหรับ volume profile (ลดจาก 20)
-        self.volume_threshold = 0.6          # เกณฑ์ volume เริ่มต้น (ลดจาก 0.7)
-        self.volume_threshold_min = 0.4      # เกณฑ์ volume ต่ำสุด (เพิ่มจาก 0.3)
-        self.volume_threshold_step = 0.2     # ขั้นตอนการลดเกณฑ์ (เพิ่มจาก 0.1)
-        
-        # Price Pattern Settings (Dynamic) - ปรับให้เร็วขึ้น
-        self.pattern_tolerance = 20.0        # ความยืดหยุ่นเริ่มต้น (เพิ่มจาก 15.0)
-        self.pattern_tolerance_max = 25.0    # ความยืดหยุ่นสูงสุด (ลดจาก 30.0)
-        self.pattern_tolerance_step = 10.0   # ขั้นตอนการเพิ่มความยืดหยุ่น (เพิ่มจาก 5.0)
-        self.min_pattern_strength = 0.5      # ความแข็งแรงขั้นต่ำของ pattern (ลดจาก 0.6)
+        # กลับไปใช้ระบบเดิมที่ทำงานได้ดี
+        self.zone_tolerance = 15.0           # ความยืดหยุ่นในการรวม zones
+        self.min_zone_strength = 3           # ความแข็งแรงขั้นต่ำของ zone
+        self.max_zones_per_type = 10         # จำนวน zone สูงสุดต่อประเภท
         
     def analyze_zones(self, symbol: str, lookback_hours: int = 24) -> Dict[str, List[Dict]]:
         """🔍 วิเคราะห์ Support/Resistance Zones ด้วย Multi-Algorithm"""
         try:
             self.symbol = symbol  # ตั้งค่า symbol จาก parameter
-            logger.info(f"🔍 [MULTI-ALGORITHM] Analyzing zones for {self.symbol} (lookback: {lookback_hours}h)")
-            logger.info(f"🔧 [MULTI-ALGORITHM] Settings: tolerance={self.zone_tolerance}, min_strength={self.min_zone_strength}")
-            logger.info(f"🎯 [MULTI-ALGORITHM] Algorithms: Pivot={self.enable_pivot_points}, Volume={self.enable_volume_profile}, Patterns={self.enable_price_patterns}")
+            logger.info(f"🔍 [ZONE ANALYSIS] Analyzing zones for {self.symbol} (lookback: {lookback_hours}h)")
+            logger.info(f"🔧 [ZONE ANALYSIS] Settings: tolerance={self.zone_tolerance}, min_strength={self.min_zone_strength}")
+            logger.info(f"🎯 [ZONE ANALYSIS] Using Pivot Points only (Volume Profile & Patterns disabled for better performance)")
             
             support_zones = []
             resistance_zones = []
@@ -97,7 +82,7 @@ class ZoneAnalyzer:
                 merged_resistance = merged_resistance[:self.max_zones_per_type]
             
             logger.info("=" * 80)
-            logger.info(f"🎯 [MULTI-ALGORITHM] ZONE ANALYSIS COMPLETE")
+            logger.info(f"🎯 [ZONE ANALYSIS] ZONE ANALYSIS COMPLETE")
             logger.info("=" * 80)
             logger.info(f"📊 [RESULTS] Support: {len(merged_support)} zones, Resistance: {len(merged_resistance)} zones")
             
