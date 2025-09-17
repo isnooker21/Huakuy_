@@ -467,6 +467,36 @@ class ZoneAnalyzer:
         
         return tops
 
+    def _get_rates(self, timeframe, lookback_hours: int):
+        """📊 ดึงข้อมูลราคาจาก MT5"""
+        try:
+            if not self.mt5_connection.is_connected():
+                logger.error("❌ MT5 not connected")
+                return None
+            
+            # คำนวณเวลาย้อนหลัง
+            end_time = datetime.now()
+            start_time = end_time - timedelta(hours=lookback_hours)
+            
+            # ดึงข้อมูลราคา
+            rates = self.mt5_connection.get_rates(
+                symbol=self.symbol,
+                timeframe=timeframe,
+                start_time=start_time,
+                end_time=end_time
+            )
+            
+            if rates is None or len(rates) == 0:
+                logger.warning(f"❌ No rates data for {self.symbol} on timeframe {timeframe}")
+                return None
+            
+            logger.info(f"📊 Retrieved {len(rates)} bars for {self.symbol} (lookback: {lookback_hours}h)")
+            return rates
+            
+        except Exception as e:
+            logger.error(f"❌ Error getting rates: {e}")
+            return None
+
     def _consolidate_zones(self, zones, zone_type) -> List[Dict]:
         """🔄 รวม zones ที่ใกล้เคียงกันและจัดเรียงตาม strength"""
         try:
