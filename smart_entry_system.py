@@ -300,12 +300,16 @@ class SmartEntrySystem:
                                  existing_positions: List = None) -> List[Dict]:
         """🚀 หาโอกาสสร้าง Recovery Position เพื่อแก้ไม้ที่ขาดทุน"""
         try:
+            logger.info(f"🔍 Recovery System: Checking {len(existing_positions) if existing_positions else 0} positions")
+            
             if not existing_positions:
+                logger.info("🚫 Recovery System: No existing positions to check")
                 return []
             
             recovery_opportunities = []
             
             # หาไม้ที่ต้องการความช่วยเหลือ
+            losing_positions = 0
             for position in existing_positions:
                 try:
                     pos_type = getattr(position, 'type', 0)
@@ -319,19 +323,29 @@ class SmartEntrySystem:
                     # คำนวณเกณฑ์ขาดทุนแบบ dynamic
                     loss_threshold = self.calculate_dynamic_loss_threshold(pos_lot)
                     
+                    logger.debug(f"🔍 Position: {pos_type} at {pos_price}, Profit: ${pos_profit:.2f}, Threshold: ${loss_threshold:.2f}")
+                    
                     # ตรวจสอบว่าไม้ขาดทุนเกินเกณฑ์หรือไม่
                     if pos_profit >= loss_threshold:
+                        logger.debug(f"✅ Position profit ${pos_profit:.2f} >= threshold ${loss_threshold:.2f} - No recovery needed")
                         continue  # ไม้ยังไม่ขาดทุนมาก
+                    
+                    losing_positions += 1
+                    logger.info(f"🚨 Losing Position Found: {pos_type} at {pos_price}, Loss: ${pos_profit:.2f} (Threshold: ${loss_threshold:.2f})")
                     
                     # หา Zone ที่แข็งแกร่งสำหรับ Recovery
                     if pos_type == 0:  # BUY ไม้ขาดทุน
                         # หา Support Zone ที่แข็งแกร่งสำหรับสร้าง SELL Recovery
                         support_zones = zones.get('support', [])
+                        logger.info(f"🔍 Recovery for BUY: Found {len(support_zones)} support zones")
+                        
                         strong_supports = [zone for zone in support_zones if zone['strength'] >= self.recovery_zone_strength]
+                        logger.info(f"🔍 Recovery for BUY: Found {len(strong_supports)} strong support zones (strength >= {self.recovery_zone_strength})")
                         
                         if strong_supports:
                             # หา Support ที่เหมาะสม (ต่ำกว่าไม้ BUY)
                             suitable_supports = [zone for zone in strong_supports if zone['price'] < pos_price - 20]
+                            logger.info(f"🔍 Recovery for BUY: Found {len(suitable_supports)} suitable supports (price < {pos_price - 20:.2f})")
                             
                             if suitable_supports:
                                 best_support = max(suitable_supports, key=lambda x: x['strength'])
@@ -352,11 +366,15 @@ class SmartEntrySystem:
                     elif pos_type == 1:  # SELL ไม้ขาดทุน
                         # หา Resistance Zone ที่แข็งแกร่งสำหรับสร้าง BUY Recovery
                         resistance_zones = zones.get('resistance', [])
+                        logger.info(f"🔍 Recovery for SELL: Found {len(resistance_zones)} resistance zones")
+                        
                         strong_resistances = [zone for zone in resistance_zones if zone['strength'] >= self.recovery_zone_strength]
+                        logger.info(f"🔍 Recovery for SELL: Found {len(strong_resistances)} strong resistance zones (strength >= {self.recovery_zone_strength})")
                         
                         if strong_resistances:
                             # หา Resistance ที่เหมาะสม (สูงกว่าไม้ SELL)
                             suitable_resistances = [zone for zone in strong_resistances if zone['price'] > pos_price + 20]
+                            logger.info(f"🔍 Recovery for SELL: Found {len(suitable_resistances)} suitable resistances (price > {pos_price + 20:.2f})")
                             
                             if suitable_resistances:
                                 best_resistance = max(suitable_resistances, key=lambda x: x['strength'])
@@ -380,6 +398,16 @@ class SmartEntrySystem:
             
             # เรียงลำดับตาม priority (ไม้ที่ขาดทุนมากที่สุดก่อน)
             recovery_opportunities.sort(key=lambda x: x['target_loss'])
+            
+            logger.info(f"🔍 Recovery System Summary: {losing_positions} losing positions, {len(recovery_opportunities)} recovery opportunities found")
+            
+            if recovery_opportunities:
+                for i, opp in enumerate(recovery_opportunities):
+                    logger.info(f"   {i+1}. {opp['reason']} at {opp['entry_price']:.2f}")
+            else:
+                logger.warning("🚫 Recovery System: No recovery opportunities found")
+                if losing_positions > 0:
+                    logger.warning("   Reason: No suitable zones found for recovery")
             
             return recovery_opportunities[:3]  # ส่งคืนสูงสุด 3 โอกาส
             
