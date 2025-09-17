@@ -484,7 +484,7 @@ class SmartEntrySystem:
                     # อัปเดต daily counter
                     self.daily_trade_count += 1
                 
-                return ticket
+                    return ticket
                 else:
                     error_msg = getattr(result, 'error_message', 'Unknown error') if result else 'No result'
                     logger.error(f"❌ OrderManager failed: {error_msg}")
