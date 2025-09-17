@@ -42,30 +42,30 @@ class ZoneAnalyzer:
         self.enable_swing_levels = True      # วิธีที่ 5: Swing High/Low Levels (Key Reversal Points)
         
         # ปรับให้หา zones ได้มากขึ้นและแม่นยำขึ้น
-        self.zone_tolerance = 5.0            # ความยืดหยุ่นในการรวม zones (ลดจาก 35.0 เพื่อให้มี zones มากขึ้น)
-        self.min_zone_strength = 1           # ความแข็งแรงขั้นต่ำของ zone (ลดจาก 2)
-        self.max_zones_per_type = 25         # จำนวน zone สูงสุดต่อประเภท (เพิ่มจาก 20)
+        self.zone_tolerance = 0.5            # ความยืดหยุ่นในการรวม zones (ลดจาก 5.0 เพื่อให้มี zones มากขึ้น)
+        self.min_zone_strength = 0.1         # ความแข็งแรงขั้นต่ำของ zone (ลดจาก 1)
+        self.max_zones_per_type = 100        # จำนวน zone สูงสุดต่อประเภท (เพิ่มจาก 25)
         
         # Moving Average Settings (REMOVED - ไม่ใช้แล้ว)
         # self.ma_periods = [10, 20, 50, 100, 200]  # ระยะเวลา Moving Average (เพิ่ม 10)
         # self.ma_tolerance = 15.0              # ความยืดหยุ่นสำหรับ MA levels (เพิ่มจาก 8.0)
         
         # Fibonacci Settings
-        self.fib_levels = [0.236, 0.382, 0.5, 0.618, 0.786, 0.886, 1.0, 1.272, 1.618]  # Fibonacci levels (เพิ่ม)
+        self.fib_levels = [0.1, 0.2, 0.236, 0.3, 0.382, 0.4, 0.5, 0.6, 0.618, 0.7, 0.786, 0.8, 0.886, 0.9, 1.0, 1.1, 1.2, 1.272, 1.3, 1.4, 1.5, 1.618, 1.7, 1.8, 2.0]  # Fibonacci levels (เพิ่มมาก)
         self.fib_lookback = 30               # จำนวน bars สำหรับหา swing high/low (ลดจาก 50)
         
         # Volume Profile Settings (ปรับปรุง)
-        self.volume_profile_bins = 30        # จำนวน bins สำหรับ volume profile (เพิ่มจาก 25)
-        self.volume_threshold = 0.3          # เกณฑ์ volume (ลดจาก 0.5)
+        self.volume_profile_bins = 50        # จำนวน bins สำหรับ volume profile (เพิ่มจาก 30)
+        self.volume_threshold = 0.1          # เกณฑ์ volume (ลดจาก 0.3)
         
         # Price Levels Settings (เลขกลม)
-        self.price_level_intervals = [50, 100, 200, 500]  # ช่วงเลขกลม (points)
-        self.price_level_tolerance = 20.0    # ความยืดหยุ่นสำหรับ price levels
+        self.price_level_intervals = [10, 20, 50, 100, 200, 500, 1000]  # ช่วงเลขกลม (points) - เพิ่มมาก
+        self.price_level_tolerance = 5.0     # ความยืดหยุ่นสำหรับ price levels (ลดจาก 20.0)
         
         # Swing Levels Settings (จุดกลับตัว)
-        self.swing_lookback = 20             # จำนวน bars สำหรับหา swing
-        self.swing_min_strength = 2          # ความแข็งแรงขั้นต่ำของ swing
-        self.swing_tolerance = 15.0          # ความยืดหยุ่นสำหรับ swing levels
+        self.swing_lookback = 10             # จำนวน bars สำหรับหา swing (ลดจาก 20)
+        self.swing_min_strength = 1          # ความแข็งแรงขั้นต่ำของ swing (ลดจาก 2)
+        self.swing_tolerance = 5.0           # ความยืดหยุ่นสำหรับ swing levels (ลดจาก 15.0)
         
         # Adaptive Market Detection (การตรวจจับสภาวะตลาด)
         self.enable_adaptive_mode = True     # เปิดโหมดปรับตัวอัตโนมัติ
@@ -931,7 +931,7 @@ class ZoneAnalyzer:
         """🔍 หา Pivot Points จากข้อมูลราคา"""
         try:
             pivots = []
-            window = 1  # ลด window เป็น 1 bar เพื่อหา pivot มากขึ้น
+            window = 1  # ใช้ window = 1 bar เพื่อหา pivot มากที่สุด
             logger.info(f"🔍 Finding pivot points from {len(rates)} bars with window={window}")
             
             for i in range(window, len(rates) - window):
@@ -941,7 +941,7 @@ class ZoneAnalyzer:
                 # ตรวจสอบ Support Pivot (Low) - ปรับให้หา Support ได้มากขึ้น
                 is_support_pivot = True
                 for j in range(i - window, i + window + 1):
-                    if j != i and j < len(rates) and float(rates[j]['low']) < float(current_low) - 1.0:  # ลด tolerance จาก 2.0 เป็น 1.0
+                    if j != i and j < len(rates) and float(rates[j]['low']) < float(current_low) - 0.5:  # ลด tolerance จาก 1.0 เป็น 0.5
                         is_support_pivot = False
                         break
                 
@@ -969,7 +969,7 @@ class ZoneAnalyzer:
                 # ตรวจสอบ Resistance Pivot (High) - ปรับให้หา Resistance ได้มากขึ้น
                 is_resistance_pivot = True
                 for j in range(i - window, i + window + 1):
-                    if j != i and j < len(rates) and float(rates[j]['high']) > float(current_high) + 1.0:  # เพิ่ม tolerance 1.0
+                    if j != i and j < len(rates) and float(rates[j]['high']) > float(current_high) + 0.5:  # ลด tolerance จาก 1.0 เป็น 0.5
                         is_resistance_pivot = False
                         break
                 

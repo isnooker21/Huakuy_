@@ -22,7 +22,7 @@ class SmartEntrySystem:
         self.profit_target_pips = 30  # เป้าหมายกำไร 30 pips ต่อ lot (ลดจาก 50)
         self.loss_threshold_pips = 30  # เกณฑ์ขาดทุน 30 pips ต่อ lot (ลดจาก 50)
         self.recovery_zone_strength = 5  # Zone strength สำหรับ Recovery (ลดจาก 10)
-        self.min_zone_strength = 0.1  # Zone strength ขั้นต่ำสำหรับเข้าไม้ (ลดจาก 0.5)
+        self.min_zone_strength = 0.01  # Zone strength ขั้นต่ำสำหรับเข้าไม้ (ลดจาก 0.1)
         
         # Risk Management (Dynamic)
         self.risk_percent_per_trade = 0.02  # 2% ของ balance ต่อ trade (เพิ่มจาก 1%)
@@ -185,7 +185,7 @@ class SmartEntrySystem:
             
             # ตรวจสอบระยะห่างจากราคาปัจจุบัน
             distance = abs(current_price - zone['price'])
-            if distance > 30.0:  # ระยะห่างสูงสุด 30 pips (เพิ่มจาก 15)
+            if distance > 50.0:  # ระยะห่างสูงสุด 50 pips (เพิ่มจาก 30)
                 logger.debug(f"🚫 Zone {zone['price']} too far: {distance}")
                 return False
             
