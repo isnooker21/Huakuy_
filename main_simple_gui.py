@@ -1295,10 +1295,13 @@ class AdaptiveTradingSystemGUI:
                                                 # สร้าง Signal จาก entry_opportunity
                                                 signal = Signal(
                                                     symbol=self.actual_symbol,
-                                                    action=entry_opportunity['direction'],
+                                                    direction=entry_opportunity['direction'].upper(),  # เปลี่ยน action เป็น direction และแปลงเป็นตัวใหญ่
                                                     price=current_price,
-                                                    lot_size=entry_opportunity['lot_size'],
-                                                    comment=entry_opportunity['reason']
+                                                    volume_suggestion=entry_opportunity['lot_size'],
+                                                    comment=entry_opportunity['reason'],
+                                                    strength=entry_opportunity['zone']['strength'],
+                                                    confidence=80.0,  # ความมั่นใจ 80%
+                                                    timestamp=datetime.now()
                                                 )
                                                 ticket = self.smart_entry_system.execute_entry(signal)
                                                 if ticket:
