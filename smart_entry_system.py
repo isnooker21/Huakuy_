@@ -297,6 +297,13 @@ class SmartEntrySystem:
                         return 'support', closest_support
                     else:
                         logger.warning("🚫 [ZONE SELECTION] No SUPPORT zones available")
+                
+                # 🎯 Additional Fallback: ถ้ามี zone แต่ไกลเกินไป ให้เลือกที่ใกล้ที่สุด
+                if support_zones:
+                    closest_support = min(support_zones, key=lambda x: abs(current_price - x['price']))
+                    distance_pips = abs(current_price - closest_support['price']) * 100
+                    logger.warning(f"🔄 [ZONE SELECTION] All zones too far, selecting closest SUPPORT: {closest_support['price']:.5f} (strength: {closest_support['strength']:.1f}, distance: {distance_pips:.1f} pips)")
+                    return 'support', closest_support
             else:
                 # ราคาสูงกว่า Pivot → หา Resistance ที่ใกล้ที่สุด
                 valid_resistances = []
@@ -338,6 +345,13 @@ class SmartEntrySystem:
                         return 'resistance', closest_resistance
                     else:
                         logger.warning("🚫 [ZONE SELECTION] No RESISTANCE zones available")
+                
+                # 🎯 Additional Fallback: ถ้ามี zone แต่ไกลเกินไป ให้เลือกที่ใกล้ที่สุด
+                if resistance_zones:
+                    closest_resistance = min(resistance_zones, key=lambda x: abs(current_price - x['price']))
+                    distance_pips = abs(current_price - closest_resistance['price']) * 100
+                    logger.warning(f"🔄 [ZONE SELECTION] All zones too far, selecting closest RESISTANCE: {closest_resistance['price']:.5f} (strength: {closest_resistance['strength']:.1f}, distance: {distance_pips:.1f} pips)")
+                    return 'resistance', closest_resistance
             
             return None, None
             
