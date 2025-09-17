@@ -240,17 +240,19 @@ class SmartEntrySystem:
                 support_zones = zones.get('support', [])
                 resistance_zones = zones.get('resistance', [])
                 
-                logger.warning("🚫 NO SUITABLE ZONE FOUND FOR ENTRY")
-                logger.warning(f"   📊 Current Price: {current_price:.2f}")
-                logger.warning(f"   📈 Available Support Zones: {len(support_zones)}")
+                logger.warning("=" * 80)
+                logger.warning("🚫 [SMART ENTRY] NO SUITABLE ZONE FOUND FOR ENTRY")
+                logger.warning("=" * 80)
+                logger.warning(f"📊 [SMART ENTRY] Current Price: {current_price:.2f}")
+                logger.warning(f"📈 [SMART ENTRY] Available Support Zones: {len(support_zones)}")
                 for i, zone in enumerate(support_zones[:3], 1):
                     logger.warning(f"      {i}. {zone['price']:.2f} (Strength: {zone['strength']:.1f})")
                 
-                logger.warning(f"   📉 Available Resistance Zones: {len(resistance_zones)}")
+                logger.warning(f"📉 [SMART ENTRY] Available Resistance Zones: {len(resistance_zones)}")
                 for i, zone in enumerate(resistance_zones[:3], 1):
                     logger.warning(f"      {i}. {zone['price']:.2f} (Strength: {zone['strength']:.1f})")
                 
-                logger.warning("   🔧 ปรับแต่ง: ลด min_zone_strength หรือเพิ่ม zone_tolerance")
+                logger.warning("🔧 [SMART ENTRY] Suggestion: ลด min_zone_strength หรือเพิ่ม zone_tolerance")
                 return None
             
             # ตรวจสอบว่า Zone ใช้ได้หรือไม่
@@ -300,10 +302,13 @@ class SmartEntrySystem:
                                  existing_positions: List = None) -> List[Dict]:
         """🚀 หาโอกาสสร้าง Recovery Position เพื่อแก้ไม้ที่ขาดทุน"""
         try:
-            logger.info(f"🔍 Recovery System: Checking {len(existing_positions) if existing_positions else 0} positions")
+            logger.info("=" * 80)
+            logger.info("🔧 [RECOVERY SYSTEM] Starting recovery opportunity analysis")
+            logger.info("=" * 80)
+            logger.info(f"📊 [RECOVERY] Checking {len(existing_positions) if existing_positions else 0} positions")
             
             if not existing_positions:
-                logger.info("🚫 Recovery System: No existing positions to check")
+                logger.warning("🚫 [RECOVERY] No existing positions to check")
                 return []
             
             recovery_opportunities = []
@@ -323,29 +328,29 @@ class SmartEntrySystem:
                     # คำนวณเกณฑ์ขาดทุนแบบ dynamic
                     loss_threshold = self.calculate_dynamic_loss_threshold(pos_lot)
                     
-                    logger.debug(f"🔍 Position: {pos_type} at {pos_price}, Profit: ${pos_profit:.2f}, Threshold: ${loss_threshold:.2f}")
+                    logger.debug(f"🔍 [RECOVERY] Position: {pos_type} at {pos_price}, Profit: ${pos_profit:.2f}, Threshold: ${loss_threshold:.2f}")
                     
                     # ตรวจสอบว่าไม้ขาดทุนเกินเกณฑ์หรือไม่
                     if pos_profit >= loss_threshold:
-                        logger.debug(f"✅ Position profit ${pos_profit:.2f} >= threshold ${loss_threshold:.2f} - No recovery needed")
+                        logger.debug(f"✅ [RECOVERY] Position profit ${pos_profit:.2f} >= threshold ${loss_threshold:.2f} - No recovery needed")
                         continue  # ไม้ยังไม่ขาดทุนมาก
                     
                     losing_positions += 1
-                    logger.info(f"🚨 Losing Position Found: {pos_type} at {pos_price}, Loss: ${pos_profit:.2f} (Threshold: ${loss_threshold:.2f})")
+                    logger.warning(f"🚨 [RECOVERY] Losing Position Found: {pos_type} at {pos_price}, Loss: ${pos_profit:.2f} (Threshold: ${loss_threshold:.2f})")
                     
                     # หา Zone ที่แข็งแกร่งสำหรับ Recovery
                     if pos_type == 0:  # BUY ไม้ขาดทุน
                         # หา Support Zone ที่แข็งแกร่งสำหรับสร้าง SELL Recovery
                         support_zones = zones.get('support', [])
-                        logger.info(f"🔍 Recovery for BUY: Found {len(support_zones)} support zones")
+                        logger.info(f"🔍 [RECOVERY] For BUY: Found {len(support_zones)} support zones")
                         
                         strong_supports = [zone for zone in support_zones if zone['strength'] >= self.recovery_zone_strength]
-                        logger.info(f"🔍 Recovery for BUY: Found {len(strong_supports)} strong support zones (strength >= {self.recovery_zone_strength})")
+                        logger.info(f"🔍 [RECOVERY] For BUY: Found {len(strong_supports)} strong support zones (strength >= {self.recovery_zone_strength})")
                         
                         if strong_supports:
                             # หา Support ที่เหมาะสม (ต่ำกว่าไม้ BUY)
                             suitable_supports = [zone for zone in strong_supports if zone['price'] < pos_price - 5]  # ลดจาก 20 เป็น 5 pips
-                            logger.info(f"🔍 Recovery for BUY: Found {len(suitable_supports)} suitable supports (price < {pos_price - 5:.2f})")
+                            logger.info(f"🔍 [RECOVERY] For BUY: Found {len(suitable_supports)} suitable supports (price < {pos_price - 5:.2f})")
                             
                             if suitable_supports:
                                 best_support = max(suitable_supports, key=lambda x: x['strength'])
@@ -366,15 +371,15 @@ class SmartEntrySystem:
                     elif pos_type == 1:  # SELL ไม้ขาดทุน
                         # หา Resistance Zone ที่แข็งแกร่งสำหรับสร้าง BUY Recovery
                         resistance_zones = zones.get('resistance', [])
-                        logger.info(f"🔍 Recovery for SELL: Found {len(resistance_zones)} resistance zones")
+                        logger.info(f"🔍 [RECOVERY] For SELL: Found {len(resistance_zones)} resistance zones")
                         
                         strong_resistances = [zone for zone in resistance_zones if zone['strength'] >= self.recovery_zone_strength]
-                        logger.info(f"🔍 Recovery for SELL: Found {len(strong_resistances)} strong resistance zones (strength >= {self.recovery_zone_strength})")
+                        logger.info(f"🔍 [RECOVERY] For SELL: Found {len(strong_resistances)} strong resistance zones (strength >= {self.recovery_zone_strength})")
                         
                         if strong_resistances:
                             # หา Resistance ที่เหมาะสม (สูงกว่าไม้ SELL)
                             suitable_resistances = [zone for zone in strong_resistances if zone['price'] > pos_price + 5]  # ลดจาก 20 เป็น 5 pips
-                            logger.info(f"🔍 Recovery for SELL: Found {len(suitable_resistances)} suitable resistances (price > {pos_price + 5:.2f})")
+                            logger.info(f"🔍 [RECOVERY] For SELL: Found {len(suitable_resistances)} suitable resistances (price > {pos_price + 5:.2f})")
                             
                             if suitable_resistances:
                                 best_resistance = max(suitable_resistances, key=lambda x: x['strength'])
@@ -399,20 +404,23 @@ class SmartEntrySystem:
             # เรียงลำดับตาม priority (ไม้ที่ขาดทุนมากที่สุดก่อน)
             recovery_opportunities.sort(key=lambda x: x['target_loss'])
             
-            logger.info(f"🔍 Recovery System Summary: {losing_positions} losing positions, {len(recovery_opportunities)} recovery opportunities found")
+            logger.info("-" * 80)
+            logger.info(f"📊 [RECOVERY] Summary: {losing_positions} losing positions, {len(recovery_opportunities)} recovery opportunities found")
+            logger.info("-" * 80)
             
             if recovery_opportunities:
+                logger.info("✅ [RECOVERY] Recovery opportunities found:")
                 for i, opp in enumerate(recovery_opportunities):
                     logger.info(f"   {i+1}. {opp['reason']} at {opp['entry_price']:.2f}")
             else:
-                logger.warning("🚫 Recovery System: No recovery opportunities found")
+                logger.warning("🚫 [RECOVERY] No recovery opportunities found")
                 if losing_positions > 0:
-                    logger.warning("   Reason: No suitable zones found for recovery")
+                    logger.warning("   🔧 [RECOVERY] Reason: No suitable zones found for recovery")
             
             return recovery_opportunities[:3]  # ส่งคืนสูงสุด 3 โอกาส
             
         except Exception as e:
-            logger.error(f"❌ Error finding recovery opportunity: {e}")
+            logger.error(f"❌ [RECOVERY] Error finding recovery opportunity: {e}")
             return []
     
     def calculate_recovery_lot_size(self, target_loss: float, target_position_lot: float) -> float:
@@ -436,6 +444,26 @@ class SmartEntrySystem:
     
     def execute_entry(self, entry_plan: Dict) -> Optional[int]:
         """📈 ทำงานเข้าไม้ (ใช้ OrderManager แทน mt5.order_send)"""
+    def get_entry_statistics(self) -> Dict:
+        """📊 สถิติการเข้าไม้"""
+        try:
+            return {
+                'daily_trade_count': self.daily_trade_count,
+                'max_daily_trades': self.max_daily_trades,
+                'used_zones_count': len(self.used_zones),
+                'support_buy_enabled': self.support_buy_enabled,
+                'resistance_sell_enabled': self.resistance_sell_enabled,
+                'min_zone_strength': self.min_zone_strength,
+                'recovery_zone_strength': self.recovery_zone_strength,
+                'profit_target_pips': self.profit_target_pips,
+                'loss_threshold_pips': self.loss_threshold_pips,
+                'risk_percent_per_trade': self.risk_percent_per_trade
+            }
+        except Exception as e:
+            logger.error(f"❌ Error getting entry statistics: {e}")
+            return {}
+    def execute_entry(self, entry_plan: Dict) -> Optional[int]:
+        """📈 ทำงานเข้าไม้ (ใช้ OrderManager แทน mt5.order_send)"""
         try:
             if not entry_plan:
                 return None
@@ -454,7 +482,7 @@ class SmartEntrySystem:
             tp_price = 0.0  # ไม่ตั้ง TP
             sl_price = 0.0  # ไม่ตั้ง SL
             
-            logger.info(f"🚀 Executing entry: {direction.upper()} {lot_size:.2f} lots at {entry_price:.5f}")
+            logger.info(f"🚀 [SMART ENTRY] Executing entry: {direction.upper()} {lot_size:.2f} lots at {entry_price:.5f}")
             logger.info(f"   Reason: {reason}")
             
             # ใช้ OrderManager แทน mt5.order_send โดยตรง
@@ -464,10 +492,10 @@ class SmartEntrySystem:
             # กำหนด comment ตามประเภทการเข้าไม้
             if reason and ('Recovery' in str(reason) or 'recovery' in str(reason).lower()):
                 comment = f"RECOVERY: {reason}"
-                logger.info(f"🔧 Recovery Entry Comment: {comment}")
+                logger.info(f"🔧 [SMART ENTRY] Recovery Entry Comment: {comment}")
             else:
                 comment = f"SMART_ENTRY: {reason}" if reason else f"SMART_ENTRY: {direction.upper()} at {entry_price:.5f}"
-                logger.info(f"🎯 Smart Entry Comment: {comment}")
+                logger.info(f"🎯 [SMART ENTRY] Smart Entry Comment: {comment}")
             
             # ตรวจสอบ comment ก่อนสร้าง Signal
             if not comment or comment is None:
@@ -488,7 +516,7 @@ class SmartEntrySystem:
             # ใช้ OrderManager ในการส่งคำสั่ง (ไฟล์ order_management.py)
             # ต้องส่ง order_manager มาจาก main system
             if hasattr(self, 'order_manager') and self.order_manager:
-                logger.info(f"📤 ส่งคำสั่งไปยัง OrderManager (order_management.py)")
+                logger.info(f"📤 [SMART ENTRY] Sending order to OrderManager (order_management.py)")
                 logger.info(f"   Symbol: {signal.symbol}, Direction: {signal.direction}, Lot: {lot_size:.2f}")
                 
                 result = self.order_manager.place_order_from_signal(
@@ -499,8 +527,8 @@ class SmartEntrySystem:
                 
                 if result and hasattr(result, 'success') and result.success:
                     ticket = getattr(result, 'ticket', None)
-                    logger.info(f"✅ Recovery Entry executed via OrderManager: Ticket {ticket}")
-                    logger.info(f"   🎯 ระบบแก้ไม้ - ไม่มี TP/SL (ให้ระบบปิดไม้จัดการเอง)")
+                    logger.info(f"✅ [SMART ENTRY] Entry executed via OrderManager: Ticket {ticket}")
+                    logger.info(f"   🎯 [SMART ENTRY] Recovery system - No TP/SL (managed by closing system)")
                     
                     # บันทึก zone ที่ใช้แล้ว
                     zone_key = self._generate_zone_key(zone)
@@ -511,35 +539,16 @@ class SmartEntrySystem:
                     
                     # อัปเดต daily counter
                     self.daily_trade_count += 1
-                
+                    
                     return ticket
                 else:
                     error_msg = getattr(result, 'error_message', 'Unknown error') if result else 'No result'
-                    logger.error(f"❌ OrderManager failed: {error_msg}")
+                    logger.error(f"❌ [SMART ENTRY] OrderManager failed: {error_msg}")
                     return None
             else:
-                logger.error(f"❌ OrderManager not available")
+                logger.error(f"❌ [SMART ENTRY] OrderManager not available")
                 return None
                 
         except Exception as e:
-            logger.error(f"❌ Error executing entry: {e}")
+            logger.error(f"❌ [SMART ENTRY] Error executing entry: {e}")
             return None
-    
-    def get_entry_statistics(self) -> Dict:
-        """📊 สถิติการเข้าไม้"""
-        try:
-            return {
-                'daily_trade_count': self.daily_trade_count,
-                'max_daily_trades': self.max_daily_trades,
-                'used_zones_count': len(self.used_zones),
-                'support_buy_enabled': self.support_buy_enabled,
-                'resistance_sell_enabled': self.resistance_sell_enabled,
-                'min_zone_strength': self.min_zone_strength,
-                'recovery_zone_strength': self.recovery_zone_strength,
-                'profit_target_pips': self.profit_target_pips,
-                'loss_threshold_pips': self.loss_threshold_pips,
-                'risk_percent_per_trade': self.risk_percent_per_trade
-            }
-        except Exception as e:
-            logger.error(f"❌ Error getting entry statistics: {e}")
-            return {}

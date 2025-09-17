@@ -411,27 +411,39 @@ class HedgePairingCloser:
             all_statuses = status_summary.get('all_statuses', [])
             portfolio_health = status_summary.get('portfolio_health', 'ไม่ทราบ')
             
-            logger.info(f"🧠 Intelligent Closing Strategy - Portfolio Health: {portfolio_health}")
-            logger.info(f"   Urgent Positions: {len(urgent_positions)}")
-            logger.info(f"   Help Needed Positions: {len(help_needed_positions)}")
+            logger.info("=" * 80)
+            logger.info("🧠 [CLOSING STRATEGY] Intelligent Closing Strategy Started")
+            logger.info("=" * 80)
+            logger.info(f"📊 [PORTFOLIO] Health: {portfolio_health}")
+            logger.info(f"📊 [PORTFOLIO] Urgent Positions: {len(urgent_positions)}")
+            logger.info(f"📊 [PORTFOLIO] Help Needed Positions: {len(help_needed_positions)}")
+            logger.info("-" * 80)
             
             # 🎯 1. ปิดไม้ไกลจากราคาปัจจุบันก่อนเสมอ (PRIORITY #1)
+            logger.info("🎯 [PRIORITY 1] Checking furthest positions from current price...")
             furthest_positions = self._find_furthest_positions(positions)
             if furthest_positions:
-                logger.info(f"🎯 PRIORITY: ปิดไม้ไกลจากราคาปัจจุบันก่อน - {len(furthest_positions)} ตัว")
+                logger.info(f"✅ [PRIORITY 1] Found {len(furthest_positions)} furthest positions - Processing...")
                 return self._close_furthest_positions(furthest_positions, all_statuses)
+            else:
+                logger.info("❌ [PRIORITY 1] No furthest positions found - Moving to next priority")
             
             # 2. ปิดไม้ที่ต้องการ Recovery ก่อน (RECOVERY_NEEDED)
+            logger.info("🚨 [PRIORITY 2] Checking urgent positions (RECOVERY_NEEDED)...")
             if urgent_positions:
                 # ตรวจสอบว่ามีไม้ติดลบหรือไม่
                 total_urgent_profit = sum(pos.profit for pos in urgent_positions)
                 if total_urgent_profit < 0:
-                    logger.info(f"🚫 INTELLIGENT CLOSING: Urgent positions are losing (${total_urgent_profit:.2f}) - Skipping")
-                    logger.info(f"   ZERO LOSS POLICY: Cannot close losing positions without helpers")
+                    logger.warning(f"⚠️ [PRIORITY 2] Urgent positions are losing (${total_urgent_profit:.2f}) - Skipping")
+                    logger.warning(f"   🚫 [ZERO LOSS] Cannot close losing positions without helpers")
                 else:
+                    logger.info(f"✅ [PRIORITY 2] Found {len(urgent_positions)} urgent positions - Processing...")
                     return self._close_recovery_needed_positions(urgent_positions, all_statuses)
+            else:
+                logger.info("❌ [PRIORITY 2] No urgent positions found - Moving to next priority")
             
             # 3. หาไม้ที่สามารถปิดคู่กันได้ (HEDGE) - ลดเกณฑ์การจับคู่
+            logger.info("🔗 [PRIORITY 3] Checking hedge candidates...")
             hedge_candidates = [s for s in all_statuses if s.recommended_action == "HEDGE_CANDIDATE"]
             if hedge_candidates:
                 # ตรวจสอบว่ามีไม้ติดลบหรือไม่
@@ -439,26 +451,33 @@ class HedgePairingCloser:
                 
                 # ลดเกณฑ์การจับคู่ - อนุญาตให้จับคู่ไม้ติดลบได้
                 if total_hedge_profit < 0:
-                    logger.info(f"⚠️ INTELLIGENT CLOSING: Hedge candidates are losing (${total_hedge_profit:.2f}) - แต่จะลองจับคู่")
-                    logger.info(f"   ลดเกณฑ์การจับคู่ - อนุญาตให้จับคู่ไม้ติดลบได้")
+                    logger.warning(f"⚠️ [PRIORITY 3] Hedge candidates are losing (${total_hedge_profit:.2f}) - But will try pairing")
+                    logger.info(f"   🔧 [HEDGE] Relaxed criteria - Allow pairing losing positions")
                 
                 # ลองจับคู่ไม้ติดลบ
+                logger.info(f"🔍 [HEDGE] Attempting to pair {len(hedge_candidates)} hedge candidates...")
                 hedge_decision = self._find_hedge_pairs(hedge_candidates, all_statuses)
                 if hedge_decision.should_close:
-                    logger.info(f"✅ HEDGE PAIRING: จับคู่ไม้ติดลบสำเร็จ - Net P&L: ${hedge_decision.net_pnl:.2f}")
+                    logger.info(f"✅ [HEDGE] Pairing successful - Net P&L: ${hedge_decision.net_pnl:.2f}")
                     return hedge_decision
                 else:
-                    logger.info(f"🚫 HEDGE PAIRING: ไม่สามารถจับคู่ไม้ติดลบได้")
+                    logger.warning(f"❌ [HEDGE] Cannot pair hedge candidates - Moving to next priority")
+            else:
+                logger.info("❌ [PRIORITY 3] No hedge candidates found - Moving to next priority")
             
             # 4. ปิดไม้ที่ต้องการความช่วยเหลือ (HELP_NEEDED)
+            logger.info("🆘 [PRIORITY 4] Checking help needed positions...")
             if help_needed_positions:
                 # ตรวจสอบว่ามีไม้ติดลบหรือไม่
                 total_help_profit = sum(pos.profit for pos in help_needed_positions)
                 if total_help_profit < 0:
-                    logger.info(f"🚫 INTELLIGENT CLOSING: Help needed positions are losing (${total_help_profit:.2f}) - Skipping")
-                    logger.info(f"   ZERO LOSS POLICY: Cannot close losing positions without helpers")
+                    logger.warning(f"⚠️ [PRIORITY 4] Help needed positions are losing (${total_help_profit:.2f}) - Skipping")
+                    logger.warning(f"   🚫 [ZERO LOSS] Cannot close losing positions without helpers")
                 else:
+                    logger.info(f"✅ [PRIORITY 4] Found {len(help_needed_positions)} help needed positions - Processing...")
                     return self._close_help_needed_positions(help_needed_positions, all_statuses)
+            else:
+                logger.info("❌ [PRIORITY 4] No help needed positions found - Moving to next priority")
             
             # 5. ปิดไม้ที่ขาดทุนน้อยที่สุดก่อน (เฉพาะเมื่อไม่ติดลบ)
             losers = [s for s in all_statuses if s.status == "LOSER"]
@@ -1874,7 +1893,7 @@ class HedgePairingCloser:
                 logger.info(f"   Confidence: {intelligent_decision.confidence_score:.2f}")
                 
                 # บันทึกประสิทธิภาพ
-                    processing_time = time.time() - start_time
+                processing_time = time.time() - start_time
                 self._record_performance(True, intelligent_decision.net_pnl, processing_time)
                 
                 return intelligent_decision
@@ -2271,10 +2290,10 @@ class HedgePairingCloser:
                 
                 for helper_count in range(1, max_helpers + 1):
                     for helper_combo in itertools.combinations(profitable_unpaired, helper_count):
-                    if search_count >= max_searches:
-                        break
-                        
-                    search_count += 1
+                        if search_count >= max_searches:
+                            break
+                            
+                        search_count += 1
                         helper_profit = sum(getattr(helper, 'profit', 0) for helper in helper_combo)
                         total_profit = losing_pair['profit'] + helper_profit
                         
@@ -2562,7 +2581,7 @@ class HedgePairingCloser:
                 logger.info(f"   BUY positions: {buy_count}, SELL positions: {sell_count}")
             else:
                 # มีไม้ฝั่งเดียว - อนุญาตให้ใช้ Single Side Closing
-            logger.info("🔍 STEP 2.5: SINGLE SIDE PROFITABLE CLOSING")
+                logger.info("🔍 STEP 2.5: SINGLE SIDE PROFITABLE CLOSING")
             single_side_combinations = self._find_single_side_profitable(priority_positions)
             
             if single_side_combinations:
@@ -3133,6 +3152,6 @@ def create_hedge_pairing_closer(symbol: str = "EURUSD") -> HedgePairingCloser:
     """สร้าง HedgePairingCloser instance"""
     try:
         return HedgePairingCloser(symbol=symbol)
-        except Exception as e:
+    except Exception as e:
         logger.error(f"❌ Failed to create HedgePairingCloser: {e}")
         raise
