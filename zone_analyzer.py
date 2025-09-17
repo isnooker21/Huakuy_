@@ -41,20 +41,20 @@ class ZoneAnalyzer:
         
         # Dynamic Threshold Settings
         self.adaptive_thresholds = True      # เปิดใช้การปรับเกณฑ์แบบอัตโนมัติ
-        self.min_zones_per_algorithm = 5     # จำนวน zones ขั้นต่ำต่อ algorithm
-        self.max_attempts = 3                # จำนวนครั้งที่ลองปรับเกณฑ์
+        self.min_zones_per_algorithm = 3     # จำนวน zones ขั้นต่ำต่อ algorithm (ลดจาก 5)
+        self.max_attempts = 2                # จำนวนครั้งที่ลองปรับเกณฑ์ (ลดจาก 3)
         
-        # Volume Profile Settings (Dynamic)
-        self.volume_profile_bins = 20        # จำนวน bins สำหรับ volume profile
-        self.volume_threshold = 0.7          # เกณฑ์ volume เริ่มต้น
-        self.volume_threshold_min = 0.3      # เกณฑ์ volume ต่ำสุด
-        self.volume_threshold_step = 0.1     # ขั้นตอนการลดเกณฑ์
+        # Volume Profile Settings (Dynamic) - ปรับให้เร็วขึ้น
+        self.volume_profile_bins = 15        # จำนวน bins สำหรับ volume profile (ลดจาก 20)
+        self.volume_threshold = 0.6          # เกณฑ์ volume เริ่มต้น (ลดจาก 0.7)
+        self.volume_threshold_min = 0.4      # เกณฑ์ volume ต่ำสุด (เพิ่มจาก 0.3)
+        self.volume_threshold_step = 0.2     # ขั้นตอนการลดเกณฑ์ (เพิ่มจาก 0.1)
         
-        # Price Pattern Settings (Dynamic)
-        self.pattern_tolerance = 15.0        # ความยืดหยุ่นเริ่มต้น
-        self.pattern_tolerance_max = 30.0    # ความยืดหยุ่นสูงสุด
-        self.pattern_tolerance_step = 5.0    # ขั้นตอนการเพิ่มความยืดหยุ่น
-        self.min_pattern_strength = 0.6      # ความแข็งแรงขั้นต่ำของ pattern
+        # Price Pattern Settings (Dynamic) - ปรับให้เร็วขึ้น
+        self.pattern_tolerance = 20.0        # ความยืดหยุ่นเริ่มต้น (เพิ่มจาก 15.0)
+        self.pattern_tolerance_max = 25.0    # ความยืดหยุ่นสูงสุด (ลดจาก 30.0)
+        self.pattern_tolerance_step = 10.0   # ขั้นตอนการเพิ่มความยืดหยุ่น (เพิ่มจาก 5.0)
+        self.min_pattern_strength = 0.5      # ความแข็งแรงขั้นต่ำของ pattern (ลดจาก 0.6)
         
     def analyze_zones(self, symbol: str, lookback_hours: int = 24) -> Dict[str, List[Dict]]:
         """🔍 วิเคราะห์ Support/Resistance Zones ด้วย Multi-Algorithm"""
@@ -311,12 +311,12 @@ class ZoneAnalyzer:
             return [], []
 
     def _find_zones_from_volume_profile_adaptive(self, rates) -> Tuple[List[Dict], List[Dict]]:
-        """📊 Algorithm 2: หา zones จาก Volume Profile (Adaptive)"""
+        """📊 Algorithm 2: หา zones จาก Volume Profile (Adaptive) - Fast Mode"""
         try:
             if len(rates) < 20:
                 return [], []
             
-            # ลองหลายเกณฑ์ volume threshold
+            # ลองแค่ 2 เกณฑ์ volume threshold (เร็วขึ้น)
             current_threshold = self.volume_threshold
             best_support = []
             best_resistance = []
@@ -337,7 +337,7 @@ class ZoneAnalyzer:
                     best_total = total_zones
                     break
                 
-                # ถ้าเจอน้อยเกินไป ให้ลด threshold
+                # ถ้าเจอน้อยเกินไป ให้ลด threshold (ขั้นใหญ่ขึ้น)
                 if total_zones < self.min_zones_per_algorithm:
                     current_threshold = max(current_threshold - self.volume_threshold_step, self.volume_threshold_min)
                     logger.info(f"📊 [VOLUME PROFILE] Too few zones, reducing threshold to {current_threshold:.1f}")
@@ -423,12 +423,12 @@ class ZoneAnalyzer:
             return [], []
 
     def _find_zones_from_patterns_adaptive(self, rates) -> Tuple[List[Dict], List[Dict]]:
-        """📈 Algorithm 3: หา zones จาก Price Action Patterns (Adaptive)"""
+        """📈 Algorithm 3: หา zones จาก Price Action Patterns (Adaptive) - Fast Mode"""
         try:
             if len(rates) < 20:
                 return [], []
             
-            # ลองหลายเกณฑ์ pattern tolerance
+            # ลองแค่ 2 เกณฑ์ pattern tolerance (เร็วขึ้น)
             current_tolerance = self.pattern_tolerance
             best_support = []
             best_resistance = []
@@ -449,7 +449,7 @@ class ZoneAnalyzer:
                     best_total = total_zones
                     break
                 
-                # ถ้าเจอน้อยเกินไป ให้เพิ่ม tolerance
+                # ถ้าเจอน้อยเกินไป ให้เพิ่ม tolerance (ขั้นใหญ่ขึ้น)
                 if total_zones < self.min_zones_per_algorithm:
                     current_tolerance = min(current_tolerance + self.pattern_tolerance_step, self.pattern_tolerance_max)
                     logger.info(f"📈 [PRICE PATTERNS] Too few zones, increasing tolerance to {current_tolerance:.1f}")
