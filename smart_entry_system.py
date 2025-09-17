@@ -544,21 +544,61 @@ class SmartEntrySystem:
             ai_entry_decision = ai_decision.ai_decision
             direction = ai_entry_decision.direction
             
-            # หา Zone ที่เหมาะสมตาม AI Decision
+            # หา Zone ที่เหมาะสมตาม AI Decision - กรองตามระยะห่างด้วย
             if direction == "BUY":
                 # หา Support Zone ที่ดีที่สุด
                 support_zones = zones.get('support', [])
                 if support_zones:
-                    # เรียงตามคะแนน (ถ้ามี) หรือ strength
-                    best_zone = max(support_zones, key=lambda z: z.get('strength', 0))
-                    return 'support', best_zone
+                    # กรอง Support Zones ตามระยะห่างก่อน
+                    valid_supports = []
+                    for zone in support_zones:
+                        distance = abs(current_price - zone['price'])
+                        zone_strength = zone.get('strength', 0)
+                        
+                        # Dynamic Distance ตาม Zone Strength
+                        if zone_strength >= 0.8:
+                            max_distance = 150.0  # Zone แข็งแกร่งมาก = 150 pips
+                        elif zone_strength >= 0.5:
+                            max_distance = 100.0  # Zone แข็งแกร่ง = 100 pips
+                        elif zone_strength >= 0.2:
+                            max_distance = 75.0   # Zone ปานกลาง = 75 pips
+                        else:
+                            max_distance = 50.0   # Zone อ่อนแอ = 50 pips
+                        
+                        if distance <= max_distance:
+                            valid_supports.append(zone)
+                    
+                    if valid_supports:
+                        # เลือก Zone ที่แข็งแกร่งที่สุดจากที่กรองแล้ว
+                        best_zone = max(valid_supports, key=lambda z: z.get('strength', 0))
+                        return 'support', best_zone
             elif direction == "SELL":
                 # หา Resistance Zone ที่ดีที่สุด
                 resistance_zones = zones.get('resistance', [])
                 if resistance_zones:
-                    # เรียงตามคะแนน (ถ้ามี) หรือ strength
-                    best_zone = max(resistance_zones, key=lambda z: z.get('strength', 0))
-                    return 'resistance', best_zone
+                    # กรอง Resistance Zones ตามระยะห่างก่อน
+                    valid_resistances = []
+                    for zone in resistance_zones:
+                        distance = abs(current_price - zone['price'])
+                        zone_strength = zone.get('strength', 0)
+                        
+                        # Dynamic Distance ตาม Zone Strength
+                        if zone_strength >= 0.8:
+                            max_distance = 150.0  # Zone แข็งแกร่งมาก = 150 pips
+                        elif zone_strength >= 0.5:
+                            max_distance = 100.0  # Zone แข็งแกร่ง = 100 pips
+                        elif zone_strength >= 0.2:
+                            max_distance = 75.0   # Zone ปานกลาง = 75 pips
+                        else:
+                            max_distance = 50.0   # Zone อ่อนแอ = 50 pips
+                        
+                        if distance <= max_distance:
+                            valid_resistances.append(zone)
+                    
+                    if valid_resistances:
+                        # เลือก Zone ที่แข็งแกร่งที่สุดจากที่กรองแล้ว
+                        best_zone = max(valid_resistances, key=lambda z: z.get('strength', 0))
+                        return 'resistance', best_zone
             
             return None, None
             
