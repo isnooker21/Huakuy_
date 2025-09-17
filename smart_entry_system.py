@@ -434,6 +434,14 @@ class SmartEntrySystem:
             # สร้าง Signal object สำหรับ OrderManager
             from trading_conditions import Signal
             
+            # กำหนด comment ตามประเภทการเข้าไม้
+            if 'Recovery' in reason or 'recovery' in reason.lower():
+                comment = f"RECOVERY: {reason}"
+                logger.info(f"🔧 Recovery Entry Comment: {comment}")
+            else:
+                comment = f"SMART_ENTRY: {reason}"
+                logger.info(f"🎯 Smart Entry Comment: {comment}")
+            
             signal = Signal(
                 direction=direction.upper(),
                 symbol=self.symbol,
@@ -441,7 +449,7 @@ class SmartEntrySystem:
                 confidence=80.0,
                 timestamp=datetime.now(),
                 price=entry_price,
-                comment=f"Smart Entry: {reason}",
+                comment=comment,
                 stop_loss=0.0,  # ไม่ตั้ง SL
                 take_profit=0.0  # ไม่ตั้ง TP
             )
@@ -472,8 +480,8 @@ class SmartEntrySystem:
                     
                     # อัปเดต daily counter
                     self.daily_trade_count += 1
-                    
-                    return ticket
+                
+                return ticket
                 else:
                     error_msg = getattr(result, 'error_message', 'Unknown error') if result else 'No result'
                     logger.error(f"❌ OrderManager failed: {error_msg}")

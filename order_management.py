@@ -61,6 +61,7 @@ class OrderManager:
             logger.info(f"📥 OrderManager รับคำสั่งจาก SmartEntrySystem")
             logger.info(f"   Signal: {signal.direction} {signal.symbol} at {signal.price}")
             logger.info(f"   Lot Size: {lot_size}, Account Balance: {account_balance}")
+            logger.info(f"   Comment: {signal.comment}")
             
             # ตรวจสอบการเชื่อมต่อ
             if not self.mt5.check_connection_health():
@@ -97,6 +98,12 @@ class OrderManager:
                 price = signal.price
                 
             # ส่ง Order
+            # ปรับปรุง comment ให้ชัดเจน
+            if signal.comment:
+                order_comment = signal.comment
+            else:
+                order_comment = f"SmartEntry_{signal.direction}"
+            
             result = self.mt5.place_order(
                 symbol=signal.symbol,
                 order_type=order_type,
@@ -104,7 +111,7 @@ class OrderManager:
                 price=price,
                 sl=signal.stop_loss,
                 tp=signal.take_profit,
-                comment=f"Signal: {signal.comment}",
+                comment=order_comment,
                 magic=self.magic_number
             )
             
@@ -142,6 +149,7 @@ class OrderManager:
                 
                 logger.info(f"✅ OrderManager: Order sent successfully - Ticket: {ticket}")
                 logger.info(f"   📤 ส่งคำสั่งไปยัง MT5 ผ่าน mt5_connection.py")
+                logger.info(f"   📝 Comment sent to MT5: {order_comment}")
                 
                 return OrderResult(
                     success=True,
