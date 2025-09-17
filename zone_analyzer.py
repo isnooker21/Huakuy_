@@ -17,9 +17,9 @@ class ZoneAnalyzer:
         
         # Multi-Algorithm Zone Detection Parameters - ปรับให้หา zones ได้มากขึ้น
         self.min_touches = 1  # เกณฑ์ขั้นต่ำสำหรับการแตะ zone
-        self.zone_tolerance = 5.0  # ความยืดหยุ่นในการรวม zones (ลดจาก 35.0 เพื่อให้มี zones มากขึ้น)
-        self.min_zone_strength = 1  # ความแข็งแรงขั้นต่ำของ zone (ลดจาก 2)
-        self.max_zones_per_type = 25  # จำนวน zone สูงสุดต่อประเภท (เพิ่มจาก 15)
+        self.zone_tolerance = 0.01  # ความยืดหยุ่นในการรวม zones (ลดจาก 5.0 เพื่อให้มี zones ละเอียดขึ้น)
+        self.min_zone_strength = 0.01  # ความแข็งแรงขั้นต่ำของ zone (ลดจาก 1)
+        self.max_zones_per_type = 200  # จำนวน zone สูงสุดต่อประเภท (เพิ่มจาก 25)
         
         # Multi-TF Analysis (ใช้หลาย timeframe)
         self.tf_weights = {
@@ -42,9 +42,9 @@ class ZoneAnalyzer:
         self.enable_swing_levels = True      # วิธีที่ 5: Swing High/Low Levels (Key Reversal Points)
         
         # ปรับให้หา zones ได้มากขึ้นและแม่นยำขึ้น
-        self.zone_tolerance = 0.1            # ความยืดหยุ่นในการรวม zones (ลดจาก 0.5 เพื่อให้มี zones มากขึ้น)
-        self.min_zone_strength = 0.1         # ความแข็งแรงขั้นต่ำของ zone (ลดจาก 1)
-        self.max_zones_per_type = 100        # จำนวน zone สูงสุดต่อประเภท (เพิ่มจาก 25)
+        self.zone_tolerance = 0.01           # ความยืดหยุ่นในการรวม zones (ลดจาก 0.1 เพื่อให้มี zones ละเอียดขึ้น)
+        self.min_zone_strength = 0.01        # ความแข็งแรงขั้นต่ำของ zone (ลดจาก 0.1)
+        self.max_zones_per_type = 200        # จำนวน zone สูงสุดต่อประเภท (เพิ่มจาก 100)
         
         # Moving Average Settings (REMOVED - ไม่ใช้แล้ว)
         # self.ma_periods = [10, 20, 50, 100, 200]  # ระยะเวลา Moving Average (เพิ่ม 10)
@@ -68,7 +68,7 @@ class ZoneAnalyzer:
         self.swing_tolerance = 5.0           # ความยืดหยุ่นสำหรับ swing levels (ลดจาก 15.0)
         
         # Adaptive Market Detection (การตรวจจับสภาวะตลาด)
-        self.enable_adaptive_mode = True     # เปิดโหมดปรับตัวอัตโนมัติ
+        self.enable_adaptive_mode = False    # ปิดโหมดปรับตัวอัตโนมัติ (เพื่อให้ใช้ zone_tolerance คงที่)
         self.market_analysis_period = 50     # จำนวน bars สำหรับวิเคราะห์สภาวะตลาด
         self.volatility_threshold = 0.02     # เกณฑ์ความผันผวน (2%)
         self.trend_strength_threshold = 0.6  # เกณฑ์ความแข็งแรงของเทรนด์
