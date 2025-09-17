@@ -36,12 +36,24 @@ class ZoneAnalyzer:
         self.enable_volume_profile = True    # วิธีที่ 2: Volume Profile
         self.enable_price_patterns = True    # วิธีที่ 3: Price Action Patterns
         
-        # Volume Profile Settings
-        self.volume_profile_bins = 20        # จำนวน bins สำหรับ volume profile
-        self.volume_threshold = 0.7          # เกณฑ์ volume (70% ของ volume สูงสุด)
+        # Algorithm Mode (Conservative, Balanced, Aggressive)
+        self.algorithm_mode = "balanced"     # default mode
         
-        # Price Pattern Settings
-        self.pattern_tolerance = 15.0        # ความยืดหยุ่นในการหา patterns
+        # Dynamic Threshold Settings
+        self.adaptive_thresholds = True      # เปิดใช้การปรับเกณฑ์แบบอัตโนมัติ
+        self.min_zones_per_algorithm = 5     # จำนวน zones ขั้นต่ำต่อ algorithm
+        self.max_attempts = 3                # จำนวนครั้งที่ลองปรับเกณฑ์
+        
+        # Volume Profile Settings (Dynamic)
+        self.volume_profile_bins = 20        # จำนวน bins สำหรับ volume profile
+        self.volume_threshold = 0.7          # เกณฑ์ volume เริ่มต้น
+        self.volume_threshold_min = 0.3      # เกณฑ์ volume ต่ำสุด
+        self.volume_threshold_step = 0.1     # ขั้นตอนการลดเกณฑ์
+        
+        # Price Pattern Settings (Dynamic)
+        self.pattern_tolerance = 15.0        # ความยืดหยุ่นเริ่มต้น
+        self.pattern_tolerance_max = 30.0    # ความยืดหยุ่นสูงสุด
+        self.pattern_tolerance_step = 5.0    # ขั้นตอนการเพิ่มความยืดหยุ่น
         self.min_pattern_strength = 0.6      # ความแข็งแรงขั้นต่ำของ pattern
         
     def analyze_zones(self, symbol: str, lookback_hours: int = 24) -> Dict[str, List[Dict]]:
@@ -146,6 +158,7 @@ class ZoneAnalyzer:
         """🎯 Multi-Algorithm Zone Detection - ใช้ 3 วิธีหา zones พร้อมกัน"""
         try:
             logger.info(f"🎯 [MULTI-ALGORITHM] Starting multi-algorithm analysis for timeframe {timeframe}")
+            logger.info(f"🔧 [MULTI-ALGORITHM] Mode: {self.algorithm_mode.upper()}, Adaptive: {self.adaptive_thresholds}")
             
             # ดึงข้อมูลราคา
             rates = self._get_rates(timeframe, lookback_hours)
@@ -164,18 +177,18 @@ class ZoneAnalyzer:
                 all_resistance_zones.extend(pivot_resistance)
                 logger.info(f"✅ [ALGORITHM 1] Found {len(pivot_support)} support, {len(pivot_resistance)} resistance zones")
             
-            # วิธีที่ 2: Volume Profile
+            # วิธีที่ 2: Volume Profile (Dynamic)
             if self.enable_volume_profile:
                 logger.info("📊 [ALGORITHM 2] Volume Profile Analysis...")
-                volume_support, volume_resistance = self._find_zones_from_volume_profile(rates)
+                volume_support, volume_resistance = self._find_zones_from_volume_profile_adaptive(rates)
                 all_support_zones.extend(volume_support)
                 all_resistance_zones.extend(volume_resistance)
                 logger.info(f"✅ [ALGORITHM 2] Found {len(volume_support)} support, {len(volume_resistance)} resistance zones")
             
-            # วิธีที่ 3: Price Action Patterns
+            # วิธีที่ 3: Price Action Patterns (Dynamic)
             if self.enable_price_patterns:
                 logger.info("📈 [ALGORITHM 3] Price Action Patterns Analysis...")
-                pattern_support, pattern_resistance = self._find_zones_from_patterns(rates)
+                pattern_support, pattern_resistance = self._find_zones_from_patterns_adaptive(rates)
                 all_support_zones.extend(pattern_support)
                 all_resistance_zones.extend(pattern_resistance)
                 logger.info(f"✅ [ALGORITHM 3] Found {len(pattern_support)} support, {len(pattern_resistance)} resistance zones")
@@ -297,11 +310,59 @@ class ZoneAnalyzer:
             logger.error(f"❌ [ALGORITHM 1] Error in pivot points analysis: {e}")
             return [], []
 
-    def _find_zones_from_volume_profile(self, rates) -> Tuple[List[Dict], List[Dict]]:
+    def _find_zones_from_volume_profile_adaptive(self, rates) -> Tuple[List[Dict], List[Dict]]:
+        """📊 Algorithm 2: หา zones จาก Volume Profile (Adaptive)"""
+        try:
+            if len(rates) < 20:
+                return [], []
+            
+            # ลองหลายเกณฑ์ volume threshold
+            current_threshold = self.volume_threshold
+            best_support = []
+            best_resistance = []
+            best_total = 0
+            
+            for attempt in range(self.max_attempts):
+                logger.info(f"📊 [VOLUME PROFILE] Attempt {attempt + 1}: threshold={current_threshold:.1f}")
+                
+                support_zones, resistance_zones = self._find_zones_from_volume_profile(rates, current_threshold)
+                total_zones = len(support_zones) + len(resistance_zones)
+                
+                logger.info(f"📊 [VOLUME PROFILE] Found {len(support_zones)} support, {len(resistance_zones)} resistance zones")
+                
+                # ถ้าเจอ zones เพียงพอ หรือเป็นครั้งสุดท้าย
+                if total_zones >= self.min_zones_per_algorithm or attempt == self.max_attempts - 1:
+                    best_support = support_zones
+                    best_resistance = resistance_zones
+                    best_total = total_zones
+                    break
+                
+                # ถ้าเจอน้อยเกินไป ให้ลด threshold
+                if total_zones < self.min_zones_per_algorithm:
+                    current_threshold = max(current_threshold - self.volume_threshold_step, self.volume_threshold_min)
+                    logger.info(f"📊 [VOLUME PROFILE] Too few zones, reducing threshold to {current_threshold:.1f}")
+                else:
+                    best_support = support_zones
+                    best_resistance = resistance_zones
+                    best_total = total_zones
+                    break
+            
+            logger.info(f"📊 [VOLUME PROFILE] Final: {len(best_support)} support, {len(best_resistance)} resistance zones (total: {best_total})")
+            return best_support, best_resistance
+            
+        except Exception as e:
+            logger.error(f"❌ [ALGORITHM 2] Error in adaptive volume profile analysis: {e}")
+            return [], []
+
+    def _find_zones_from_volume_profile(self, rates, volume_threshold=None) -> Tuple[List[Dict], List[Dict]]:
         """📊 Algorithm 2: หา zones จาก Volume Profile"""
         try:
             if len(rates) < 20:
                 return [], []
+            
+            # ใช้ threshold ที่ส่งมา หรือใช้ default
+            if volume_threshold is None:
+                volume_threshold = self.volume_threshold
             
             # สร้าง Volume Profile
             prices = [float(rate['close']) for rate in rates]
@@ -329,13 +390,13 @@ class ZoneAnalyzer:
             
             # หา zones ที่มี volume สูง
             max_volume = max(bin_data['volume'] for bin_data in volume_bins.values())
-            volume_threshold = max_volume * self.volume_threshold
+            actual_threshold = max_volume * volume_threshold
             
             support_zones = []
             resistance_zones = []
             
             for bin_index, bin_data in volume_bins.items():
-                if bin_data['volume'] >= volume_threshold:
+                if bin_data['volume'] >= actual_threshold:
                     avg_price = sum(bin_data['prices']) / len(bin_data['prices'])
                     volume_strength = (bin_data['volume'] / max_volume) * 100
                     
@@ -361,11 +422,59 @@ class ZoneAnalyzer:
             logger.error(f"❌ [ALGORITHM 2] Error in volume profile analysis: {e}")
             return [], []
 
-    def _find_zones_from_patterns(self, rates) -> Tuple[List[Dict], List[Dict]]:
+    def _find_zones_from_patterns_adaptive(self, rates) -> Tuple[List[Dict], List[Dict]]:
+        """📈 Algorithm 3: หา zones จาก Price Action Patterns (Adaptive)"""
+        try:
+            if len(rates) < 20:
+                return [], []
+            
+            # ลองหลายเกณฑ์ pattern tolerance
+            current_tolerance = self.pattern_tolerance
+            best_support = []
+            best_resistance = []
+            best_total = 0
+            
+            for attempt in range(self.max_attempts):
+                logger.info(f"📈 [PRICE PATTERNS] Attempt {attempt + 1}: tolerance={current_tolerance:.1f}")
+                
+                support_zones, resistance_zones = self._find_zones_from_patterns(rates, current_tolerance)
+                total_zones = len(support_zones) + len(resistance_zones)
+                
+                logger.info(f"📈 [PRICE PATTERNS] Found {len(support_zones)} support, {len(resistance_zones)} resistance zones")
+                
+                # ถ้าเจอ zones เพียงพอ หรือเป็นครั้งสุดท้าย
+                if total_zones >= self.min_zones_per_algorithm or attempt == self.max_attempts - 1:
+                    best_support = support_zones
+                    best_resistance = resistance_zones
+                    best_total = total_zones
+                    break
+                
+                # ถ้าเจอน้อยเกินไป ให้เพิ่ม tolerance
+                if total_zones < self.min_zones_per_algorithm:
+                    current_tolerance = min(current_tolerance + self.pattern_tolerance_step, self.pattern_tolerance_max)
+                    logger.info(f"📈 [PRICE PATTERNS] Too few zones, increasing tolerance to {current_tolerance:.1f}")
+                else:
+                    best_support = support_zones
+                    best_resistance = resistance_zones
+                    best_total = total_zones
+                    break
+            
+            logger.info(f"📈 [PRICE PATTERNS] Final: {len(best_support)} support, {len(best_resistance)} resistance zones (total: {best_total})")
+            return best_support, best_resistance
+            
+        except Exception as e:
+            logger.error(f"❌ [ALGORITHM 3] Error in adaptive price patterns analysis: {e}")
+            return [], []
+
+    def _find_zones_from_patterns(self, rates, pattern_tolerance=None) -> Tuple[List[Dict], List[Dict]]:
         """📈 Algorithm 3: หา zones จาก Price Action Patterns"""
         try:
             if len(rates) < 20:
                 return [], []
+            
+            # ใช้ tolerance ที่ส่งมา หรือใช้ default
+            if pattern_tolerance is None:
+                pattern_tolerance = self.pattern_tolerance
             
             support_zones = []
             resistance_zones = []
@@ -375,7 +484,7 @@ class ZoneAnalyzer:
             lows = [float(rate['low']) for rate in rates]
             
             # หา Double/Triple Bottoms (Support)
-            bottoms = self._find_double_triple_bottoms(lows, rates)
+            bottoms = self._find_double_triple_bottoms(lows, rates, pattern_tolerance)
             for bottom in bottoms:
                 zone = {
                     'price': bottom['price'],
@@ -388,7 +497,7 @@ class ZoneAnalyzer:
                 support_zones.append(zone)
             
             # หา Double/Triple Tops (Resistance)
-            tops = self._find_double_triple_tops(highs, rates)
+            tops = self._find_double_triple_tops(highs, rates, pattern_tolerance)
             for top in tops:
                 zone = {
                     'price': top['price'],
@@ -405,10 +514,11 @@ class ZoneAnalyzer:
             logger.error(f"❌ [ALGORITHM 3] Error in price patterns analysis: {e}")
             return [], []
 
-    def _find_double_triple_bottoms(self, lows, rates) -> List[Dict]:
+    def _find_double_triple_bottoms(self, lows, rates, tolerance=None) -> List[Dict]:
         """🔍 หา Double/Triple Bottoms"""
         bottoms = []
-        tolerance = self.pattern_tolerance
+        if tolerance is None:
+            tolerance = self.pattern_tolerance
         
         for i in range(2, len(lows) - 2):
             current_low = lows[i]
@@ -436,10 +546,11 @@ class ZoneAnalyzer:
         
         return bottoms
 
-    def _find_double_triple_tops(self, highs, rates) -> List[Dict]:
+    def _find_double_triple_tops(self, highs, rates, tolerance=None) -> List[Dict]:
         """🔍 หา Double/Triple Tops"""
         tops = []
-        tolerance = self.pattern_tolerance
+        if tolerance is None:
+            tolerance = self.pattern_tolerance
         
         for i in range(2, len(highs) - 2):
             current_high = highs[i]
