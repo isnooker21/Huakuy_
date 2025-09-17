@@ -536,13 +536,16 @@ class TradingGUI:
         ]
         
         for i, (label, key) in enumerate(position_stats_fields):
-            tk.Label(stats_frame, text=f"{label}:", bg='#3a3a3a', fg='lightgray', 
-                    font=('Arial', 9)).grid(row=i, column=0, sticky='w', padx=5, pady=2)
+            row_frame = tk.Frame(stats_frame, bg='#3a3a3a')
+            row_frame.pack(fill=tk.X, pady=2)
             
-            self.ai_position_stats_labels[key] = tk.Label(stats_frame, text="0", 
+            tk.Label(row_frame, text=f"{label}:", bg='#3a3a3a', fg='lightgray', 
+                    font=('Arial', 9)).pack(side=tk.LEFT)
+            
+            self.ai_position_stats_labels[key] = tk.Label(row_frame, text="0", 
                                                         bg='#3a3a3a', fg='#00ff88', 
                                                         font=('Arial', 9, 'bold'))
-            self.ai_position_stats_labels[key].grid(row=i, column=1, sticky='e', padx=5, pady=2)
+            self.ai_position_stats_labels[key].pack(side=tk.RIGHT)
         
         # Weight Configuration
         weights_frame = tk.Frame(section_frame, bg='#3a3a3a')
@@ -589,13 +592,16 @@ class TradingGUI:
         ]
         
         for i, (label, key) in enumerate(entry_stats_fields):
-            tk.Label(stats_frame, text=f"{label}:", bg='#3a3a3a', fg='lightgray', 
-                    font=('Arial', 9)).grid(row=i, column=0, sticky='w', padx=5, pady=2)
+            row_frame = tk.Frame(stats_frame, bg='#3a3a3a')
+            row_frame.pack(fill=tk.X, pady=2)
             
-            self.ai_entry_stats_labels[key] = tk.Label(stats_frame, text="0", 
+            tk.Label(row_frame, text=f"{label}:", bg='#3a3a3a', fg='lightgray', 
+                    font=('Arial', 9)).pack(side=tk.LEFT)
+            
+            self.ai_entry_stats_labels[key] = tk.Label(row_frame, text="0", 
                                                      bg='#3a3a3a', fg='#00ff88', 
                                                      font=('Arial', 9, 'bold'))
-            self.ai_entry_stats_labels[key].grid(row=i, column=1, sticky='e', padx=5, pady=2)
+            self.ai_entry_stats_labels[key].pack(side=tk.RIGHT)
         
         # Weight Configuration
         weights_frame = tk.Frame(section_frame, bg='#3a3a3a')
@@ -641,13 +647,16 @@ class TradingGUI:
         ]
         
         for i, (label, key) in enumerate(learning_stats_fields):
-            tk.Label(stats_frame, text=f"{label}:", bg='#3a3a3a', fg='lightgray', 
-                    font=('Arial', 9)).grid(row=i, column=0, sticky='w', padx=5, pady=2)
+            row_frame = tk.Frame(stats_frame, bg='#3a3a3a')
+            row_frame.pack(fill=tk.X, pady=2)
             
-            self.ai_learning_stats_labels[key] = tk.Label(stats_frame, text="0", 
+            tk.Label(row_frame, text=f"{label}:", bg='#3a3a3a', fg='lightgray', 
+                    font=('Arial', 9)).pack(side=tk.LEFT)
+            
+            self.ai_learning_stats_labels[key] = tk.Label(row_frame, text="0", 
                                                         bg='#3a3a3a', fg='#00ff88', 
                                                         font=('Arial', 9, 'bold'))
-            self.ai_learning_stats_labels[key].grid(row=i, column=1, sticky='e', padx=5, pady=2)
+            self.ai_learning_stats_labels[key].pack(side=tk.RIGHT)
     
     def create_ai_decision_engine_section(self, parent):
         """🧠 สร้างส่วน AI Decision Engine"""
@@ -668,13 +677,16 @@ class TradingGUI:
         ]
         
         for i, (label, key) in enumerate(decision_stats_fields):
-            tk.Label(stats_frame, text=f"{label}:", bg='#3a3a3a', fg='lightgray', 
-                    font=('Arial', 9)).grid(row=i, column=0, sticky='w', padx=5, pady=2)
+            row_frame = tk.Frame(stats_frame, bg='#3a3a3a')
+            row_frame.pack(fill=tk.X, pady=2)
             
-            self.ai_decision_stats_labels[key] = tk.Label(stats_frame, text="0", 
+            tk.Label(row_frame, text=f"{label}:", bg='#3a3a3a', fg='lightgray', 
+                    font=('Arial', 9)).pack(side=tk.LEFT)
+            
+            self.ai_decision_stats_labels[key] = tk.Label(row_frame, text="0", 
                                                         bg='#3a3a3a', fg='#00ff88', 
                                                         font=('Arial', 9, 'bold'))
-            self.ai_decision_stats_labels[key].grid(row=i, column=1, sticky='e', padx=5, pady=2)
+            self.ai_decision_stats_labels[key].pack(side=tk.RIGHT)
     
     def create_ai_controls_section(self, parent):
         """🧠 สร้างส่วน AI Controls"""
