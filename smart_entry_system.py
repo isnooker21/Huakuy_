@@ -21,7 +21,7 @@ class SmartEntrySystem:
         # Dynamic Calculation Parameters
         self.profit_target_pips = 50  # เป้าหมายกำไร 50 pips ต่อ lot
         self.loss_threshold_pips = 50  # เกณฑ์ขาดทุน 50 pips ต่อ lot
-        self.recovery_zone_strength = 80  # Zone strength สำหรับ Recovery
+        self.recovery_zone_strength = 30  # Zone strength สำหรับ Recovery (ลดจาก 80 เพื่อหาโอกาสได้มากขึ้น)
         self.min_zone_strength = 5  # Zone strength ขั้นต่ำสำหรับเข้าไม้ (ลดจาก 10)
         
         # Risk Management (Dynamic)
@@ -344,8 +344,8 @@ class SmartEntrySystem:
                         
                         if strong_supports:
                             # หา Support ที่เหมาะสม (ต่ำกว่าไม้ BUY)
-                            suitable_supports = [zone for zone in strong_supports if zone['price'] < pos_price - 20]
-                            logger.info(f"🔍 Recovery for BUY: Found {len(suitable_supports)} suitable supports (price < {pos_price - 20:.2f})")
+                            suitable_supports = [zone for zone in strong_supports if zone['price'] < pos_price - 5]  # ลดจาก 20 เป็น 5 pips
+                            logger.info(f"🔍 Recovery for BUY: Found {len(suitable_supports)} suitable supports (price < {pos_price - 5:.2f})")
                             
                             if suitable_supports:
                                 best_support = max(suitable_supports, key=lambda x: x['strength'])
@@ -373,8 +373,8 @@ class SmartEntrySystem:
                         
                         if strong_resistances:
                             # หา Resistance ที่เหมาะสม (สูงกว่าไม้ SELL)
-                            suitable_resistances = [zone for zone in strong_resistances if zone['price'] > pos_price + 20]
-                            logger.info(f"🔍 Recovery for SELL: Found {len(suitable_resistances)} suitable resistances (price > {pos_price + 20:.2f})")
+                            suitable_resistances = [zone for zone in strong_resistances if zone['price'] > pos_price + 5]  # ลดจาก 20 เป็น 5 pips
+                            logger.info(f"🔍 Recovery for SELL: Found {len(suitable_resistances)} suitable resistances (price > {pos_price + 5:.2f})")
                             
                             if suitable_resistances:
                                 best_resistance = max(suitable_resistances, key=lambda x: x['strength'])

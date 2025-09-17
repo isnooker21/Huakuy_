@@ -373,7 +373,7 @@ class HedgePairingCloser:
         logger.info("🚀 Hedge Pairing Closer initialized")
     
     def intelligent_closing_strategy(self, positions: List[Any]) -> ClosingDecision:
-        """🧠 กลยุทธ์ปิดไม้ที่ฉลาด - ปิดไม้ที่ต้องการความช่วยเหลือก่อน"""
+        """🧠 กลยุทธ์ปิดไม้ที่ฉลาด - ปิดไม้ไกลจากราคาปัจจุบันก่อนเสมอ"""
         try:
             if not self.position_tracking_enabled or not positions:
                 return ClosingDecision(
@@ -415,7 +415,13 @@ class HedgePairingCloser:
             logger.info(f"   Urgent Positions: {len(urgent_positions)}")
             logger.info(f"   Help Needed Positions: {len(help_needed_positions)}")
             
-            # 1. ปิดไม้ที่ต้องการ Recovery ก่อน (RECOVERY_NEEDED)
+            # 🎯 1. ปิดไม้ไกลจากราคาปัจจุบันก่อนเสมอ (PRIORITY #1)
+            furthest_positions = self._find_furthest_positions(positions)
+            if furthest_positions:
+                logger.info(f"🎯 PRIORITY: ปิดไม้ไกลจากราคาปัจจุบันก่อน - {len(furthest_positions)} ตัว")
+                return self._close_furthest_positions(furthest_positions, all_statuses)
+            
+            # 2. ปิดไม้ที่ต้องการ Recovery ก่อน (RECOVERY_NEEDED)
             if urgent_positions:
                 # ตรวจสอบว่ามีไม้ติดลบหรือไม่
                 total_urgent_profit = sum(pos.profit for pos in urgent_positions)
@@ -425,7 +431,7 @@ class HedgePairingCloser:
                 else:
                     return self._close_recovery_needed_positions(urgent_positions, all_statuses)
             
-            # 2. หาไม้ที่สามารถปิดคู่กันได้ (HEDGE) - ลดเกณฑ์การจับคู่
+            # 3. หาไม้ที่สามารถปิดคู่กันได้ (HEDGE) - ลดเกณฑ์การจับคู่
             hedge_candidates = [s for s in all_statuses if s.recommended_action == "HEDGE_CANDIDATE"]
             if hedge_candidates:
                 # ตรวจสอบว่ามีไม้ติดลบหรือไม่
@@ -444,7 +450,7 @@ class HedgePairingCloser:
                 else:
                     logger.info(f"🚫 HEDGE PAIRING: ไม่สามารถจับคู่ไม้ติดลบได้")
             
-            # 3. ปิดไม้ที่ต้องการความช่วยเหลือ (HELP_NEEDED)
+            # 4. ปิดไม้ที่ต้องการความช่วยเหลือ (HELP_NEEDED)
             if help_needed_positions:
                 # ตรวจสอบว่ามีไม้ติดลบหรือไม่
                 total_help_profit = sum(pos.profit for pos in help_needed_positions)
@@ -454,7 +460,7 @@ class HedgePairingCloser:
                 else:
                     return self._close_help_needed_positions(help_needed_positions, all_statuses)
             
-            # 4. ปิดไม้ที่ขาดทุนน้อยที่สุดก่อน (เฉพาะเมื่อไม่ติดลบ)
+            # 5. ปิดไม้ที่ขาดทุนน้อยที่สุดก่อน (เฉพาะเมื่อไม่ติดลบ)
             losers = [s for s in all_statuses if s.status == "LOSER"]
             if losers:
                 # ตรวจสอบว่ามีไม้ติดลบหรือไม่
@@ -465,7 +471,7 @@ class HedgePairingCloser:
                 else:
                     return self._close_smallest_losers(losers)
             
-            # 5. ปิดไม้กำไรเมื่อจำเป็น (เฉพาะเมื่อพอร์ตแย่ และไม่มีไม้ติดลบให้จับคู่)
+            # 6. ปิดไม้กำไรเมื่อจำเป็น (เฉพาะเมื่อพอร์ตแย่ และไม่มีไม้ติดลบให้จับคู่)
             if portfolio_health in ["แย่", "แย่มาก"]:
                 # ตรวจสอบว่ามีไม้ติดลบให้จับคู่หรือไม่
                 losers = [s for s in all_statuses if s.status == "LOSER"]
@@ -520,6 +526,237 @@ class HedgePairingCloser:
                 reason=f"เกิดข้อผิดพลาด: {e}"
             )
     
+    def _find_furthest_positions(self, positions: List[Any]) -> List[Any]:
+        """🎯 หาไม้ที่ไกลจากราคาปัจจุบันมากที่สุด"""
+        try:
+            if not positions:
+                return []
+            
+            # หาราคาปัจจุบัน
+            import MetaTrader5 as mt5
+            tick = mt5.symbol_info_tick(self.symbol)
+            if not tick:
+                logger.warning("⚠️ Cannot get current price for furthest position analysis")
+                return []
+            
+            current_price = tick.bid
+            logger.info(f"🎯 Current Price: {current_price:.5f}")
+            
+            # คำนวณระยะห่างจากราคาปัจจุบัน
+            position_distances = []
+            for pos in positions:
+                try:
+                    entry_price = getattr(pos, 'price_open', 0)
+                    if entry_price > 0:
+                        distance = abs(entry_price - current_price)
+                        position_distances.append({
+                            'position': pos,
+                            'distance': distance,
+                            'entry_price': entry_price,
+                            'profit': getattr(pos, 'profit', 0),
+                            'ticket': getattr(pos, 'ticket', 0)
+                        })
+                except Exception as e:
+                    logger.warning(f"⚠️ Error calculating distance for position: {e}")
+                    continue
+            
+            if not position_distances:
+                return []
+            
+            # เรียงตามระยะห่าง (ไกลที่สุดก่อน)
+            position_distances.sort(key=lambda x: x['distance'], reverse=True)
+            
+            # หาไม้ที่ไกลที่สุด (มากกว่า 5 points จากราคาปัจจุบัน)
+            furthest_positions = []
+            max_distance = position_distances[0]['distance']
+            
+            logger.info(f"🎯 Furthest Position Analysis:")
+            logger.info(f"   Max Distance: {max_distance:.5f} points")
+            
+            for i, pos_data in enumerate(position_distances[:5]):  # แสดง 5 ตัวแรก
+                logger.info(f"   {i+1}. Ticket {pos_data['ticket']}: Entry {pos_data['entry_price']:.5f}, Distance {pos_data['distance']:.5f}, Profit ${pos_data['profit']:.2f}")
+            
+            # เลือกไม้ที่ไกลที่สุด (มากกว่า 3 points) หรือไม้ที่ไกลที่สุด 2 ตัว
+            for pos_data in position_distances:
+                if pos_data['distance'] >= 3.0 or len(furthest_positions) < 2:
+                    furthest_positions.append(pos_data['position'])
+                    if len(furthest_positions) >= 3:  # สูงสุด 3 ตัว
+                        break
+            
+            if furthest_positions:
+                logger.info(f"🎯 Selected {len(furthest_positions)} furthest positions for closing priority")
+                for i, pos in enumerate(furthest_positions):
+                    entry_price = getattr(pos, 'price_open', 0)
+                    distance = abs(entry_price - current_price)
+                    profit = getattr(pos, 'profit', 0)
+                    ticket = getattr(pos, 'ticket', 0)
+                    logger.info(f"   {i+1}. Ticket {ticket}: Entry {entry_price:.5f}, Distance {distance:.5f}, Profit ${profit:.2f}")
+            
+            return furthest_positions
+            
+        except Exception as e:
+            logger.error(f"❌ Error finding furthest positions: {e}")
+            return []
+    
+    def _close_furthest_positions(self, furthest_positions: List[Any], all_statuses: List[PositionStatus]) -> ClosingDecision:
+        """🎯 ปิดไม้ที่ไกลจากราคาปัจจุบันมากที่สุด"""
+        try:
+            if not furthest_positions:
+                return ClosingDecision(
+                    should_close=False,
+                    positions_to_close=[],
+                    method="NO_FURTHEST_POSITIONS",
+                    net_pnl=0.0,
+                    expected_pnl=0.0,
+                    position_count=0,
+                    buy_count=0,
+                    sell_count=0,
+                    confidence_score=0.0,
+                    reason="ไม่มีไม้ไกลจากราคาปัจจุบัน"
+                )
+            
+            # คำนวณกำไรรวมของไม้ไกล
+            total_profit = sum(getattr(pos, 'profit', 0) for pos in furthest_positions)
+            total_volume = sum(getattr(pos, 'volume', 0) for pos in furthest_positions)
+            
+            buy_count = len([pos for pos in furthest_positions if getattr(pos, 'type', 0) == 0])
+            sell_count = len([pos for pos in furthest_positions if getattr(pos, 'type', 0) == 1])
+            
+            logger.info(f"🎯 CLOSING FURTHEST POSITIONS:")
+            logger.info(f"   Positions: {len(furthest_positions)} (BUY: {buy_count}, SELL: {sell_count})")
+            logger.info(f"   Total Profit: ${total_profit:.2f}")
+            logger.info(f"   Total Volume: {total_volume:.2f}")
+            
+            # ตรวจสอบ ZERO LOSS POLICY
+            if total_profit < 0:
+                logger.warning(f"🚫 ZERO LOSS POLICY: Furthest positions are losing (${total_profit:.2f})")
+                
+                # ลองหาไม้ช่วยจากไม้ที่เหลือ
+                available_helpers = self._find_available_helpers(furthest_positions, all_statuses)
+                if available_helpers:
+                    logger.info(f"🔍 Found {len(available_helpers)} available helpers for furthest positions")
+                    
+                    # ลองใช้ไม้ช่วย 1-5 ตัว
+                    for num_helpers in range(1, min(6, len(available_helpers) + 1)):
+                        for helpers in itertools.combinations(available_helpers, num_helpers):
+                            helpers_profit = sum(getattr(helper, 'profit', 0) for helper in helpers)
+                            combined_profit = total_profit + helpers_profit
+                            
+                            if combined_profit > 0:
+                                all_positions_to_close = furthest_positions + list(helpers)
+                                logger.info(f"✅ MULTI-HELPER SUCCESS: Furthest positions + {num_helpers} helpers = ${combined_profit:.2f}")
+                                
+                                return ClosingDecision(
+                                    should_close=True,
+                                    positions_to_close=all_positions_to_close,
+                                    method="FURTHEST_POSITIONS_WITH_HELPERS",
+                                    net_pnl=combined_profit,
+                                    expected_pnl=combined_profit,
+                                    position_count=len(all_positions_to_close),
+                                    buy_count=len([p for p in all_positions_to_close if getattr(p, 'type', 0) == 0]),
+                                    sell_count=len([p for p in all_positions_to_close if getattr(p, 'type', 0) == 1]),
+                                    confidence_score=95.0,
+                                    reason=f"ปิดไม้ไกล + {num_helpers} helpers = ${combined_profit:.2f}"
+                                )
+                    
+                    logger.warning(f"🚫 No suitable helpers found for furthest positions")
+                    return ClosingDecision(
+                        should_close=False,
+                        positions_to_close=[],
+                        method="NO_SUITABLE_HELPERS",
+                        net_pnl=total_profit,
+                        expected_pnl=total_profit,
+                        position_count=len(furthest_positions),
+                        buy_count=buy_count,
+                        sell_count=sell_count,
+                        confidence_score=0.0,
+                        reason="ไม้ไกลติดลบและไม่มีไม้ช่วยที่เหมาะสม"
+                    )
+                else:
+                    logger.warning(f"🚫 No available helpers found")
+                    return ClosingDecision(
+                        should_close=False,
+                        positions_to_close=[],
+                        method="NO_AVAILABLE_HELPERS",
+                        net_pnl=total_profit,
+                        expected_pnl=total_profit,
+                        position_count=len(furthest_positions),
+                        buy_count=buy_count,
+                        sell_count=sell_count,
+                        confidence_score=0.0,
+                        reason="ไม้ไกลติดลบและไม่มีไม้ช่วย"
+                    )
+            
+            # ไม้ไกลมีกำไร - ปิดได้เลย
+            logger.info(f"✅ Furthest positions are profitable (${total_profit:.2f}) - Closing immediately")
+            
+            return ClosingDecision(
+                should_close=True,
+                positions_to_close=furthest_positions,
+                method="FURTHEST_POSITIONS_PROFITABLE",
+                net_pnl=total_profit,
+                expected_pnl=total_profit,
+                position_count=len(furthest_positions),
+                buy_count=buy_count,
+                sell_count=sell_count,
+                confidence_score=98.0,
+                reason=f"ปิดไม้ไกลจากราคาปัจจุบัน - กำไร ${total_profit:.2f}"
+            )
+            
+        except Exception as e:
+            logger.error(f"❌ Error closing furthest positions: {e}")
+            return ClosingDecision(
+                should_close=False,
+                positions_to_close=[],
+                method="ERROR",
+                net_pnl=0.0,
+                expected_pnl=0.0,
+                position_count=len(furthest_positions) if furthest_positions else 0,
+                buy_count=0,
+                sell_count=0,
+                confidence_score=0.0,
+                reason=f"เกิดข้อผิดพลาด: {e}"
+            )
+    
+    def _find_available_helpers(self, target_positions: List[Any], all_statuses: List[PositionStatus]) -> List[Any]:
+        """🔍 หาไม้ช่วยที่ไม่ได้อยู่ในกลุ่มเป้าหมาย"""
+        try:
+            # หา tickets ของไม้เป้าหมาย
+            target_tickets = set()
+            for pos in target_positions:
+                ticket = getattr(pos, 'ticket', 0)
+                if ticket:
+                    target_tickets.add(ticket)
+            
+            # หาไม้ช่วยจากสถานะทั้งหมด
+            available_helpers = []
+            for status in all_statuses:
+                try:
+                    pos = status.position
+                    ticket = getattr(pos, 'ticket', 0)
+                    
+                    # ไม้ช่วยต้องไม่ใช่ไม้เป้าหมาย และต้องกำไร
+                    if ticket not in target_tickets and status.profit > 0:
+                        available_helpers.append(pos)
+                except Exception as e:
+                    logger.warning(f"⚠️ Error processing helper position: {e}")
+                    continue
+            
+            # เรียงตามกำไร (มากก่อน)
+            available_helpers.sort(key=lambda x: getattr(x, 'profit', 0), reverse=True)
+            
+            logger.info(f"🔍 Available Helpers: {len(available_helpers)} positions")
+            for i, helper in enumerate(available_helpers[:5]):  # แสดง 5 ตัวแรก
+                profit = getattr(helper, 'profit', 0)
+                ticket = getattr(helper, 'ticket', 0)
+                logger.info(f"   {i+1}. Ticket {ticket}: Profit ${profit:.2f}")
+            
+            return available_helpers
+            
+        except Exception as e:
+            logger.error(f"❌ Error finding available helpers: {e}")
+            return []
+
     def _close_recovery_needed_positions(self, urgent_positions: List[PositionStatus], all_statuses: List[PositionStatus]) -> ClosingDecision:
         """🚨 ปิดไม้ที่ต้องการ Recovery"""
         try:
@@ -2535,8 +2772,8 @@ class HedgePairingCloser:
                     best_combination = None
                     best_profit = hedge_profit
                     
-                    # เพิ่มจำนวนการทดสอบ - ใช้ไม้ช่วยได้หลายตัว
-                    max_attempts = min(len(additional_positions), 5)  # เพิ่มจาก 2 เป็น 5
+                    # เพิ่มจำนวนการทดสอบ - ใช้ไม้ช่วยได้หลายตัว (ไม่จำกัดจำนวน)
+                    max_attempts = min(len(additional_positions), 10)  # เพิ่มจาก 5 เป็น 10 (ไม่จำกัดจำนวน)
                     
                     for i in range(1, min(len(additional_positions) + 1, max_attempts + 1)):
                         for combo in itertools.combinations(additional_positions, i):
@@ -2549,13 +2786,14 @@ class HedgePairingCloser:
                                 best_profit = test_profit
                                 
                                 logger.info(f"   💡 Found helping combination: {len(combo)} helpers, total profit: ${test_profit:.2f}")
+                                logger.info(f"   🎯 Multi-Helper Success: Hedge pair + {len(combo)} helpers = ${test_profit:.2f}")
                                 
                                 # Early break - หยุดเมื่อพบ combination ที่ดีพอ
-                                if test_profit >= effective_min_profit * 1.5:  # กำไรมากกว่า 1.5 เท่าของ threshold
+                                if test_profit >= effective_min_profit * 1.2:  # ลดจาก 1.5 เป็น 1.2 เพื่อให้หาผลลัพธ์ได้ง่ายขึ้น
                                     break
                         
                         # Early break - หยุดเมื่อพบ combination ที่ดีพอ
-                        if best_combination and best_profit >= effective_min_profit * 1.5:
+                        if best_combination and best_profit >= effective_min_profit * 1.2:  # ลดจาก 1.5 เป็น 1.2
                             break
                     
                     if best_combination:
