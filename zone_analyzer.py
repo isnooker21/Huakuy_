@@ -12,7 +12,7 @@ class ZoneAnalyzer:
     def __init__(self, mt5_connection):
         self.mt5_connection = mt5_connection
         self.symbol = None  # จะถูกตั้งค่าใน analyze_zones
-        self.timeframes = [mt5.TIMEFRAME_M5]  # ใช้แค่ M5 เท่านั้น
+        self.timeframes = [mt5.TIMEFRAME_M1, mt5.TIMEFRAME_M5, mt5.TIMEFRAME_M15, mt5.TIMEFRAME_H1]  # ใช้หลาย timeframe
         # ไม่ใช้ Daily timeframe เพราะมีปัญหา array comparison
         
         # Multi-Algorithm Zone Detection Parameters - ปรับให้หา zones ได้มากขึ้น
@@ -21,9 +21,12 @@ class ZoneAnalyzer:
         self.min_zone_strength = 2  # ความแข็งแรงขั้นต่ำของ zone
         self.max_zones_per_type = 15  # จำนวน zone สูงสุดต่อประเภท
         
-        # Multi-TF Analysis (ใช้แค่ M5)
+        # Multi-TF Analysis (ใช้หลาย timeframe)
         self.tf_weights = {
-            mt5.TIMEFRAME_M5: 1.0  # ใช้แค่ M5 เท่านั้น
+            mt5.TIMEFRAME_M1: 0.8,   # M1 - ละเอียดมาก (short-term)
+            mt5.TIMEFRAME_M5: 1.0,   # M5 - หลัก (current)
+            mt5.TIMEFRAME_M15: 0.9,  # M15 - ระยะกลาง (medium-term)
+            mt5.TIMEFRAME_H1: 0.7    # H1 - ระยะยาว (long-term)
         }
         
         # Zone Strength Calculation
@@ -729,6 +732,136 @@ class ZoneAnalyzer:
         except Exception as e:
             logger.error(f"❌ Error getting rates: {e}")
             return None
+
+    def _create_trade_comment(self, zone, entry_type, timeframe_name) -> str:
+        """📝 สร้าง comment ที่แสดงเงื่อนไขการออกไม้และ zone ที่ใช้"""
+        try:
+            algorithm = zone.get('algorithm', 'unknown')
+            strength = zone.get('strength', 0)
+            price = zone.get('price', 0)
+            
+            # กำหนดชื่อ algorithm
+            algorithm_names = {
+                'pivot_points': 'PIVOT',
+                'moving_averages': 'MA',
+                'fibonacci': 'FIB',
+                'volume_profile': 'VOL',
+                'consolidated': 'MULTI'
+            }
+            
+            algo_name = algorithm_names.get(algorithm, algorithm.upper())
+            
+            # กำหนด entry condition
+            if entry_type == 'BUY':
+                condition = f"BUY at Support {price:.2f}"
+            else:
+                condition = f"SELL at Resistance {price:.2f}"
+            
+            # สร้าง comment
+            comment = f"{condition} | {algo_name} | {timeframe_name} | Strength:{strength:.1f}"
+            
+            # เพิ่มข้อมูลเพิ่มเติมถ้ามี
+            if 'ma_period' in zone:
+                comment += f" | MA{zone['ma_period']}"
+            elif 'fib_level' in zone:
+                comment += f" | Fib{zone['fib_level']:.3f}"
+            elif 'zone_count' in zone and zone['zone_count'] > 1:
+                comment += f" | {zone['zone_count']}zones"
+            
+            return comment
+            
+        except Exception as e:
+            logger.error(f"❌ Error creating trade comment: {e}")
+            return f"{entry_type} | {zone.get('price', 0):.2f} | {algorithm}"
+
+    def find_entry_opportunities(self, symbol: str, current_price: float, zones: Dict[str, List[Dict]]) -> List[Dict]:
+        """🎯 หาโอกาสการออกไม้พร้อม comment ที่แสดงเงื่อนไข"""
+        try:
+            opportunities = []
+            
+            # หา Support zones สำหรับ BUY
+            support_zones = zones.get('support', [])
+            for zone in support_zones[:5]:  # เอา 5 zones ที่แข็งแกร่งที่สุด
+                zone_price = zone['price']
+                distance = abs(current_price - zone_price)
+                
+                # ตรวจสอบว่าใกล้พอสำหรับ entry
+                if distance <= 20.0:  # ภายใน 20 points
+                    timeframe_name = self._get_timeframe_name(zone)
+                    comment = self._create_trade_comment(zone, 'BUY', timeframe_name)
+                    
+                    opportunities.append({
+                        'type': 'BUY',
+                        'price': zone_price,
+                        'strength': zone['strength'],
+                        'distance': distance,
+                        'comment': comment,
+                        'zone': zone
+                    })
+            
+            # หา Resistance zones สำหรับ SELL
+            resistance_zones = zones.get('resistance', [])
+            for zone in resistance_zones[:5]:  # เอา 5 zones ที่แข็งแกร่งที่สุด
+                zone_price = zone['price']
+                distance = abs(current_price - zone_price)
+                
+                # ตรวจสอบว่าใกล้พอสำหรับ entry
+                if distance <= 20.0:  # ภายใน 20 points
+                    timeframe_name = self._get_timeframe_name(zone)
+                    comment = self._create_trade_comment(zone, 'SELL', timeframe_name)
+                    
+                    opportunities.append({
+                        'type': 'SELL',
+                        'price': zone_price,
+                        'strength': zone['strength'],
+                        'distance': distance,
+                        'comment': comment,
+                        'zone': zone
+                    })
+            
+            # จัดเรียงตาม strength
+            opportunities.sort(key=lambda x: x['strength'], reverse=True)
+            
+            logger.info(f"🎯 [ENTRY OPPORTUNITIES] Found {len(opportunities)} opportunities")
+            for i, opp in enumerate(opportunities[:3], 1):
+                logger.info(f"   {i}. {opp['comment']}")
+            
+            return opportunities[:10]  # ส่งคืน 10 opportunities ที่ดีที่สุด
+            
+        except Exception as e:
+            logger.error(f"❌ Error finding entry opportunities: {e}")
+            return []
+
+    def _get_timeframe_name(self, zone) -> str:
+        """⏰ กำหนดชื่อ timeframe"""
+        try:
+            timeframes = zone.get('timeframes', [])
+            if not timeframes:
+                return 'M5'
+            
+            # หา timeframe ที่มี weight สูงสุด
+            best_tf = None
+            best_weight = 0
+            
+            for tf in timeframes:
+                weight = self.tf_weights.get(tf, 0)
+                if weight > best_weight:
+                    best_weight = weight
+                    best_tf = tf
+            
+            # แปลง timeframe เป็นชื่อ
+            tf_names = {
+                mt5.TIMEFRAME_M1: 'M1',
+                mt5.TIMEFRAME_M5: 'M5',
+                mt5.TIMEFRAME_M15: 'M15',
+                mt5.TIMEFRAME_H1: 'H1'
+            }
+            
+            return tf_names.get(best_tf, 'M5')
+            
+        except Exception as e:
+            logger.error(f"❌ Error getting timeframe name: {e}")
+            return 'M5'
 
     def _consolidate_zones(self, zones, zone_type) -> List[Dict]:
         """🔄 รวม zones ที่ใกล้เคียงกันและจัดเรียงตาม strength"""
