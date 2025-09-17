@@ -21,8 +21,8 @@ class SmartEntrySystem:
         # Dynamic Calculation Parameters
         self.profit_target_pips = 50  # เป้าหมายกำไร 50 pips ต่อ lot
         self.loss_threshold_pips = 50  # เกณฑ์ขาดทุน 50 pips ต่อ lot
-        self.recovery_zone_strength = 30  # Zone strength สำหรับ Recovery (ลดจาก 80 เพื่อหาโอกาสได้มากขึ้น)
-        self.min_zone_strength = 5  # Zone strength ขั้นต่ำสำหรับเข้าไม้ (ลดจาก 10)
+        self.recovery_zone_strength = 20  # Zone strength สำหรับ Recovery (ลดจาก 30 เพื่อหาโอกาสได้มากขึ้น)
+        self.min_zone_strength = 3  # Zone strength ขั้นต่ำสำหรับเข้าไม้ (ลดจาก 5 เพื่อหาโอกาสได้มากขึ้น)
         
         # Risk Management (Dynamic)
         self.risk_percent_per_trade = 0.01  # 1% ของ balance ต่อ trade
@@ -462,6 +462,8 @@ class SmartEntrySystem:
         except Exception as e:
             logger.error(f"❌ Error getting entry statistics: {e}")
             return {}
+    def execute_entry(self, entry_plan: Dict) -> Optional[int]:
+        """📈 ทำงานเข้าไม้ (ใช้ OrderManager แทน mt5.order_send)"""
     def execute_entry(self, entry_plan: Dict) -> Optional[int]:
         """📈 ทำงานเข้าไม้ (ใช้ OrderManager แทน mt5.order_send)"""
         try:

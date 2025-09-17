@@ -15,10 +15,11 @@ class ZoneAnalyzer:
         self.timeframes = [mt5.TIMEFRAME_M5]  # ใช้แค่ M5 เท่านั้น
         # ไม่ใช้ Daily timeframe เพราะมีปัญหา array comparison
         
-        # Zone Detection Parameters (ปรับให้หา Support/Resistance ได้สมดุล)
+        # Zone Detection Parameters (ปรับให้หา Support/Resistance ได้ละเอียดมากขึ้น)
         self.min_touches = 1  # ลดเกณฑ์ให้หา Zone ได้มากขึ้น (จาก 2)
-        self.zone_tolerance = 50.0  # เพิ่มความยืดหยุ่น สำหรับ XAUUSD (จาก 30.0)
-        self.min_zone_strength = 5  # ลดเกณฑ์ความแข็งแรง (จาก 10) เพื่อหา Support มากขึ้น
+        self.zone_tolerance = 30.0  # ลดจาก 50.0 เป็น 30.0 เพื่อหา zone ที่ละเอียดกว่า
+        self.min_zone_strength = 3  # ลดจาก 5 เป็น 3 เพื่อหา zone ที่อ่อนแอกว่าได้
+        self.max_zones_per_type = 10  # เพิ่มจำนวน zone สูงสุดต่อประเภท
         
         # Multi-TF Analysis (ใช้แค่ M5)
         self.tf_weights = {
@@ -63,25 +64,31 @@ class ZoneAnalyzer:
             merged_support.sort(key=lambda x: x['strength'], reverse=True)
             merged_resistance.sort(key=lambda x: x['strength'], reverse=True)
             
+            # จำกัดจำนวน zones ตาม max_zones_per_type
+            if len(merged_support) > self.max_zones_per_type:
+                merged_support = merged_support[:self.max_zones_per_type]
+            if len(merged_resistance) > self.max_zones_per_type:
+                merged_resistance = merged_resistance[:self.max_zones_per_type]
+            
             logger.info(f"🔍 ZONE ANALYSIS COMPLETE: {len(merged_support)} support zones, {len(merged_resistance)} resistance zones")
             
             # Log all Support zones with prices
             if merged_support:
                 logger.info("📈 SUPPORT ZONES FOUND:")
-                for i, zone in enumerate(merged_support[:5], 1):  # แสดง 5 zones ที่แข็งแกร่งที่สุด
+                for i, zone in enumerate(merged_support[:10], 1):  # แสดง 10 zones ที่แข็งแกร่งที่สุด
                     logger.info(f"   {i}. Support: {zone['price']:.2f} (Strength: {zone['strength']:.1f})")
-                if len(merged_support) > 5:
-                    logger.info(f"   ... และอีก {len(merged_support) - 5} zones")
+                if len(merged_support) > 10:
+                    logger.info(f"   ... และอีก {len(merged_support) - 10} zones")
             else:
                 logger.warning("🚫 NO SUPPORT ZONES FOUND - อาจเป็นเพราะตลาดไม่มี Support ที่แข็งแกร่งเพียงพอ")
             
             # Log all Resistance zones with prices
             if merged_resistance:
                 logger.info("📉 RESISTANCE ZONES FOUND:")
-                for i, zone in enumerate(merged_resistance[:5], 1):  # แสดง 5 zones ที่แข็งแกร่งที่สุด
+                for i, zone in enumerate(merged_resistance[:10], 1):  # แสดง 10 zones ที่แข็งแกร่งที่สุด
                     logger.info(f"   {i}. Resistance: {zone['price']:.2f} (Strength: {zone['strength']:.1f})")
-                if len(merged_resistance) > 5:
-                    logger.info(f"   ... และอีก {len(merged_resistance) - 5} zones")
+                if len(merged_resistance) > 10:
+                    logger.info(f"   ... และอีก {len(merged_resistance) - 10} zones")
             else:
                 logger.warning("🚫 NO RESISTANCE ZONES FOUND - อาจเป็นเพราะตลาดไม่มี Resistance ที่แข็งแกร่งเพียงพอ")
             
@@ -174,7 +181,7 @@ class ZoneAnalyzer:
         """🔍 หา Pivot Points จากข้อมูลราคา"""
         try:
             pivots = []
-            window = 5  # เพิ่ม window เป็น 5 bars ให้แม่นยำกว่า
+            window = 3  # ลด window เป็น 3 bars เพื่อหา pivot มากขึ้น
             logger.info(f"🔍 Finding pivot points from {len(rates)} bars with window={window}")
             
             for i in range(window, len(rates) - window):
@@ -184,7 +191,7 @@ class ZoneAnalyzer:
                 # ตรวจสอบ Support Pivot (Low) - ปรับให้หา Support ได้มากขึ้น
                 is_support_pivot = True
                 for j in range(i - window, i + window + 1):
-                    if j != i and j < len(rates) and float(rates[j]['low']) < float(current_low) - 2.0:  # เพิ่ม tolerance
+                    if j != i and j < len(rates) and float(rates[j]['low']) < float(current_low) - 1.0:  # ลด tolerance จาก 2.0 เป็น 1.0
                         is_support_pivot = False
                         break
                 
@@ -209,10 +216,10 @@ class ZoneAnalyzer:
                             'support_score': support_score
                         })
                 
-                # ตรวจสอบ Resistance Pivot (High)
+                # ตรวจสอบ Resistance Pivot (High) - ปรับให้หา Resistance ได้มากขึ้น
                 is_resistance_pivot = True
                 for j in range(i - window, i + window + 1):
-                    if j != i and j < len(rates) and float(rates[j]['high']) >= float(current_high):
+                    if j != i and j < len(rates) and float(rates[j]['high']) > float(current_high) + 1.0:  # เพิ่ม tolerance 1.0
                         is_resistance_pivot = False
                         break
                 
