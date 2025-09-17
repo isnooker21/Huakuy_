@@ -298,16 +298,18 @@ class SmartEntrySystem:
             
             # ตรวจสอบระยะห่างจากคำสั่งที่เปิดอยู่แล้ว (ป้องกันการเปิดคำสั่งใกล้กันเกินไป)
             min_distance_from_existing = 20.0  # ระยะห่างขั้นต่ำ 20 pips จากคำสั่งที่มีอยู่
-            if hasattr(self, 'order_manager') and self.order_manager:
-                existing_positions = self.order_manager.get_positions()
-                for position in existing_positions:
-                    if position.get('symbol') == self.symbol:
-                        existing_price = position.get('price', 0)
-                        if existing_price > 0:
-                            distance_from_existing = abs(zone['price'] - existing_price) * 10000  # แปลงเป็น pips
+            if hasattr(self, 'order_manager') and self.order_manager and self.symbol:
+                try:
+                    existing_positions = self.order_manager.get_positions_by_symbol(self.symbol)
+                    for position in existing_positions:
+                        if hasattr(position, 'price') and position.price > 0:
+                            distance_from_existing = abs(zone['price'] - position.price) * 10000  # แปลงเป็น pips
                             if distance_from_existing < min_distance_from_existing:
-                                logger.warning(f"🚫 Zone {zone['price']} too close to existing position at {existing_price}: {distance_from_existing:.1f} pips < {min_distance_from_existing} pips")
+                                logger.warning(f"🚫 Zone {zone['price']} too close to existing position at {position.price}: {distance_from_existing:.1f} pips < {min_distance_from_existing} pips")
                                 return False
+                except Exception as e:
+                    logger.debug(f"⚠️ Could not check existing positions: {e}")
+                    # ไม่ให้ error หยุดการทำงาน
             
             return True
             
