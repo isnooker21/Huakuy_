@@ -480,8 +480,6 @@ class SmartEntrySystem:
             logger.error(f"❌ Error calculating recovery lot size: {e}")
             return self.min_lot_size  # fallback
     
-    def execute_entry(self, entry_plan: Dict) -> Optional[int]:
-        """📈 ทำงานเข้าไม้ (ใช้ OrderManager แทน mt5.order_send)"""
     def get_entry_statistics(self) -> Dict:
         """📊 สถิติการเข้าไม้"""
         try:
@@ -500,8 +498,6 @@ class SmartEntrySystem:
         except Exception as e:
             logger.error(f"❌ Error getting entry statistics: {e}")
             return {}
-    def execute_entry(self, entry_plan: Dict) -> Optional[int]:
-        """📈 ทำงานเข้าไม้ (ใช้ OrderManager แทน mt5.order_send)"""
     def execute_entry(self, entry_plan: Dict) -> Optional[int]:
         """📈 ทำงานเข้าไม้ (ใช้ OrderManager แทน mt5.order_send)"""
         try:
