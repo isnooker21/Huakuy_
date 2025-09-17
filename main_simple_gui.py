@@ -41,6 +41,12 @@ from zone_analyzer import ZoneAnalyzer
 from smart_entry_system import SmartEntrySystem
 # 🚫 REMOVED: from portfolio_anchor import PortfolioAnchor
 
+# 🧠 AI INTELLIGENCE SYSTEMS
+from ai_position_intelligence import AIPositionIntelligence
+from ai_entry_intelligence import AIEntryIntelligence
+from ai_decision_engine import AIDecisionEngine
+from ai_learning_system import AILearningSystem
+
 # 🚀 SIMPLE & CLEAN LOGGING CONFIGURATION
 logging.basicConfig(
     level=logging.INFO,
@@ -120,6 +126,20 @@ class AdaptiveTradingSystemGUI:
         self.market_condition = 'sideways'  # Current market condition
         self.last_market_analysis = 0
         self.market_analysis_interval = 30  # Analyze market every 30 seconds
+        
+        # 🧠 AI INTELLIGENCE SYSTEMS
+        self.ai_position_intelligence = AIPositionIntelligence()
+        self.ai_entry_intelligence = AIEntryIntelligence()
+        self.ai_decision_engine = AIDecisionEngine()
+        self.ai_learning_system = AILearningSystem(
+            self.ai_position_intelligence, 
+            self.ai_entry_intelligence
+        )
+        
+        # 🧠 AI Brain Management
+        self.ai_brain_auto_save = True  # Auto-save AI brains
+        self.ai_brain_save_interval = 300  # Save every 5 minutes
+        self.last_ai_brain_save = 0
         
         
         # 🔒 Position Locking
@@ -265,7 +285,7 @@ class AdaptiveTradingSystemGUI:
             return False
     
     def stop_trading(self):
-        """Stop trading loop (Same as original)"""
+        """Stop trading loop with AI Brain saving"""
         if not self.is_running:
             logger.warning("ระบบเทรดไม่ได้ทำงานอยู่")
             return
@@ -273,6 +293,13 @@ class AdaptiveTradingSystemGUI:
         self.is_running = False
         if self.trading_thread and self.trading_thread != threading.current_thread():
             self.trading_thread.join(timeout=5)
+        
+        # 🧠 Save AI Brains before stopping
+        try:
+            logger.info("🧠 Saving AI Brains before stopping...")
+            self._save_ai_brains()
+        except Exception as e:
+            logger.error(f"❌ Error saving AI brains during stop: {e}")
         
         logger.info("🛑 หยุดระบบเทรดแล้ว")
     
@@ -399,6 +426,9 @@ class AdaptiveTradingSystemGUI:
                         self._last_smart_systems_time = current_time
                     else:
                         logger.debug("🎯 Smart Systems already running, skipping...")
+                
+                # 🧠 AI Brain Auto-Save - Check every 5 minutes
+                self._check_ai_brain_auto_save()
                 
                 # Sleep - เพิ่มเป็น 5 วินาที เพื่อลด CPU usage มากขึ้น
                 time.sleep(5.0)  # ตรวจสอบแท่งเทียนทุก 5 วินาที (ลด GUI freeze มากขึ้น)
@@ -1099,7 +1129,7 @@ class AdaptiveTradingSystemGUI:
     # 🚫 REMOVED: _handle_dynamic_closing - Replaced by Edge Priority Closing
     
     def _initialize_smart_systems(self):
-        """🎯 Initialize Smart Trading Systems"""
+        """🎯 Initialize Smart Trading Systems with AI Intelligence"""
         try:
             
             # Initialize Zone Analyzer
@@ -1110,12 +1140,86 @@ class AdaptiveTradingSystemGUI:
             # ส่ง order_manager ไปยัง SmartEntrySystem
             self.smart_entry_system.order_manager = self.order_manager
             
+            # 🧠 Initialize AI Systems
+            logger.info("🧠 Initializing AI Intelligence Systems...")
+            
+            # Connect AI systems to existing components
+            self.smart_entry_system.ai_entry_intelligence = self.ai_entry_intelligence
+            self.smart_entry_system.ai_decision_engine = self.ai_decision_engine
+            
+            # Connect AI systems to portfolio manager
+            self.portfolio_manager.ai_position_intelligence = self.ai_position_intelligence
+            self.portfolio_manager.ai_decision_engine = self.ai_decision_engine
+            self.portfolio_manager.ai_learning_system = self.ai_learning_system
+            
+            # Load AI Brains
+            self._load_ai_brains()
+            
             # 🚫 Portfolio Anchor REMOVED - Using Edge Priority Closing only
             self.portfolio_anchor = None
             
         except Exception as e:
             logger.error(f"❌ Error initializing smart systems: {e}")
             self.smart_systems_enabled = False
+    
+    def _load_ai_brains(self):
+        """🧠 Load AI Brains from saved files"""
+        try:
+            logger.info("🧠 Loading AI Brains...")
+            
+            # Load individual AI brains
+            self.ai_position_intelligence.load_ai_brain()
+            self.ai_entry_intelligence.load_ai_brain()
+            self.ai_decision_engine.load_all_ai_brains()
+            self.ai_learning_system.load_learning_data()
+            
+            logger.info("✅ AI Brains loaded successfully")
+            
+        except Exception as e:
+            logger.error(f"❌ Error loading AI brains: {e}")
+    
+    def _save_ai_brains(self):
+        """🧠 Save AI Brains to files"""
+        try:
+            logger.info("🧠 Saving AI Brains...")
+            
+            # Save individual AI brains
+            self.ai_position_intelligence.save_ai_brain()
+            self.ai_entry_intelligence.save_ai_brain()
+            self.ai_decision_engine.save_all_ai_brains()
+            self.ai_learning_system.save_learning_data()
+            
+            logger.info("✅ AI Brains saved successfully")
+            
+        except Exception as e:
+            logger.error(f"❌ Error saving AI brains: {e}")
+    
+    def _check_ai_brain_auto_save(self):
+        """🧠 Check if AI Brains need auto-saving"""
+        try:
+            if not self.ai_brain_auto_save:
+                return
+            
+            current_time = time.time()
+            if current_time - self.last_ai_brain_save >= self.ai_brain_save_interval:
+                self._save_ai_brains()
+                self.last_ai_brain_save = current_time
+                
+        except Exception as e:
+            logger.error(f"❌ Error in AI brain auto-save: {e}")
+    
+    def get_ai_stats(self) -> Dict[str, Any]:
+        """🧠 Get AI Statistics"""
+        try:
+            return {
+                'position_intelligence': self.ai_position_intelligence.get_ai_stats(),
+                'entry_intelligence': self.ai_entry_intelligence.get_ai_stats(),
+                'learning_system': self.ai_learning_system.get_learning_summary(),
+                'combined_stats': self.ai_decision_engine.get_combined_ai_stats()
+            }
+        except Exception as e:
+            logger.error(f"❌ Error getting AI stats: {e}")
+            return {}
     
     def _handle_smart_systems(self):
         """🎯 Handle Smart Trading Systems"""
@@ -1296,10 +1400,17 @@ class AdaptiveTradingSystemGUI:
             logger.error(f"เกิดข้อผิดพลาดใน GUI: {str(e)}")
     
     def shutdown(self):
-        """Shutdown system (Same as original)"""
+        """Shutdown system with AI Brain saving"""
         try:
             logger.info("กำลังปิดระบบเทรด...")
             self.stop_trading()
+            
+            # 🧠 Final AI Brain save
+            try:
+                logger.info("🧠 Final AI Brain save...")
+                self._save_ai_brains()
+            except Exception as e:
+                logger.error(f"❌ Error in final AI brain save: {e}")
             
             if self.mt5_connection:
                 self.mt5_connection.disconnect_mt5()

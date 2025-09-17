@@ -69,6 +69,9 @@ class TradingGUI:
             # สร้าง bottom frame สำหรับ positions และ log
             self.create_bottom_panel(main_frame)
             
+            # 🧠 สร้าง AI Intelligence Tab
+            self.create_ai_intelligence_tab(main_frame)
+            
         except Exception as e:
             logger.error(f"เกิดข้อผิดพลาดในการสร้าง widgets: {str(e)}")
             
@@ -346,6 +349,9 @@ class TradingGUI:
         # แท็บ Settings
         self.create_settings_tab(notebook)
         
+        # 🧠 แท็บ AI Intelligence
+        self.create_ai_intelligence_tab(notebook)
+        
     def create_positions_tab(self, notebook):
         """สร้างแท็บ Positions"""
         positions_frame = tk.Frame(notebook, bg='#2b2b2b')
@@ -471,6 +477,270 @@ class TradingGUI:
         save_btn = tk.Button(settings_frame, text="Save Settings", command=self.save_settings, 
                            bg='#4caf50', fg='white', font=('Arial', 10, 'bold'))
         save_btn.pack(pady=10)
+    
+    def create_ai_intelligence_tab(self, notebook):
+        """🧠 สร้างแท็บ AI Intelligence"""
+        ai_frame = tk.Frame(notebook, bg='#2b2b2b')
+        notebook.add(ai_frame, text="🧠 AI Intelligence")
+        
+        # สร้าง scrollable frame
+        canvas = tk.Canvas(ai_frame, bg='#2b2b2b')
+        scrollbar = ttk.Scrollbar(ai_frame, orient="vertical", command=canvas.yview)
+        scrollable_frame = tk.Frame(canvas, bg='#2b2b2b')
+        
+        scrollable_frame.bind(
+            "<Configure>",
+            lambda e: canvas.configure(scrollregion=canvas.bbox("all"))
+        )
+        
+        canvas.create_window((0, 0), window=scrollable_frame, anchor="nw")
+        canvas.configure(yscrollcommand=scrollbar.set)
+        
+        # AI Position Intelligence
+        self.create_ai_position_intelligence_section(scrollable_frame)
+        
+        # AI Entry Intelligence
+        self.create_ai_entry_intelligence_section(scrollable_frame)
+        
+        # AI Learning System
+        self.create_ai_learning_system_section(scrollable_frame)
+        
+        # AI Decision Engine
+        self.create_ai_decision_engine_section(scrollable_frame)
+        
+        # AI Controls
+        self.create_ai_controls_section(scrollable_frame)
+        
+        # จัดวาง canvas และ scrollbar
+        canvas.pack(side="left", fill="both", expand=True)
+        scrollbar.pack(side="right", fill="y")
+        
+        # Bind mousewheel to canvas
+        def _on_mousewheel(event):
+            canvas.yview_scroll(int(-1*(event.delta/120)), "units")
+        canvas.bind_all("<MouseWheel>", _on_mousewheel)
+    
+    def create_ai_position_intelligence_section(self, parent):
+        """🧠 สร้างส่วน AI Position Intelligence"""
+        section_frame = tk.LabelFrame(parent, text="🧠 AI Position Intelligence", 
+                                    bg='#3a3a3a', fg='#00ff88', font=('Arial', 10, 'bold'))
+        section_frame.pack(fill=tk.X, padx=8, pady=5)
+        
+        # Performance Stats
+        stats_frame = tk.Frame(section_frame, bg='#3a3a3a')
+        stats_frame.pack(fill=tk.X, padx=5, pady=5)
+        
+        self.ai_position_stats_labels = {}
+        position_stats_fields = [
+            ('Total Decisions', 'total_decisions'),
+            ('Successful Decisions', 'successful_decisions'),
+            ('Accuracy Rate', 'accuracy_rate'),
+            ('Learning Progress', 'learning_progress')
+        ]
+        
+        for i, (label, key) in enumerate(position_stats_fields):
+            tk.Label(stats_frame, text=f"{label}:", bg='#3a3a3a', fg='lightgray', 
+                    font=('Arial', 9)).grid(row=i, column=0, sticky='w', padx=5, pady=2)
+            
+            self.ai_position_stats_labels[key] = tk.Label(stats_frame, text="0", 
+                                                        bg='#3a3a3a', fg='#00ff88', 
+                                                        font=('Arial', 9, 'bold'))
+            self.ai_position_stats_labels[key].grid(row=i, column=1, sticky='e', padx=5, pady=2)
+        
+        # Weight Configuration
+        weights_frame = tk.Frame(section_frame, bg='#3a3a3a')
+        weights_frame.pack(fill=tk.X, padx=5, pady=5)
+        
+        tk.Label(weights_frame, text="Weight Configuration:", bg='#3a3a3a', fg='white', 
+                font=('Arial', 9, 'bold')).pack(anchor='w', pady=(0, 5))
+        
+        self.ai_position_weights = {}
+        weight_fields = [
+            ('P&L Weight', 'pnl_weight', 0.35),
+            ('Time Weight', 'time_weight', 0.20),
+            ('Distance Weight', 'distance_weight', 0.20),
+            ('Balance Weight', 'balance_weight', 0.15),
+            ('Market Context Weight', 'market_context_weight', 0.10)
+        ]
+        
+        for i, (label, key, default_value) in enumerate(weight_fields):
+            tk.Label(weights_frame, text=f"{label}:", bg='#3a3a3a', fg='lightgray', 
+                    font=('Arial', 8)).grid(row=i, column=0, sticky='w', padx=5, pady=1)
+            
+            var = tk.DoubleVar(value=default_value)
+            entry = tk.Entry(weights_frame, textvariable=var, width=8)
+            entry.grid(row=i, column=1, padx=5, pady=1)
+            
+            self.ai_position_weights[key] = var
+    
+    def create_ai_entry_intelligence_section(self, parent):
+        """🧠 สร้างส่วน AI Entry Intelligence"""
+        section_frame = tk.LabelFrame(parent, text="🧠 AI Entry Intelligence", 
+                                    bg='#3a3a3a', fg='#00ff88', font=('Arial', 10, 'bold'))
+        section_frame.pack(fill=tk.X, padx=8, pady=5)
+        
+        # Performance Stats
+        stats_frame = tk.Frame(section_frame, bg='#3a3a3a')
+        stats_frame.pack(fill=tk.X, padx=5, pady=5)
+        
+        self.ai_entry_stats_labels = {}
+        entry_stats_fields = [
+            ('Total Decisions', 'total_decisions'),
+            ('Successful Decisions', 'successful_decisions'),
+            ('Accuracy Rate', 'accuracy_rate'),
+            ('Learning Progress', 'learning_progress')
+        ]
+        
+        for i, (label, key) in enumerate(entry_stats_fields):
+            tk.Label(stats_frame, text=f"{label}:", bg='#3a3a3a', fg='lightgray', 
+                    font=('Arial', 9)).grid(row=i, column=0, sticky='w', padx=5, pady=2)
+            
+            self.ai_entry_stats_labels[key] = tk.Label(stats_frame, text="0", 
+                                                     bg='#3a3a3a', fg='#00ff88', 
+                                                     font=('Arial', 9, 'bold'))
+            self.ai_entry_stats_labels[key].grid(row=i, column=1, sticky='e', padx=5, pady=2)
+        
+        # Weight Configuration
+        weights_frame = tk.Frame(section_frame, bg='#3a3a3a')
+        weights_frame.pack(fill=tk.X, padx=5, pady=5)
+        
+        tk.Label(weights_frame, text="Weight Configuration:", bg='#3a3a3a', fg='white', 
+                font=('Arial', 9, 'bold')).pack(anchor='w', pady=(0, 5))
+        
+        self.ai_entry_weights = {}
+        entry_weight_fields = [
+            ('Zone Quality Weight', 'zone_quality_weight', 0.30),
+            ('Market Context Weight', 'market_context_weight', 0.25),
+            ('Portfolio Impact Weight', 'portfolio_impact_weight', 0.25),
+            ('Timing Weight', 'timing_weight', 0.20)
+        ]
+        
+        for i, (label, key, default_value) in enumerate(entry_weight_fields):
+            tk.Label(weights_frame, text=f"{label}:", bg='#3a3a3a', fg='lightgray', 
+                    font=('Arial', 8)).grid(row=i, column=0, sticky='w', padx=5, pady=1)
+            
+            var = tk.DoubleVar(value=default_value)
+            entry = tk.Entry(weights_frame, textvariable=var, width=8)
+            entry.grid(row=i, column=1, padx=5, pady=1)
+            
+            self.ai_entry_weights[key] = var
+    
+    def create_ai_learning_system_section(self, parent):
+        """🧠 สร้างส่วน AI Learning System"""
+        section_frame = tk.LabelFrame(parent, text="🧠 AI Learning System", 
+                                    bg='#3a3a3a', fg='#00ff88', font=('Arial', 10, 'bold'))
+        section_frame.pack(fill=tk.X, padx=8, pady=5)
+        
+        # Learning Stats
+        stats_frame = tk.Frame(section_frame, bg='#3a3a3a')
+        stats_frame.pack(fill=tk.X, padx=5, pady=5)
+        
+        self.ai_learning_stats_labels = {}
+        learning_stats_fields = [
+            ('Total Learning Cycles', 'total_learning_cycles'),
+            ('Last Learning Update', 'last_learning_update'),
+            ('Learning Rate', 'learning_rate'),
+            ('Adaptation Speed', 'adaptation_speed')
+        ]
+        
+        for i, (label, key) in enumerate(learning_stats_fields):
+            tk.Label(stats_frame, text=f"{label}:", bg='#3a3a3a', fg='lightgray', 
+                    font=('Arial', 9)).grid(row=i, column=0, sticky='w', padx=5, pady=2)
+            
+            self.ai_learning_stats_labels[key] = tk.Label(stats_frame, text="0", 
+                                                        bg='#3a3a3a', fg='#00ff88', 
+                                                        font=('Arial', 9, 'bold'))
+            self.ai_learning_stats_labels[key].grid(row=i, column=1, sticky='e', padx=5, pady=2)
+    
+    def create_ai_decision_engine_section(self, parent):
+        """🧠 สร้างส่วน AI Decision Engine"""
+        section_frame = tk.LabelFrame(parent, text="🧠 AI Decision Engine", 
+                                    bg='#3a3a3a', fg='#00ff88', font=('Arial', 10, 'bold'))
+        section_frame.pack(fill=tk.X, padx=8, pady=5)
+        
+        # Decision Stats
+        stats_frame = tk.Frame(section_frame, bg='#3a3a3a')
+        stats_frame.pack(fill=tk.X, padx=5, pady=5)
+        
+        self.ai_decision_stats_labels = {}
+        decision_stats_fields = [
+            ('Combined Decisions', 'combined_decisions'),
+            ('AI vs Traditional', 'ai_vs_traditional'),
+            ('Confidence Level', 'confidence_level'),
+            ('Decision Quality', 'decision_quality')
+        ]
+        
+        for i, (label, key) in enumerate(decision_stats_fields):
+            tk.Label(stats_frame, text=f"{label}:", bg='#3a3a3a', fg='lightgray', 
+                    font=('Arial', 9)).grid(row=i, column=0, sticky='w', padx=5, pady=2)
+            
+            self.ai_decision_stats_labels[key] = tk.Label(stats_frame, text="0", 
+                                                        bg='#3a3a3a', fg='#00ff88', 
+                                                        font=('Arial', 9, 'bold'))
+            self.ai_decision_stats_labels[key].grid(row=i, column=1, sticky='e', padx=5, pady=2)
+    
+    def create_ai_controls_section(self, parent):
+        """🧠 สร้างส่วน AI Controls"""
+        section_frame = tk.LabelFrame(parent, text="🧠 AI Controls", 
+                                    bg='#3a3a3a', fg='#00ff88', font=('Arial', 10, 'bold'))
+        section_frame.pack(fill=tk.X, padx=8, pady=5)
+        
+        # Control buttons
+        controls_frame = tk.Frame(section_frame, bg='#3a3a3a')
+        controls_frame.pack(fill=tk.X, padx=5, pady=5)
+        
+        # AI Brain Management
+        brain_frame = tk.Frame(controls_frame, bg='#3a3a3a')
+        brain_frame.pack(fill=tk.X, pady=5)
+        
+        tk.Label(brain_frame, text="AI Brain Management:", bg='#3a3a3a', fg='white', 
+                font=('Arial', 9, 'bold')).pack(anchor='w', pady=(0, 5))
+        
+        brain_buttons_frame = tk.Frame(brain_frame, bg='#3a3a3a')
+        brain_buttons_frame.pack(fill=tk.X)
+        
+        save_brain_btn = tk.Button(brain_buttons_frame, text="Save AI Brains", 
+                                  command=self.save_ai_brains, bg='#4caf50', fg='white',
+                                  font=('Arial', 9))
+        save_brain_btn.pack(side=tk.LEFT, padx=(0, 5))
+        
+        load_brain_btn = tk.Button(brain_buttons_frame, text="Load AI Brains", 
+                                  command=self.load_ai_brains, bg='#2196f3', fg='white',
+                                  font=('Arial', 9))
+        load_brain_btn.pack(side=tk.LEFT, padx=(0, 5))
+        
+        reset_brain_btn = tk.Button(brain_buttons_frame, text="Reset AI Brains", 
+                                   command=self.reset_ai_brains, bg='#f44336', fg='white',
+                                   font=('Arial', 9))
+        reset_brain_btn.pack(side=tk.LEFT, padx=(0, 5))
+        
+        # AI Learning Controls
+        learning_frame = tk.Frame(controls_frame, bg='#3a3a3a')
+        learning_frame.pack(fill=tk.X, pady=5)
+        
+        tk.Label(learning_frame, text="AI Learning Controls:", bg='#3a3a3a', fg='white', 
+                font=('Arial', 9, 'bold')).pack(anchor='w', pady=(0, 5))
+        
+        learning_buttons_frame = tk.Frame(learning_frame, bg='#3a3a3a')
+        learning_buttons_frame.pack(fill=tk.X)
+        
+        start_learning_btn = tk.Button(learning_buttons_frame, text="Start Learning", 
+                                      command=self.start_ai_learning, bg='#ff9800', fg='white',
+                                      font=('Arial', 9))
+        start_learning_btn.pack(side=tk.LEFT, padx=(0, 5))
+        
+        stop_learning_btn = tk.Button(learning_buttons_frame, text="Stop Learning", 
+                                     command=self.stop_ai_learning, bg='#9e9e9e', fg='white',
+                                     font=('Arial', 9))
+        stop_learning_btn.pack(side=tk.LEFT, padx=(0, 5))
+        
+        # AI Status
+        status_frame = tk.Frame(controls_frame, bg='#3a3a3a')
+        status_frame.pack(fill=tk.X, pady=5)
+        
+        self.ai_status_label = tk.Label(status_frame, text="AI Status: Initializing...", 
+                                       bg='#3a3a3a', fg='#ff9800', font=('Arial', 9, 'bold'))
+        self.ai_status_label.pack(anchor='w')
         
     def setup_styles(self):
         """ตั้งค่า styles สำหรับ ttk widgets"""
@@ -570,6 +840,10 @@ class TradingGUI:
                     
                     if update_counter % 10 == 0:  # ทุก 200 วินาที (เพิ่มมากขึ้น)
                         self.root.after_idle(self.update_7d_closer_status)
+                    
+                    # 🧠 อัพเดท AI Intelligence ทุก 12 cycles (240 วินาที)
+                    if update_counter % 12 == 0:
+                        self.root.after_idle(self.update_ai_intelligence_display)
                     
                     update_counter += 1
                 time.sleep(30)  # อัพเดททุก 30 วินาที (เพิ่มจาก 20)
@@ -1390,6 +1664,141 @@ class TradingGUI:
         except Exception as e:
             logger.error(f"เกิดข้อผิดพลาดในการบันทึกการตั้งค่า: {str(e)}")
             messagebox.showerror("Error", f"เกิดข้อผิดพลาด: {str(e)}")
+    
+    # 🧠 AI Intelligence Functions
+    def save_ai_brains(self):
+        """🧠 บันทึก AI Brains"""
+        try:
+            if hasattr(self.trading_system, '_save_ai_brains'):
+                self.trading_system._save_ai_brains()
+                messagebox.showinfo("Success", "🧠 AI Brains saved successfully!")
+            else:
+                messagebox.showwarning("Warning", "AI Brain saving not available")
+        except Exception as e:
+            logger.error(f"Error saving AI brains: {e}")
+            messagebox.showerror("Error", f"Failed to save AI brains: {str(e)}")
+    
+    def load_ai_brains(self):
+        """🧠 โหลด AI Brains"""
+        try:
+            if hasattr(self.trading_system, '_load_ai_brains'):
+                self.trading_system._load_ai_brains()
+                self.update_ai_intelligence_display()
+                messagebox.showinfo("Success", "🧠 AI Brains loaded successfully!")
+            else:
+                messagebox.showwarning("Warning", "AI Brain loading not available")
+        except Exception as e:
+            logger.error(f"Error loading AI brains: {e}")
+            messagebox.showerror("Error", f"Failed to load AI brains: {str(e)}")
+    
+    def reset_ai_brains(self):
+        """🧠 รีเซ็ต AI Brains"""
+        try:
+            result = messagebox.askyesno("Confirm Reset", 
+                                       "Are you sure you want to reset all AI Brains?\n"
+                                       "This will delete all learning data!")
+            if result:
+                # Reset AI systems
+                if hasattr(self.trading_system, 'ai_position_intelligence'):
+                    self.trading_system.ai_position_intelligence.reset_ai_brain()
+                if hasattr(self.trading_system, 'ai_entry_intelligence'):
+                    self.trading_system.ai_entry_intelligence.reset_ai_brain()
+                if hasattr(self.trading_system, 'ai_decision_engine'):
+                    self.trading_system.ai_decision_engine.reset_all_ai_brains()
+                
+                self.update_ai_intelligence_display()
+                messagebox.showinfo("Success", "🧠 AI Brains reset successfully!")
+        except Exception as e:
+            logger.error(f"Error resetting AI brains: {e}")
+            messagebox.showerror("Error", f"Failed to reset AI brains: {str(e)}")
+    
+    def start_ai_learning(self):
+        """🧠 เริ่ม AI Learning"""
+        try:
+            if hasattr(self.trading_system, 'ai_learning_system'):
+                self.trading_system.ai_learning_system.start_learning()
+                self.ai_status_label.config(text="AI Status: Learning Active", fg='#00ff88')
+                messagebox.showinfo("Success", "🧠 AI Learning started!")
+            else:
+                messagebox.showwarning("Warning", "AI Learning system not available")
+        except Exception as e:
+            logger.error(f"Error starting AI learning: {e}")
+            messagebox.showerror("Error", f"Failed to start AI learning: {str(e)}")
+    
+    def stop_ai_learning(self):
+        """🧠 หยุด AI Learning"""
+        try:
+            if hasattr(self.trading_system, 'ai_learning_system'):
+                self.trading_system.ai_learning_system.stop_learning()
+                self.ai_status_label.config(text="AI Status: Learning Stopped", fg='#ff9800')
+                messagebox.showinfo("Success", "🧠 AI Learning stopped!")
+            else:
+                messagebox.showwarning("Warning", "AI Learning system not available")
+        except Exception as e:
+            logger.error(f"Error stopping AI learning: {e}")
+            messagebox.showerror("Error", f"Failed to stop AI learning: {str(e)}")
+    
+    def update_ai_intelligence_display(self):
+        """🧠 อัพเดทการแสดงผล AI Intelligence"""
+        try:
+            if not hasattr(self.trading_system, 'get_ai_stats'):
+                return
+            
+            ai_stats = self.trading_system.get_ai_stats()
+            if not ai_stats:
+                return
+            
+            # Update Position Intelligence
+            if 'position_intelligence' in ai_stats:
+                pos_stats = ai_stats['position_intelligence']
+                for key, label in self.ai_position_stats_labels.items():
+                    if key in pos_stats:
+                        value = pos_stats[key]
+                        if isinstance(value, float):
+                            label.config(text=f"{value:.2f}")
+                        else:
+                            label.config(text=str(value))
+            
+            # Update Entry Intelligence
+            if 'entry_intelligence' in ai_stats:
+                entry_stats = ai_stats['entry_intelligence']
+                for key, label in self.ai_entry_stats_labels.items():
+                    if key in entry_stats:
+                        value = entry_stats[key]
+                        if isinstance(value, float):
+                            label.config(text=f"{value:.2f}")
+                        else:
+                            label.config(text=str(value))
+            
+            # Update Learning System
+            if 'learning_system' in ai_stats:
+                learning_stats = ai_stats['learning_system']
+                for key, label in self.ai_learning_stats_labels.items():
+                    if key in learning_stats:
+                        value = learning_stats[key]
+                        if isinstance(value, float):
+                            label.config(text=f"{value:.2f}")
+                        else:
+                            label.config(text=str(value))
+            
+            # Update Decision Engine
+            if 'combined_stats' in ai_stats:
+                decision_stats = ai_stats['combined_stats']
+                for key, label in self.ai_decision_stats_labels.items():
+                    if key in decision_stats:
+                        value = decision_stats[key]
+                        if isinstance(value, float):
+                            label.config(text=f"{value:.2f}")
+                        else:
+                            label.config(text=str(value))
+            
+            # Update AI Status
+            if 'ai_status' in ai_stats:
+                status = ai_stats['ai_status']
+                self.ai_status_label.config(text=f"AI Status: {status}", fg='#00ff88')
+                
+        except Exception as e:
+            logger.error(f"Error updating AI intelligence display: {e}")
             
     def run(self):
         """เริ่มต้น GUI"""

@@ -4,6 +4,10 @@ from datetime import datetime, timedelta
 from typing import List, Dict, Tuple, Optional
 import logging
 
+# 🧠 AI INTELLIGENCE SYSTEMS
+from ai_entry_intelligence import AIEntryIntelligence, EntryDecision, EntryAnalysis
+from ai_decision_engine import AIDecisionEngine, CombinedDecision
+
 logger = logging.getLogger(__name__)
 
 class SmartEntrySystem:
@@ -13,6 +17,10 @@ class SmartEntrySystem:
         self.mt5_connection = mt5_connection
         self.zone_analyzer = zone_analyzer
         self.symbol = None  # จะถูกตั้งค่าจาก main system
+        
+        # 🧠 AI INTELLIGENCE SYSTEMS
+        self.ai_entry_intelligence = AIEntryIntelligence()
+        self.ai_decision_engine = AIDecisionEngine()
         
         # Entry Parameters (ปรับใหม่ตาม Demand & Supply)
         self.support_buy_enabled = True      # เปิด Support entries (BUY ที่ Support)
@@ -354,11 +362,12 @@ class SmartEntrySystem:
     
     def analyze_entry_opportunity(self, symbol: str, current_price: float, zones: Dict[str, List[Dict]], 
                                 existing_positions: List = None) -> Optional[Dict]:
-        """🔍 วิเคราะห์โอกาสเข้าไม้แบบใหม่ (Support/Resistance เท่านั้น)"""
+        """🧠 AI-Enhanced Entry Analysis - ใช้ AI Intelligence ในการวิเคราะห์โอกาสเข้าไม้"""
         try:
-            logger.info(f"🔍 [SMART ENTRY] Starting entry analysis for {symbol} at {current_price:.5f}")
-            logger.info(f"🔍 [SMART ENTRY] Zones received: {len(zones.get('support', []))} support, {len(zones.get('resistance', []))} resistance")
+            logger.info(f"🧠 [AI ENTRY] Starting AI-enhanced entry analysis for {symbol} at {current_price:.5f}")
+            logger.info(f"🧠 [AI ENTRY] Zones received: {len(zones.get('support', []))} support, {len(zones.get('resistance', []))} resistance")
             self.symbol = symbol  # ตั้งค่า symbol ที่ถูกต้อง
+            
             # รีเซ็ต daily counter
             self._reset_daily_counter()
             
@@ -378,8 +387,30 @@ class SmartEntrySystem:
                     logger.debug(f"🚫 Too soon since last trade: {time_since_last_trade:.1f}s < {min_time_between_trades}s")
                     return None
             
-            # 🎯 เลือก Zone ตาม Pivot Point + Zone Strength (วิธี C)
-            zone_type, selected_zone = self.select_zone_by_pivot_and_strength(current_price, zones)
+            # 🧠 AI Entry Analysis
+            market_data = {
+                'current_price': current_price,
+                'trend_direction': 'sideways',  # TODO: วิเคราะห์จากข้อมูลจริง
+                'volatility': 'normal',  # TODO: วิเคราะห์จากข้อมูลจริง
+                'session': 'unknown'  # TODO: วิเคราะห์จากข้อมูลจริง
+            }
+            
+            # ใช้ AI Decision Engine วิเคราะห์โอกาสเข้าไม้
+            ai_decision = self.ai_decision_engine.make_entry_decision(
+                symbol, current_price, zones, existing_positions or [], market_data
+            )
+            
+            # ตรวจสอบ AI Decision
+            if ai_decision.final_decision.get('action') == 'NO_ENTRY':
+                logger.debug(f"🧠 AI recommends no entry: {ai_decision.final_decision.get('reasoning', 'No reasoning')}")
+                return None
+            
+            # 🎯 เลือก Zone ตาม AI Decision หรือ Traditional Logic
+            zone_type, selected_zone = self._select_zone_from_ai_decision(ai_decision, current_price, zones)
+            
+            # ถ้า AI ไม่แนะนำ Zone ให้ใช้ Traditional Logic
+            if not zone_type or not selected_zone:
+                zone_type, selected_zone = self.select_zone_by_pivot_and_strength(current_price, zones)
             
             if not zone_type or not selected_zone:
                 # Log all available zones for debugging
@@ -435,19 +466,53 @@ class SmartEntrySystem:
                 'zone_type': zone_type,
                 'lot_size': lot_size,
                 'profit_target': profit_target,
-                'loss_threshold': self.calculate_dynamic_loss_threshold(lot_size)
+                'loss_threshold': self.calculate_dynamic_loss_threshold(lot_size),
+                'ai_decision': ai_decision  # เพิ่ม AI Decision
             }
             
-            logger.info(f"🎯 Entry Opportunity: {direction.upper()} at {current_price:.5f} "
+            logger.info(f"🧠 AI Entry Opportunity: {direction.upper()} at {current_price:.5f} "
                        f"(Zone: {selected_zone['price']:.5f}, Strength: {selected_zone['strength']}, "
-                       f"Lot: {lot_size:.2f}, Target: ${profit_target:.2f})")
+                       f"Lot: {lot_size:.2f}, Target: ${profit_target:.2f}, "
+                       f"AI Confidence: {ai_decision.confidence:.1f}%)")
             
-            logger.info(f"✅ [SMART ENTRY] Entry opportunity created successfully - Ready for execution")
+            logger.info(f"✅ [AI ENTRY] AI-enhanced entry opportunity created successfully - Ready for execution")
             return entry_opportunity
             
         except Exception as e:
-            logger.error(f"❌ Error analyzing entry opportunity: {e}")
+            logger.error(f"❌ Error in AI-enhanced entry analysis: {e}")
             return None
+    
+    def _select_zone_from_ai_decision(self, ai_decision, current_price: float, zones: Dict[str, List[Dict]]) -> Tuple[Optional[str], Optional[Dict]]:
+        """เลือก Zone จาก AI Decision"""
+        try:
+            # ตรวจสอบ AI Decision
+            if not ai_decision or not ai_decision.ai_decision:
+                return None, None
+            
+            ai_entry_decision = ai_decision.ai_decision
+            direction = ai_entry_decision.direction
+            
+            # หา Zone ที่เหมาะสมตาม AI Decision
+            if direction == "BUY":
+                # หา Support Zone ที่ดีที่สุด
+                support_zones = zones.get('support', [])
+                if support_zones:
+                    # เรียงตามคะแนน (ถ้ามี) หรือ strength
+                    best_zone = max(support_zones, key=lambda z: z.get('strength', 0))
+                    return 'support', best_zone
+            elif direction == "SELL":
+                # หา Resistance Zone ที่ดีที่สุด
+                resistance_zones = zones.get('resistance', [])
+                if resistance_zones:
+                    # เรียงตามคะแนน (ถ้ามี) หรือ strength
+                    best_zone = max(resistance_zones, key=lambda z: z.get('strength', 0))
+                    return 'resistance', best_zone
+            
+            return None, None
+            
+        except Exception as e:
+            logger.error(f"❌ Error selecting zone from AI decision: {e}")
+            return None, None
     
     def find_recovery_opportunity(self, symbol: str, current_price: float, zones: Dict[str, List[Dict]], 
                                  existing_positions: List = None) -> List[Dict]:
@@ -643,8 +708,13 @@ class SmartEntrySystem:
                 comment = f"RECOVERY: {reason}"
                 logger.info(f"🔧 [SMART ENTRY] Recovery Entry Comment: {comment}")
             else:
-                comment = f"SMART_ENTRY: {reason}" if reason else f"SMART_ENTRY: {direction.upper()} at {entry_price:.5f}"
-                logger.info(f"🎯 [SMART ENTRY] Smart Entry Comment: {comment}")
+                comment = f"AI_ENTRY: {reason}" if reason else f"AI_ENTRY: {direction.upper()} at {entry_price:.5f}"
+                logger.info(f"🧠 [AI ENTRY] AI Entry Comment: {comment}")
+            
+            # 🧠 บันทึก AI Decision (ถ้ามี)
+            ai_decision = entry_plan.get('ai_decision')
+            if ai_decision:
+                logger.info(f"🧠 AI Decision included: {ai_decision.final_decision.get('action', 'UNKNOWN')} - Confidence: {ai_decision.confidence:.1f}%")
             
             # ตรวจสอบ comment ก่อนสร้าง Signal
             if not comment or comment is None:
@@ -691,6 +761,18 @@ class SmartEntrySystem:
                     
                     # อัปเดตเวลาคำสั่งล่าสุด
                     self.last_trade_time = datetime.now()
+                    
+                    # 🧠 บันทึกผลลัพธ์ให้ AI Learning System
+                    if ai_decision:
+                        outcome = {
+                            'success': True,
+                            'ticket': ticket,
+                            'direction': direction,
+                            'lot_size': lot_size,
+                            'entry_price': entry_price
+                        }
+                        self.ai_decision_engine.log_decision_outcome(ai_decision, outcome)
+                        logger.info(f"🧠 AI Decision outcome logged for ticket {ticket}")
                 
                     return ticket
                 else:
