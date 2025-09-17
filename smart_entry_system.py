@@ -24,9 +24,9 @@ class SmartEntrySystem:
         self.recovery_zone_strength = 8  # Zone strength สำหรับ Recovery (เพิ่มเพื่อคุณภาพ)
         self.min_zone_strength = 0.05  # Zone strength ขั้นต่ำสำหรับเข้าไม้ (เพิ่มเพื่อคุณภาพ)
         
-        # Risk Management (Dynamic)
-        self.risk_percent_per_trade = 0.02  # 2% ของ balance ต่อ trade (เพิ่มจาก 1%)
-        self.max_daily_trades = 50  # เพิ่มจำนวน trade ต่อวัน (เพิ่มจาก 20 เพื่อรองรับตลาดผันผวน)
+        # Risk Management (Dynamic) - ปรับให้เหมาะสมกับ XAUUSD
+        self.risk_percent_per_trade = 0.01  # ลดเป็น 1% ของ balance ต่อ trade (ปลอดภัยขึ้น)
+        self.max_daily_trades = 30  # ลดจำนวน trade ต่อวัน (คุณภาพเหนือปริมาณ)
         
         # Lot Size Management
         self.min_lot_size = 0.01
@@ -73,15 +73,18 @@ class SmartEntrySystem:
             
             # คำนวณ lot size ตาม % ของ balance
             risk_amount = balance * self.risk_percent_per_trade
-            base_lot_size = risk_amount / (self.profit_target_pips * 10)  # 10 = pip value
             
-            # ปรับตาม zone strength
+            # ปรับ pip value สำหรับ XAUUSD (1 lot = 100 oz, pip value = 100)
+            pip_value = 100  # XAUUSD pip value
+            base_lot_size = risk_amount / (self.profit_target_pips * pip_value)
+            
+            # ปรับตาม zone strength (ปรับให้เหมาะสมกับ XAUUSD)
             strength_multiplier = {
-                50: 0.5,   # 50-59: 0.5x
-                60: 0.7,   # 60-69: 0.7x
-                70: 0.8,   # 70-79: 0.8x
-                80: 1.0,   # 80-89: 1.0x
-                90: 1.2,   # 90-100: 1.2x
+                50: 0.3,   # 50-59: 0.3x (ลดลง)
+                60: 0.4,   # 60-69: 0.4x
+                70: 0.5,   # 70-79: 0.5x
+                80: 0.6,   # 80-89: 0.6x
+                90: 0.8,   # 90-100: 0.8x (ลดจาก 1.2x)
             }
             
             # หา multiplier ที่เหมาะสม
@@ -94,8 +97,16 @@ class SmartEntrySystem:
             
             final_lot_size = base_lot_size * final_multiplier
             
+            # Debug log
+            logger.info(f"📊 [LOT CALCULATION] Balance: ${balance:.2f}, Risk: {self.risk_percent_per_trade*100:.1f}%")
+            logger.info(f"📊 [LOT CALCULATION] Risk Amount: ${risk_amount:.2f}, Pip Value: {pip_value}")
+            logger.info(f"📊 [LOT CALCULATION] Base Lot: {base_lot_size:.4f}, Zone Strength: {zone_strength:.1f}")
+            logger.info(f"📊 [LOT CALCULATION] Multiplier: {final_multiplier:.2f}, Final Lot: {final_lot_size:.4f}")
+            
             # จำกัด lot size
-            return max(self.min_lot_size, min(self.max_lot_size, final_lot_size))
+            final_lot_size = max(self.min_lot_size, min(self.max_lot_size, final_lot_size))
+            logger.info(f"📊 [LOT CALCULATION] Final Lot Size: {final_lot_size:.4f}")
+            return final_lot_size
             
         except Exception as e:
             logger.error(f"❌ Error calculating dynamic lot size: {e}")
