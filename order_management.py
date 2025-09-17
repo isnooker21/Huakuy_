@@ -58,8 +58,13 @@ class OrderManager:
             OrderResult: ผลลัพธ์การส่ง Order
         """
         try:
+            logger.info(f"📥 OrderManager รับคำสั่งจาก SmartEntrySystem")
+            logger.info(f"   Signal: {signal.direction} {signal.symbol} at {signal.price}")
+            logger.info(f"   Lot Size: {lot_size}, Account Balance: {account_balance}")
+            
             # ตรวจสอบการเชื่อมต่อ
             if not self.mt5.check_connection_health():
+                logger.error(f"❌ OrderManager: ไม่สามารถเชื่อมต่อ MT5 ได้")
                 return OrderResult(
                     success=False,
                     error_message="ไม่สามารถเชื่อมต่อ MT5 ได้"
@@ -135,7 +140,8 @@ class OrderManager:
                 
                 self.active_positions.append(position)
                 
-                logger.info(f"✅ Order sent successfully - Ticket: {ticket}")
+                logger.info(f"✅ OrderManager: Order sent successfully - Ticket: {ticket}")
+                logger.info(f"   📤 ส่งคำสั่งไปยัง MT5 ผ่าน mt5_connection.py")
                 
                 return OrderResult(
                     success=True,

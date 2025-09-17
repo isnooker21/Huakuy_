@@ -446,9 +446,12 @@ class SmartEntrySystem:
                 take_profit=0.0  # ไม่ตั้ง TP
             )
             
-            # ใช้ OrderManager ในการส่งคำสั่ง
+            # ใช้ OrderManager ในการส่งคำสั่ง (ไฟล์ order_management.py)
             # ต้องส่ง order_manager มาจาก main system
             if hasattr(self, 'order_manager') and self.order_manager:
+                logger.info(f"📤 ส่งคำสั่งไปยัง OrderManager (order_management.py)")
+                logger.info(f"   Symbol: {signal.symbol}, Direction: {signal.direction}, Lot: {lot_size:.2f}")
+                
                 result = self.order_manager.place_order_from_signal(
                     signal=signal,
                     lot_size=lot_size,
