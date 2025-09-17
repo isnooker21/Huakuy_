@@ -417,23 +417,47 @@ class HedgePairingCloser:
             
             # 1. ปิดไม้ที่ต้องการ Recovery ก่อน (RECOVERY_NEEDED)
             if urgent_positions:
-                return self._close_recovery_needed_positions(urgent_positions, all_statuses)
+                # ตรวจสอบว่ามีไม้ติดลบหรือไม่
+                total_urgent_profit = sum(pos.profit for pos in urgent_positions)
+                if total_urgent_profit < 0:
+                    logger.info(f"🚫 INTELLIGENT CLOSING: Urgent positions are losing (${total_urgent_profit:.2f}) - Skipping")
+                    logger.info(f"   ZERO LOSS POLICY: Cannot close losing positions without helpers")
+                else:
+                    return self._close_recovery_needed_positions(urgent_positions, all_statuses)
             
             # 2. หาไม้ที่สามารถปิดคู่กันได้ (HEDGE)
             hedge_candidates = [s for s in all_statuses if s.recommended_action == "HEDGE_CANDIDATE"]
             if hedge_candidates:
-                hedge_decision = self._find_hedge_pairs(hedge_candidates, all_statuses)
-                if hedge_decision.should_close:
-                    return hedge_decision
+                # ตรวจสอบว่ามีไม้ติดลบหรือไม่
+                total_hedge_profit = sum(pos.profit for pos in hedge_candidates)
+                if total_hedge_profit < 0:
+                    logger.info(f"🚫 INTELLIGENT CLOSING: Hedge candidates are losing (${total_hedge_profit:.2f}) - Skipping")
+                    logger.info(f"   ZERO LOSS POLICY: Cannot close losing positions without helpers")
+                else:
+                    hedge_decision = self._find_hedge_pairs(hedge_candidates, all_statuses)
+                    if hedge_decision.should_close:
+                        return hedge_decision
             
             # 3. ปิดไม้ที่ต้องการความช่วยเหลือ (HELP_NEEDED)
             if help_needed_positions:
-                return self._close_help_needed_positions(help_needed_positions, all_statuses)
+                # ตรวจสอบว่ามีไม้ติดลบหรือไม่
+                total_help_profit = sum(pos.profit for pos in help_needed_positions)
+                if total_help_profit < 0:
+                    logger.info(f"🚫 INTELLIGENT CLOSING: Help needed positions are losing (${total_help_profit:.2f}) - Skipping")
+                    logger.info(f"   ZERO LOSS POLICY: Cannot close losing positions without helpers")
+                else:
+                    return self._close_help_needed_positions(help_needed_positions, all_statuses)
             
-            # 4. ปิดไม้ที่ขาดทุนน้อยที่สุดก่อน
+            # 4. ปิดไม้ที่ขาดทุนน้อยที่สุดก่อน (เฉพาะเมื่อไม่ติดลบ)
             losers = [s for s in all_statuses if s.status == "LOSER"]
             if losers:
-                return self._close_smallest_losers(losers)
+                # ตรวจสอบว่ามีไม้ติดลบหรือไม่
+                total_loser_profit = sum(pos.profit for pos in losers)
+                if total_loser_profit < 0:
+                    logger.info(f"🚫 INTELLIGENT CLOSING: All losers are losing (${total_loser_profit:.2f}) - Skipping")
+                    logger.info(f"   ZERO LOSS POLICY: Cannot close losing positions without helpers")
+                else:
+                    return self._close_smallest_losers(losers)
             
             # 5. ปิดไม้กำไรเมื่อจำเป็น (เฉพาะเมื่อพอร์ตแย่)
             if portfolio_health in ["แย่", "แย่มาก"]:
@@ -698,6 +722,23 @@ class HedgePairingCloser:
             positions_to_close = losers[:2]  # ปิด 2 ตัวแรก
             
             total_profit = sum(pos.profit for pos in positions_to_close)
+            
+            # 🚫 ตรวจสอบว่าไม้ติดลบหรือไม่ - ถ้าติดลบให้ข้าม
+            if total_profit < 0:
+                logger.info(f"🚫 SMALLEST LOSERS: All positions are losing (${total_profit:.2f}) - Skipping")
+                logger.info(f"   ZERO LOSS POLICY: Cannot close losing positions without helpers")
+                return ClosingDecision(
+                    should_close=False,
+                    positions_to_close=[],
+                    method="SKIP_LOSING_POSITIONS",
+                    net_pnl=total_profit,
+                    expected_pnl=total_profit,
+                    position_count=len(positions_to_close),
+                    buy_count=len([pos for pos in positions_to_close if getattr(pos.position, 'type', 0) == 0]),
+                    sell_count=len([pos for pos in positions_to_close if getattr(pos.position, 'type', 0) == 1]),
+                    confidence_score=0.0,
+                    reason=f"Skip losing positions: {len(positions_to_close)} positions (${total_profit:.2f}) - Need helpers"
+                )
             
             return ClosingDecision(
                 should_close=True,
