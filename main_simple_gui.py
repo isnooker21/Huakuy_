@@ -1168,6 +1168,8 @@ class SmartEntryTradingSystemGUI:
             
             # Initialize Smart Entry System
             self.smart_entry_system = SmartEntrySystem(self.mt5_connection, self.zone_analyzer)
+            # ส่ง order_manager ไปยัง SmartEntrySystem
+            self.smart_entry_system.order_manager = self.order_manager
             logger.info("✅ Smart Entry System initialized")
             
             # Initialize Portfolio Anchor

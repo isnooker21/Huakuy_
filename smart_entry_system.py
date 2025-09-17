@@ -407,7 +407,7 @@ class SmartEntrySystem:
             return self.min_lot_size  # fallback
     
     def execute_entry(self, entry_plan: Dict) -> Optional[int]:
-        """📈 ทำงานเข้าไม้"""
+        """📈 ทำงานเข้าไม้ (ใช้ OrderManager แทน mt5.order_send)"""
         try:
             if not entry_plan:
                 return None
@@ -422,54 +422,65 @@ class SmartEntrySystem:
             profit_target = entry_plan.get('profit_target', 50.0)
             loss_threshold = entry_plan.get('loss_threshold', -50.0)
             
-            # คำนวณ TP และ SL
+            # คำนวณ TP และ SL (ปรับให้ง่ายขึ้น)
             if direction == 'buy':
-                tp_price = entry_price + (profit_target / (lot_size * 10))  # 50 pips
-                sl_price = entry_price - (abs(loss_threshold) / (lot_size * 10))  # 50 pips
+                tp_price = entry_price + 50.0  # 50 pips TP
+                sl_price = entry_price - 50.0  # 50 pips SL
             else:  # sell
-                tp_price = entry_price - (profit_target / (lot_size * 10))  # 50 pips
-                sl_price = entry_price + (abs(loss_threshold) / (lot_size * 10))  # 50 pips
+                tp_price = entry_price - 50.0  # 50 pips TP
+                sl_price = entry_price + 50.0  # 50 pips SL
             
-            # สร้างคำสั่งซื้อขาย
-            request = {
-                "action": mt5.TRADE_ACTION_DEAL,
-                "symbol": self.symbol,
-                "volume": lot_size,
-                "type": mt5.ORDER_TYPE_BUY if direction == 'buy' else mt5.ORDER_TYPE_SELL,
-                "price": entry_price,
-                "tp": tp_price,
-                "sl": sl_price,
-                "comment": f"Smart Entry: {reason}",
-                "type_time": mt5.ORDER_TIME_GTC,
-                "type_filling": mt5.ORDER_FILLING_IOC,
-            }
+            logger.info(f"🚀 Executing entry: {direction.upper()} {lot_size:.2f} lots at {entry_price:.5f}")
+            logger.info(f"   TP: {tp_price:.5f}, SL: {sl_price:.5f}")
+            logger.info(f"   Reason: {reason}")
             
-            # ส่งคำสั่ง
-            result = mt5.order_send(request)
+            # ใช้ OrderManager แทน mt5.order_send โดยตรง
+            # สร้าง Signal object สำหรับ OrderManager
+            from trading_conditions import Signal
             
-            # ตรวจสอบว่า result เป็น None หรือไม่
-            if result is None:
-                logger.error(f"❌ Failed to execute entry: mt5.order_send returned None")
+            signal = Signal(
+                direction=direction.upper(),
+                symbol=self.symbol,
+                strength=zone.get('strength', 50),
+                confidence=80.0,
+                timestamp=datetime.now(),
+                price=entry_price,
+                comment=f"Smart Entry: {reason}",
+                stop_loss=sl_price,
+                take_profit=tp_price
+            )
+            
+            # ใช้ OrderManager ในการส่งคำสั่ง
+            # ต้องส่ง order_manager มาจาก main system
+            if hasattr(self, 'order_manager') and self.order_manager:
+                result = self.order_manager.place_order_from_signal(
+                    signal=signal,
+                    lot_size=lot_size,
+                    account_balance=1000.0  # fallback balance
+                )
+                
+                if result and hasattr(result, 'success') and result.success:
+                    ticket = getattr(result, 'ticket', None)
+                    logger.info(f"✅ Entry executed via OrderManager: Ticket {ticket}")
+                    
+                    # บันทึก zone ที่ใช้แล้ว
+                    zone_key = self._generate_zone_key(zone)
+                    self.used_zones[zone_key] = {
+                        'timestamp': datetime.now(),
+                        'ticket': ticket
+                    }
+                    
+                    # อัปเดต daily counter
+                    self.daily_trade_count += 1
+                    
+                    return ticket
+                else:
+                    error_msg = getattr(result, 'error_message', 'Unknown error') if result else 'No result'
+                    logger.error(f"❌ OrderManager failed: {error_msg}")
+                    return None
+            else:
+                logger.error(f"❌ OrderManager not available")
                 return None
-            
-            if result.retcode != mt5.TRADE_RETCODE_DONE:
-                logger.error(f"❌ Failed to execute entry: {result.retcode} - {result.comment}")
-                return None
-            
-            # บันทึก zone ที่ใช้แล้ว
-            zone_key = self._generate_zone_key(zone)
-            self.used_zones[zone_key] = {
-                'timestamp': datetime.now(),
-                'ticket': result.order
-            }
-            
-            # อัปเดต daily counter
-            self.daily_trade_count += 1
-            
-            logger.info(f"✅ Entry executed: {direction.upper()} {lot_size:.2f} lots at {entry_price:.5f} "
-                       f"(TP: {tp_price:.5f}, SL: {sl_price:.5f}) - {reason}")
-            
-            return result.order
                 
         except Exception as e:
             logger.error(f"❌ Error executing entry: {e}")
