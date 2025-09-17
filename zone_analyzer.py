@@ -17,7 +17,7 @@ class ZoneAnalyzer:
         
         # Multi-Algorithm Zone Detection Parameters - ปรับให้หา zones ได้มากขึ้น
         self.min_touches = 1  # เกณฑ์ขั้นต่ำสำหรับการแตะ zone
-        self.zone_tolerance = 35.0  # ความยืดหยุ่นในการรวม zones (เพิ่มจาก 25.0)
+        self.zone_tolerance = 5.0  # ความยืดหยุ่นในการรวม zones (ลดจาก 35.0 เพื่อให้มี zones มากขึ้น)
         self.min_zone_strength = 1  # ความแข็งแรงขั้นต่ำของ zone (ลดจาก 2)
         self.max_zones_per_type = 25  # จำนวน zone สูงสุดต่อประเภท (เพิ่มจาก 15)
         
@@ -42,7 +42,7 @@ class ZoneAnalyzer:
         self.enable_swing_levels = True      # วิธีที่ 5: Swing High/Low Levels (Key Reversal Points)
         
         # ปรับให้หา zones ได้มากขึ้นและแม่นยำขึ้น
-        self.zone_tolerance = 35.0           # ความยืดหยุ่นในการรวม zones (เพิ่มจาก 12.0)
+        self.zone_tolerance = 5.0            # ความยืดหยุ่นในการรวม zones (ลดจาก 35.0 เพื่อให้มี zones มากขึ้น)
         self.min_zone_strength = 1           # ความแข็งแรงขั้นต่ำของ zone (ลดจาก 2)
         self.max_zones_per_type = 25         # จำนวน zone สูงสุดต่อประเภท (เพิ่มจาก 20)
         
@@ -874,6 +874,8 @@ class ZoneAnalyzer:
             if not zones:
                 return []
             
+            logger.info(f"🔍 [CONSOLIDATE] Starting consolidation for {zone_type}: {len(zones)} zones (tolerance: {self.zone_tolerance})")
+            
             # จัดเรียงตาม strength
             zones.sort(key=lambda x: x['strength'], reverse=True)
             
@@ -917,7 +919,9 @@ class ZoneAnalyzer:
                     consolidated.append(zone)
             
             # จำกัดจำนวน zones
-            return consolidated[:self.max_zones_per_type]
+            final_zones = consolidated[:self.max_zones_per_type]
+            logger.info(f"✅ [CONSOLIDATE] Final {zone_type} zones: {len(final_zones)} (from {len(zones)} original)")
+            return final_zones
             
         except Exception as e:
             logger.error(f"❌ Error consolidating {zone_type} zones: {e}")
