@@ -78,7 +78,7 @@ class DynamicPositionModifier:
     def __init__(self, mt5_connection=None, symbol: str = "XAUUSD", hedge_pairing_closer=None, initial_balance: float = 10000.0):
         self.mt5_connection = mt5_connection
         self.symbol = symbol
-        self.hedge_pairing_closer = hedge_pairing_closer
+        self.hedge_pairing_closer = None  # Disabled - Using Edge Priority Closing
         self.initial_balance = initial_balance
         
         # 🎯 Dynamic Thresholds - ปรับตัวตามสถานการณ์
@@ -587,10 +587,11 @@ class DynamicPositionModifier:
             logger.error(f"❌ Error cancelling correction position: {e}")
     
     def _send_correction_to_hedge_pairing(self, correction_pos: Any, target_pos: Any):
-        """📤 ส่งไม้แก้ไขไปให้ Hedge Pairing Closer"""
+        """📤 ส่งไม้แก้ไขไปให้ Hedge Pairing Closer - DISABLED"""
         try:
-            if not self.hedge_pairing_closer:
-                return
+            # 🚫 DISABLED: hedge_pairing_closer - Using Edge Priority Closing instead
+            logger.debug("🚫 hedge_pairing_closer disabled - Using Edge Priority Closing instead")
+            return
             
             # เพิ่มไม้แก้ไขเข้าไปในรายการไม้ทั้งหมด
             logger.info(f"📤 Sending correction position {getattr(correction_pos, 'ticket', 'N/A')} to Hedge Pairing Closer")
@@ -661,9 +662,8 @@ class DynamicPositionModifier:
                             correction_count += 1
                             logger.info(f"✅ Created safe correction for ticket {getattr(target_pos, 'ticket', 'N/A')} (distance: {distance:.1f}) [{correction_count}/{max_corrections}]")
                             
-                            # ส่งไม้แก้ไขไปให้ Hedge Pairing Closer
-                            if self.hedge_pairing_closer:
-                                self._send_correction_to_hedge_pairing(correction_pos, target_pos)
+                            # 🚫 DISABLED: hedge_pairing_closer - Using Edge Priority Closing instead
+                            logger.debug("🚫 hedge_pairing_closer disabled - Using Edge Priority Closing instead")
                             
                             # อัปเดตเวลาการแก้ไขล่าสุด
                             self.last_correction_time = current_time

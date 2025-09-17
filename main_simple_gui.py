@@ -1190,8 +1190,8 @@ class AdaptiveTradingSystemGUI:
                                                         logger.info(f"✅ Recovery Entry executed: Ticket {ticket}")
                                             else:
                                                 logger.debug("🚫 No recovery opportunities found")
-                                        else:
-                                            logger.warning(f"🚫 SW Filter blocked Smart Entry: {sw_reason}")
+                                    else:
+                                        logger.warning(f"🚫 SW Filter blocked Smart Entry: {sw_reason}")
                                 except Exception as e:
                                     logger.error(f"❌ Error in smart entry: {e}")
                             
@@ -1213,8 +1213,8 @@ class AdaptiveTradingSystemGUI:
                                                 ticket = self.portfolio_anchor.execute_anchor(anchor_need, current_price)
                                                 if ticket:
                                                     logger.info(f"✅ Anchor created: Ticket {ticket}")
-                                        else:
-                                            logger.debug("🚫 SW Filter blocked Portfolio Anchor")
+                                    else:
+                                        logger.debug("🚫 SW Filter blocked Portfolio Anchor")
                                 except Exception as e:
                                     logger.error(f"❌ Error in portfolio anchor: {e}")
                             

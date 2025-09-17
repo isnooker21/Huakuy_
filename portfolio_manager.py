@@ -421,7 +421,9 @@ class PortfolioManager:
                     positions_to_close, scaling_type, reason
                 )
             else:
-                result = self.order_manager.close_positions_group(positions_to_close, reason)
+                # 🚫 DISABLED: close_positions_group - Using Edge Priority Closing instead
+                logger.warning("🚫 close_positions_group disabled - Using Edge Priority Closing instead")
+                result = None
                 
             if result.success:
                 # อัพเดทสถิติ
