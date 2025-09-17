@@ -1284,6 +1284,7 @@ class AdaptiveTradingSystemGUI:
                                             'volume': 0.01
                                         })()
                                         sw_ok, _ = self.hedge_pairing_closer._sw_filter_check(mock_position, positions)
+                                        logger.info(f"🔍 [DEBUG] SW Filter Check: {sw_ok}")
                                         if sw_ok:
                                             # 1.1 ตรวจสอบโอกาสเข้าไม้ปกติ
                                             entry_opportunity = self.smart_entry_system.analyze_entry_opportunity(

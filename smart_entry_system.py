@@ -128,28 +128,40 @@ class SmartEntrySystem:
         try:
             # คำนวณ Pivot Point
             pivot_point = self.calculate_pivot_point(current_price, zones)
+            logger.info(f"🔍 [ZONE SELECTION] Current price: {current_price:.2f}, Pivot: {pivot_point:.2f}")
             
             support_zones = zones.get('support', [])
             resistance_zones = zones.get('resistance', [])
             
+            logger.info(f"🔍 [ZONE SELECTION] Available zones: {len(support_zones)} support, {len(resistance_zones)} resistance")
+            
             if not support_zones or not resistance_zones:
+                logger.warning("🚫 [ZONE SELECTION] No support or resistance zones available")
                 return None, None
             
             # เลือก Zone ตาม Pivot Point (ปรับให้เลือกที่ใกล้ที่สุด)
             if current_price < pivot_point:
                 # ราคาต่ำกว่า Pivot → หา Support ที่ใกล้ที่สุด
                 valid_supports = [zone for zone in support_zones if zone['strength'] >= self.min_zone_strength]
+                logger.info(f"🔍 [ZONE SELECTION] Looking for SUPPORT zones. Valid: {len(valid_supports)} (min_strength: {self.min_zone_strength})")
                 if valid_supports:
                     # เลือก Support ที่ใกล้ที่สุดและแข็งแกร่งพอ
                     best_support = min(valid_supports, key=lambda x: abs(current_price - x['price']))
+                    logger.info(f"✅ [ZONE SELECTION] Selected SUPPORT: {best_support['price']:.2f} (strength: {best_support['strength']:.1f})")
                     return 'support', best_support
+                else:
+                    logger.warning("🚫 [ZONE SELECTION] No valid SUPPORT zones found")
             else:
                 # ราคาสูงกว่า Pivot → หา Resistance ที่ใกล้ที่สุด
                 valid_resistances = [zone for zone in resistance_zones if zone['strength'] >= self.min_zone_strength]
+                logger.info(f"🔍 [ZONE SELECTION] Looking for RESISTANCE zones. Valid: {len(valid_resistances)} (min_strength: {self.min_zone_strength})")
                 if valid_resistances:
                     # เลือก Resistance ที่ใกล้ที่สุดและแข็งแกร่งพอ
                     best_resistance = min(valid_resistances, key=lambda x: abs(current_price - x['price']))
+                    logger.info(f"✅ [ZONE SELECTION] Selected RESISTANCE: {best_resistance['price']:.2f} (strength: {best_resistance['strength']:.1f})")
                     return 'resistance', best_resistance
+                else:
+                    logger.warning("🚫 [ZONE SELECTION] No valid RESISTANCE zones found")
             
             return None, None
             
@@ -222,6 +234,7 @@ class SmartEntrySystem:
                                 existing_positions: List = None) -> Optional[Dict]:
         """🔍 วิเคราะห์โอกาสเข้าไม้แบบใหม่ (Support/Resistance เท่านั้น)"""
         try:
+            logger.info(f"🔍 [SMART ENTRY] Starting entry analysis for {symbol} at {current_price:.2f}")
             self.symbol = symbol  # ตั้งค่า symbol ที่ถูกต้อง
             # รีเซ็ต daily counter
             self._reset_daily_counter()
