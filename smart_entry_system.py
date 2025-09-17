@@ -427,7 +427,6 @@ class SmartEntrySystem:
             sl_price = 0.0  # ไม่ตั้ง SL
             
             logger.info(f"🚀 Executing entry: {direction.upper()} {lot_size:.2f} lots at {entry_price:.5f}")
-            logger.info(f"   TP: None (ให้ระบบปิดไม้จัดการ), SL: None (ให้ระบบปิดไม้จัดการ)")
             logger.info(f"   Reason: {reason}")
             
             # ใช้ OrderManager แทน mt5.order_send โดยตรง
@@ -435,11 +434,11 @@ class SmartEntrySystem:
             from trading_conditions import Signal
             
             # กำหนด comment ตามประเภทการเข้าไม้
-            if 'Recovery' in reason or 'recovery' in reason.lower():
+            if reason and ('Recovery' in str(reason) or 'recovery' in str(reason).lower()):
                 comment = f"RECOVERY: {reason}"
                 logger.info(f"🔧 Recovery Entry Comment: {comment}")
             else:
-                comment = f"SMART_ENTRY: {reason}"
+                comment = f"SMART_ENTRY: {reason}" if reason else f"SMART_ENTRY: {direction.upper()} at {entry_price:.5f}"
                 logger.info(f"🎯 Smart Entry Comment: {comment}")
             
             signal = Signal(

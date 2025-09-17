@@ -99,8 +99,8 @@ class OrderManager:
                 
             # ส่ง Order
             # ปรับปรุง comment ให้ชัดเจน
-            if signal.comment:
-                order_comment = signal.comment
+            if signal.comment and len(str(signal.comment)) > 0:
+                order_comment = str(signal.comment)
             else:
                 order_comment = f"SmartEntry_{signal.direction}"
             
