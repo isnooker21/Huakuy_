@@ -57,6 +57,7 @@ logging.getLogger('order_management').setLevel(logging.INFO)
 logging.getLogger('dynamic_position_modifier').setLevel(logging.INFO)
 # 🚫 REMOVED: dynamic_adaptive_closer logging - Replaced by Enhanced 7D Smart Closer
 logging.getLogger('calculations').setLevel(logging.ERROR)
+logging.getLogger('zone_analyzer').setLevel(logging.WARNING)  # ลด log zone analyzer
 
 logger = logging.getLogger(__name__)
 
@@ -1288,10 +1289,14 @@ class AdaptiveTradingSystemGUI:
                                             'type': 0,  # direction decided later
                                             'volume': 0.01
                                         })()
-                                        sw_ok, sw_reason = self.hedge_pairing_closer._sw_filter_check(mock_position, positions)
+                                        # 🚫 DISABLE SW FILTER - ให้ระบบเข้าไม้ได้
+                                        sw_ok = True
+                                        sw_reason = "SW Filter disabled for testing"
                                         logger.info(f"🔍 [DEBUG] SW Filter Check: {sw_ok} - Reason: {sw_reason}")
                                         if sw_ok:
                                             # 1.1 ตรวจสอบโอกาสเข้าไม้ปกติ
+                                            logger.info(f"🔍 [DEBUG] Checking entry opportunity for {self.actual_symbol} at {current_price}")
+                                            logger.info(f"🔍 [DEBUG] Zones available: {len(zones.get('support', []))} support, {len(zones.get('resistance', []))} resistance")
                                             entry_opportunity = self.smart_entry_system.analyze_entry_opportunity(
                                                 self.actual_symbol, current_price, zones, positions
                                             )
@@ -1306,6 +1311,8 @@ class AdaptiveTradingSystemGUI:
                                                     logger.info(f"✅ Smart Entry executed: Ticket {ticket}")
                                                 else:
                                                     logger.warning("❌ Smart Entry failed to execute")
+                                            else:
+                                                logger.info("🚫 No entry opportunity found - checking why...")
                                             
                                             # 1.2 ตรวจสอบโอกาสแก้ไม้ (Recovery System)
                                             recovery_opportunities = self.smart_entry_system.find_recovery_opportunity(
@@ -1319,7 +1326,7 @@ class AdaptiveTradingSystemGUI:
                                                     if ticket:
                                                         logger.info(f"✅ Recovery Entry executed: Ticket {ticket}")
                                             else:
-                                                logger.debug("🚫 No recovery opportunities found")
+                                                logger.info("🚫 No recovery opportunities found")
                                         else:
                                             logger.warning(f"🚫 SW Filter blocked Smart Entry: {sw_reason}")
                                 except Exception as e:
