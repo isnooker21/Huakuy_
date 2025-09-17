@@ -425,18 +425,24 @@ class HedgePairingCloser:
                 else:
                     return self._close_recovery_needed_positions(urgent_positions, all_statuses)
             
-            # 2. หาไม้ที่สามารถปิดคู่กันได้ (HEDGE)
+            # 2. หาไม้ที่สามารถปิดคู่กันได้ (HEDGE) - ลดเกณฑ์การจับคู่
             hedge_candidates = [s for s in all_statuses if s.recommended_action == "HEDGE_CANDIDATE"]
             if hedge_candidates:
                 # ตรวจสอบว่ามีไม้ติดลบหรือไม่
                 total_hedge_profit = sum(pos.profit for pos in hedge_candidates)
+                
+                # ลดเกณฑ์การจับคู่ - อนุญาตให้จับคู่ไม้ติดลบได้
                 if total_hedge_profit < 0:
-                    logger.info(f"🚫 INTELLIGENT CLOSING: Hedge candidates are losing (${total_hedge_profit:.2f}) - Skipping")
-                    logger.info(f"   ZERO LOSS POLICY: Cannot close losing positions without helpers")
+                    logger.info(f"⚠️ INTELLIGENT CLOSING: Hedge candidates are losing (${total_hedge_profit:.2f}) - แต่จะลองจับคู่")
+                    logger.info(f"   ลดเกณฑ์การจับคู่ - อนุญาตให้จับคู่ไม้ติดลบได้")
+                
+                # ลองจับคู่ไม้ติดลบ
+                hedge_decision = self._find_hedge_pairs(hedge_candidates, all_statuses)
+                if hedge_decision.should_close:
+                    logger.info(f"✅ HEDGE PAIRING: จับคู่ไม้ติดลบสำเร็จ - Net P&L: ${hedge_decision.net_pnl:.2f}")
+                    return hedge_decision
                 else:
-                    hedge_decision = self._find_hedge_pairs(hedge_candidates, all_statuses)
-                    if hedge_decision.should_close:
-                        return hedge_decision
+                    logger.info(f"🚫 HEDGE PAIRING: ไม่สามารถจับคู่ไม้ติดลบได้")
             
             # 3. ปิดไม้ที่ต้องการความช่วยเหลือ (HELP_NEEDED)
             if help_needed_positions:
@@ -459,10 +465,30 @@ class HedgePairingCloser:
                 else:
                     return self._close_smallest_losers(losers)
             
-            # 5. ปิดไม้กำไรเมื่อจำเป็น (เฉพาะเมื่อพอร์ตแย่)
+            # 5. ปิดไม้กำไรเมื่อจำเป็น (เฉพาะเมื่อพอร์ตแย่ และไม่มีไม้ติดลบให้จับคู่)
             if portfolio_health in ["แย่", "แย่มาก"]:
+                # ตรวจสอบว่ามีไม้ติดลบให้จับคู่หรือไม่
+                losers = [s for s in all_statuses if s.status == "LOSER"]
+                if losers:
+                    logger.info(f"🚫 Portfolio health แย่ แต่มีไม้ติดลบ {len(losers)} ตัว - ข้ามการปิดไม้กำไร")
+                    logger.info(f"   ควรจับคู่ไม้ติดลบก่อนปิดไม้กำไร")
+                    return ClosingDecision(
+                        should_close=False,
+                        positions_to_close=[],
+                        method="SKIP_WINNERS_FOR_LOSERS",
+                        net_pnl=0.0,
+                        expected_pnl=0.0,
+                        position_count=len(positions),
+                        buy_count=len([p for p in positions if getattr(p, 'type', 0) == 0]),
+                        sell_count=len([p for p in positions if getattr(p, 'type', 0) == 1]),
+                        confidence_score=0.0,
+                        reason="มีไม้ติดลบให้จับคู่ - ข้ามการปิดไม้กำไร"
+                    )
+                
+                # ไม่มีไม้ติดลบแล้วค่อยปิดไม้กำไร
                 winners = [s for s in all_statuses if s.status == "WINNER"]
                 if winners:
+                    logger.info(f"⚠️ Portfolio health แย่ และไม่มีไม้ติดลบ - ปิดไม้กำไร {len(winners)} ตัว")
                     return self._close_some_winners(winners, portfolio_health)
             
             # ไม่มีไม้ที่ควรปิด
@@ -1611,7 +1637,7 @@ class HedgePairingCloser:
                 logger.info(f"   Confidence: {intelligent_decision.confidence_score:.2f}")
                 
                 # บันทึกประสิทธิภาพ
-                processing_time = time.time() - start_time
+                    processing_time = time.time() - start_time
                 self._record_performance(True, intelligent_decision.net_pnl, processing_time)
                 
                 return intelligent_decision
@@ -2008,10 +2034,10 @@ class HedgePairingCloser:
                 
                 for helper_count in range(1, max_helpers + 1):
                     for helper_combo in itertools.combinations(profitable_unpaired, helper_count):
-                        if search_count >= max_searches:
-                            break
-                            
-                        search_count += 1
+                    if search_count >= max_searches:
+                        break
+                        
+                    search_count += 1
                         helper_profit = sum(getattr(helper, 'profit', 0) for helper in helper_combo)
                         total_profit = losing_pair['profit'] + helper_profit
                         
@@ -2299,8 +2325,8 @@ class HedgePairingCloser:
                 logger.info(f"   BUY positions: {buy_count}, SELL positions: {sell_count}")
             else:
                 # มีไม้ฝั่งเดียว - อนุญาตให้ใช้ Single Side Closing
-                logger.info("🔍 STEP 2.5: SINGLE SIDE PROFITABLE CLOSING")
-                single_side_combinations = self._find_single_side_profitable(priority_positions)
+            logger.info("🔍 STEP 2.5: SINGLE SIDE PROFITABLE CLOSING")
+            single_side_combinations = self._find_single_side_profitable(priority_positions)
             
             if single_side_combinations:
                 logger.info("-" * 40)
@@ -2869,6 +2895,6 @@ def create_hedge_pairing_closer(symbol: str = "EURUSD") -> HedgePairingCloser:
     """สร้าง HedgePairingCloser instance"""
     try:
         return HedgePairingCloser(symbol=symbol)
-    except Exception as e:
+        except Exception as e:
         logger.error(f"❌ Failed to create HedgePairingCloser: {e}")
         raise

@@ -259,20 +259,31 @@ class OrderManager:
             logger.info(f"   Safety Buffer: ${safety_buffer:.2f}")
             logger.info(f"   Final Expected: ${net_profit_before_close - safety_buffer:.2f}")
             
-            # 🚨 STRICT ZERO LOSS CHECK - บังคับตรวจสอบทุกครั้ง
+            # 🚨 STRICT ZERO LOSS CHECK - บังคับตรวจสอบทุกครั้ง (ยกเว้น Hedge Pairs)
             if net_profit_before_close < safety_buffer:
-                logger.warning(f"🚫 ZERO LOSS POLICY: Rejecting close - would result in loss")
-                logger.warning(f"   💰 Current Profit: ${net_profit_before_close:.2f}")
-                logger.warning(f"   🛡️ Required Buffer: ${safety_buffer:.2f}")
-                logger.warning(f"   📊 Positions: {len(valid_positions)}")
-                logger.warning(f"   📈 Total Volume: {sum(getattr(pos, 'volume', 0.01) for pos in valid_positions):.2f}")
-                logger.warning(f"   🚫 FORCE REJECT: No bypass allowed for loss-making positions")
-                return CloseResult(
-                    success=False,
-                    closed_tickets=[],
-                    total_profit=0.0,
-                    error_message=f"Zero Loss Policy: Insufficient profit (${net_profit_before_close:.2f} < ${safety_buffer:.2f}) - FORCE REJECT"
-                )
+                # ตรวจสอบว่าเป็น Hedge Pair หรือไม่ (มีไม้ทั้ง BUY และ SELL)
+                buy_positions = [pos for pos in valid_positions if getattr(pos, 'type', 0) == 0]
+                sell_positions = [pos for pos in valid_positions if getattr(pos, 'type', 0) == 1]
+                
+                if len(buy_positions) > 0 and len(sell_positions) > 0:
+                    logger.info(f"✅ ZERO LOSS POLICY: Hedge Pair detected - ALLOWING close despite loss")
+                    logger.info(f"   💰 Current Profit: ${net_profit_before_close:.2f} (Loss)")
+                    logger.info(f"   🛡️ Required Buffer: ${safety_buffer:.2f}")
+                    logger.info(f"   📊 Positions: {len(valid_positions)} (BUY: {len(buy_positions)}, SELL: {len(sell_positions)})")
+                    logger.info(f"   🎯 HEDGE PAIR BYPASS: Allowing hedge pair closure")
+                else:
+                    logger.warning(f"🚫 ZERO LOSS POLICY: Rejecting close - would result in loss")
+                    logger.warning(f"   💰 Current Profit: ${net_profit_before_close:.2f}")
+                    logger.warning(f"   🛡️ Required Buffer: ${safety_buffer:.2f}")
+                    logger.warning(f"   📊 Positions: {len(valid_positions)}")
+                    logger.warning(f"   📈 Total Volume: {sum(getattr(pos, 'volume', 0.01) for pos in valid_positions):.2f}")
+                    logger.warning(f"   🚫 FORCE REJECT: No bypass allowed for loss-making positions")
+                    return CloseResult(
+                        success=False,
+                        closed_tickets=[],
+                        total_profit=0.0,
+                        error_message=f"Zero Loss Policy: Insufficient profit (${net_profit_before_close:.2f} < ${safety_buffer:.2f}) - FORCE REJECT"
+                    )
             else:
                 logger.info(f"✅ ZERO LOSS POLICY: APPROVED for closing")
                 logger.info(f"   💰 Profit: ${net_profit_before_close:.2f} > Buffer: ${safety_buffer:.2f}")
@@ -329,15 +340,25 @@ class OrderManager:
                     error_message=f"Spread check rejected - group losing {group_profit_percentage:.2f}%"
                 )
             
-            # 🚫 ZERO LOSS POLICY: Double check before closing
+            # 🚫 ZERO LOSS POLICY: Double check before closing (ยกเว้น Hedge Pairs)
             if total_group_profit < 0:
-                logger.warning(f"🚫 ZERO LOSS POLICY: Group profit is negative (${total_group_profit:.2f})")
-                logger.warning(f"   🚫 FORCE REJECT: Cannot close loss-making group")
-                return CloseResult(
-                    success=False,
-                    closed_tickets=[],
-                    error_message=f"Zero Loss Policy: Group profit is negative (${total_group_profit:.2f}) - FORCE REJECT"
-                )
+                # ตรวจสอบว่าเป็น Hedge Pair หรือไม่
+                buy_positions = [pos for pos in valid_positions if getattr(pos, 'type', 0) == 0]
+                sell_positions = [pos for pos in valid_positions if getattr(pos, 'type', 0) == 1]
+                
+                if len(buy_positions) > 0 and len(sell_positions) > 0:
+                    logger.info(f"✅ ZERO LOSS POLICY: Hedge Pair detected - ALLOWING close despite negative profit")
+                    logger.info(f"   💰 Group Profit: ${total_group_profit:.2f} (Negative)")
+                    logger.info(f"   📊 Positions: {len(valid_positions)} (BUY: {len(buy_positions)}, SELL: {len(sell_positions)})")
+                    logger.info(f"   🎯 HEDGE PAIR BYPASS: Allowing hedge pair closure")
+                else:
+                    logger.warning(f"🚫 ZERO LOSS POLICY: Group profit is negative (${total_group_profit:.2f})")
+                    logger.warning(f"   🚫 FORCE REJECT: Cannot close loss-making group")
+                    return CloseResult(
+                        success=False,
+                        closed_tickets=[],
+                        error_message=f"Zero Loss Policy: Group profit is negative (${total_group_profit:.2f}) - FORCE REJECT"
+                    )
             
             # ✅ STEP 3: Execute raw group closing via MT5Connection
             logger.info(f"✅ SPREAD CHECK PASSED: Executing raw group close")
