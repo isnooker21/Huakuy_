@@ -414,16 +414,10 @@ class PortfolioManager:
             exit_type = decision.get('exit_type', 'manual')
             reason = decision.get('reason', 'Portfolio decision')
             
-            # ปิด Position
-            if exit_type == 'scaling':
-                scaling_type = decision.get('scaling_type', '1:1')
-                result = self.order_manager.close_positions_by_scaling_ratio(
-                    positions_to_close, scaling_type, reason
-                )
-            else:
-                # 🚫 DISABLED: close_positions_group - Using Edge Priority Closing instead
-                logger.warning("🚫 close_positions_group disabled - Using Edge Priority Closing instead")
-                result = None
+            # 🚫 DISABLED: All closing methods - Using Edge Priority Closing only
+            logger.warning("🚫 ALL closing methods disabled - Using Edge Priority Closing only")
+            logger.warning(f"   Exit decision ignored: {exit_type} - {reason}")
+            result = None
                 
             if result.success:
                 # อัพเดทสถิติ

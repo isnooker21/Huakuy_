@@ -39,7 +39,7 @@ from dynamic_position_modifier import create_dynamic_position_modifier
 # 🎯 NEW SMART TRADING SYSTEMS
 from zone_analyzer import ZoneAnalyzer
 from smart_entry_system import SmartEntrySystem
-from portfolio_anchor import PortfolioAnchor
+# 🚫 REMOVED: from portfolio_anchor import PortfolioAnchor
 
 # 🚀 SIMPLE & CLEAN LOGGING CONFIGURATION
 logging.basicConfig(
@@ -654,11 +654,75 @@ class AdaptiveTradingSystemGUI:
             
             logger.info(f"🎯 [EDGE CLOSING] Analyzing {len(buy_positions)} BUY, {len(sell_positions)} SELL positions")
             
-            # TODO: Implement Edge Priority Closing Logic
+            # 🎯 Edge Priority Closing Logic
             # 1. จับคู่ไม้ขอบ (BUY ราคาต่ำสุด + BUY ราคาสูงสุด)
+            edge_positions = []
+            
+            # BUY Edge: ราคาต่ำสุด (กำไรมาก) + ราคาสูงสุด (ขาดทุน)
+            if len(buy_positions) >= 2:
+                buy_sorted = sorted(buy_positions, key=lambda x: getattr(x, 'price_open', 0))
+                lowest_buy = buy_sorted[0]  # ราคาต่ำสุด (กำไรมาก)
+                highest_buy = buy_sorted[-1]  # ราคาสูงสุด (ขาดทุน)
+                edge_positions.extend([lowest_buy, highest_buy])
+                logger.info(f"🎯 [EDGE] BUY Edge: {getattr(lowest_buy, 'price_open', 0):.5f} + {getattr(highest_buy, 'price_open', 0):.5f}")
+            
+            # SELL Edge: ราคาสูงสุด (กำไรมาก) + ราคาต่ำสุด (ขาดทุน)
+            if len(sell_positions) >= 2:
+                sell_sorted = sorted(sell_positions, key=lambda x: getattr(x, 'price_open', 0))
+                highest_sell = sell_sorted[-1]  # ราคาสูงสุด (กำไรมาก)
+                lowest_sell = sell_sorted[0]  # ราคาต่ำสุด (ขาดทุน)
+                edge_positions.extend([highest_sell, lowest_sell])
+                logger.info(f"🎯 [EDGE] SELL Edge: {getattr(highest_sell, 'price_open', 0):.5f} + {getattr(lowest_sell, 'price_open', 0):.5f}")
+            
+            if not edge_positions:
+                logger.debug("🎯 [EDGE CLOSING] No edge positions found")
+                return
+            
             # 2. หา Helper (ไม้กำไรอื่นๆ)
+            helper_positions = []
+            edge_tickets = [getattr(pos, 'ticket', 0) for pos in edge_positions]
+            
+            for pos in positions:
+                ticket = getattr(pos, 'ticket', 0)
+                profit = getattr(pos, 'profit', 0)
+                
+                # ไม่อยู่ใน edge และมีกำไร
+                if ticket not in edge_tickets and profit > 0:
+                    helper_positions.append(pos)
+            
+            # เรียงตามกำไร (มากไปน้อย)
+            helper_positions.sort(key=lambda x: getattr(x, 'profit', 0), reverse=True)
+            logger.info(f"🎯 [HELPER] Found {len(helper_positions)} helper positions")
+            
             # 3. คำนวณ % กำไร (5% ต่อ lot)
-            # 4. ปิดเมื่อ % กำไร ≥ 5%
+            all_positions_to_close = edge_positions + helper_positions
+            total_profit = sum(getattr(pos, 'profit', 0) for pos in all_positions_to_close)
+            total_lot = sum(getattr(pos, 'volume', 0) for pos in all_positions_to_close)
+            
+            if total_lot > 0:
+                # คำนวณ % กำไรต่อ lot (เป้าหมาย: $0.5 ต่อ 0.01 lot = 5%)
+                profit_per_lot = total_profit / total_lot
+                profit_percentage = (profit_per_lot / 0.5) * 5.0  # 5% ต่อ $0.5
+                
+                logger.info(f"🎯 [EDGE CLOSING] Edge: {len(edge_positions)}, Helper: {len(helper_positions)}")
+                logger.info(f"   Total Profit: ${total_profit:.2f}, Lot: {total_lot:.2f}, %: {profit_percentage:.2f}%")
+                
+                # 4. ปิดเมื่อ % กำไร ≥ 5%
+                if profit_percentage >= 5.0:
+                    logger.info(f"✅ [EDGE CLOSING] Profit target reached: {profit_percentage:.2f}% ≥ 5%")
+                    
+                    # ใช้ระบบปิดไม้เก่าที่มีอยู่
+                    result = self.order_manager.close_positions_group(all_positions_to_close, "Edge Priority Closing")
+                    
+                    if result.success:
+                        logger.info(f"✅ [EDGE CLOSING] Successfully closed {len(result.closed_tickets)} positions")
+                        logger.info(f"   Total Profit: ${result.total_profit:.2f}")
+                    else:
+                        logger.error(f"❌ [EDGE CLOSING] Failed to close positions: {result.error_message}")
+                else:
+                    logger.debug(f"🎯 [EDGE CLOSING] Profit not enough: {profit_percentage:.2f}% < 5%")
+            else:
+                logger.debug("🎯 [EDGE CLOSING] No positions to close (total lot = 0)")
             
         except Exception as e:
             logger.error(f"❌ Error in edge priority closing: {e}")
@@ -1198,28 +1262,8 @@ class AdaptiveTradingSystemGUI:
                             entry_time = time.time() - entry_start
                             logger.debug(f"⏱️ Smart Entry processed in {entry_time:.2f}s")
                             
-                            # 2. Portfolio Anchor System
-                            anchor_start = time.time()
-                            if hasattr(self, 'portfolio_anchor') and self.portfolio_anchor:
-                                try:
-                                    # 🎯 SW Filter disabled - Using Edge Priority Closing instead
-                                    sw_ok = True  # Always allow entry
-                                    if sw_ok:
-                                            anchor_need = self.portfolio_anchor.analyze_anchor_needs(
-                                                self.actual_symbol, current_price, portfolio_profit, zones, positions
-                                            )
-                                            if anchor_need:
-                                                logger.info(f"⚓ Anchor Opportunity: {anchor_need['direction']} (Reason: {anchor_need['reason']})")
-                                                ticket = self.portfolio_anchor.execute_anchor(anchor_need, current_price)
-                                                if ticket:
-                                                    logger.info(f"✅ Anchor created: Ticket {ticket}")
-                                    else:
-                                        logger.debug("🚫 SW Filter blocked Portfolio Anchor")
-                                except Exception as e:
-                                    logger.error(f"❌ Error in portfolio anchor: {e}")
-                            
-                            anchor_time = time.time() - anchor_start
-                            logger.debug(f"⏱️ Portfolio Anchor processed in {anchor_time:.2f}s")
+                            # 🚫 Portfolio Anchor System REMOVED - Using Edge Priority Closing only
+                            logger.debug("🚫 Portfolio Anchor removed - Using Edge Priority Closing only")
                                     
                             # Log total processing time
                             total_time = time.time() - start_time
@@ -1238,34 +1282,8 @@ class AdaptiveTradingSystemGUI:
                 except Exception as e:
                     logger.error(f"❌ Error starting smart systems thread: {e}")
             
-            # 3. Manage Existing Anchors (Background Thread)
-            if hasattr(self, 'portfolio_anchor') and self.portfolio_anchor:
-                try:
-                    import threading
-                    def anchor_management_worker():
-                        try:
-                            anchor_actions = self.portfolio_anchor.manage_existing_anchors(current_price)
-                            for action in anchor_actions:
-                                if action['action'] == 'close':
-                                    success = self.portfolio_anchor.close_anchor(action['ticket'], action['reason'])
-                                    if success:
-                                        logger.info(f"✅ Anchor {action['ticket']} closed: {action['reason']}")
-                            
-                            # Log Statistics
-                            entry_stats = self.smart_entry_system.get_entry_statistics() if hasattr(self, 'smart_entry_system') else {}
-                            anchor_stats = self.portfolio_anchor.get_anchor_statistics()
-                            
-                            logger.info(f"📊 Smart Systems Status: Entry trades: {entry_stats.get('daily_trades', 0)}/{entry_stats.get('max_daily_trades', 0)}, "
-                                       f"Anchors: {anchor_stats.get('active_anchors', 0)}/{anchor_stats.get('max_anchors', 0)}")
-                        except Exception as e:
-                            logger.error(f"❌ Error in anchor management worker: {e}")
-                    
-                    # เริ่ม thread
-                    anchor_mgmt_thread = threading.Thread(target=anchor_management_worker, daemon=True)
-                    anchor_mgmt_thread.start()
-                    
-                except Exception as e:
-                    logger.error(f"❌ Error starting anchor management thread: {e}")
+            # 🚫 Portfolio Anchor Management REMOVED - Using Edge Priority Closing only
+            logger.debug("🚫 Portfolio Anchor management removed - Using Edge Priority Closing only")
             
         except Exception as e:
             logger.error(f"❌ Error in smart systems: {e}")

@@ -1338,21 +1338,15 @@ class TradingGUI:
             messagebox.showerror("Error", f"เกิดข้อผิดพลาด: {str(e)}")
             
     def close_all_positions(self):
-        """ปิด Position ทั้งหมด - ⚠️ อันตราย: อาจปิดติดลบ"""
+        """ปิด Position ทั้งหมด - 🚫 DISABLED: ใช้ Edge Priority Closing เท่านั้น"""
         try:
-            if messagebox.askyesno("⚠️ อันตราย!", 
-                                 "การปิดทั้งหมดอาจทำให้ขาดทุน!\n"
-                                 "แนะนำให้ใช้ Smart Profit Taking แทน\n\n"
-                                 "ยืนยันที่จะปิดทั้งหมด?"):
-                result = self.portfolio_manager.order_manager.emergency_close_all("Manual close all")
-                if result.success:
-                    logger.info(f"ปิด Position ทั้งหมดสำเร็จ - จำนวน: {len(result.closed_tickets)}")
-                    messagebox.showinfo("Success", f"ปิด Position สำเร็จ {len(result.closed_tickets)} ตัว")
-                else:
-                    logger.error(f"ไม่สามารถปิด Position ได้: {result.error_message}")
-                    messagebox.showerror("Error", result.error_message)
+            messagebox.showwarning("🚫 ปิดการใช้งาน!", 
+                                 "การปิดทั้งหมดถูกปิดการใช้งานแล้ว!\n"
+                                 "ระบบใช้ Edge Priority Closing เท่านั้น\n"
+                                 "รอให้ระบบปิดไม้อัตโนมัติ")
+            logger.warning("🚫 close_all_positions disabled - Using Edge Priority Closing only")
         except Exception as e:
-            logger.error(f"เกิดข้อผิดพลาดในการปิด Position ทั้งหมด: {str(e)}")
+            logger.error(f"เกิดข้อผิดพลาดในการแสดงข้อความ: {str(e)}")
             messagebox.showerror("Error", f"เกิดข้อผิดพลาด: {str(e)}")
             
     def close_selected_position(self):
