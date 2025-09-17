@@ -1272,6 +1272,7 @@ class SmartEntryTradingSystemGUI:
                                         })()
                                         sw_ok, _ = self.hedge_pairing_closer._sw_filter_check(mock_position, positions)
                                         if sw_ok:
+                                            # 1.1 ตรวจสอบโอกาสเข้าไม้ปกติ
                                             entry_opportunity = self.smart_entry_system.analyze_entry_opportunity(
                                                 self.actual_symbol, current_price, zones, positions
                                             )
@@ -1280,6 +1281,20 @@ class SmartEntryTradingSystemGUI:
                                                 ticket = self.smart_entry_system.execute_entry(entry_opportunity)
                                                 if ticket:
                                                     logger.info(f"✅ Smart Entry executed: Ticket {ticket}")
+                                            
+                                            # 1.2 ตรวจสอบโอกาสแก้ไม้ (Recovery System)
+                                            recovery_opportunities = self.smart_entry_system.find_recovery_opportunity(
+                                                self.actual_symbol, current_price, zones, positions
+                                            )
+                                            if recovery_opportunities:
+                                                logger.info(f"🚀 Recovery Opportunities Found: {len(recovery_opportunities)}")
+                                                for i, recovery_opp in enumerate(recovery_opportunities[:2]):  # สร้างสูงสุด 2 ตัว
+                                                    logger.info(f"   {i+1}. {recovery_opp['reason']}")
+                                                    ticket = self.smart_entry_system.execute_entry(recovery_opp)
+                                                    if ticket:
+                                                        logger.info(f"✅ Recovery Entry executed: Ticket {ticket}")
+                                            else:
+                                                logger.debug("🚫 No recovery opportunities found")
                                         else:
                                             logger.debug("🚫 SW Filter blocked Smart Entry")
                                 except Exception as e:
