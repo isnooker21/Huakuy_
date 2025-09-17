@@ -470,7 +470,7 @@ class ZoneAnalyzer:
     def _get_rates(self, timeframe, lookback_hours: int):
         """📊 ดึงข้อมูลราคาจาก MT5"""
         try:
-            if not self.mt5_connection.is_connected():
+            if not self.mt5_connection.is_connected:
                 logger.error("❌ MT5 not connected")
                 return None
             
