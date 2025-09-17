@@ -474,16 +474,15 @@ class ZoneAnalyzer:
                 logger.error("❌ MT5 not connected")
                 return None
             
-            # คำนวณเวลาย้อนหลัง
-            end_time = datetime.now()
-            start_time = end_time - timedelta(hours=lookback_hours)
+            # คำนวณจำนวน bars ที่ต้องการ (M5 = 12 bars ต่อชั่วโมง)
+            bars_per_hour = 12  # M5 timeframe
+            count = lookback_hours * bars_per_hour
             
             # ดึงข้อมูลราคา
-            rates = self.mt5_connection.get_rates(
+            rates = self.mt5_connection.get_market_data(
                 symbol=self.symbol,
                 timeframe=timeframe,
-                start_time=start_time,
-                end_time=end_time
+                count=count
             )
             
             if rates is None or len(rates) == 0:
