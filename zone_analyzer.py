@@ -15,9 +15,9 @@ class ZoneAnalyzer:
         self.timeframes = [mt5.TIMEFRAME_M5]  # ใช้แค่ M5 เท่านั้น
         # ไม่ใช้ Daily timeframe เพราะมีปัญหา array comparison
         
-        # Multi-Algorithm Zone Detection Parameters
+        # Multi-Algorithm Zone Detection Parameters - ปรับให้หา zones ได้มากขึ้น
         self.min_touches = 1  # เกณฑ์ขั้นต่ำสำหรับการแตะ zone
-        self.zone_tolerance = 20.0  # ความยืดหยุ่นในการรวม zones
+        self.zone_tolerance = 25.0  # ความยืดหยุ่นในการรวม zones (เพิ่มจาก 20.0)
         self.min_zone_strength = 2  # ความแข็งแรงขั้นต่ำของ zone
         self.max_zones_per_type = 15  # จำนวน zone สูงสุดต่อประเภท
         
@@ -36,10 +36,10 @@ class ZoneAnalyzer:
         self.enable_volume_profile = False   # วิธีที่ 2: Volume Profile (ปิด - หา zones น้อย)
         self.enable_price_patterns = False   # วิธีที่ 3: Price Action Patterns (ปิด - หา zones มากเกินไป)
         
-        # กลับไปใช้ระบบเดิมที่ทำงานได้ดี
-        self.zone_tolerance = 15.0           # ความยืดหยุ่นในการรวม zones
-        self.min_zone_strength = 3           # ความแข็งแรงขั้นต่ำของ zone
-        self.max_zones_per_type = 10         # จำนวน zone สูงสุดต่อประเภท
+        # ปรับให้หา zones ได้มากขึ้น
+        self.zone_tolerance = 25.0           # ความยืดหยุ่นในการรวม zones (เพิ่มจาก 15.0)
+        self.min_zone_strength = 2           # ความแข็งแรงขั้นต่ำของ zone (ลดจาก 3)
+        self.max_zones_per_type = 15         # จำนวน zone สูงสุดต่อประเภท (เพิ่มจาก 10)
         
     def analyze_zones(self, symbol: str, lookback_hours: int = 24) -> Dict[str, List[Dict]]:
         """🔍 วิเคราะห์ Support/Resistance Zones ด้วย Multi-Algorithm"""
@@ -634,7 +634,7 @@ class ZoneAnalyzer:
         """🔍 หา Pivot Points จากข้อมูลราคา"""
         try:
             pivots = []
-            window = 3  # ลด window เป็น 3 bars เพื่อหา pivot มากขึ้น
+            window = 2  # ลด window เป็น 2 bars เพื่อหา pivot มากขึ้น
             logger.info(f"🔍 Finding pivot points from {len(rates)} bars with window={window}")
             
             for i in range(window, len(rates) - window):
@@ -656,7 +656,7 @@ class ZoneAnalyzer:
                         volume_factor = self._estimate_volume_factor(rates, i)
                         
                         # เพิ่มคะแนนสำหรับ Support เพื่อให้หาได้มากขึ้น
-                        support_score = rejection_strength + volume_factor + (touches * 5)
+                        support_score = rejection_strength + volume_factor + (touches * 3)  # ลดจาก 5 เป็น 3
                         
                         pivots.append({
                             'type': 'support',
