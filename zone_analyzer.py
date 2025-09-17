@@ -36,9 +36,10 @@ class ZoneAnalyzer:
         
         # Multi-Method Zone Detection - ใช้หลายวิธีพร้อมกัน
         self.enable_pivot_points = True      # วิธีที่ 1: Pivot Points (Sideways markets)
-        self.enable_moving_averages = True   # วิธีที่ 2: Moving Average Levels (Trending markets)
-        self.enable_fibonacci = True         # วิธีที่ 3: Fibonacci Levels (Volatile markets)
-        self.enable_volume_profile = True    # วิธีที่ 4: Volume Profile (Consolidation markets)
+        self.enable_fibonacci = True         # วิธีที่ 2: Fibonacci Levels (Volatile markets)
+        self.enable_volume_profile = True    # วิธีที่ 3: Volume Profile (Consolidation markets)
+        self.enable_price_levels = True      # วิธีที่ 4: Price Levels (Round Numbers, Psychological Levels)
+        self.enable_swing_levels = True      # วิธีที่ 5: Swing High/Low Levels (Key Reversal Points)
         
         # ปรับให้หา zones ได้มากขึ้นและแม่นยำขึ้น
         self.zone_tolerance = 35.0           # ความยืดหยุ่นในการรวม zones (เพิ่มจาก 12.0)
@@ -56,6 +57,28 @@ class ZoneAnalyzer:
         # Volume Profile Settings (ปรับปรุง)
         self.volume_profile_bins = 30        # จำนวน bins สำหรับ volume profile (เพิ่มจาก 25)
         self.volume_threshold = 0.3          # เกณฑ์ volume (ลดจาก 0.5)
+        
+        # Price Levels Settings (เลขกลม)
+        self.price_level_intervals = [50, 100, 200, 500]  # ช่วงเลขกลม (points)
+        self.price_level_tolerance = 20.0    # ความยืดหยุ่นสำหรับ price levels
+        
+        # Swing Levels Settings (จุดกลับตัว)
+        self.swing_lookback = 20             # จำนวน bars สำหรับหา swing
+        self.swing_min_strength = 2          # ความแข็งแรงขั้นต่ำของ swing
+        self.swing_tolerance = 15.0          # ความยืดหยุ่นสำหรับ swing levels
+        
+        # Adaptive Market Detection (การตรวจจับสภาวะตลาด)
+        self.enable_adaptive_mode = True     # เปิดโหมดปรับตัวอัตโนมัติ
+        self.market_analysis_period = 50     # จำนวน bars สำหรับวิเคราะห์สภาวะตลาด
+        self.volatility_threshold = 0.02     # เกณฑ์ความผันผวน (2%)
+        self.trend_strength_threshold = 0.6  # เกณฑ์ความแข็งแรงของเทรนด์
+        
+        # Market Condition Weights (น้ำหนักตามสภาวะตลาด)
+        self.market_weights = {
+            'trending': {'pivot_points': 1.2, 'swing_levels': 1.3, 'price_levels': 0.8, 'fibonacci': 0.9, 'volume_profile': 0.7},
+            'sideways': {'pivot_points': 0.9, 'swing_levels': 0.8, 'price_levels': 1.3, 'fibonacci': 0.8, 'volume_profile': 1.2},
+            'volatile': {'pivot_points': 1.0, 'swing_levels': 1.1, 'price_levels': 1.1, 'fibonacci': 1.3, 'volume_profile': 0.9}
+        }
         
     def analyze_zones(self, symbol: str, lookback_hours: int = 24) -> Dict[str, List[Dict]]:
         """🔍 วิเคราะห์ Support/Resistance Zones ด้วย Multi-Algorithm + Multi-Timeframe"""
@@ -83,6 +106,16 @@ class ZoneAnalyzer:
                 logger.error("❌ [MULTI-TF] No valid timeframe data available")
                 return {'support': [], 'resistance': []}
             
+            # 🔍 ตรวจจับสภาวะตลาด (ใช้ข้อมูล M5 เป็นหลัก)
+            market_condition = 'sideways'  # default
+            if mt5.TIMEFRAME_M5 in all_rates:
+                market_condition = self._detect_market_condition(all_rates[mt5.TIMEFRAME_M5])
+                logger.info(f"🎯 [ADAPTIVE] Market condition detected: {market_condition.upper()}")
+            
+            # ⚙️ ปรับพารามิเตอร์ตามสภาวะตลาด
+            if self.enable_adaptive_mode:
+                self._adjust_parameters_for_market(market_condition)
+            
             # ใช้ Multi-Algorithm หา zones จากทุก timeframe
             for tf in self.timeframes:
                 if tf in all_rates:
@@ -102,6 +135,11 @@ class ZoneAnalyzer:
             for zone in merged_resistance:
                 zone['strength'] = self._calculate_zone_strength(zone, 'resistance')
                 zone['type'] = 'resistance'
+            
+            # ⚖️ ใช้น้ำหนักตามสภาวะตลาด
+            if self.enable_adaptive_mode:
+                merged_support = self._apply_market_weights(merged_support, market_condition)
+                merged_resistance = self._apply_market_weights(merged_resistance, market_condition)
             
             # เรียงตาม Strength
             merged_support.sort(key=lambda x: x['strength'], reverse=True)
@@ -196,29 +234,37 @@ class ZoneAnalyzer:
                 all_resistance_zones.extend(pivot_resistance)
                 logger.info(f"✅ [METHOD 1] Found {len(pivot_support)} support, {len(pivot_resistance)} resistance zones")
             
-            # วิธีที่ 2: Moving Average Levels (Trending markets) - ใช้ข้อมูลจากทุก timeframe
-            if self.enable_moving_averages:
-                logger.info("📈 [METHOD 2] Moving Average Levels Analysis (Multi-Timeframe)...")
-                ma_support, ma_resistance = self._find_zones_from_moving_averages_multi_tf(all_rates)
-                all_support_zones.extend(ma_support)
-                all_resistance_zones.extend(ma_resistance)
-                logger.info(f"✅ [METHOD 2] Found {len(ma_support)} support, {len(ma_resistance)} resistance zones")
-            
-            # วิธีที่ 3: Fibonacci Levels (Volatile markets) - ใช้ข้อมูลจากทุก timeframe
+            # วิธีที่ 2: Fibonacci Levels (Volatile markets) - ใช้ข้อมูลจากทุก timeframe
             if self.enable_fibonacci:
-                logger.info("📊 [METHOD 3] Fibonacci Levels Analysis (Multi-Timeframe)...")
+                logger.info("📊 [METHOD 2] Fibonacci Levels Analysis (Multi-Timeframe)...")
                 fib_support, fib_resistance = self._find_zones_from_fibonacci_multi_tf(all_rates)
                 all_support_zones.extend(fib_support)
                 all_resistance_zones.extend(fib_resistance)
-                logger.info(f"✅ [METHOD 3] Found {len(fib_support)} support, {len(fib_resistance)} resistance zones")
+                logger.info(f"✅ [METHOD 2] Found {len(fib_support)} support, {len(fib_resistance)} resistance zones")
             
-            # วิธีที่ 4: Volume Profile (Consolidation markets) - ใช้ข้อมูลจากทุก timeframe
+            # วิธีที่ 3: Volume Profile (Consolidation markets) - ใช้ข้อมูลจากทุก timeframe
             if self.enable_volume_profile:
-                logger.info("📊 [METHOD 4] Volume Profile Analysis (Multi-Timeframe)...")
+                logger.info("📊 [METHOD 3] Volume Profile Analysis (Multi-Timeframe)...")
                 volume_support, volume_resistance = self._find_zones_from_volume_profile_multi_tf(all_rates)
                 all_support_zones.extend(volume_support)
                 all_resistance_zones.extend(volume_resistance)
-                logger.info(f"✅ [METHOD 4] Found {len(volume_support)} support, {len(volume_resistance)} resistance zones")
+                logger.info(f"✅ [METHOD 3] Found {len(volume_support)} support, {len(volume_resistance)} resistance zones")
+            
+            # วิธีที่ 4: Price Levels (เลขกลม) - ใช้ข้อมูลจากทุก timeframe
+            if self.enable_price_levels:
+                logger.info("💰 [METHOD 4] Price Levels Analysis (Multi-Timeframe)...")
+                price_support, price_resistance = self._find_zones_from_price_levels_multi_tf(all_rates)
+                all_support_zones.extend(price_support)
+                all_resistance_zones.extend(price_resistance)
+                logger.info(f"✅ [METHOD 4] Found {len(price_support)} support, {len(price_resistance)} resistance zones")
+            
+            # วิธีที่ 5: Swing Levels (จุดกลับตัว) - ใช้ข้อมูลจากทุก timeframe
+            if self.enable_swing_levels:
+                logger.info("🔄 [METHOD 5] Swing Levels Analysis (Multi-Timeframe)...")
+                swing_support, swing_resistance = self._find_zones_from_swing_levels_multi_tf(all_rates)
+                all_support_zones.extend(swing_support)
+                all_resistance_zones.extend(swing_resistance)
+                logger.info(f"✅ [METHOD 5] Found {len(swing_support)} support, {len(swing_resistance)} resistance zones")
             
             # รวมและจัดเรียง zones ตาม strength
             final_support = self._consolidate_zones(all_support_zones, 'support')
@@ -301,66 +347,6 @@ class ZoneAnalyzer:
             logger.error(f"❌ Error analyzing timeframe {timeframe}: {e}")
             return [], []
     
-    def _find_zones_from_moving_averages(self, rates) -> Tuple[List[Dict], List[Dict]]:
-        """📈 Method 2: หา zones จาก Moving Average Levels"""
-        try:
-            if len(rates) < max(self.ma_periods):
-                return [], []
-            
-            support_zones = []
-            resistance_zones = []
-            
-            # คำนวณ Moving Averages
-            closes = [float(rate['close']) for rate in rates]
-            
-            for period in self.ma_periods:
-                if len(closes) < period:
-                    continue
-                
-                # คำนวณ MA
-                ma_values = []
-                for i in range(period - 1, len(closes)):
-                    ma = sum(closes[i - period + 1:i + 1]) / period
-                    ma_values.append(ma)
-                
-                # หา MA levels ที่เป็น Support/Resistance
-                for i, ma_value in enumerate(ma_values):
-                    if i + period - 1 >= len(rates):
-                        continue
-                    
-                    # ตรวจสอบว่า MA เป็น Support หรือ Resistance
-                    current_price = closes[i + period - 1]
-                    price_diff = abs(current_price - ma_value)
-                    
-                    if price_diff <= self.ma_tolerance:
-                        # กำหนดว่าเป็น Support หรือ Resistance ตามตำแหน่ง
-                        if current_price > ma_value:
-                            # ราคาอยู่เหนือ MA = MA เป็น Support
-                            zone = {
-                                'price': ma_value,
-                                'touches': 1,
-                                'strength': 50 + (period / 4),  # MA ยาว = แข็งแรงกว่า
-                                'timestamp': float(rates[i + period - 1]['time']),
-                                'algorithm': 'moving_averages',
-                                'ma_period': period
-                            }
-                            support_zones.append(zone)
-                        else:
-                            # ราคาอยู่ใต้ MA = MA เป็น Resistance
-                            zone = {
-                                'price': ma_value,
-                                'touches': 1,
-                                'strength': 50 + (period / 4),  # MA ยาว = แข็งแรงกว่า
-                                'timestamp': float(rates[i + period - 1]['time']),
-                                'algorithm': 'moving_averages',
-                                'ma_period': period
-                            }
-                            resistance_zones.append(zone)
-            
-            return support_zones, resistance_zones
-        except Exception as e:
-            logger.error(f"❌ [METHOD 2] Error in moving averages analysis: {e}")
-            return [], []
 
     def _find_zones_from_fibonacci(self, rates) -> Tuple[List[Dict], List[Dict]]:
         """📊 Method 3: หา zones จาก Fibonacci Levels"""
@@ -1273,34 +1259,6 @@ class ZoneAnalyzer:
             logger.error(f"❌ Error getting zone at price: {e}")
             return None
     
-    def _find_zones_from_moving_averages_multi_tf(self, all_rates: Dict) -> Tuple[List[Dict], List[Dict]]:
-        """📈 หา Moving Average Levels จากทุก timeframe"""
-        try:
-            support_zones = []
-            resistance_zones = []
-            
-            for tf, rates in all_rates.items():
-                if not rates or len(rates) < 50:
-                    continue
-                    
-                tf_support, tf_resistance = self._find_zones_from_moving_averages(rates)
-                
-                # เพิ่ม timeframe info
-                for zone in tf_support:
-                    zone['timeframe'] = tf
-                    zone['algorithm'] = 'moving_averages'
-                for zone in tf_resistance:
-                    zone['timeframe'] = tf
-                    zone['algorithm'] = 'moving_averages'
-                
-                support_zones.extend(tf_support)
-                resistance_zones.extend(tf_resistance)
-            
-            return support_zones, resistance_zones
-            
-        except Exception as e:
-            logger.error(f"❌ Error in multi-TF Moving Average analysis: {e}")
-            return [], []
     
     def _find_zones_from_fibonacci_multi_tf(self, all_rates: Dict) -> Tuple[List[Dict], List[Dict]]:
         """📊 หา Fibonacci Levels จากทุก timeframe"""
@@ -1359,6 +1317,314 @@ class ZoneAnalyzer:
         except Exception as e:
             logger.error(f"❌ Error in multi-TF Volume Profile analysis: {e}")
             return [], []
+    
+    def _find_zones_from_price_levels_multi_tf(self, all_rates: Dict) -> Tuple[List[Dict], List[Dict]]:
+        """💰 หา Price Levels (เลขกลม) จากทุก timeframe"""
+        try:
+            support_zones = []
+            resistance_zones = []
+            
+            for tf, rates in all_rates.items():
+                if not rates or len(rates) < 50:
+                    continue
+                    
+                tf_support, tf_resistance = self._find_zones_from_price_levels(rates)
+                
+                # เพิ่ม timeframe info
+                for zone in tf_support:
+                    zone['timeframe'] = tf
+                    zone['algorithm'] = 'price_levels'
+                for zone in tf_resistance:
+                    zone['timeframe'] = tf
+                    zone['algorithm'] = 'price_levels'
+                
+                support_zones.extend(tf_support)
+                resistance_zones.extend(tf_resistance)
+            
+            return support_zones, resistance_zones
+            
+        except Exception as e:
+            logger.error(f"❌ Error in multi-TF Price Levels analysis: {e}")
+            return [], []
+    
+    def _find_zones_from_swing_levels_multi_tf(self, all_rates: Dict) -> Tuple[List[Dict], List[Dict]]:
+        """🔄 หา Swing Levels (จุดกลับตัว) จากทุก timeframe"""
+        try:
+            support_zones = []
+            resistance_zones = []
+            
+            for tf, rates in all_rates.items():
+                if not rates or len(rates) < 50:
+                    continue
+                    
+                tf_support, tf_resistance = self._find_zones_from_swing_levels(rates)
+                
+                # เพิ่ม timeframe info
+                for zone in tf_support:
+                    zone['timeframe'] = tf
+                    zone['algorithm'] = 'swing_levels'
+                for zone in tf_resistance:
+                    zone['timeframe'] = tf
+                    zone['algorithm'] = 'swing_levels'
+                
+                support_zones.extend(tf_support)
+                resistance_zones.extend(tf_resistance)
+            
+            return support_zones, resistance_zones
+            
+        except Exception as e:
+            logger.error(f"❌ Error in multi-TF Swing Levels analysis: {e}")
+            return [], []
+    
+    def _find_zones_from_price_levels(self, rates) -> Tuple[List[Dict], List[Dict]]:
+        """💰 Method 4: หา zones จาก Price Levels (เลขกลม)"""
+        try:
+            if len(rates) < 50:
+                return [], []
+            
+            support_zones = []
+            resistance_zones = []
+            
+            # หา price range
+            highs = [float(rate['high']) for rate in rates]
+            lows = [float(rate['low']) for rate in rates]
+            min_price = min(lows)
+            max_price = max(highs)
+            
+            # สร้าง price levels (เลขกลม)
+            for interval in self.price_level_intervals:
+                # หาเลขกลมที่ใกล้เคียงกับ min_price และ max_price
+                start_level = int(min_price / interval) * interval
+                end_level = int(max_price / interval) * interval + interval
+                
+                current_level = start_level
+                while current_level <= end_level:
+                    # ตรวจสอบว่า price level นี้เป็น Support หรือ Resistance
+                    touches = 0
+                    for rate in rates:
+                        high = float(rate['high'])
+                        low = float(rate['low'])
+                        
+                        # ตรวจสอบการแตะ level
+                        if abs(high - current_level) <= self.price_level_tolerance:
+                            touches += 1
+                        elif abs(low - current_level) <= self.price_level_tolerance:
+                            touches += 1
+                    
+                    if touches >= 1:  # แตะอย่างน้อย 1 ครั้ง
+                        # กำหนดว่าเป็น Support หรือ Resistance ตามตำแหน่ง
+                        avg_price = (min_price + max_price) / 2
+                        if current_level < avg_price:
+                            # อยู่ใต้ราคาเฉลี่ย = Support
+                            zone = {
+                                'price': current_level,
+                                'touches': touches,
+                                'strength': 40 + (touches * 5),  # strength ตามจำนวนการแตะ
+                                'timestamp': float(rates[-1]['time']),
+                                'algorithm': 'price_levels',
+                                'level_type': f'Round_{interval}'
+                            }
+                            support_zones.append(zone)
+                        else:
+                            # อยู่เหนือราคาเฉลี่ย = Resistance
+                            zone = {
+                                'price': current_level,
+                                'touches': touches,
+                                'strength': 40 + (touches * 5),  # strength ตามจำนวนการแตะ
+                                'timestamp': float(rates[-1]['time']),
+                                'algorithm': 'price_levels',
+                                'level_type': f'Round_{interval}'
+                            }
+                            resistance_zones.append(zone)
+                    
+                    current_level += interval
+            
+            return support_zones, resistance_zones
+            
+        except Exception as e:
+            logger.error(f"❌ Error in Price Levels analysis: {e}")
+            return [], []
+    
+    def _find_zones_from_swing_levels(self, rates) -> Tuple[List[Dict], List[Dict]]:
+        """🔄 Method 5: หา zones จาก Swing Levels (จุดกลับตัว)"""
+        try:
+            if len(rates) < self.swing_lookback * 2:
+                return [], []
+            
+            support_zones = []
+            resistance_zones = []
+            
+            highs = [float(rate['high']) for rate in rates]
+            lows = [float(rate['low']) for rate in rates]
+            
+            # หา Swing Highs
+            for i in range(self.swing_lookback, len(highs) - self.swing_lookback):
+                is_swing_high = True
+                current_high = highs[i]
+                
+                # ตรวจสอบว่าเป็น swing high หรือไม่
+                for j in range(i - self.swing_lookback, i + self.swing_lookback + 1):
+                    if j != i and j >= 0 and j < len(highs):
+                        if highs[j] >= current_high:
+                            is_swing_high = False
+                            break
+                
+                if is_swing_high:
+                    # หา zones ที่ใกล้เคียงกัน
+                    found_similar = False
+                    for zone in resistance_zones:
+                        if abs(zone['price'] - current_high) <= self.swing_tolerance:
+                            zone['touches'] += 1
+                            zone['strength'] += 10  # เพิ่ม strength
+                            found_similar = True
+                            break
+                    
+                    if not found_similar:
+                        zone = {
+                            'price': current_high,
+                            'touches': 1,
+                            'strength': 50 + (self.swing_lookback / 2),
+                            'timestamp': float(rates[i]['time']),
+                            'algorithm': 'swing_levels',
+                            'swing_type': 'high'
+                        }
+                        resistance_zones.append(zone)
+            
+            # หา Swing Lows
+            for i in range(self.swing_lookback, len(lows) - self.swing_lookback):
+                is_swing_low = True
+                current_low = lows[i]
+                
+                # ตรวจสอบว่าเป็น swing low หรือไม่
+                for j in range(i - self.swing_lookback, i + self.swing_lookback + 1):
+                    if j != i and j >= 0 and j < len(lows):
+                        if lows[j] <= current_low:
+                            is_swing_low = False
+                            break
+                
+                if is_swing_low:
+                    # หา zones ที่ใกล้เคียงกัน
+                    found_similar = False
+                    for zone in support_zones:
+                        if abs(zone['price'] - current_low) <= self.swing_tolerance:
+                            zone['touches'] += 1
+                            zone['strength'] += 10  # เพิ่ม strength
+                            found_similar = True
+                            break
+                    
+                    if not found_similar:
+                        zone = {
+                            'price': current_low,
+                            'touches': 1,
+                            'strength': 50 + (self.swing_lookback / 2),
+                            'timestamp': float(rates[i]['time']),
+                            'algorithm': 'swing_levels',
+                            'swing_type': 'low'
+                        }
+                        support_zones.append(zone)
+            
+            return support_zones, resistance_zones
+            
+        except Exception as e:
+            logger.error(f"❌ Error in Swing Levels analysis: {e}")
+            return [], []
+    
+    def _detect_market_condition(self, rates) -> str:
+        """🔍 ตรวจจับสภาวะตลาด (Trending/Sideways/Volatile)"""
+        try:
+            if len(rates) < self.market_analysis_period:
+                return 'sideways'  # default
+            
+            # ดึงข้อมูลราคา
+            closes = [float(rate['close']) for rate in rates[-self.market_analysis_period:]]
+            highs = [float(rate['high']) for rate in rates[-self.market_analysis_period:]]
+            lows = [float(rate['low']) for rate in rates[-self.market_analysis_period:]]
+            
+            # คำนวณ Volatility (ความผันผวน)
+            price_range = max(highs) - min(lows)
+            avg_price = sum(closes) / len(closes)
+            volatility = price_range / avg_price
+            
+            # คำนวณ Trend Strength (ความแข็งแรงของเทรนด์)
+            # ใช้ Linear Regression slope
+            n = len(closes)
+            x = list(range(n))
+            y = closes
+            
+            # คำนวณ slope
+            sum_x = sum(x)
+            sum_y = sum(y)
+            sum_xy = sum(x[i] * y[i] for i in range(n))
+            sum_x2 = sum(x[i] ** 2 for i in range(n))
+            
+            slope = (n * sum_xy - sum_x * sum_y) / (n * sum_x2 - sum_x ** 2)
+            trend_strength = abs(slope) / avg_price
+            
+            # กำหนดสภาวะตลาด
+            if volatility > self.volatility_threshold:
+                return 'volatile'
+            elif trend_strength > self.trend_strength_threshold:
+                return 'trending'
+            else:
+                return 'sideways'
+                
+        except Exception as e:
+            logger.error(f"❌ Error detecting market condition: {e}")
+            return 'sideways'
+    
+    def _adjust_parameters_for_market(self, market_condition: str):
+        """⚙️ ปรับพารามิเตอร์ตามสภาวะตลาด"""
+        try:
+            if market_condition == 'trending':
+                # Trending Market: เพิ่มความยืดหยุ่น, ลดเกณฑ์
+                self.zone_tolerance = 40.0
+                self.min_zone_strength = 0.5
+                self.price_level_tolerance = 25.0
+                self.swing_tolerance = 20.0
+                logger.info("📈 [ADAPTIVE] Trending market detected - Increased flexibility")
+                
+            elif market_condition == 'sideways':
+                # Sideways Market: ลดความยืดหยุ่น, เพิ่มเกณฑ์
+                self.zone_tolerance = 25.0
+                self.min_zone_strength = 1.5
+                self.price_level_tolerance = 15.0
+                self.swing_tolerance = 10.0
+                logger.info("📊 [ADAPTIVE] Sideways market detected - Increased precision")
+                
+            elif market_condition == 'volatile':
+                # Volatile Market: ปรับให้เหมาะสมกับความผันผวน
+                self.zone_tolerance = 35.0
+                self.min_zone_strength = 1.0
+                self.price_level_tolerance = 20.0
+                self.swing_tolerance = 15.0
+                logger.info("⚡ [ADAPTIVE] Volatile market detected - Balanced settings")
+                
+        except Exception as e:
+            logger.error(f"❌ Error adjusting parameters: {e}")
+    
+    def _apply_market_weights(self, zones: List[Dict], market_condition: str) -> List[Dict]:
+        """⚖️ ใช้น้ำหนักตามสภาวะตลาด"""
+        try:
+            if not self.enable_adaptive_mode:
+                return zones
+            
+            weights = self.market_weights.get(market_condition, {})
+            
+            for zone in zones:
+                algorithm = zone.get('algorithm', 'unknown')
+                weight = weights.get(algorithm, 1.0)
+                
+                # ปรับ strength ตามน้ำหนัก
+                original_strength = zone.get('strength', 0)
+                zone['strength'] = original_strength * weight
+                zone['market_weight'] = weight
+                zone['market_condition'] = market_condition
+            
+            return zones
+            
+        except Exception as e:
+            logger.error(f"❌ Error applying market weights: {e}")
+            return zones
     
     def get_strongest_zones(self, zones: Dict[str, List[Dict]], count: int = 5) -> Dict[str, List[Dict]]:
         """🏆 หา Zones ที่แข็งแรงที่สุด"""
