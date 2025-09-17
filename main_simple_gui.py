@@ -119,7 +119,6 @@ class SmartEntryTradingSystemGUI:
         self.max_range_points = 50     # ลดเป็น 50 จุด (ต้องติดมากจริงๆ)
         self.min_positions_for_range_check = 20  # เพิ่มเป็น 20 positions (ปิดแทบจะปิด)
         
-        logger.info(f"🛡️ Range-bound Protection: Max Range: {self.max_range_points} points, Min Positions: {self.min_positions_for_range_check}")
         
         # 🔒 Position Locking
         self.closing_positions = set()
@@ -138,11 +137,6 @@ class SmartEntryTradingSystemGUI:
         self.zone_analysis_interval = 5  # ทุก 5 วินาที (ปรับให้เร็วขึ้น)
         self._smart_systems_thread = None  # เพิ่ม thread tracking
         
-        logger.info("🚀 SIMPLE BREAKOUT TRADING SYSTEM WITH GUI initialized")
-        logger.info(f"💰 Initial Balance: ${initial_balance:,.2f}")
-        logger.info(f"📊 Target Symbol: {symbol}")
-        logger.info(f"⏰ Monitoring Timeframes: {self.timeframes}")
-        logger.info("🎯 Smart Trading Systems will be initialized after MT5 connection")
     
     @property
     def is_trading(self):
@@ -183,13 +177,11 @@ class SmartEntryTradingSystemGUI:
             
             # ซิงค์ข้อมูล Position
             positions = self.order_manager.sync_positions_from_mt5()
-            logger.info(f"พบ Position ที่เปิดอยู่: {len(positions)} ตัว")
             
             # โหลดข้อมูลราคาเริ่มต้น
             self.load_initial_market_data()
             
             # ✅ Initialize Position Management Systems (Keep from original)
-            logger.info("✅ Initializing Position Management Systems...")
             
             self.dynamic_position_modifier = create_dynamic_position_modifier(
                 mt5_connection=self.mt5_connection,
@@ -200,7 +192,6 @@ class SmartEntryTradingSystemGUI:
             
             # 🚫 REMOVED: dynamic_adaptive_closer initialization - Replaced by Enhanced 7D Smart Closer
             
-            logger.info("✅ SIMPLE BREAKOUT SYSTEM WITH GUI ready!")
             return True
             
         except Exception as e:
@@ -218,7 +209,6 @@ class SmartEntryTradingSystemGUI:
             if tick_data:
                 current_price = tick_data.get('bid', 0)
                 self.current_prices[self.actual_symbol] = current_price
-                logger.info(f"โหลดราคาปัจจุบัน: {current_price}")
             
             # โหลดข้อมูลเทียนเริ่มต้น (ใช้ H1 = 16385)
             try:
@@ -231,7 +221,6 @@ class SmartEntryTradingSystemGUI:
             if candles:
                 self.price_history = [candle.get('close', 0) for candle in candles[-50:]]
                 self.volume_history = [candle.get('volume', 0) for candle in candles[-50:]]
-                logger.info(f"โหลดข้อมูลเทียน: {len(candles)} แท่ง")
                 
         except Exception as e:
             logger.error(f"เกิดข้อผิดพลาดในการโหลดข้อมูลตลาด: {str(e)}")
@@ -257,7 +246,6 @@ class SmartEntryTradingSystemGUI:
                 # ตั้งค่า MT5 connection สำหรับ Real-time P&L
                 if self.mt5_connection:
                     self.hedge_pairing_closer.set_mt5_connection(self.mt5_connection)
-                logger.info("🚀 Hedge Pairing Closer initialized successfully")
             except Exception as e:
                 logger.error(f"❌ Failed to initialize Hedge Pairing Closer: {e}")
                 self.hedge_pairing_closer = None
@@ -266,7 +254,6 @@ class SmartEntryTradingSystemGUI:
             self.trading_thread = threading.Thread(target=self._trading_loop, daemon=True)
             self.trading_thread.start()
             
-            logger.info("🚀 เริ่มระบบเทรดแล้ว")
             return True
             
         except Exception as e:
@@ -287,7 +274,6 @@ class SmartEntryTradingSystemGUI:
     
     def _trading_loop(self):
         """Main trading loop with Smart Entry Logic"""
-        logger.info("🔄 เริ่มลูปเทรด Smart Entry System")
         
         # ลบ Performance Optimization Variables ออก - ใช้แบบเดิม
         
@@ -403,7 +389,6 @@ class SmartEntryTradingSystemGUI:
                 if current_time - getattr(self, '_last_smart_systems_time', 0) >= 5:  # 5 วินาที (Smart Entry เป็นหลัก)
                     # ตรวจสอบว่า Smart Systems ทำงานอยู่หรือไม่ก่อนเริ่มใหม่
                     if not hasattr(self, '_smart_systems_running') or not self._smart_systems_running:
-                        logger.info(f"🎯 Smart Systems Timer: {current_time - getattr(self, '_last_smart_systems_time', 0):.1f}s elapsed")
                         self._smart_systems_running = True
                         self._handle_smart_systems()
                         self._last_smart_systems_time = current_time
@@ -1163,23 +1148,17 @@ class SmartEntryTradingSystemGUI:
     def _initialize_smart_systems(self):
         """🎯 Initialize Smart Trading Systems"""
         try:
-            logger.info("🎯 Initializing Smart Entry Trading Systems...")
             
             # Initialize Zone Analyzer
             self.zone_analyzer = ZoneAnalyzer(self.mt5_connection)
-            logger.info("✅ Zone Analyzer initialized")
             
             # Initialize Smart Entry System
             self.smart_entry_system = SmartEntrySystem(self.mt5_connection, self.zone_analyzer)
             # ส่ง order_manager ไปยัง SmartEntrySystem
             self.smart_entry_system.order_manager = self.order_manager
-            logger.info("✅ Smart Entry System initialized")
             
             # Initialize Portfolio Anchor
             self.portfolio_anchor = PortfolioAnchor(self.mt5_connection, self.zone_analyzer)
-            logger.info("✅ Portfolio Anchor initialized")
-            
-            logger.info("🎯 All Smart Entry Trading Systems initialized successfully")
             
         except Exception as e:
             logger.error(f"❌ Error initializing smart systems: {e}")
@@ -1188,7 +1167,6 @@ class SmartEntryTradingSystemGUI:
     def _handle_smart_systems(self):
         """🎯 Handle Smart Trading Systems"""
         try:
-            logger.info("🎯 _handle_smart_systems() called")
             
             # ตรวจสอบ smart_systems_enabled
             if not self.smart_systems_enabled:
@@ -1208,19 +1186,16 @@ class SmartEntryTradingSystemGUI:
                 logger.warning("🚫 Portfolio Anchor not available - skipping")
                 return
                 
-            logger.info("✅ All Smart Systems components available")
             
             current_time = time.time()
             
             # ตรวจสอบเวลาสำหรับ Zone Analysis
             time_since_last_analysis = current_time - self.last_zone_analysis
-            logger.info(f"⏰ Time since last zone analysis: {time_since_last_analysis:.1f}s (interval: {self.zone_analysis_interval}s)")
             
             if time_since_last_analysis < self.zone_analysis_interval:
                 logger.debug("⏰ Zone analysis interval not reached yet - skipping")
                 return
             
-            logger.info("⏰ Zone analysis interval reached - proceeding")
             self.last_zone_analysis = current_time
             
             # ดึงราคาปัจจุบัน
@@ -1243,7 +1218,6 @@ class SmartEntryTradingSystemGUI:
                             start_time = time.time()
                             
                             # วิเคราะห์ Zones ใน background (ใช้ threading timeout แทน signal)
-                            logger.info("🎯 Starting Zone Analysis...")
                             
                             import concurrent.futures
                             with concurrent.futures.ThreadPoolExecutor() as executor:
