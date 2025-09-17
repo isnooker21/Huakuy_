@@ -656,8 +656,27 @@ class SmartEntrySystem:
                         logger.info(f"🔍 [RECOVERY] For BUY: Found {len(strong_supports)} strong support zones (strength >= {self.recovery_zone_strength})")
                         
                         if strong_supports:
-                            # หา Support ที่เหมาะสม (ต่ำกว่าไม้ BUY)
-                            suitable_supports = [zone for zone in strong_supports if zone['price'] < pos_price - 5]  # ลดจาก 20 เป็น 5 pips
+                            # หา Support ที่เหมาะสม (ต่ำกว่าไม้ BUY) + กรองตามระยะห่าง
+                            suitable_supports = []
+                            for zone in strong_supports:
+                                if zone['price'] < pos_price - 5:  # ลดจาก 20 เป็น 5 pips
+                                    # ตรวจสอบระยะห่างจากราคาปัจจุบัน
+                                    distance = abs(current_price - zone['price'])
+                                    zone_strength = zone.get('strength', 0)
+                                    
+                                    # Dynamic Distance ตาม Zone Strength
+                                    if zone_strength >= 0.8:
+                                        max_distance = 150.0  # Zone แข็งแกร่งมาก = 150 pips
+                                    elif zone_strength >= 0.5:
+                                        max_distance = 100.0  # Zone แข็งแกร่ง = 100 pips
+                                    elif zone_strength >= 0.2:
+                                        max_distance = 75.0   # Zone ปานกลาง = 75 pips
+                                    else:
+                                        max_distance = 50.0   # Zone อ่อนแอ = 50 pips
+                                    
+                                    if distance <= max_distance:
+                                        suitable_supports.append(zone)
+                            
                             logger.info(f"🔍 [RECOVERY] For BUY: Found {len(suitable_supports)} suitable supports (price < {pos_price - 5:.2f})")
                             
                             if suitable_supports:
@@ -685,8 +704,27 @@ class SmartEntrySystem:
                         logger.info(f"🔍 [RECOVERY] For SELL: Found {len(strong_resistances)} strong resistance zones (strength >= {self.recovery_zone_strength})")
                         
                         if strong_resistances:
-                            # หา Resistance ที่เหมาะสม (สูงกว่าไม้ SELL)
-                            suitable_resistances = [zone for zone in strong_resistances if zone['price'] > pos_price + 5]  # ลดจาก 20 เป็น 5 pips
+                            # หา Resistance ที่เหมาะสม (สูงกว่าไม้ SELL) + กรองตามระยะห่าง
+                            suitable_resistances = []
+                            for zone in strong_resistances:
+                                if zone['price'] > pos_price + 5:  # ลดจาก 20 เป็น 5 pips
+                                    # ตรวจสอบระยะห่างจากราคาปัจจุบัน
+                                    distance = abs(current_price - zone['price'])
+                                    zone_strength = zone.get('strength', 0)
+                                    
+                                    # Dynamic Distance ตาม Zone Strength
+                                    if zone_strength >= 0.8:
+                                        max_distance = 150.0  # Zone แข็งแกร่งมาก = 150 pips
+                                    elif zone_strength >= 0.5:
+                                        max_distance = 100.0  # Zone แข็งแกร่ง = 100 pips
+                                    elif zone_strength >= 0.2:
+                                        max_distance = 75.0   # Zone ปานกลาง = 75 pips
+                                    else:
+                                        max_distance = 50.0   # Zone อ่อนแอ = 50 pips
+                                    
+                                    if distance <= max_distance:
+                                        suitable_resistances.append(zone)
+                            
                             logger.info(f"🔍 [RECOVERY] For SELL: Found {len(suitable_resistances)} suitable resistances (price > {pos_price + 5:.2f})")
                             
                             if suitable_resistances:
