@@ -325,7 +325,7 @@ class SmartEntrySystem:
             logger.error(f"❌ Error selecting zone by pivot and strength: {e}")
             return None, None
     
-    def _is_valid_entry_zone(self, zone: Dict, current_price: float) -> bool:
+    def _is_valid_entry_zone(self, zone: Dict, current_price: float, zones: Dict = None) -> bool:
         """✅ ตรวจสอบว่า Zone ใช้ได้หรือไม่"""
         try:
             # ตรวจสอบ Zone Strength
@@ -333,25 +333,71 @@ class SmartEntrySystem:
                 logger.info(f"🚫 Zone {zone['price']} too weak: {zone.get('strength', 0)} < {self.min_zone_strength}")
                 return False
             
-            # ตรวจสอบว่าใช้ Zone นี้แล้วหรือยัง
+            # ตรวจสอบว่าใช้ Zone นี้แล้วหรือยัง (Dynamic Reuse Logic)
             zone_key = self._generate_zone_key(zone)
             if zone_key in self.used_zones:
-                logger.info(f"🚫 Zone {zone['price']} already used")
-                return False
+                zone_data = self.used_zones[zone_key]
+                time_since_used = datetime.now() - zone_data['timestamp']
+                
+                # 🎯 Dynamic Zone Reuse: อนุญาตให้ใช้ซ้ำได้ตามเงื่อนไข
+                zone_strength = zone.get('strength', 0)
+                current_strength = zone_data.get('strength', 0)
+                
+                # เงื่อนไขการใช้ซ้ำ:
+                # 1. Zone แข็งแกร่งขึ้น (strength เพิ่มขึ้น)
+                # 2. ผ่านไปแล้วอย่างน้อย 30 นาที
+                # 3. Zone แข็งแกร่งมาก (strength > 0.8) ใช้ซ้ำได้เร็วขึ้น
+                can_reuse = False
+                
+                if zone_strength > current_strength + 0.1:  # Strength เพิ่มขึ้น
+                    can_reuse = True
+                    logger.info(f"✅ Zone {zone['price']} can reuse - strength improved: {current_strength:.2f} → {zone_strength:.2f}")
+                elif zone_strength >= 0.8 and time_since_used > timedelta(minutes=30):  # Zone แข็งแกร่งมาก
+                    can_reuse = True
+                    logger.info(f"✅ Zone {zone['price']} can reuse - strong zone after {time_since_used}")
+                elif time_since_used > timedelta(hours=1):  # ผ่านไปแล้ว 1 ชั่วโมง
+                    can_reuse = True
+                    logger.info(f"✅ Zone {zone['price']} can reuse - time passed: {time_since_used}")
+                
+                if not can_reuse:
+                    logger.info(f"🚫 Zone {zone['price']} already used (strength: {current_strength:.2f}, time: {time_since_used})")
+                    return False
             
             # ตรวจสอบระยะห่างจากราคาปัจจุบัน - Dynamic Distance ตาม Zone Strength
             distance = abs(current_price - zone['price'])
             
-            # 🎯 Dynamic Distance: Zone แข็งแกร่ง = ระยะห่างมากขึ้น
+            # 🎯 Dynamic Distance: Zone แข็งแกร่ง = ระยะห่างมากขึ้น (ปรับให้ยืดหยุ่นมากขึ้น)
             zone_strength = zone.get('strength', 0)
+            
+            # เพิ่มระยะห่างสูงสุดเพื่อให้มีโอกาสมากขึ้น
             if zone_strength >= 0.8:
-                max_distance = 150.0  # Zone แข็งแกร่งมาก = 150 pips
+                max_distance = 200.0  # Zone แข็งแกร่งมาก = 200 pips (เพิ่มจาก 150)
             elif zone_strength >= 0.5:
-                max_distance = 100.0  # Zone แข็งแกร่ง = 100 pips  
+                max_distance = 150.0  # Zone แข็งแกร่ง = 150 pips (เพิ่มจาก 100)
             elif zone_strength >= 0.2:
-                max_distance = 75.0   # Zone ปานกลาง = 75 pips
+                max_distance = 120.0  # Zone ปานกลาง = 120 pips (เพิ่มจาก 75)
             else:
-                max_distance = 50.0   # Zone อ่อนแอ = 50 pips
+                max_distance = 80.0   # Zone อ่อนแอ = 80 pips (เพิ่มจาก 50)
+            
+            # 🎯 Market Condition Adjustment: ปรับตามสภาวะตลาด
+            # ถ้าราคาอยู่ในช่วง sideways หรือ range ให้เพิ่มระยะห่าง
+            if hasattr(self, 'zone_analyzer') and self.zone_analyzer:
+                try:
+                    # ตรวจสอบว่าเป็น range market หรือไม่
+                    support_zones = zones.get('support', [])
+                    resistance_zones = zones.get('resistance', [])
+                    
+                    if support_zones and resistance_zones:
+                        support_price = min([z['price'] for z in support_zones])
+                        resistance_price = max([z['price'] for z in resistance_zones])
+                        range_size = resistance_price - support_price
+                        
+                        # ถ้า range เล็ก (sideways market) ให้เพิ่มระยะห่าง
+                        if range_size < 100 * 0.0001:  # Range < 100 pips
+                            max_distance *= 1.5  # เพิ่ม 50%
+                            logger.debug(f"🎯 Range market detected, increased max_distance to {max_distance:.1f} pips")
+                except Exception as e:
+                    logger.debug(f"⚠️ Could not check market condition: {e}")
                 
             if distance > max_distance:
                 logger.info(f"🚫 Zone {zone['price']} too far: {distance:.1f} pips (max: {max_distance}, strength: {zone_strength:.2f})")
@@ -379,12 +425,13 @@ class SmartEntrySystem:
             return False
     
     def _generate_zone_key(self, zone: Dict) -> str:
-        """🔑 สร้าง key สำหรับ Zone"""
+        """🔑 สร้าง key สำหรับ Zone (Dynamic - ใช้เฉพาะ price)"""
         try:
-            return f"{zone['price']:.5f}_{zone.get('strength', 0)}"
+            # ใช้เฉพาะ price โดยไม่รวม strength เพื่อให้ zone เดียวกันสามารถใช้ซ้ำได้
+            return f"{zone['price']:.5f}"
         except Exception as e:
             logger.error(f"❌ Error generating zone key: {e}")
-            return f"{zone.get('price', 0):.5f}_0"
+            return f"{zone.get('price', 0):.5f}"
     
     def _reset_daily_counter(self):
         """🔄 รีเซ็ต daily counter"""
@@ -397,18 +444,28 @@ class SmartEntrySystem:
             logger.error(f"❌ Error resetting daily counter: {e}")
     
     def _cleanup_used_zones(self):
-        """🧹 ทำความสะอาด used_zones"""
+        """🧹 ทำความสะอาด used_zones (Dynamic - ใช้เวลาสั้นลง)"""
         try:
             current_time = datetime.now()
             expired_zones = []
             
             for zone_key, zone_data in self.used_zones.items():
-                # ลบ zones ที่ใช้แล้วเกิน 24 ชั่วโมง
-                if current_time - zone_data['timestamp'] > timedelta(hours=24):
+                # 🎯 Dynamic Cleanup: ลดเวลาลงเหลือ 2-4 ชั่วโมง ตาม market volatility
+                time_since_used = current_time - zone_data['timestamp']
+                
+                # ถ้าเป็น zone ที่แข็งแกร่ง (strength > 0.7) ให้ใช้ซ้ำได้เร็วขึ้น
+                if 'strength' in zone_data and zone_data['strength'] > 0.7:
+                    cleanup_hours = 2  # Zone แข็งแกร่ง = 2 ชั่วโมง
+                else:
+                    cleanup_hours = 4  # Zone ปกติ = 4 ชั่วโมง
+                
+                if time_since_used > timedelta(hours=cleanup_hours):
                     expired_zones.append(zone_key)
+                    logger.debug(f"🧹 Zone {zone_key} expired after {time_since_used}")
             
             for zone_key in expired_zones:
                 del self.used_zones[zone_key]
+                logger.info(f"🧹 Cleaned up expired zone: {zone_key}")
                 
         except Exception as e:
             logger.error(f"❌ Error cleaning up used zones: {e}")
@@ -488,7 +545,7 @@ class SmartEntrySystem:
                 return None
             
             # ตรวจสอบว่า Zone ใช้ได้หรือไม่
-            if not self._is_valid_entry_zone(selected_zone, current_price):
+            if not self._is_valid_entry_zone(selected_zone, current_price, zones):
                 logger.warning(f"🚫 Zone {selected_zone['price']} is not valid for entry")
                 logger.warning(f"   Current Price: {current_price:.2f}, Zone Price: {selected_zone['price']:.2f}")
                 return None
@@ -879,11 +936,12 @@ class SmartEntrySystem:
                     logger.info(f"✅ [SMART ENTRY] Entry executed via OrderManager: Ticket {ticket}")
                     logger.info(f"   🎯 [SMART ENTRY] Recovery system - No TP/SL (managed by closing system)")
                     
-                    # บันทึก zone ที่ใช้แล้ว
+                    # บันทึก zone ที่ใช้แล้ว (รวม strength เพื่อ dynamic reuse)
                     zone_key = self._generate_zone_key(zone)
                     self.used_zones[zone_key] = {
                         'timestamp': datetime.now(),
-                        'ticket': ticket
+                        'ticket': ticket,
+                        'strength': zone.get('strength', 0)  # เพิ่ม strength เพื่อ dynamic reuse
                     }
                     
                     # อัปเดต daily counter
