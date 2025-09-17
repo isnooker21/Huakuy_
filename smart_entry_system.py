@@ -422,16 +422,12 @@ class SmartEntrySystem:
             profit_target = entry_plan.get('profit_target', 50.0)
             loss_threshold = entry_plan.get('loss_threshold', -50.0)
             
-            # คำนวณ TP และ SL (ปรับให้ง่ายขึ้น)
-            if direction == 'buy':
-                tp_price = entry_price + 50.0  # 50 pips TP
-                sl_price = entry_price - 50.0  # 50 pips SL
-            else:  # sell
-                tp_price = entry_price - 50.0  # 50 pips TP
-                sl_price = entry_price + 50.0  # 50 pips SL
+            # ระบบแก้ไม้ - ไม่ตั้ง TP/SL (ให้ระบบปิดไม้จัดการเอง)
+            tp_price = 0.0  # ไม่ตั้ง TP
+            sl_price = 0.0  # ไม่ตั้ง SL
             
             logger.info(f"🚀 Executing entry: {direction.upper()} {lot_size:.2f} lots at {entry_price:.5f}")
-            logger.info(f"   TP: {tp_price:.5f}, SL: {sl_price:.5f}")
+            logger.info(f"   TP: None (ให้ระบบปิดไม้จัดการ), SL: None (ให้ระบบปิดไม้จัดการ)")
             logger.info(f"   Reason: {reason}")
             
             # ใช้ OrderManager แทน mt5.order_send โดยตรง
@@ -446,8 +442,8 @@ class SmartEntrySystem:
                 timestamp=datetime.now(),
                 price=entry_price,
                 comment=f"Smart Entry: {reason}",
-                stop_loss=sl_price,
-                take_profit=tp_price
+                stop_loss=0.0,  # ไม่ตั้ง SL
+                take_profit=0.0  # ไม่ตั้ง TP
             )
             
             # ใช้ OrderManager ในการส่งคำสั่ง
@@ -461,7 +457,8 @@ class SmartEntrySystem:
                 
                 if result and hasattr(result, 'success') and result.success:
                     ticket = getattr(result, 'ticket', None)
-                    logger.info(f"✅ Entry executed via OrderManager: Ticket {ticket}")
+                    logger.info(f"✅ Recovery Entry executed via OrderManager: Ticket {ticket}")
+                    logger.info(f"   🎯 ระบบแก้ไม้ - ไม่มี TP/SL (ให้ระบบปิดไม้จัดการเอง)")
                     
                     # บันทึก zone ที่ใช้แล้ว
                     zone_key = self._generate_zone_key(zone)
