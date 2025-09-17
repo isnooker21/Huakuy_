@@ -78,30 +78,82 @@ class SmartEntrySystem:
             pip_value = 100  # XAUUSD pip value
             base_lot_size = risk_amount / (self.profit_target_pips * pip_value)
             
-            # ปรับตาม zone strength (ปรับให้เหมาะสมกับ XAUUSD)
-            strength_multiplier = {
-                50: 0.3,   # 50-59: 0.3x (ลดลง)
-                60: 0.4,   # 60-69: 0.4x
-                70: 0.5,   # 70-79: 0.5x
-                80: 0.6,   # 80-89: 0.6x
-                90: 0.8,   # 90-100: 0.8x (ลดจาก 1.2x)
-            }
+            # ปรับตาม zone strength แบบละเอียด (ปรับให้เหมาะสมกับ XAUUSD)
+            # ใช้การคำนวณแบบต่อเนื่องแทนการแบ่งช่วง
+            if zone_strength >= 90:
+                # Zone แข็งแกร่งมาก (90-100): ใช้ lot มากที่สุด
+                final_multiplier = 0.8 + (zone_strength - 90) * 0.02  # 0.8-1.0
+            elif zone_strength >= 80:
+                # Zone แข็งแกร่ง (80-89): ใช้ lot มาก
+                final_multiplier = 0.6 + (zone_strength - 80) * 0.02  # 0.6-0.8
+            elif zone_strength >= 70:
+                # Zone ปานกลาง (70-79): ใช้ lot ปานกลาง
+                final_multiplier = 0.4 + (zone_strength - 70) * 0.02  # 0.4-0.6
+            elif zone_strength >= 60:
+                # Zone อ่อน (60-69): ใช้ lot น้อย
+                final_multiplier = 0.2 + (zone_strength - 60) * 0.02  # 0.2-0.4
+            elif zone_strength >= 50:
+                # Zone อ่อนมาก (50-59): ใช้ lot น้อยมาก
+                final_multiplier = 0.1 + (zone_strength - 50) * 0.01  # 0.1-0.2
+            else:
+                # Zone อ่อนเกินไป (<50): ใช้ lot ขั้นต่ำ
+                final_multiplier = 0.05
             
-            # หา multiplier ที่เหมาะสม
-            final_multiplier = 0.5  # default
-            for threshold, multiplier in strength_multiplier.items():
-                if zone_strength >= threshold:
-                    final_multiplier = multiplier
-                else:
-                    break
+            # ปรับเพิ่มเติมตามปัจจัยอื่นๆ
+            additional_multiplier = 1.0
             
-            final_lot_size = base_lot_size * final_multiplier
+            # ปรับตามจำนวน touches ของ zone
+            touches = zone.get('touches', 1)
+            if touches >= 5:
+                additional_multiplier *= 1.2  # Zone ที่แตะบ่อย = แข็งแกร่ง
+            elif touches >= 3:
+                additional_multiplier *= 1.1
+            elif touches <= 1:
+                additional_multiplier *= 0.8  # Zone ที่แตะน้อย = อ่อน
+            
+            # ปรับตามจำนวน algorithms ที่พบ zone นี้
+            algorithms_used = zone.get('algorithms_used', [])
+            if isinstance(algorithms_used, list) and len(algorithms_used) >= 3:
+                additional_multiplier *= 1.15  # Zone ที่พบจากหลายวิธี = แข็งแกร่ง
+            elif len(algorithms_used) >= 2:
+                additional_multiplier *= 1.05
+            
+            # ปรับตาม zone count (zones ที่รวมกัน)
+            zone_count = zone.get('zone_count', 1)
+            if zone_count >= 3:
+                additional_multiplier *= 1.1  # Zone ที่รวมกันหลายตัว = แข็งแกร่ง
+            
+            # ปรับตาม market condition (ถ้ามีข้อมูล)
+            market_condition = zone.get('market_condition', 'normal')
+            if market_condition == 'trending':
+                additional_multiplier *= 1.1  # ตลาด trending = ใช้ lot มากกว่า
+            elif market_condition == 'sideways':
+                additional_multiplier *= 0.9  # ตลาด sideways = ใช้ lot น้อยกว่า
+            elif market_condition == 'volatile':
+                additional_multiplier *= 0.8  # ตลาดผันผวน = ใช้ lot น้อยกว่า
+            
+            # ปรับตามระยะห่างจาก current price
+            current_price = zone.get('current_price', 0)
+            zone_price = zone.get('price', 0)
+            if current_price > 0 and zone_price > 0:
+                distance_pips = abs(current_price - zone_price) * 10000  # แปลงเป็น pips
+                if distance_pips <= 10:
+                    additional_multiplier *= 1.2  # Zone ใกล้ราคาปัจจุบัน = แข็งแกร่ง
+                elif distance_pips <= 20:
+                    additional_multiplier *= 1.1
+                elif distance_pips >= 50:
+                    additional_multiplier *= 0.9  # Zone ไกลราคาปัจจุบัน = อ่อน
+            
+            final_lot_size = base_lot_size * final_multiplier * additional_multiplier
             
             # Debug log
             logger.info(f"📊 [LOT CALCULATION] Balance: ${balance:.2f}, Risk: {self.risk_percent_per_trade*100:.1f}%")
             logger.info(f"📊 [LOT CALCULATION] Risk Amount: ${risk_amount:.2f}, Pip Value: {pip_value}")
             logger.info(f"📊 [LOT CALCULATION] Base Lot: {base_lot_size:.4f}, Zone Strength: {zone_strength:.1f}")
-            logger.info(f"📊 [LOT CALCULATION] Multiplier: {final_multiplier:.2f}, Final Lot: {final_lot_size:.4f}")
+            logger.info(f"📊 [LOT CALCULATION] Strength Multiplier: {final_multiplier:.3f}")
+            logger.info(f"📊 [LOT CALCULATION] Touches: {touches}, Algorithms: {len(algorithms_used)}, Zone Count: {zone_count}")
+            logger.info(f"📊 [LOT CALCULATION] Additional Multiplier: {additional_multiplier:.3f}")
+            logger.info(f"📊 [LOT CALCULATION] Final Lot: {final_lot_size:.4f}")
             
             # จำกัด lot size
             final_lot_size = max(self.min_lot_size, min(self.max_lot_size, final_lot_size))
