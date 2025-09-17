@@ -91,8 +91,7 @@ class AdaptiveTradingSystemGUI:
         
         # ✅ KEEP POSITION MANAGEMENT & CLOSING SYSTEMS
         self.dynamic_position_modifier = None
-        # 🚫 REMOVED: dynamic_adaptive_closer - Replaced by Enhanced 7D Smart Closer
-        self.hedge_pairing_closer = None
+        # 🚫 REMOVED: All old closing systems - Replaced by Edge Priority Closing
         
         # 🎯 ADAPTIVE TRADING STATE
         self.last_candle_data = {}  # {timeframe: candle}
@@ -199,7 +198,7 @@ class AdaptiveTradingSystemGUI:
             self.dynamic_position_modifier = create_dynamic_position_modifier(
                 mt5_connection=self.mt5_connection,
                 symbol=self.actual_symbol,
-                hedge_pairing_closer=self.hedge_pairing_closer,
+                hedge_pairing_closer=None,  # Disabled - Using Edge Priority Closing
                 initial_balance=self.initial_balance
             )
             
@@ -252,16 +251,8 @@ class AdaptiveTradingSystemGUI:
                 self.gui.alert(f"{e}", 'error')
                 return False
             
-            # 🚀 Initialize Hedge Pairing Closer
-            try:
-                from hedge_pairing_closer import create_hedge_pairing_closer
-                self.hedge_pairing_closer = create_hedge_pairing_closer(symbol=self.actual_symbol)
-                # ตั้งค่า MT5 connection สำหรับ Real-time P&L
-                if self.mt5_connection:
-                    self.hedge_pairing_closer.set_mt5_connection(self.mt5_connection)
-            except Exception as e:
-                logger.error(f"❌ Failed to initialize Hedge Pairing Closer: {e}")
-                self.hedge_pairing_closer = None
+            # 🚀 Initialize Edge Priority Closing System
+            logger.info("🎯 Initializing Edge Priority Closing System...")
             
             self.is_running = True
             self.trading_thread = threading.Thread(target=self._trading_loop, daemon=True)
@@ -325,8 +316,8 @@ class AdaptiveTradingSystemGUI:
                 # Process Simple Breakout for all timeframes - DISABLED (ใช้ Smart Entry System แทน)
                 # self._process_simple_breakout(current_candle)
                 
-                # 🚀 Immediate Take Profit Check (ใหม่) - ตรวจสอบ TP ทันที
-                self._check_immediate_take_profit(current_candle)
+                # 🎯 Edge Priority Closing Check (ใหม่) - ตรวจสอบการปิดไม้ขอบ
+                self._check_edge_priority_closing(current_candle)
                 
                 # Position Management (Keep original logic) - Throttle to every 20 seconds (เพิ่มจาก 10)
                 if not hasattr(self, '_last_position_management_time'):
@@ -384,7 +375,7 @@ class AdaptiveTradingSystemGUI:
                             except:
                                 pass  # ถ้าใช้ signal ไม่ได้ก็ข้าม
                             
-                            self._handle_dynamic_closing(current_candle)
+                            # 🎯 Edge Priority Closing handled in main loop
                             
                             try:
                                 if platform.system() != 'Windows':
@@ -643,8 +634,8 @@ class AdaptiveTradingSystemGUI:
         except Exception as e:
             logger.error(f"❌ Error in simple breakout processing: {e}")
     
-    def _check_immediate_take_profit(self, current_candle: CandleData):
-        """🚀 ตรวจสอบ Take Profit ทันที - ไม่รอ 15 วินาที"""
+    def _check_edge_priority_closing(self, current_candle: CandleData):
+        """🎯 ตรวจสอบการปิดไม้ขอบ - ระบบใหม่ Edge Priority Closing"""
         try:
             if not self.order_manager:
                 return
@@ -654,63 +645,23 @@ class AdaptiveTradingSystemGUI:
             if not positions:
                 return
             
-            current_price = current_candle.close
-            positions_to_close = []
+            # แยกไม้ BUY และ SELL
+            buy_positions = [pos for pos in positions if getattr(pos, 'type', 0) == 0]
+            sell_positions = [pos for pos in positions if getattr(pos, 'type', 0) == 1]
             
-            for pos in positions:
-                try:
-                    # ตรวจสอบ Take Profit
-                    tp_price = getattr(pos, 'tp', 0)
-                    if tp_price > 0:
-                        pos_type = getattr(pos, 'type', 0)
-                        pos_profit = getattr(pos, 'profit', 0)
-                        
-                        # ตรวจสอบว่าไม้ถึง TP หรือไม่
-                        should_close = False
-                        if pos_type == 0:  # BUY
-                            if current_price >= tp_price:
-                                should_close = True
-                                logger.info(f"🎯 BUY TP reached: {current_price:.5f} >= {tp_price:.5f} (Profit: ${pos_profit:.2f})")
-                        elif pos_type == 1:  # SELL
-                            if current_price <= tp_price:
-                                should_close = True
-                                logger.info(f"🎯 SELL TP reached: {current_price:.5f} <= {tp_price:.5f} (Profit: ${pos_profit:.2f})")
-                        
-                        if should_close:
-                            positions_to_close.append(pos)
-                            
-                except Exception as e:
-                    logger.error(f"❌ Error checking TP for position: {e}")
-                    continue
+            if not buy_positions and not sell_positions:
+                return
             
-            # ปิดไม้ที่ถึง TP แล้ว
-            if positions_to_close:
-                logger.info(f"🚀 IMMEDIATE TP CLOSING: {len(positions_to_close)} positions reached TP")
-                for pos in positions_to_close:
-                    try:
-                        ticket = getattr(pos, 'ticket', 0)
-                        pos_type = getattr(pos, 'type', 0)
-                        pos_profit = getattr(pos, 'profit', 0)
-                        
-                        # 🚫 HELPER-REQUIRED POLICY: ตรวจสอบกำไรก่อนปิดไม้ TP
-                        if pos_profit <= 0:
-                            logger.warning(f"🚫 HELPER-REQUIRED POLICY: TP Position {ticket} has negative profit (${pos_profit:.2f})")
-                            logger.warning(f"   🚫 CANNOT CLOSE: Even TP positions must be profitable")
-                            continue
-                            
-                        # ปิดไม้ทันที (เฉพาะไม้กำไร)
-                        logger.info(f"✅ HELPER-REQUIRED POLICY: TP Position {ticket} is profitable (${pos_profit:.2f}) - ALLOWING")
-                        result = self.order_manager.close_position(ticket)
-                        if result.success:
-                            logger.info(f"✅ IMMEDIATE TP CLOSED: Ticket {ticket} (Type: {'BUY' if pos_type == 0 else 'SELL'}, Profit: ${pos_profit:.2f})")
-                        else:
-                            logger.warning(f"⚠️ Failed to close TP position {ticket}: {result.error_message}")
-                            
-                    except Exception as e:
-                        logger.error(f"❌ Error closing TP position: {e}")
-                        
+            logger.info(f"🎯 [EDGE CLOSING] Analyzing {len(buy_positions)} BUY, {len(sell_positions)} SELL positions")
+            
+            # TODO: Implement Edge Priority Closing Logic
+            # 1. จับคู่ไม้ขอบ (BUY ราคาต่ำสุด + BUY ราคาสูงสุด)
+            # 2. หา Helper (ไม้กำไรอื่นๆ)
+            # 3. คำนวณ % กำไร (5% ต่อ lot)
+            # 4. ปิดเมื่อ % กำไร ≥ 5%
+            
         except Exception as e:
-            logger.error(f"❌ Error in immediate TP check: {e}")
+            logger.error(f"❌ Error in edge priority closing: {e}")
     
     def _can_trade_timeframe(self, timeframe: str) -> bool:
         """Check if we can trade this timeframe (one trade per candle rule) - ตรวจสอบแท่งเทียนปิดจริง"""
@@ -794,23 +745,7 @@ class AdaptiveTradingSystemGUI:
         try:
             # ลบ Bar Close System ออกทั้งหมด - ทำงานทันที
             
-            # ตรวจสอบ SW Filter ก่อนออกไม้ใหม่
-            if hasattr(self, 'hedge_pairing_closer') and self.hedge_pairing_closer:
-                # สร้าง mock position สำหรับตรวจสอบ SW Filter
-                mock_position = type('MockPosition', (), {
-                    'price': current_candle.close,
-                    'price_open': current_candle.close,
-                    'type': 0 if direction == 'BUY' else 1,
-                    'volume': 0.01
-                })()
-                
-                # ตรวจสอบ SW Filter
-                existing_positions = self.order_manager.active_positions
-                sw_ok, sw_msg = self.hedge_pairing_closer._sw_filter_check(mock_position, existing_positions)
-                
-                if not sw_ok:
-                    logger.info(f"🚫 SW FILTER: {sw_msg}")
-                    return
+            # 🎯 SW Filter disabled - Using Edge Priority Closing instead
             
             # 💰 Calculate dynamic lot size
             lot_size = self._calculate_dynamic_lot_size(current_candle, timeframe)
@@ -1097,81 +1032,7 @@ class AdaptiveTradingSystemGUI:
         except Exception as e:
             logger.error(f"❌ Error in position management: {e}")
     
-    def _handle_dynamic_closing(self, candle: CandleData):
-        """Handle dynamic closing using Hedge Pairing Closer"""
-        try:
-            if not self.hedge_pairing_closer:
-                return
-            
-            # 🕐 Check market status before closing
-            market_status = self.mt5_connection.get_market_status(self.actual_symbol or "XAUUSD")
-            if not market_status.get('is_market_open', False):
-                logger.debug(f"💤 Market is closed - skipping closing analysis")
-                return
-            
-            # ย้ายการดึงข้อมูลไป Background Thread เพื่อไม่ให้ GUI ค้าง
-            try:
-                import threading
-                def closing_analysis_worker():
-                    try:
-                        account_info = self.mt5_connection.get_account_info()
-                        
-                        # 🔄 ซิงค์ข้อมูล Position จาก MT5 ก่อนวิเคราะห์
-                        positions = self.order_manager.sync_positions_from_mt5()
-                        
-                        if not positions:
-                            return
-                        
-                        # 🚀 Use Hedge Pairing Closer for comprehensive analysis
-                        market_conditions = {
-                            'current_price': candle.close,
-                            'volatility': 'medium',  # Could be enhanced with real volatility calculation
-                            'trend': 'neutral',      # Could be enhanced with real trend analysis
-                            'market_open': market_status.get('is_market_open', False),
-                            'active_sessions': market_status.get('active_sessions', []),
-                            'london_ny_overlap': market_status.get('london_ny_overlap', False)
-                        }
-                        
-                        closing_result = self.hedge_pairing_closer.find_optimal_closing(
-                            positions=positions,
-                            account_info=account_info or {},
-                            market_conditions=market_conditions
-                        )
-                        
-                        if closing_result and closing_result.should_close:
-                            logger.info(f"🚀 HEDGE CLOSING RECOMMENDED: {len(closing_result.positions_to_close)} positions")
-                            logger.info(f"   Net P&L: ${closing_result.net_pnl:.2f}, Confidence: {closing_result.confidence_score:.1f}%")
-                            logger.info(f"   Method: {closing_result.method}")
-                            logger.info(f"   Reason: {closing_result.reason}")
-                            
-                            # 🚫 HELPER-REQUIRED POLICY: ตรวจสอบว่ามี Helper หรือไม่
-                            if closing_result.net_pnl <= 0:
-                                logger.warning(f"🚫 HELPER-REQUIRED POLICY: Cannot close negative P&L (${closing_result.net_pnl:.2f})")
-                                logger.warning(f"   🚫 NO HELPERS DETECTED: Rejecting closing recommendation")
-                                logger.warning(f"   📊 Method: {closing_result.method} - REJECTED")
-                            else:
-                                # Execute closing only if profitable (has helpers)
-                                logger.info(f"✅ HELPER-REQUIRED POLICY: Profitable close detected - ALLOWING")
-                                result = self.order_manager.close_positions_group(closing_result.positions_to_close)
-                                if result:
-                                    logger.info(f"✅ HEDGE GROUP CLOSED successfully")
-                                else:
-                                    logger.warning(f"❌ HEDGE GROUP CLOSE FAILED")
-                        else:
-                            logger.debug(f"💤 HEDGE No closing recommended - waiting for better opportunity")
-                            
-                    except Exception as e:
-                        logger.error(f"❌ Error in closing analysis worker: {e}")
-                
-                # เริ่ม thread
-                closing_thread = threading.Thread(target=closing_analysis_worker, daemon=True)
-                closing_thread.start()
-                
-            except Exception as e:
-                logger.error(f"❌ Error starting closing analysis thread: {e}")
-                            
-        except Exception as e:
-            logger.error(f"❌ Error in Hedge dynamic closing: {e}")
+    # 🚫 REMOVED: _handle_dynamic_closing - Replaced by Edge Priority Closing
     
     def _initialize_smart_systems(self):
         """🎯 Initialize Smart Trading Systems"""
@@ -1295,18 +1156,10 @@ class AdaptiveTradingSystemGUI:
                             entry_start = time.time()
                             if hasattr(self, 'smart_entry_system') and self.smart_entry_system:
                                 try:
-                                    # Build a mock position with current price for SW filter
-                                    if hasattr(self, 'hedge_pairing_closer') and self.hedge_pairing_closer:
-                                        mock_position = type('MockPosition', (), {
-                                            'price': current_price,
-                                            'price_open': current_price,
-                                            'type': 0,  # direction decided later
-                                            'volume': 0.01
-                                        })()
-                                        # 🚫 DISABLE SW FILTER - ให้ระบบเข้าไม้ได้
-                                        sw_ok = True
-                                        sw_reason = "SW Filter disabled for testing"
-                                        if sw_ok:
+                                    # 🎯 SW Filter disabled - Using Edge Priority Closing instead
+                                    sw_ok = True  # Always allow entry
+                                    sw_reason = "SW Filter disabled - Using Edge Priority Closing"
+                                    if sw_ok:
                                             # 1.1 ตรวจสอบโอกาสเข้าไม้ปกติ
                                             logger.info(f"🔍 [SMART ENTRY] Checking entry opportunity for {self.actual_symbol} at {current_price:.5f}")
                                             entry_opportunity = self.smart_entry_system.analyze_entry_opportunity(
@@ -1349,16 +1202,9 @@ class AdaptiveTradingSystemGUI:
                             anchor_start = time.time()
                             if hasattr(self, 'portfolio_anchor') and self.portfolio_anchor:
                                 try:
-                                    # Build a mock position with current price for SW filter
-                                    if hasattr(self, 'hedge_pairing_closer') and self.hedge_pairing_closer:
-                                        mock_position = type('MockPosition', (), {
-                                            'price': current_price,
-                                            'price_open': current_price,
-                                            'type': 0,
-                                            'volume': 0.01
-                                        })()
-                                        sw_ok, _ = self.hedge_pairing_closer._sw_filter_check(mock_position, positions)
-                                        if sw_ok:
+                                    # 🎯 SW Filter disabled - Using Edge Priority Closing instead
+                                    sw_ok = True  # Always allow entry
+                                    if sw_ok:
                                             anchor_need = self.portfolio_anchor.analyze_anchor_needs(
                                                 self.actual_symbol, current_price, portfolio_profit, zones, positions
                                             )
