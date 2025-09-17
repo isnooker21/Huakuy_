@@ -692,7 +692,14 @@ class AdaptiveTradingSystemGUI:
                         pos_type = getattr(pos, 'type', 0)
                         pos_profit = getattr(pos, 'profit', 0)
                         
-                        # ปิดไม้ทันที
+                        # 🚫 HELPER-REQUIRED POLICY: ตรวจสอบกำไรก่อนปิดไม้ TP
+                        if pos_profit <= 0:
+                            logger.warning(f"🚫 HELPER-REQUIRED POLICY: TP Position {ticket} has negative profit (${pos_profit:.2f})")
+                            logger.warning(f"   🚫 CANNOT CLOSE: Even TP positions must be profitable")
+                            continue
+                            
+                        # ปิดไม้ทันที (เฉพาะไม้กำไร)
+                        logger.info(f"✅ HELPER-REQUIRED POLICY: TP Position {ticket} is profitable (${pos_profit:.2f}) - ALLOWING")
                         result = self.order_manager.close_position(ticket)
                         if result.success:
                             logger.info(f"✅ IMMEDIATE TP CLOSED: Ticket {ticket} (Type: {'BUY' if pos_type == 0 else 'SELL'}, Profit: ${pos_profit:.2f})")
@@ -1137,12 +1144,19 @@ class AdaptiveTradingSystemGUI:
                             logger.info(f"   Method: {closing_result.method}")
                             logger.info(f"   Reason: {closing_result.reason}")
                             
-                            # Execute closing
-                            result = self.order_manager.close_positions_group(closing_result.positions_to_close)
-                            if result:
-                                logger.info(f"✅ HEDGE GROUP CLOSED successfully")
+                            # 🚫 HELPER-REQUIRED POLICY: ตรวจสอบว่ามี Helper หรือไม่
+                            if closing_result.net_pnl <= 0:
+                                logger.warning(f"🚫 HELPER-REQUIRED POLICY: Cannot close negative P&L (${closing_result.net_pnl:.2f})")
+                                logger.warning(f"   🚫 NO HELPERS DETECTED: Rejecting closing recommendation")
+                                logger.warning(f"   📊 Method: {closing_result.method} - REJECTED")
                             else:
-                                logger.warning(f"❌ HEDGE GROUP CLOSE FAILED")
+                                # Execute closing only if profitable (has helpers)
+                                logger.info(f"✅ HELPER-REQUIRED POLICY: Profitable close detected - ALLOWING")
+                                result = self.order_manager.close_positions_group(closing_result.positions_to_close)
+                                if result:
+                                    logger.info(f"✅ HEDGE GROUP CLOSED successfully")
+                                else:
+                                    logger.warning(f"❌ HEDGE GROUP CLOSE FAILED")
                         else:
                             logger.debug(f"💤 HEDGE No closing recommended - waiting for better opportunity")
                             

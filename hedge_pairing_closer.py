@@ -670,21 +670,29 @@ class HedgePairingCloser:
                         reason="ไม้ไกลติดลบและไม่มีไม้จับคู่ที่ฉลาด"
                     )
             
-            # ไม้ไกลมีกำไร - ปิดได้เลย
-            logger.info(f"✅ Furthest positions are profitable (${total_profit:.2f}) - Closing immediately")
+            # ไม้ไกลมีกำไร - ต้องตรวจสอบ Helper ก่อนปิด
+            logger.info(f"✅ Furthest positions are profitable (${total_profit:.2f}) - Checking for helpers...")
             
-            return ClosingDecision(
-                should_close=True,
-                positions_to_close=furthest_positions,
-                method="FURTHEST_POSITIONS_PROFITABLE",
-                net_pnl=total_profit,
-                expected_pnl=total_profit,
-                position_count=len(furthest_positions),
-                buy_count=buy_count,
-                sell_count=sell_count,
-                confidence_score=95.0,
-                reason=f"ปิดไม้ไกลกำไร: {len(furthest_positions)} ตัว (${total_profit:.2f})"
-            )
+            # 🧠 SMART HEDGE PAIRING - หาไม้จับคู่ที่ฉลาดที่สุด (แม้ไม้ไกลจะกำไร)
+            best_combination = self._find_smart_hedge_combination(furthest_positions, all_statuses)
+            if best_combination:
+                logger.info(f"✅ SMART HEDGE SUCCESS: {best_combination['reason']} = ${best_combination['total_profit']:.2f}")
+                return best_combination
+            else:
+                logger.warning(f"🚫 No smart hedge combination found for profitable furthest positions")
+                logger.warning(f"   HELPER REQUIRED POLICY: Cannot close without helpers")
+                return ClosingDecision(
+                    should_close=False,
+                    positions_to_close=[],
+                    method="HELPER_REQUIRED",
+                    net_pnl=total_profit,
+                    expected_pnl=total_profit,
+                    position_count=len(furthest_positions),
+                    buy_count=buy_count,
+                    sell_count=sell_count,
+                    confidence_score=0.0,
+                    reason="ไม้ไกลกำไรแต่ไม่มีไม้ Helper มาช่วย - ห้ามปิดโดยไม่มี Helper"
+                )
             
         except Exception as e:
             logger.error(f"❌ Error closing furthest positions: {e}")
@@ -1644,40 +1652,23 @@ class HedgePairingCloser:
             return False
     
     def _create_close_all_decision(self, positions: List[Any], total_profit: float) -> ClosingDecision:
-        """💰 สร้างการตัดสินใจปิดไม้ทั้งหมด"""
+        """💰 สร้างการตัดสินใจปิดไม้ทั้งหมด - ต้องมี Helper เสมอ"""
         try:
-            # สร้างรายการไม้ที่จะปิด
-            positions_to_close = []
-            buy_count = 0
-            sell_count = 0
+            # 🚫 ห้ามปิดไม้ทั้งหมดโดยไม่มี Helper
+            logger.warning("🚫 CLOSE ALL: Cannot close all positions without helpers")
+            logger.warning("   HELPER REQUIRED POLICY: All closing must include profitable helpers")
             
-            for pos in positions:
-                pos_type = getattr(pos, 'type', 0)
-                if pos_type == 0:  # BUY
-                    buy_count += 1
-                else:  # SELL
-                    sell_count += 1
-                
-                positions_to_close.append({
-                    'ticket': getattr(pos, 'ticket', 'N/A'),
-                    'symbol': getattr(pos, 'symbol', 'XAUUSD'),
-                    'type': 'BUY' if pos_type == 0 else 'SELL',
-                    'volume': getattr(pos, 'volume', 0),
-                    'profit': getattr(pos, 'profit', 0)
-                })
-            
-            # สร้าง ClosingDecision
-            decision = ClosingDecision(
-                should_close=True,
-                positions_to_close=positions_to_close,
-                method="CLOSE_ALL_PROFITABLE",
+            return ClosingDecision(
+                should_close=False,
+                positions_to_close=[],
+                method="HELPER_REQUIRED",
                 net_pnl=total_profit,
                 expected_pnl=total_profit,
                 position_count=len(positions),
-                buy_count=buy_count,
-                sell_count=sell_count,
-                confidence_score=95.0,
-                reason=f"Close all positions - Portfolio profitable: ${total_profit:.2f}"
+                buy_count=0,
+                sell_count=0,
+                confidence_score=0.0,
+                reason="ไม้ทั้งหมดต้องมีไม้ Helper มาช่วย - ห้ามปิดโดยไม่มี Helper"
             )
             
             return decision

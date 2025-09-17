@@ -340,25 +340,16 @@ class OrderManager:
                     error_message=f"Spread check rejected - group losing {group_profit_percentage:.2f}%"
                 )
             
-            # 🚫 ZERO LOSS POLICY: Double check before closing (ยกเว้น Hedge Pairs)
+            # 🚫 HELPER-REQUIRED POLICY: NO CLOSING WITHOUT PROFITABLE HELPERS
             if total_group_profit < 0:
-                # ตรวจสอบว่าเป็น Hedge Pair หรือไม่
-                buy_positions = [pos for pos in valid_positions if getattr(pos, 'type', 0) == 0]
-                sell_positions = [pos for pos in valid_positions if getattr(pos, 'type', 0) == 1]
-                
-                if len(buy_positions) > 0 and len(sell_positions) > 0:
-                    logger.info(f"✅ ZERO LOSS POLICY: Hedge Pair detected - ALLOWING close despite negative profit")
-                    logger.info(f"   💰 Group Profit: ${total_group_profit:.2f} (Negative)")
-                    logger.info(f"   📊 Positions: {len(valid_positions)} (BUY: {len(buy_positions)}, SELL: {len(sell_positions)})")
-                    logger.info(f"   🎯 HEDGE PAIR BYPASS: Allowing hedge pair closure")
-                else:
-                    logger.warning(f"🚫 ZERO LOSS POLICY: Group profit is negative (${total_group_profit:.2f})")
-                    logger.warning(f"   🚫 FORCE REJECT: Cannot close loss-making group")
-                    return CloseResult(
-                        success=False,
-                        closed_tickets=[],
-                        error_message=f"Zero Loss Policy: Group profit is negative (${total_group_profit:.2f}) - FORCE REJECT"
-                    )
+                logger.warning(f"🚫 HELPER-REQUIRED POLICY: Group profit is negative (${total_group_profit:.2f})")
+                logger.warning(f"   🚫 NO HELPERS DETECTED: Cannot close without profitable helpers")
+                logger.warning(f"   📊 Positions: {len(valid_positions)} - ALL MUST HAVE HELPERS")
+                return CloseResult(
+                    success=False,
+                    closed_tickets=[],
+                    error_message=f"Helper-Required Policy: Group profit is negative (${total_group_profit:.2f}) - HELPERS REQUIRED"
+                )
             
             # ✅ STEP 3: Execute raw group closing via MT5Connection
             logger.info(f"✅ SPREAD CHECK PASSED: Executing raw group close")
