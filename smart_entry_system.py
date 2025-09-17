@@ -364,20 +364,22 @@ class SmartEntrySystem:
                     return False
             
             # ตรวจสอบระยะห่างจากราคาปัจจุบัน - Dynamic Distance ตาม Zone Strength
-            distance = abs(current_price - zone['price'])
+            # สำหรับ XAUUSD: 1 pip = 0.01, ต้องแปลงเป็น pips
+            price_diff = abs(current_price - zone['price'])
+            distance = price_diff * 100  # แปลงเป็น pips สำหรับ XAUUSD
             
             # 🎯 Dynamic Distance: Zone แข็งแกร่ง = ระยะห่างมากขึ้น (ปรับให้ยืดหยุ่นมากขึ้น)
             zone_strength = zone.get('strength', 0)
             
-            # เพิ่มระยะห่างสูงสุดเพื่อให้มีโอกาสมากขึ้น
+            # เพิ่มระยะห่างสูงสุดเพื่อให้มีโอกาสมากขึ้น (ปรับให้เหมาะสมกับ XAUUSD)
             if zone_strength >= 0.8:
-                max_distance = 200.0  # Zone แข็งแกร่งมาก = 200 pips (เพิ่มจาก 150)
+                max_distance = 500.0  # Zone แข็งแกร่งมาก = 500 pips (5.0 USD)
             elif zone_strength >= 0.5:
-                max_distance = 150.0  # Zone แข็งแกร่ง = 150 pips (เพิ่มจาก 100)
+                max_distance = 400.0  # Zone แข็งแกร่ง = 400 pips (4.0 USD)
             elif zone_strength >= 0.2:
-                max_distance = 120.0  # Zone ปานกลาง = 120 pips (เพิ่มจาก 75)
+                max_distance = 300.0  # Zone ปานกลาง = 300 pips (3.0 USD)
             else:
-                max_distance = 80.0   # Zone อ่อนแอ = 80 pips (เพิ่มจาก 50)
+                max_distance = 200.0  # Zone อ่อนแอ = 200 pips (2.0 USD)
             
             # 🎯 Market Condition Adjustment: ปรับตามสภาวะตลาด
             # ถ้าราคาอยู่ในช่วง sideways หรือ range ให้เพิ่มระยะห่าง
@@ -393,7 +395,7 @@ class SmartEntrySystem:
                         range_size = resistance_price - support_price
                         
                         # ถ้า range เล็ก (sideways market) ให้เพิ่มระยะห่าง
-                        if range_size < 100 * 0.0001:  # Range < 100 pips
+                        if range_size < 1.0:  # Range < 1.0 USD (100 pips สำหรับ XAUUSD)
                             max_distance *= 1.5  # เพิ่ม 50%
                             logger.debug(f"🎯 Range market detected, increased max_distance to {max_distance:.1f} pips")
                 except Exception as e:
