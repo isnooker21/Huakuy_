@@ -165,14 +165,14 @@ class CandleAnalyzer:
             return 'SELL' if candle.is_green else 'BUY'  # Fallback to counter-trend
         
     def check_volume_filter(self, current_volume: float, volume_history: List[float], 
-                           min_volume_percentage: float = 120.0) -> bool:
+                           min_volume_percentage: float = 80.0) -> bool:
         """
-        ตรวจสอบ Volume Filter
+        ตรวจสอบ Volume Filter (ปรับให้ยืดหยุ่นมากขึ้น)
         
         Args:
             current_volume: Volume ปัจจุบัน
             volume_history: ประวัติ Volume
-            min_volume_percentage: เกณฑ์ขั้นต่ำของ Volume เป็นเปอร์เซ็นต์
+            min_volume_percentage: เกณฑ์ขั้นต่ำของ Volume เป็นเปอร์เซ็นต์ (ลดจาก 120% เป็น 80%)
             
         Returns:
             bool: ผ่านเกณฑ์ Volume หรือไม่
@@ -223,9 +223,9 @@ class TradingConditions:
         """🎯 เช็คเวลาเข้าที่ฉลาด - ป้องกัน BUY สูง SELL ต่ำ"""
         try:
             if not self.smart_entry_timing:
-                # Smart Entry Timing disabled - allow all entries
+                # Smart Entry Timing disabled - allow all entries (ปรับให้เทรดได้ทุกสภาวะ)
                 logger.debug(f"🎯 SMART ENTRY: Disabled - allowing {signal_direction} at {current_price:.2f}")
-                return {'approved': True, 'reason': 'Smart Entry Timing disabled'}
+                return {'approved': True, 'reason': 'Smart Entry Timing disabled - All market conditions allowed'}
             
             logger.info(f"🎯 SMART ENTRY CHECK: {signal_direction} at {current_price:.2f}")
             
@@ -323,9 +323,12 @@ class TradingConditions:
         # ตรวจสอบจำนวน orders ต่อนาที (แทน per candle)
         orders_this_minute = self.orders_per_candle.get(minute_key, 0)
         
-        # 🧠 Adaptive Entry Limits ตามสภาพตลาด
+        # 🧠 Adaptive Entry Limits ตามสภาพตลาด (ปรับให้ยืดหยุ่นมากขึ้น)
         volatility_factor = self._calculate_market_volatility(candle)
         max_entries_per_minute = self._get_adaptive_entry_limit(volatility_factor, len(positions))
+        
+        # เพิ่ม entry limit เพื่อให้เทรดได้บ่อยขึ้น
+        max_entries_per_minute = max_entries_per_minute * 2  # เพิ่มเป็น 2 เท่า
         
         if orders_this_minute >= max_entries_per_minute:
             result['reasons'].append(f"Entry limit reached: {orders_this_minute}/{max_entries_per_minute} per minute")
@@ -397,10 +400,15 @@ class TradingConditions:
                 can_enter_analysis = True
                 entry_reason = f"Session สูง + แรงตลาดพอ ({strength_analysis['total_strength']:.2f}%)"
             else:
-                entry_reason = f"❌ BLOCKED: แรงตลาดไม่เพียงพอ ({strength_analysis['total_strength']:.2f}% < 15%)"
-                result['reasons'].append(entry_reason)
-                logger.warning(f"❌ เงื่อนไข 2: {entry_reason}")
-                return result
+                # ลดเกณฑ์แรงตลาดเพื่อให้เทรดได้ทุกสภาวะ
+                if strength_analysis['total_strength'] >= 5.0:  # ลดจาก 15% เป็น 5%
+                    can_enter_analysis = True
+                    entry_reason = f"แรงตลาดพอสำหรับทุกสภาวะ ({strength_analysis['total_strength']:.2f}% >= 5%)"
+                else:
+                    entry_reason = f"❌ BLOCKED: แรงตลาดไม่เพียงพอ ({strength_analysis['total_strength']:.2f}% < 5%)"
+                    result['reasons'].append(entry_reason)
+                    logger.warning(f"❌ เงื่อนไข 2: {entry_reason}")
+                    return result
         
         logger.info(f"✅ เงื่อนไข 2: {entry_reason}")
             

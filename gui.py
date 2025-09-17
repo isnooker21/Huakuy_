@@ -438,12 +438,15 @@ class TradingGUI:
         ]
         
         for i, (label, key, default_value) in enumerate(risk_settings_fields):
-            tk.Label(risk_settings_frame, text=label, bg='#3a3a3a', fg='lightgray', 
-                    font=('Arial', 9)).grid(row=i, column=0, sticky='w', padx=5, pady=2)
+            row_frame = tk.Frame(risk_settings_frame, bg='#3a3a3a')
+            row_frame.pack(fill=tk.X, pady=2)
+            
+            tk.Label(row_frame, text=label, bg='#3a3a3a', fg='lightgray', 
+                    font=('Arial', 9)).pack(side=tk.LEFT, padx=5)
             
             var = tk.DoubleVar(value=default_value)
-            entry = tk.Entry(risk_settings_frame, textvariable=var, width=10)
-            entry.grid(row=i, column=1, padx=5, pady=2)
+            entry = tk.Entry(row_frame, textvariable=var, width=10)
+            entry.pack(side=tk.RIGHT, padx=5)
             
             self.risk_settings[key] = var
             
@@ -461,12 +464,15 @@ class TradingGUI:
         ]
         
         for i, (label, key, default_value) in enumerate(balance_settings_fields):
-            tk.Label(balance_settings_frame, text=label, bg='#3a3a3a', fg='lightgray', 
-                    font=('Arial', 9)).grid(row=i, column=0, sticky='w', padx=5, pady=2)
+            row_frame = tk.Frame(balance_settings_frame, bg='#3a3a3a')
+            row_frame.pack(fill=tk.X, pady=2)
+            
+            tk.Label(row_frame, text=label, bg='#3a3a3a', fg='lightgray', 
+                    font=('Arial', 9)).pack(side=tk.LEFT, padx=5)
             
             var = tk.DoubleVar(value=default_value)
-            entry = tk.Entry(balance_settings_frame, textvariable=var, width=10)
-            entry.grid(row=i, column=1, padx=5, pady=2)
+            entry = tk.Entry(row_frame, textvariable=var, width=10)
+            entry.pack(side=tk.RIGHT, padx=5)
             
             self.balance_settings[key] = var
             
@@ -564,12 +570,15 @@ class TradingGUI:
         ]
         
         for i, (label, key, default_value) in enumerate(weight_fields):
-            tk.Label(weights_frame, text=f"{label}:", bg='#3a3a3a', fg='lightgray', 
-                    font=('Arial', 8)).grid(row=i, column=0, sticky='w', padx=5, pady=1)
+            row_frame = tk.Frame(weights_frame, bg='#3a3a3a')
+            row_frame.pack(fill=tk.X, pady=1)
+            
+            tk.Label(row_frame, text=f"{label}:", bg='#3a3a3a', fg='lightgray', 
+                    font=('Arial', 8)).pack(side=tk.LEFT, padx=5)
             
             var = tk.DoubleVar(value=default_value)
-            entry = tk.Entry(weights_frame, textvariable=var, width=8)
-            entry.grid(row=i, column=1, padx=5, pady=1)
+            entry = tk.Entry(row_frame, textvariable=var, width=8)
+            entry.pack(side=tk.RIGHT, padx=5)
             
             self.ai_position_weights[key] = var
     
@@ -619,12 +628,15 @@ class TradingGUI:
         ]
         
         for i, (label, key, default_value) in enumerate(entry_weight_fields):
-            tk.Label(weights_frame, text=f"{label}:", bg='#3a3a3a', fg='lightgray', 
-                    font=('Arial', 8)).grid(row=i, column=0, sticky='w', padx=5, pady=1)
+            row_frame = tk.Frame(weights_frame, bg='#3a3a3a')
+            row_frame.pack(fill=tk.X, pady=1)
+            
+            tk.Label(row_frame, text=f"{label}:", bg='#3a3a3a', fg='lightgray', 
+                    font=('Arial', 8)).pack(side=tk.LEFT, padx=5)
             
             var = tk.DoubleVar(value=default_value)
-            entry = tk.Entry(weights_frame, textvariable=var, width=8)
-            entry.grid(row=i, column=1, padx=5, pady=1)
+            entry = tk.Entry(row_frame, textvariable=var, width=8)
+            entry.pack(side=tk.RIGHT, padx=5)
             
             self.ai_entry_weights[key] = var
     

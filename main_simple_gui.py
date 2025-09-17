@@ -1277,18 +1277,18 @@ class AdaptiveTradingSystemGUI:
                             import time
                             start_time = time.time()
                             
-                            # วิเคราะห์ Zones ใน background (ใช้ threading timeout แทน signal)
+                            # วิเคราะห์ Zones ใน background (ปรับให้หา zones ได้บ่อยขึ้น)
                             
                             import concurrent.futures
                             with concurrent.futures.ThreadPoolExecutor() as executor:
-                                # ส่ง Zone Analysis ไปทำใน thread pool พร้อม timeout
-                                future = executor.submit(self.zone_analyzer.analyze_zones, self.actual_symbol, 12)  # ลด lookback เป็น 12 ชั่วโมง
+                                # ส่ง Zone Analysis ไปทำใน thread pool พร้อม timeout (เพิ่ม lookback เพื่อหาโอกาสได้มากขึ้น)
+                                future = executor.submit(self.zone_analyzer.analyze_zones, self.actual_symbol, 24)  # เพิ่ม lookback เป็น 24 ชั่วโมง
                                 try:
-                                    zones = future.result(timeout=15)  # ลด timeout เป็น 15 วินาที
+                                    zones = future.result(timeout=20)  # เพิ่ม timeout เป็น 20 วินาที
                                     zone_time = time.time() - start_time
                                     logger.info(f"🎯 Zone Analysis: {len(zones.get('support', []))} support, {len(zones.get('resistance', []))} resistance ({zone_time:.1f}s)")
                                 except concurrent.futures.TimeoutError:
-                                    logger.warning("🎯 Zone analysis timeout (15s), skipping...")
+                                    logger.warning("🎯 Zone analysis timeout (20s), skipping...")
                                     self._smart_systems_running = False  # Reset flag
                                     return
                                 except Exception as e:
@@ -1323,26 +1323,26 @@ class AdaptiveTradingSystemGUI:
                             entry_start = time.time()
                             if hasattr(self, 'smart_entry_system') and self.smart_entry_system:
                                 try:
-                                    # 🎯 SW Filter disabled - Using Edge Priority Closing instead
+                                    # 🎯 SW Filter disabled - Allow trading in all market conditions
                                     sw_ok = True  # Always allow entry
-                                    sw_reason = "SW Filter disabled - Using Edge Priority Closing"
+                                    sw_reason = "SW Filter disabled - All market conditions allowed"
                                     if sw_ok:
-                                            # 1.1 ตรวจสอบโอกาสเข้าไม้ปกติ
-                                            logger.info(f"🔍 [SMART ENTRY] Checking entry opportunity for {self.actual_symbol} at {current_price:.5f}")
-                                            entry_opportunity = self.smart_entry_system.analyze_entry_opportunity(
-                                                self.actual_symbol, current_price, zones, positions
-                                            )
-                                            if entry_opportunity:
-                                                logger.info(f"🎯 Smart Entry Opportunity: {entry_opportunity['direction']} at {current_price}")
-                                                logger.info(f"   Zone: {entry_opportunity['zone']['price']:.2f} (Strength: {entry_opportunity['zone']['strength']:.1f})")
-                                                logger.info(f"   Lot Size: {entry_opportunity['lot_size']:.2f}")
-                                                
-                                                # เรียก execute_entry ด้วย entry_opportunity (ไม่ใช่ signal)
-                                                ticket = self.smart_entry_system.execute_entry(entry_opportunity)
-                                                if ticket:
-                                                    logger.info(f"✅ Smart Entry executed: Ticket {ticket}")
-                                                else:
-                                                    logger.warning("❌ Smart Entry failed to execute")
+                                        # 1.1 ตรวจสอบโอกาสเข้าไม้ปกติ
+                                        logger.info(f"🔍 [SMART ENTRY] Checking entry opportunity for {self.actual_symbol} at {current_price:.5f}")
+                                        entry_opportunity = self.smart_entry_system.analyze_entry_opportunity(
+                                            self.actual_symbol, current_price, zones, positions
+                                        )
+                                        if entry_opportunity:
+                                            logger.info(f"🎯 Smart Entry Opportunity: {entry_opportunity['direction']} at {current_price}")
+                                            logger.info(f"   Zone: {entry_opportunity['zone']['price']:.2f} (Strength: {entry_opportunity['zone']['strength']:.1f})")
+                                            logger.info(f"   Lot Size: {entry_opportunity['lot_size']:.2f}")
+                                            
+                                            # เรียก execute_entry ด้วย entry_opportunity (ไม่ใช่ signal)
+                                            ticket = self.smart_entry_system.execute_entry(entry_opportunity)
+                                            if ticket:
+                                                logger.info(f"✅ Smart Entry executed: Ticket {ticket}")
+                                            else:
+                                                logger.warning("❌ Smart Entry failed to execute")
                                             
                                             # 1.2 ตรวจสอบโอกาสแก้ไม้ (Recovery System)
                                             recovery_opportunities = self.smart_entry_system.find_recovery_opportunity(

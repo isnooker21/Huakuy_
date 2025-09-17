@@ -15,11 +15,11 @@ class ZoneAnalyzer:
         self.timeframes = [mt5.TIMEFRAME_M1, mt5.TIMEFRAME_M5, mt5.TIMEFRAME_M15, mt5.TIMEFRAME_H1]  # ใช้หลาย timeframe
         # ไม่ใช้ Daily timeframe เพราะมีปัญหา array comparison
         
-        # Multi-Algorithm Zone Detection Parameters - ปรับให้หา zones ได้แม่นยำขึ้น
-        self.min_touches = 2  # เกณฑ์ขั้นต่ำสำหรับการแตะ zone (เพิ่มจาก 1 เพื่อความแม่นยำ)
-        self.zone_tolerance = 0.005  # ความยืดหยุ่นในการรวม zones (ลดจาก 0.01 เพื่อความแม่นยำ)
-        self.min_zone_strength = 0.05  # ความแข็งแรงขั้นต่ำของ zone (เพิ่มจาก 0.01 เพื่อคุณภาพ)
-        self.max_zones_per_type = 150  # จำนวน zone สูงสุดต่อประเภท (ลดจาก 200 เพื่อคุณภาพ)
+        # Multi-Algorithm Zone Detection Parameters - ปรับให้หา zones ได้ง่ายขึ้น
+        self.min_touches = 1  # ลดเกณฑ์ขั้นต่ำสำหรับการแตะ zone เพื่อหาโอกาสได้มากขึ้น
+        self.zone_tolerance = 0.01  # เพิ่มความยืดหยุ่นในการรวม zones เพื่อหาโอกาสได้มากขึ้น
+        self.min_zone_strength = 0.01  # ลดความแข็งแรงขั้นต่ำของ zone เพื่อหาโอกาสได้มากขึ้น
+        self.max_zones_per_type = 200  # เพิ่มจำนวน zone สูงสุดต่อประเภทเพื่อหาโอกาสได้มากขึ้น
         
         # Multi-TF Analysis (ใช้หลาย timeframe)
         self.tf_weights = {
@@ -41,10 +41,10 @@ class ZoneAnalyzer:
         self.enable_price_levels = True      # วิธีที่ 4: Price Levels (Round Numbers, Psychological Levels)
         self.enable_swing_levels = True      # วิธีที่ 5: Swing High/Low Levels (Key Reversal Points)
         
-        # ปรับให้หา zones ได้แม่นยำขึ้นและมีคุณภาพ
-        self.zone_tolerance = 0.005          # ความยืดหยุ่นในการรวม zones (ลดจาก 0.01 เพื่อความแม่นยำ)
-        self.min_zone_strength = 0.05        # ความแข็งแรงขั้นต่ำของ zone (เพิ่มจาก 0.01 เพื่อคุณภาพ)
-        self.max_zones_per_type = 150        # จำนวน zone สูงสุดต่อประเภท (ลดจาก 200 เพื่อคุณภาพ)
+        # ปรับให้หา zones ได้ง่ายขึ้นและมีโอกาสมากขึ้น
+        self.zone_tolerance = 0.01           # เพิ่มความยืดหยุ่นในการรวม zones เพื่อหาโอกาสได้มากขึ้น
+        self.min_zone_strength = 0.01        # ลดความแข็งแรงขั้นต่ำของ zone เพื่อหาโอกาสได้มากขึ้น
+        self.max_zones_per_type = 200        # เพิ่มจำนวน zone สูงสุดต่อประเภทเพื่อหาโอกาสได้มากขึ้น
         
         # Moving Average Settings (REMOVED - ไม่ใช้แล้ว)
         # self.ma_periods = [10, 20, 50, 100, 200]  # ระยะเวลา Moving Average (เพิ่ม 10)
@@ -811,8 +811,8 @@ class ZoneAnalyzer:
                 zone_price = zone['price']
                 distance = abs(current_price - zone_price)
                 
-                # ตรวจสอบว่าใกล้พอสำหรับ entry
-                if distance <= 20.0:  # ภายใน 20 points
+                # ตรวจสอบว่าใกล้พอสำหรับ entry (เพิ่มระยะห่างเพื่อหาโอกาสได้มากขึ้น)
+                if distance <= 50.0:  # เพิ่มเป็น 50 points เพื่อหาโอกาสได้มากขึ้น
                     timeframe_name = self._get_timeframe_name(zone)
                     comment = self._create_trade_comment(zone, 'BUY', timeframe_name)
                     
@@ -831,8 +831,8 @@ class ZoneAnalyzer:
                 zone_price = zone['price']
                 distance = abs(current_price - zone_price)
                 
-                # ตรวจสอบว่าใกล้พอสำหรับ entry
-                if distance <= 20.0:  # ภายใน 20 points
+                # ตรวจสอบว่าใกล้พอสำหรับ entry (เพิ่มระยะห่างเพื่อหาโอกาสได้มากขึ้น)
+                if distance <= 50.0:  # เพิ่มเป็น 50 points เพื่อหาโอกาสได้มากขึ้น
                     timeframe_name = self._get_timeframe_name(zone)
                     comment = self._create_trade_comment(zone, 'SELL', timeframe_name)
                     

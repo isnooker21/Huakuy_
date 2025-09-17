@@ -22,19 +22,23 @@ class SmartEntrySystem:
         self.ai_entry_intelligence = AIEntryIntelligence()
         self.ai_decision_engine = AIDecisionEngine()
         
-        # Entry Parameters (ปรับใหม่ตาม Demand & Supply)
+        # Entry Parameters (ปรับให้เทรดได้ทุกสภาวะตลาด)
         self.support_buy_enabled = True      # เปิด Support entries (BUY ที่ Support)
         self.resistance_sell_enabled = True  # เปิด Resistance entries (SELL ที่ Resistance)
+        self.trend_following_enabled = True  # เปิด Trend Following entries
+        self.breakout_enabled = True         # เปิด Breakout entries
+        self.range_trading_enabled = True    # เปิด Range Trading entries
         
-        # Dynamic Calculation Parameters - ปรับให้แม่นยำขึ้น
-        self.profit_target_pips = 25  # เป้าหมายกำไร 25 pips ต่อ lot (ลดเพื่อความแม่นยำ)
-        self.loss_threshold_pips = 25  # เกณฑ์ขาดทุน 25 pips ต่อ lot (ลดเพื่อความแม่นยำ)
-        self.recovery_zone_strength = 8  # Zone strength สำหรับ Recovery (เพิ่มเพื่อคุณภาพ)
-        self.min_zone_strength = 0.05  # Zone strength ขั้นต่ำสำหรับเข้าไม้ (เพิ่มเพื่อคุณภาพ)
+        # Dynamic Calculation Parameters - ปรับให้เทรดได้บ่อยขึ้น
+        self.profit_target_pips = 20  # ลดเป้าหมายกำไรเพื่อให้ปิดง่ายขึ้น
+        self.loss_threshold_pips = 30  # เพิ่มเกณฑ์ขาดทุนเพื่อให้มีโอกาสมากขึ้น
+        self.recovery_zone_strength = 5  # ลด Zone strength เพื่อหา zone ได้มากขึ้น
+        self.min_zone_strength = 0.01  # ลด Zone strength ขั้นต่ำเพื่อหาโอกาสได้มากขึ้น
         
-        # Risk Management (Dynamic) - ปรับให้เหมาะสมกับ XAUUSD
-        self.risk_percent_per_trade = 0.02  # เพิ่มเป็น 2% ของ balance ต่อ trade (เพิ่ม lot size)
-        self.max_daily_trades = 30  # ลดจำนวน trade ต่อวัน (คุณภาพเหนือปริมาณ)
+        # Risk Management (Dynamic) - ปรับให้เทรดได้บ่อยขึ้น
+        self.risk_percent_per_trade = 0.015  # ลดความเสี่ยงต่อ trade เพื่อเทรดได้บ่อยขึ้น
+        self.max_daily_trades = 50  # เพิ่มจำนวน trade ต่อวัน
+        self.min_time_between_trades = 15  # ลดเวลาระหว่าง trades เป็น 15 วินาที
         
         # Lot Size Management
         self.min_lot_size = 0.01
@@ -237,8 +241,8 @@ class SmartEntrySystem:
                 logger.warning("🚫 [ZONE SELECTION] No support or resistance zones available")
                 return None, None
             
-            # ตรวจสอบระยะห่างระหว่าง support และ resistance ที่ใกล้ที่สุด
-            min_distance_pips = 50.0  # ระยะห่างขั้นต่ำ 50 pips
+            # ตรวจสอบระยะห่างระหว่าง support และ resistance ที่ใกล้ที่สุด (ลดข้อจำกัด)
+            min_distance_pips = 20.0  # ลดระยะห่างขั้นต่ำเป็น 20 pips เพื่อหาโอกาสได้มากขึ้น
             if support_zones and resistance_zones:
                 closest_support_price = min(support_zones, key=lambda x: abs(x['price'] - current_price))['price']
                 closest_resistance_price = min(resistance_zones, key=lambda x: abs(x['price'] - current_price))['price']
@@ -379,12 +383,11 @@ class SmartEntrySystem:
             # ทำความสะอาด used_zones (ลบ zones เก่า)
             self._cleanup_used_zones()
             
-            # ตรวจสอบเวลาระหว่างคำสั่งซื้อและขาย (ป้องกันการเปิดคำสั่งใกล้กันเกินไป)
+            # ตรวจสอบเวลาระหว่างคำสั่งซื้อและขาย (ลดข้อจำกัดเวลา)
             if hasattr(self, 'last_trade_time') and self.last_trade_time is not None:
                 time_since_last_trade = (datetime.now() - self.last_trade_time).total_seconds()
-                min_time_between_trades = 30.0  # ระยะเวลาขั้นต่ำ 30 วินาที
-                if time_since_last_trade < min_time_between_trades:
-                    logger.debug(f"🚫 Too soon since last trade: {time_since_last_trade:.1f}s < {min_time_between_trades}s")
+                if time_since_last_trade < self.min_time_between_trades:
+                    logger.debug(f"🚫 Too soon since last trade: {time_since_last_trade:.1f}s < {self.min_time_between_trades}s")
                     return None
             
             # 🧠 AI Entry Analysis
