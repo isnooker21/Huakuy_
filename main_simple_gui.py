@@ -135,7 +135,7 @@ class SmartEntryTradingSystemGUI:
         self.portfolio_anchor = None
         self.smart_systems_enabled = True
         self.last_zone_analysis = 0
-        self.zone_analysis_interval = 300  # ทุก 5 นาที
+        self.zone_analysis_interval = 5  # ทุก 5 วินาที (ปรับให้เร็วขึ้น)
         self._smart_systems_thread = None  # เพิ่ม thread tracking
         
         logger.info("🚀 SIMPLE BREAKOUT TRADING SYSTEM WITH GUI initialized")
@@ -403,9 +403,12 @@ class SmartEntryTradingSystemGUI:
                 if current_time - getattr(self, '_last_smart_systems_time', 0) >= 5:  # 5 วินาที (Smart Entry เป็นหลัก)
                     # ตรวจสอบว่า Smart Systems ทำงานอยู่หรือไม่ก่อนเริ่มใหม่
                     if not hasattr(self, '_smart_systems_running') or not self._smart_systems_running:
+                        logger.info(f"🎯 Smart Systems Timer: {current_time - getattr(self, '_last_smart_systems_time', 0):.1f}s elapsed")
                         self._smart_systems_running = True
                         self._handle_smart_systems()
                         self._last_smart_systems_time = current_time
+                    else:
+                        logger.debug("🎯 Smart Systems already running, skipping...")
                 
                 # Sleep - เพิ่มเป็น 5 วินาที เพื่อลด CPU usage มากขึ้น
                 time.sleep(5.0)  # ตรวจสอบแท่งเทียนทุก 5 วินาที (ลด GUI freeze มากขึ้น)
@@ -1185,15 +1188,39 @@ class SmartEntryTradingSystemGUI:
     def _handle_smart_systems(self):
         """🎯 Handle Smart Trading Systems"""
         try:
-            if not self.smart_systems_enabled or not all([self.zone_analyzer, self.smart_entry_system, self.portfolio_anchor]):
+            logger.info("🎯 _handle_smart_systems() called")
+            
+            # ตรวจสอบ smart_systems_enabled
+            if not self.smart_systems_enabled:
+                logger.warning("🚫 Smart Systems disabled - skipping")
                 return
+            
+            # ตรวจสอบ components
+            if not self.zone_analyzer:
+                logger.warning("🚫 Zone Analyzer not available - skipping")
+                return
+                
+            if not self.smart_entry_system:
+                logger.warning("🚫 Smart Entry System not available - skipping")
+                return
+                
+            if not self.portfolio_anchor:
+                logger.warning("🚫 Portfolio Anchor not available - skipping")
+                return
+                
+            logger.info("✅ All Smart Systems components available")
             
             current_time = time.time()
             
             # ตรวจสอบเวลาสำหรับ Zone Analysis
-            if current_time - self.last_zone_analysis < self.zone_analysis_interval:
+            time_since_last_analysis = current_time - self.last_zone_analysis
+            logger.info(f"⏰ Time since last zone analysis: {time_since_last_analysis:.1f}s (interval: {self.zone_analysis_interval}s)")
+            
+            if time_since_last_analysis < self.zone_analysis_interval:
+                logger.debug("⏰ Zone analysis interval not reached yet - skipping")
                 return
             
+            logger.info("⏰ Zone analysis interval reached - proceeding")
             self.last_zone_analysis = current_time
             
             # ดึงราคาปัจจุบัน
