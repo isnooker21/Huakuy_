@@ -369,7 +369,7 @@ class SmartEntrySystem:
             self._cleanup_used_zones()
             
             # ตรวจสอบเวลาระหว่างคำสั่งซื้อและขาย (ป้องกันการเปิดคำสั่งใกล้กันเกินไป)
-            if hasattr(self, 'last_trade_time'):
+            if hasattr(self, 'last_trade_time') and self.last_trade_time is not None:
                 time_since_last_trade = (datetime.now() - self.last_trade_time).total_seconds()
                 min_time_between_trades = 30.0  # ระยะเวลาขั้นต่ำ 30 วินาที
                 if time_since_last_trade < min_time_between_trades:
