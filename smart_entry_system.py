@@ -134,12 +134,20 @@ class SmartEntrySystem:
         try:
             # คำนวณ Pivot Point
             pivot_point = self.calculate_pivot_point(current_price, zones)
-            logger.info(f"🔍 [ZONE SELECTION] Current price: {current_price:.2f}, Pivot: {pivot_point:.2f}")
+            logger.info(f"🔍 [ZONE SELECTION] Current price: {current_price:.5f}, Pivot: {pivot_point:.5f}")
             
             support_zones = zones.get('support', [])
             resistance_zones = zones.get('resistance', [])
             
             logger.info(f"🔍 [ZONE SELECTION] Available zones: {len(support_zones)} support, {len(resistance_zones)} resistance")
+            
+            # แสดงราคาใกล้เคียงกับ current_price
+            if support_zones:
+                closest_support = min(support_zones, key=lambda x: abs(x['price'] - current_price))
+                logger.info(f"🔍 [ZONE SELECTION] Closest support: {closest_support['price']:.5f} (distance: {abs(closest_support['price'] - current_price):.5f})")
+            if resistance_zones:
+                closest_resistance = min(resistance_zones, key=lambda x: abs(x['price'] - current_price))
+                logger.info(f"🔍 [ZONE SELECTION] Closest resistance: {closest_resistance['price']:.5f} (distance: {abs(closest_resistance['price'] - current_price):.5f})")
             
             if not support_zones or not resistance_zones:
                 logger.warning("🚫 [ZONE SELECTION] No support or resistance zones available")
@@ -255,7 +263,8 @@ class SmartEntrySystem:
                                 existing_positions: List = None) -> Optional[Dict]:
         """🔍 วิเคราะห์โอกาสเข้าไม้แบบใหม่ (Support/Resistance เท่านั้น)"""
         try:
-            logger.info(f"🔍 [SMART ENTRY] Starting entry analysis for {symbol} at {current_price:.2f}")
+            logger.info(f"🔍 [SMART ENTRY] Starting entry analysis for {symbol} at {current_price:.5f}")
+            logger.info(f"🔍 [SMART ENTRY] Zones received: {len(zones.get('support', []))} support, {len(zones.get('resistance', []))} resistance")
             self.symbol = symbol  # ตั้งค่า symbol ที่ถูกต้อง
             # รีเซ็ต daily counter
             self._reset_daily_counter()
@@ -279,15 +288,18 @@ class SmartEntrySystem:
                 logger.warning("=" * 80)
                 logger.warning("🚫 [SMART ENTRY] NO SUITABLE ZONE FOUND FOR ENTRY")
                 logger.warning("=" * 80)
-                logger.warning(f"📊 [SMART ENTRY] Current Price: {current_price:.2f}")
+                logger.warning(f"📊 [SMART ENTRY] Current Price: {current_price:.5f}")
                 logger.warning(f"📈 [SMART ENTRY] Available Support Zones: {len(support_zones)}")
-                for i, zone in enumerate(support_zones[:3], 1):
-                    logger.warning(f"      {i}. {zone['price']:.2f} (Strength: {zone['strength']:.1f})")
+                for i, zone in enumerate(support_zones[:5], 1):
+                    distance = abs(zone['price'] - current_price)
+                    logger.warning(f"      {i}. {zone['price']:.5f} (Strength: {zone['strength']:.1f}, Distance: {distance:.5f})")
                 
                 logger.warning(f"📉 [SMART ENTRY] Available Resistance Zones: {len(resistance_zones)}")
-                for i, zone in enumerate(resistance_zones[:3], 1):
-                    logger.warning(f"      {i}. {zone['price']:.2f} (Strength: {zone['strength']:.1f})")
+                for i, zone in enumerate(resistance_zones[:5], 1):
+                    distance = abs(zone['price'] - current_price)
+                    logger.warning(f"      {i}. {zone['price']:.5f} (Strength: {zone['strength']:.1f}, Distance: {distance:.5f})")
                 
+                logger.warning(f"🔧 [SMART ENTRY] Min Zone Strength: {self.min_zone_strength}")
                 logger.warning("🔧 [SMART ENTRY] Suggestion: ลด min_zone_strength หรือเพิ่ม zone_tolerance")
                 return None
             

@@ -869,12 +869,16 @@ class MT5Connection:
         """ดึงราคาปัจจุบัน (Bid) สำหรับ Smart Entry System"""
         try:
             if symbol is None:
-                symbol = self.default_symbol
+                # ใช้ XAUUSD เป็น default
+                symbol = "XAUUSD"
             
             tick = mt5.symbol_info_tick(symbol)
             if tick:
+                logger.debug(f"💰 [TICK] {symbol}: Bid={tick.bid:.5f}, Ask={tick.ask:.5f}")
                 return tick.bid
-            return None
+            else:
+                logger.warning(f"⚠️ No tick data for {symbol}")
+                return None
             
         except Exception as e:
             logger.error(f"❌ Error getting current price for {symbol}: {e}")
