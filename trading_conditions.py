@@ -16,12 +16,12 @@ logger = logging.getLogger(__name__)
 @dataclass
 class Signal:
     """คลาสสำหรับเก็บข้อมูลสัญญาณการเทรด"""
-    direction: str  # "BUY" หรือ "SELL"
-    symbol: str
-    strength: float  # แรงของสัญญาณ (0-100)
-    confidence: float  # ความมั่นใจ (0-100)
-    timestamp: datetime
-    price: float
+    direction: str = "BUY"  # "BUY" หรือ "SELL"
+    symbol: str = "XAUUSD"
+    strength: float = 50.0  # แรงของสัญญาณ (0-100)
+    confidence: float = 50.0  # ความมั่นใจ (0-100)
+    timestamp: datetime = None
+    price: float = 0.0
     volume_suggestion: float = 0.01
     stop_loss: float = 0.0
     take_profit: float = 0.0
@@ -32,6 +32,11 @@ class Signal:
     recovery_support: float = 0.0     # คะแนนการช่วย recovery
     timing_intelligence: float = 0.0  # คะแนนจังหวะเปิดไม้
     margin_safety: float = 0.0        # คะแนนความปลอดภัย margin
+    
+    def __post_init__(self):
+        """Post-initialization processing"""
+        if self.timestamp is None:
+            self.timestamp = datetime.now()
 
 @dataclass
 class Smart7DEntryAnalysis:
