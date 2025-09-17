@@ -1,19 +1,19 @@
 # -*- coding: utf-8 -*-
 """
-🚀 Smart Entry Trading System with GUI
-=====================================
-2645542741b983d3a8dc3f660a0531af92a85a69 <<< commit file ที่ใช้งานสมบูณ
-NEW SMART ENTRY LOGIC:
-✅ Support BUY: เข้า BUY ที่ Support zone
-✅ Resistance SELL: เข้า SELL ที่ Resistance zone
-✅ Pivot Point Selection: เลือกตาม Pivot Point + Zone Strength
-✅ Dynamic Lot Sizing: คำนวณตามทุนและ lot size
+🚀 Adaptive Multi-Method Zone Detection Trading System
+=====================================================
+🎯 NEW ADAPTIVE FEATURES:
+✅ Multi-Method Zone Detection: Pivot Points, Fibonacci, Volume Profile, Price Levels, Swing Levels
+✅ Adaptive Market Detection: Trending, Sideways, Volatile
+✅ Dynamic Parameter Adjustment: ปรับพารามิเตอร์ตามสภาวะตลาด
+✅ Multi-Timeframe Analysis: M1, M5, M15, H1
+✅ Smart Entry Logic: Support/Resistance + Market Condition
 ✅ Recovery System: แก้ไม้ที่ขาดทุน
-✅ 5 Second Loop: เข้าไม้ทุก 5 วินาที
-✅ Demand & Supply Trading
+✅ 3 Second Loop: เข้าไม้ทุก 3 วินาที
+✅ Market-Adaptive Trading
 
 AUTHOR: Advanced Trading System
-VERSION: 2.0.0
+VERSION: 3.0.0 - Adaptive Edition
 """
 
 import logging
@@ -60,16 +60,19 @@ logging.getLogger('calculations').setLevel(logging.ERROR)
 
 logger = logging.getLogger(__name__)
 
-class SmartEntryTradingSystemGUI:
+class AdaptiveTradingSystemGUI:
     """
-    🚀 Smart Entry Trading System with GUI
+    🚀 Adaptive Multi-Method Zone Detection Trading System
     
-    FEATURES:
-    ✅ Original GUI Interface
-    ✅ Smart Entry Logic (Support/Resistance + Pivot Point)
+    NEW FEATURES:
+    ✅ Multi-Method Zone Detection (5 Methods)
+    ✅ Adaptive Market Detection (Trending/Sideways/Volatile)
+    ✅ Dynamic Parameter Adjustment
+    ✅ Multi-Timeframe Analysis (M1, M5, M15, H1)
+    ✅ Smart Entry Logic with Market Condition
     ✅ Recovery System for Losing Positions
     ✅ Dynamic Lot Sizing (based on account balance)
-    ✅ 5 Second Trading Loop
+    ✅ 3 Second Trading Loop
     ✅ Position Management Systems
     """
     
@@ -90,9 +93,9 @@ class SmartEntryTradingSystemGUI:
         # 🚫 REMOVED: dynamic_adaptive_closer - Replaced by Enhanced 7D Smart Closer
         self.hedge_pairing_closer = None
         
-        # 🎯 SIMPLE BREAKOUT STATE
+        # 🎯 ADAPTIVE TRADING STATE
         self.last_candle_data = {}  # {timeframe: candle}
-        self.timeframes = ['M5', 'M15', 'M30', 'H1']
+        self.timeframes = ['M1', 'M5', 'M15', 'H1']  # Multi-timeframe analysis
         self.last_trade_time = {}  # {timeframe: timestamp}
         
         # Initialize last trade times
@@ -113,11 +116,10 @@ class SmartEntryTradingSystemGUI:
         # GUI
         self.gui = None
         
-        # 🛡️ RANGE-BOUND MARKET PROTECTION (DISABLED - FIGHT MODE!)
-        self.price_range_history = []  # เก็บราคา high/low ล่าสุด
-        self.range_check_period = 10   # ลดเป็น 10 candles (เร็วสุด)
-        self.max_range_points = 50     # ลดเป็น 50 จุด (ต้องติดมากจริงๆ)
-        self.min_positions_for_range_check = 20  # เพิ่มเป็น 20 positions (ปิดแทบจะปิด)
+        # 🎯 ADAPTIVE MARKET DETECTION
+        self.market_condition = 'sideways'  # Current market condition
+        self.last_market_analysis = 0
+        self.market_analysis_interval = 30  # Analyze market every 30 seconds
         
         
         # 🔒 Position Locking
@@ -128,7 +130,7 @@ class SmartEntryTradingSystemGUI:
         self.last_closing_time = None
         self.closing_cooldown_seconds = 30
         
-        # 🎯 NEW SMART TRADING SYSTEMS (Initialize later)
+        # 🎯 ADAPTIVE SMART TRADING SYSTEMS (Initialize later)
         self.zone_analyzer = None
         self.smart_entry_system = None
         self.portfolio_anchor = None
@@ -136,6 +138,16 @@ class SmartEntryTradingSystemGUI:
         self.last_zone_analysis = 0
         self.zone_analysis_interval = 3  # ทุก 3 วินาที (ปรับให้เร็วขึ้น)
         self._smart_systems_thread = None  # เพิ่ม thread tracking
+        
+        # 🎯 ZONE DETECTION STATS
+        self.zone_stats = {
+            'pivot_points': {'support': 0, 'resistance': 0},
+            'fibonacci': {'support': 0, 'resistance': 0},
+            'volume_profile': {'support': 0, 'resistance': 0},
+            'price_levels': {'support': 0, 'resistance': 0},
+            'swing_levels': {'support': 0, 'resistance': 0}
+        }
+        self.last_zone_update = 0
         
     
     @property
@@ -1405,10 +1417,53 @@ class SmartEntryTradingSystemGUI:
         except Exception as e:
             logger.error(f"เกิดข้อผิดพลาดในการปิดระบบ: {str(e)}")
 
+    def update_zone_stats(self, zones: Dict[str, List[Dict]]):
+        """📊 อัปเดตสถิติการหา zones"""
+        try:
+            current_time = time.time()
+            if current_time - self.last_zone_update < 5:  # อัปเดตทุก 5 วินาที
+                return
+            
+            # รีเซ็ตสถิติ
+            for method in self.zone_stats:
+                self.zone_stats[method]['support'] = 0
+                self.zone_stats[method]['resistance'] = 0
+            
+            # นับ zones ตาม method
+            for zone_type in ['support', 'resistance']:
+                for zone in zones.get(zone_type, []):
+                    algorithm = zone.get('algorithm', 'unknown')
+                    if algorithm in self.zone_stats:
+                        self.zone_stats[algorithm][zone_type] += 1
+            
+            self.last_zone_update = current_time
+            
+        except Exception as e:
+            logger.error(f"❌ Error updating zone stats: {e}")
+    
+    def get_system_status(self) -> Dict[str, Any]:
+        """📊 ข้อมูลสถานะระบบสำหรับ GUI"""
+        try:
+            status = {
+                'market_condition': self.market_condition.upper(),
+                'zone_analysis_interval': f"{self.zone_analysis_interval}s",
+                'smart_systems_enabled': self.smart_systems_enabled,
+                'zone_stats': self.zone_stats.copy(),
+                'total_support_zones': sum(stats['support'] for stats in self.zone_stats.values()),
+                'total_resistance_zones': sum(stats['resistance'] for stats in self.zone_stats.values()),
+                'timeframes': self.timeframes,
+                'adaptive_mode': getattr(self.zone_analyzer, 'enable_adaptive_mode', False) if self.zone_analyzer else False
+            }
+            return status
+            
+        except Exception as e:
+            logger.error(f"❌ Error getting system status: {e}")
+            return {}
+
 def main():
     """Main function"""
     # Create trading system
-    system = SmartEntryTradingSystemGUI(initial_balance=10000.0, symbol="XAUUSD")
+    system = AdaptiveTradingSystemGUI(initial_balance=10000.0, symbol="XAUUSD")
     
     try:
         # Initialize system
