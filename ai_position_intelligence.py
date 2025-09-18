@@ -62,13 +62,14 @@ class AIPositionIntelligence:
             'average_profit_per_decision': 0.0
         }
         
-        # AI Weights (ปรับได้จากการเรียนรู้)
+        # AI Weights (ปรับได้จากการเรียนรู้) - ปรับปรุงให้เหมาะสมกับ XAUUSD
         self.weights = {
-            'pnl_weight': 0.35,
-            'time_weight': 0.20,
-            'distance_weight': 0.20,
-            'balance_weight': 0.15,
-            'market_context_weight': 0.10
+            'pnl_weight': 0.35,        # P&L
+            'time_weight': 0.20,       # เวลา
+            'distance_weight': 0.15,   # ระยะห่าง
+            'balance_weight': 0.10,    # Balance
+            'market_context_weight': 0.10,  # Market context
+            'risk_management_weight': 0.10  # เพิ่ม Risk management
         }
         
         # Load existing AI brain if available
@@ -95,13 +96,13 @@ class AIPositionIntelligence:
             time_open = getattr(position, 'time', datetime.now())
             
             # 1. P&L Score (35%)
-            pnl_score = self._calculate_pnl_score(profit, volume)
+            pnl_score = self._calculate_pnl_score(profit, volume, market_data)
             
             # 2. Time Score (20%)
-            time_score = self._calculate_time_score(time_open)
+            time_score = self._calculate_time_score(time_open, market_data)
             
             # 3. Distance Score (20%)
-            distance_score = self._calculate_distance_score(price_open, current_price)
+            distance_score = self._calculate_distance_score(price_open, current_price, market_data)
             
             # 4. Balance Score (15%)
             balance_score = self._calculate_balance_score(profit, volume)
@@ -109,20 +110,24 @@ class AIPositionIntelligence:
             # 5. Market Context Score (10%)
             market_context_score = self._calculate_market_context_score(market_data, position)
             
+            # 6. Risk Management Score (10%) - เพิ่มใหม่
+            risk_management_score = self._calculate_risk_management_score(position, market_data)
+            
             # คำนวณคะแนนรวม
             total_score = (
                 pnl_score * self.weights['pnl_weight'] +
                 time_score * self.weights['time_weight'] +
                 distance_score * self.weights['distance_weight'] +
                 balance_score * self.weights['balance_weight'] +
-                market_context_score * self.weights['market_context_weight']
+                market_context_score * self.weights['market_context_weight'] +
+                risk_management_score * self.weights['risk_management_weight']
             )
             
             # สร้างคำแนะนำ
-            recommendation = self._generate_recommendation(total_score, profit)
+            recommendation = self._generate_recommendation(total_score, profit, market_data)
             
             # สร้างเหตุผล
-            reasons = self._generate_reasons(pnl_score, time_score, distance_score, balance_score, market_context_score)
+            reasons = self._generate_reasons(pnl_score, time_score, distance_score, balance_score, market_context_score, risk_management_score)
             
             return PositionScore(
                 ticket=ticket,
@@ -150,8 +155,8 @@ class AIPositionIntelligence:
                 recommendation="HOLD"
             )
     
-    def _calculate_pnl_score(self, profit: float, volume: float) -> float:
-        """คำนวณคะแนน P&L"""
+    def _calculate_pnl_score(self, profit: float, volume: float, market_data: Dict = None) -> float:
+        """คำนวณคะแนน P&L แบบปรับปรุง - พิจารณา spread, commission, และ market volatility"""
         try:
             if volume == 0:
                 return 0.0
@@ -159,31 +164,53 @@ class AIPositionIntelligence:
             # คำนวณกำไรต่อ lot
             profit_per_lot = profit / volume
             
-            # แปลงเป็นคะแนน 0-100
-            # กำไร $0.5 ต่อ 0.01 lot = 100 คะแนน
-            # กำไร $0.25 ต่อ 0.01 lot = 50 คะแนน
-            # ขาดทุน $0.25 ต่อ 0.01 lot = 0 คะแนน
-            # ขาดทุน $0.5+ ต่อ 0.01 lot = 0 คะแนน
+            # คำนวณต้นทุนการปิด (spread + commission)
+            spread_cost = 0.3  # XAUUSD spread cost per lot
+            commission_cost = 0.1  # Commission cost per lot
+            total_cost_per_lot = spread_cost + commission_cost
             
-            if profit_per_lot >= 0.5:
-                return 100.0
-            elif profit_per_lot >= 0.25:
-                return 50.0 + (profit_per_lot - 0.25) * 200  # 50-100
-            elif profit_per_lot >= 0:
-                return profit_per_lot * 200  # 0-50
+            # คำนวณกำไรสุทธิหลังหักต้นทุน
+            net_profit_per_lot = profit_per_lot - total_cost_per_lot
+            
+            # ปรับตาม market volatility
+            volatility_multiplier = 1.0
+            if market_data:
+                volatility = market_data.get('volatility', 'normal')
+                if volatility == 'high':
+                    volatility_multiplier = 1.2  # High volatility = ควรปิดเร็วขึ้น
+                elif volatility == 'low':
+                    volatility_multiplier = 0.8  # Low volatility = ไม่รีบปิด
+            
+            # คำนวณคะแนนตามกำไรสุทธิ
+            if net_profit_per_lot >= 0.8:  # กำไรสุทธิมาก
+                base_score = 100.0
+            elif net_profit_per_lot >= 0.5:  # กำไรสุทธิปานกลาง
+                base_score = 75.0 + (net_profit_per_lot - 0.5) * 83.33  # 75-100
+            elif net_profit_per_lot >= 0.2:  # กำไรสุทธิน้อย
+                base_score = 50.0 + (net_profit_per_lot - 0.2) * 83.33  # 50-75
+            elif net_profit_per_lot >= 0:  # กำไรสุทธิเล็กน้อย
+                base_score = 25.0 + net_profit_per_lot * 125.0  # 25-50
             else:
-                # ขาดทุน
-                if profit_per_lot <= -0.5:
-                    return 0.0
-                else:
-                    return max(0.0, 50.0 + profit_per_lot * 100)  # 0-50
+                # ขาดทุน - คำนวณตามระดับการขาดทุน
+                if net_profit_per_lot <= -1.0:  # ขาดทุนมาก
+                    base_score = 0.0
+                elif net_profit_per_lot <= -0.5:  # ขาดทุนปานกลาง
+                    base_score = 10.0 + (net_profit_per_lot + 1.0) * 20.0  # 0-10
+                else:  # ขาดทุนน้อย
+                    base_score = 15.0 + (net_profit_per_lot + 0.5) * 20.0  # 10-15
+            
+            # ปรับตาม volatility
+            final_score = base_score * volatility_multiplier
+            
+            # จำกัดคะแนนระหว่าง 0-100
+            return max(0.0, min(100.0, final_score))
                     
         except Exception as e:
             logger.error(f"❌ Error calculating P&L score: {e}")
             return 0.0
     
-    def _calculate_time_score(self, time_open: datetime) -> float:
-        """คำนวณคะแนนเวลา"""
+    def _calculate_time_score(self, time_open: datetime, market_data: Dict = None) -> float:
+        """คำนวณคะแนนเวลาแบบปรับปรุง - พิจารณา market session และ volatility"""
         try:
             if not isinstance(time_open, datetime):
                 return 50.0  # Default score
@@ -192,43 +219,103 @@ class AIPositionIntelligence:
             time_diff = datetime.now() - time_open
             hours_open = time_diff.total_seconds() / 3600
             
-            # คะแนนตามเวลา (ไม้เก่า = คะแนนสูง = ควรปิด)
-            if hours_open >= 24:  # 1 วันขึ้นไป
-                return 100.0
+            # คำนวณคะแนนพื้นฐานตามเวลา
+            if hours_open >= 48:  # 2 วันขึ้นไป
+                base_score = 100.0
+            elif hours_open >= 24:  # 1 วันขึ้นไป
+                base_score = 85.0
             elif hours_open >= 12:  # 12 ชั่วโมง
-                return 75.0
+                base_score = 70.0
             elif hours_open >= 6:   # 6 ชั่วโมง
-                return 50.0
+                base_score = 50.0
             elif hours_open >= 3:   # 3 ชั่วโมง
-                return 25.0
-            else:  # น้อยกว่า 3 ชั่วโมง
-                return 10.0
+                base_score = 30.0
+            elif hours_open >= 1:   # 1 ชั่วโมง
+                base_score = 15.0
+            else:  # น้อยกว่า 1 ชั่วโมง
+                base_score = 5.0
+            
+            # ปรับตาม market session
+            session_multiplier = 1.0
+            if market_data:
+                session = market_data.get('session', 'unknown')
+                current_hour = datetime.now().hour
+                
+                # ปรับตาม session ที่เปิดอยู่
+                if session == 'london' or (8 <= current_hour <= 16):
+                    session_multiplier = 1.2  # London/NY session = ควรปิดเร็วขึ้น
+                elif session == 'new_york' or (13 <= current_hour <= 21):
+                    session_multiplier = 1.1  # NY session = ควรปิดเร็วขึ้นเล็กน้อย
+                elif session == 'asia' or (0 <= current_hour <= 8):
+                    session_multiplier = 0.9  # Asia session = ไม่รีบปิด
+                
+                # ปรับตาม volatility
+                volatility = market_data.get('volatility', 'normal')
+                if volatility == 'high':
+                    session_multiplier *= 1.3  # High volatility = ควรปิดเร็วขึ้น
+                elif volatility == 'low':
+                    session_multiplier *= 0.8  # Low volatility = ไม่รีบปิด
+            
+            # คำนวณคะแนนสุดท้าย
+            final_score = base_score * session_multiplier
+            
+            # จำกัดคะแนนระหว่าง 0-100
+            return max(0.0, min(100.0, final_score))
                 
         except Exception as e:
             logger.error(f"❌ Error calculating time score: {e}")
             return 50.0
     
-    def _calculate_distance_score(self, price_open: float, current_price: float) -> float:
-        """คำนวณคะแนนระยะห่าง"""
+    def _calculate_distance_score(self, price_open: float, current_price: float, market_data: Dict = None) -> float:
+        """คำนวณคะแนนระยะห่างแบบปรับปรุง - เหมาะสมกับ XAUUSD และ market conditions"""
         try:
             if price_open == 0:
                 return 50.0
             
-            # คำนวณเปอร์เซ็นต์การเปลี่ยนแปลง
-            price_change = abs(current_price - price_open) / price_open * 100
+            # คำนวณระยะห่างเป็น pips สำหรับ XAUUSD
+            price_diff = abs(current_price - price_open)
+            distance_pips = price_diff  # XAUUSD: 1 USD = 1 pip
             
-            # คะแนนตามการเปลี่ยนแปลงราคา
-            # เปลี่ยนแปลงมาก = คะแนนสูง = ควรปิด
-            if price_change >= 2.0:  # 2% ขึ้นไป
-                return 100.0
-            elif price_change >= 1.0:  # 1%
-                return 75.0
-            elif price_change >= 0.5:  # 0.5%
-                return 50.0
-            elif price_change >= 0.2:  # 0.2%
-                return 25.0
-            else:  # น้อยกว่า 0.2%
-                return 10.0
+            # คำนวณเปอร์เซ็นต์การเปลี่ยนแปลง
+            price_change = price_diff / price_open * 100
+            
+            # คะแนนพื้นฐานตามระยะห่าง (pips)
+            if distance_pips >= 50:  # 50 pips ขึ้นไป
+                base_score = 100.0
+            elif distance_pips >= 30:  # 30 pips
+                base_score = 85.0
+            elif distance_pips >= 20:  # 20 pips
+                base_score = 70.0
+            elif distance_pips >= 10:  # 10 pips
+                base_score = 50.0
+            elif distance_pips >= 5:   # 5 pips
+                base_score = 30.0
+            elif distance_pips >= 2:   # 2 pips
+                base_score = 15.0
+            else:  # น้อยกว่า 2 pips
+                base_score = 5.0
+            
+            # ปรับตาม market volatility
+            volatility_multiplier = 1.0
+            if market_data:
+                volatility = market_data.get('volatility', 'normal')
+                if volatility == 'high':
+                    volatility_multiplier = 1.3  # High volatility = ควรปิดเร็วขึ้น
+                elif volatility == 'low':
+                    volatility_multiplier = 0.7  # Low volatility = ไม่รีบปิด
+                
+                # ปรับตาม trend direction
+                trend_direction = market_data.get('trend_direction', 'sideways')
+                if trend_direction == 'trending':
+                    volatility_multiplier *= 1.1  # Trending market = ควรปิดเร็วขึ้น
+                elif trend_direction == 'sideways':
+                    volatility_multiplier *= 0.9  # Sideways market = ไม่รีบปิด
+            
+            # คำนวณคะแนนสุดท้าย
+            final_score = base_score * volatility_multiplier
+            
+            # จำกัดคะแนนระหว่าง 0-100
+            return max(0.0, min(100.0, final_score))
                 
         except Exception as e:
             logger.error(f"❌ Error calculating distance score: {e}")
@@ -260,7 +347,7 @@ class AIPositionIntelligence:
             return 50.0
     
     def _calculate_market_context_score(self, market_data: Dict, position) -> float:
-        """คำนวณคะแนน Market Context"""
+        """คำนวณคะแนน Market Context แบบปรับปรุง - เพิ่มปัจจัย volatility และ risk"""
         try:
             if not market_data:
                 return 50.0  # Default score
@@ -268,27 +355,60 @@ class AIPositionIntelligence:
             # ตรวจสอบ Market Context
             trend_direction = market_data.get('trend_direction', 'sideways')
             volatility = market_data.get('volatility', 'normal')
+            session = market_data.get('session', 'unknown')
+            news_impact = market_data.get('news_impact', 'none')
             
             # คะแนนตาม Market Context
             score = 50.0  # Base score
             
-            # ปรับตาม Trend Direction
+            # 1. Trend Direction (30%)
             if trend_direction == 'uptrend':
                 if getattr(position, 'type', 0) == 0:  # BUY
-                    score += 20  # BUY ใน uptrend = ดี
+                    score += 25  # BUY ใน uptrend = ดีมาก
                 else:  # SELL
-                    score -= 20  # SELL ใน uptrend = ไม่ดี
+                    score -= 25  # SELL ใน uptrend = ไม่ดี
             elif trend_direction == 'downtrend':
                 if getattr(position, 'type', 0) == 0:  # BUY
-                    score -= 20  # BUY ใน downtrend = ไม่ดี
+                    score -= 25  # BUY ใน downtrend = ไม่ดี
                 else:  # SELL
-                    score += 20  # SELL ใน downtrend = ดี
+                    score += 25  # SELL ใน downtrend = ดีมาก
+            elif trend_direction == 'sideways':
+                score += 5  # Sideways = ปานกลาง
             
-            # ปรับตาม Volatility
+            # 2. Volatility (25%)
             if volatility == 'high':
-                score += 10  # High volatility = ควรปิด
+                score += 20  # High volatility = ควรปิดเร็ว
+            elif volatility == 'normal':
+                score += 5   # Normal volatility = ปานกลาง
             elif volatility == 'low':
                 score -= 10  # Low volatility = ไม่รีบปิด
+            
+            # 3. Market Session (20%)
+            if session == 'london' or session == 'new_york':
+                score += 15  # Major sessions = ควรปิดเร็ว
+            elif session == 'asia':
+                score += 5   # Asia session = ปานกลาง
+            else:
+                score += 0   # Unknown session
+            
+            # 4. News Impact (15%)
+            if news_impact == 'high':
+                score += 20  # High news impact = ควรปิดเร็ว
+            elif news_impact == 'medium':
+                score += 10  # Medium news impact = ควรปิด
+            elif news_impact == 'low':
+                score += 5   # Low news impact = ปานกลาง
+            else:
+                score += 0   # No news impact
+            
+            # 5. Risk Level (10%)
+            risk_level = market_data.get('risk_level', 'normal')
+            if risk_level == 'high':
+                score += 15  # High risk = ควรปิดเร็ว
+            elif risk_level == 'normal':
+                score += 5   # Normal risk = ปานกลาง
+            elif risk_level == 'low':
+                score -= 5   # Low risk = ไม่รีบปิด
             
             return max(0.0, min(100.0, score))
             
@@ -296,21 +416,133 @@ class AIPositionIntelligence:
             logger.error(f"❌ Error calculating market context score: {e}")
             return 50.0
     
-    def _generate_recommendation(self, total_score: float, profit: float) -> str:
-        """สร้างคำแนะนำ"""
-        if total_score >= 80:
-            return "CLOSE_NOW"
-        elif total_score >= 60:
-            return "CLOSE_LATER"
-        elif total_score >= 40:
-            return "HOLD"
-        else:
-            return "HOLD"
+    def _calculate_risk_management_score(self, position, market_data: Dict = None) -> float:
+        """คำนวณคะแนน Risk Management - พิจารณา drawdown, exposure, และ correlation"""
+        try:
+            score = 50.0  # Base score
+            
+            # 1. Drawdown Analysis (40%)
+            profit = getattr(position, 'profit', 0)
+            volume = getattr(position, 'volume', 0)
+            
+            if volume > 0:
+                profit_per_lot = profit / volume
+                
+                # คำนวณ drawdown level
+                if profit_per_lot <= -1.0:  # ขาดทุนมาก
+                    score += 30  # ควรปิดเร็ว
+                elif profit_per_lot <= -0.5:  # ขาดทุนปานกลาง
+                    score += 20  # ควรปิด
+                elif profit_per_lot <= -0.2:  # ขาดทุนน้อย
+                    score += 10  # ควรปิดเล็กน้อย
+                elif profit_per_lot >= 0.5:  # กำไรมาก
+                    score += 25  # ควรปิดเพื่อเก็บกำไร
+                elif profit_per_lot >= 0.2:  # กำไรปานกลาง
+                    score += 15  # ควรปิด
+                else:  # กำไร/ขาดทุนน้อย
+                    score += 5   # ปานกลาง
+            
+            # 2. Exposure Analysis (30%)
+            if market_data:
+                total_exposure = market_data.get('total_exposure', 0)
+                max_exposure = market_data.get('max_exposure', 1000)
+                
+                if max_exposure > 0:
+                    exposure_ratio = total_exposure / max_exposure
+                    
+                    if exposure_ratio >= 0.8:  # Exposure สูง
+                        score += 25  # ควรปิดเร็ว
+                    elif exposure_ratio >= 0.6:  # Exposure ปานกลาง
+                        score += 15  # ควรปิด
+                    elif exposure_ratio >= 0.4:  # Exposure ปกติ
+                        score += 5   # ปานกลาง
+                    else:  # Exposure ต่ำ
+                        score -= 5   # ไม่รีบปิด
+            
+            # 3. Correlation Analysis (20%)
+            if market_data:
+                correlation = market_data.get('correlation', 0)
+                
+                if abs(correlation) >= 0.8:  # Correlation สูง
+                    score += 20  # ควรปิดเร็ว
+                elif abs(correlation) >= 0.6:  # Correlation ปานกลาง
+                    score += 10  # ควรปิด
+                elif abs(correlation) >= 0.4:  # Correlation ปกติ
+                    score += 5   # ปานกลาง
+                else:  # Correlation ต่ำ
+                    score -= 5   # ไม่รีบปิด
+            
+            # 4. Volatility Risk (10%)
+            if market_data:
+                volatility = market_data.get('volatility', 'normal')
+                
+                if volatility == 'high':
+                    score += 15  # High volatility = ควรปิดเร็ว
+                elif volatility == 'normal':
+                    score += 5   # Normal volatility = ปานกลาง
+                elif volatility == 'low':
+                    score -= 5   # Low volatility = ไม่รีบปิด
+            
+            return max(0.0, min(100.0, score))
+            
+        except Exception as e:
+            logger.error(f"❌ Error calculating risk management score: {e}")
+            return 50.0
+    
+    def _generate_recommendation(self, total_score: float, profit: float, market_data: Dict = None) -> str:
+        """สร้างคำแนะนำแบบปรับปรุง - พิจารณา market conditions"""
+        try:
+            # ปรับเกณฑ์ตาม market volatility
+            volatility_threshold_adjustment = 0
+            if market_data:
+                volatility = market_data.get('volatility', 'normal')
+                if volatility == 'high':
+                    volatility_threshold_adjustment = -10  # High volatility = ควรปิดเร็วขึ้น
+                elif volatility == 'low':
+                    volatility_threshold_adjustment = 10   # Low volatility = ไม่รีบปิด
+            
+            # ปรับเกณฑ์ตาม profit level
+            profit_threshold_adjustment = 0
+            if profit > 0:
+                profit_threshold_adjustment = -5  # กำไร = ควรปิดเร็วขึ้น
+            elif profit < -10:
+                profit_threshold_adjustment = 5   # ขาดทุนมาก = ไม่รีบปิด
+            
+            # คำนวณเกณฑ์ที่ปรับแล้ว
+            close_now_threshold = 80 + volatility_threshold_adjustment + profit_threshold_adjustment
+            close_later_threshold = 60 + volatility_threshold_adjustment + profit_threshold_adjustment
+            hold_threshold = 40 + volatility_threshold_adjustment + profit_threshold_adjustment
+            
+            # จำกัดเกณฑ์ให้อยู่ในช่วงที่สมเหตุสมผล
+            close_now_threshold = max(70, min(90, close_now_threshold))
+            close_later_threshold = max(50, min(80, close_later_threshold))
+            hold_threshold = max(30, min(60, hold_threshold))
+            
+            if total_score >= close_now_threshold:
+                return "CLOSE_NOW"
+            elif total_score >= close_later_threshold:
+                return "CLOSE_LATER"
+            elif total_score >= hold_threshold:
+                return "HOLD"
+            else:
+                return "HOLD"
+                
+        except Exception as e:
+            logger.error(f"❌ Error generating recommendation: {e}")
+            # Fallback to original logic
+            if total_score >= 80:
+                return "CLOSE_NOW"
+            elif total_score >= 60:
+                return "CLOSE_LATER"
+            elif total_score >= 40:
+                return "HOLD"
+            else:
+                return "HOLD"
     
     def _generate_reasons(self, pnl_score: float, time_score: float, 
                          distance_score: float, balance_score: float, 
-                         market_context_score: float) -> List[str]:
-        """สร้างเหตุผล"""
+                         market_context_score: float, risk_management_score: float) -> List[str]:
+        """สร้างเหตุผลแบบปรับปรุง - รวม risk management"""
         reasons = []
         
         if pnl_score >= 70:
@@ -337,6 +569,11 @@ class AIPositionIntelligence:
             reasons.append("Favorable market context")
         elif market_context_score <= 30:
             reasons.append("Unfavorable market context")
+        
+        if risk_management_score >= 70:
+            reasons.append("High risk management score")
+        elif risk_management_score <= 30:
+            reasons.append("Low risk management score")
         
         return reasons
     
@@ -392,7 +629,7 @@ class AIPositionIntelligence:
     
     def _calculate_pair_score(self, pos1, pos2, current_price: float, 
                             market_data: Dict = None) -> Optional[PairScore]:
-        """คำนวณคะแนนการจับคู่"""
+        """คำนวณคะแนนการจับคู่แบบปรับปรุง - เพิ่มปัจจัย market context และ risk management"""
         try:
             ticket1 = getattr(pos1, 'ticket', 0)
             ticket2 = getattr(pos2, 'ticket', 0)
@@ -402,34 +639,59 @@ class AIPositionIntelligence:
             volume2 = getattr(pos2, 'volume', 0)
             time1 = getattr(pos1, 'time', datetime.now())
             time2 = getattr(pos2, 'time', datetime.now())
+            price1 = getattr(pos1, 'price_open', 0)
+            price2 = getattr(pos2, 'price_open', 0)
             
-            # 1. Combined Profit (40%)
+            # 1. Combined Profit (35%) - ลดน้ำหนักลง
             combined_profit = profit1 + profit2
-            profit_score = min(100.0, max(0.0, (combined_profit / (volume1 + volume2)) * 200))
+            total_volume = volume1 + volume2
+            if total_volume > 0:
+                profit_per_lot = combined_profit / total_volume
+                # คำนวณต้นทุนการปิด
+                spread_cost = 0.3 * total_volume
+                commission_cost = 0.1 * total_volume
+                net_profit = combined_profit - spread_cost - commission_cost
+                net_profit_per_lot = net_profit / total_volume
+                
+                # คะแนนตามกำไรสุทธิ
+                if net_profit_per_lot >= 0.5:
+                    profit_score = 100.0
+                elif net_profit_per_lot >= 0.2:
+                    profit_score = 50.0 + (net_profit_per_lot - 0.2) * 166.67  # 50-100
+                elif net_profit_per_lot >= 0:
+                    profit_score = net_profit_per_lot * 250.0  # 0-50
+                else:
+                    profit_score = max(0.0, 25.0 + net_profit_per_lot * 125.0)  # 0-25
+            else:
+                profit_score = 0.0
             
-            # 2. Risk Reduction (30%)
+            # 2. Risk Reduction (25%) - ลดน้ำหนักลง
             risk_reduction = self._calculate_risk_reduction(pos1, pos2)
             
-            # 3. Lot Balance (20%)
+            # 3. Lot Balance (15%) - ลดน้ำหนักลง
             lot_balance = self._calculate_lot_balance(volume1, volume2)
             
-            # 4. Time Sync (10%)
+            # 4. Time Sync (10%) - ลดน้ำหนักลง
             time_sync = self._calculate_time_sync(time1, time2)
+            
+            # 5. Market Context (15%) - เพิ่มใหม่
+            market_context_score = self._calculate_pair_market_context(pos1, pos2, market_data)
             
             # คะแนนรวม
             combined_score = (
-                profit_score * 0.4 +
-                risk_reduction * 0.3 +
-                lot_balance * 0.2 +
-                time_sync * 0.1
+                profit_score * 0.35 +
+                risk_reduction * 0.25 +
+                lot_balance * 0.15 +
+                time_sync * 0.10 +
+                market_context_score * 0.15
             )
             
             # สร้างคำแนะนำ
-            if combined_score >= 80:
+            if combined_score >= 85:
                 recommendation = "STRONG_PAIR"
-            elif combined_score >= 60:
+            elif combined_score >= 70:
                 recommendation = "GOOD_PAIR"
-            elif combined_score >= 40:
+            elif combined_score >= 50:
                 recommendation = "WEAK_PAIR"
             else:
                 recommendation = "NO_PAIR"
@@ -503,6 +765,55 @@ class AIPositionIntelligence:
                 
         except Exception as e:
             logger.error(f"❌ Error calculating time sync: {e}")
+            return 50.0
+    
+    def _calculate_pair_market_context(self, pos1, pos2, market_data: Dict = None) -> float:
+        """คำนวณคะแนน Market Context สำหรับการจับคู่ไม้"""
+        try:
+            if not market_data:
+                return 50.0  # Default score
+            
+            score = 50.0  # Base score
+            
+            # ตรวจสอบประเภทไม้
+            type1 = getattr(pos1, 'type', 0)
+            type2 = getattr(pos2, 'type', 0)
+            
+            # 1. Hedge Pair Analysis (40%)
+            if type1 != type2:  # ไม้คนละทิศทาง (Hedge)
+                score += 30  # Hedge pair = ดีมาก
+            else:  # ไม้ทิศทางเดียวกัน
+                score += 10  # Same direction = ดีปานกลาง
+            
+            # 2. Market Volatility (25%)
+            volatility = market_data.get('volatility', 'normal')
+            if volatility == 'high':
+                score += 20  # High volatility = ควรปิดเร็ว
+            elif volatility == 'normal':
+                score += 10  # Normal volatility = ปานกลาง
+            elif volatility == 'low':
+                score += 5   # Low volatility = ไม่รีบปิด
+            
+            # 3. Trend Direction (20%)
+            trend_direction = market_data.get('trend_direction', 'sideways')
+            if trend_direction == 'trending':
+                score += 15  # Trending market = ควรปิดเร็ว
+            elif trend_direction == 'sideways':
+                score += 5   # Sideways market = ปานกลาง
+            
+            # 4. Market Session (15%)
+            session = market_data.get('session', 'unknown')
+            if session in ['london', 'new_york']:
+                score += 15  # Major sessions = ควรปิดเร็ว
+            elif session == 'asia':
+                score += 8   # Asia session = ปานกลาง
+            else:
+                score += 5   # Unknown session
+            
+            return max(0.0, min(100.0, score))
+            
+        except Exception as e:
+            logger.error(f"❌ Error calculating pair market context: {e}")
             return 50.0
     
     def log_decision(self, decision: AIDecision, outcome: Dict = None):
