@@ -246,7 +246,7 @@ class SmartEntrySystem:
             if support_zones and resistance_zones:
                 closest_support_price = min(support_zones, key=lambda x: abs(x['price'] - current_price))['price']
                 closest_resistance_price = min(resistance_zones, key=lambda x: abs(x['price'] - current_price))['price']
-                distance_between_zones = abs(closest_support_price - closest_resistance_price) * 100  # แปลงเป็น pips สำหรับ XAUUSD
+                distance_between_zones = abs(closest_support_price - closest_resistance_price)  # XAUUSD: ราคา 1 USD = 1 pip
                 
                 logger.info(f"🔍 [ZONE SELECTION] Distance between closest zones: {distance_between_zones:.1f} pips")
                 
@@ -263,19 +263,19 @@ class SmartEntrySystem:
                     if zone['strength'] >= self.min_zone_strength:
                         # ตรวจสอบระยะห่างด้วย Dynamic Distance (ปรับให้สอดคล้องกับ XAUUSD)
                         price_diff = abs(current_price - zone['price'])
-                        distance = price_diff * 100  # แปลงเป็น pips สำหรับ XAUUSD
+                        distance = price_diff  # XAUUSD: ราคา 1 USD = 1 pip (ไม่ต้องคูณ 100)
                         zone_strength = zone.get('strength', 0)
                         
                         # Dynamic Distance ตาม Zone Strength (ปรับให้สอดคล้องกับ validation)
                         # เพิ่มระยะห่างให้มากขึ้นเพื่อให้มีโอกาสมากขึ้น
                         if zone_strength >= 0.8:
-                            max_distance = 20000.0  # Zone แข็งแกร่งมาก = 20000 pips (200.0 USD)
+                            max_distance = 200.0  # Zone แข็งแกร่งมาก = 200 pips (2.0 USD)
                         elif zone_strength >= 0.5:
-                            max_distance = 15000.0  # Zone แข็งแกร่ง = 15000 pips (150.0 USD)
+                            max_distance = 150.0  # Zone แข็งแกร่ง = 150 pips (1.5 USD)
                         elif zone_strength >= 0.2:
-                            max_distance = 10000.0  # Zone ปานกลาง = 10000 pips (100.0 USD)
+                            max_distance = 100.0  # Zone ปานกลาง = 100 pips (1.0 USD)
                         else:
-                            max_distance = 5000.0   # Zone อ่อนแอ = 5000 pips (50.0 USD)
+                            max_distance = 50.0   # Zone อ่อนแอ = 50 pips (0.5 USD)
                         
                         if distance <= max_distance:
                             valid_supports.append(zone)
@@ -285,7 +285,7 @@ class SmartEntrySystem:
                 if valid_supports:
                     # เลือก Support ที่ใกล้ที่สุดและแข็งแกร่งพอ
                     best_support = min(valid_supports, key=lambda x: abs(current_price - x['price']))
-                    distance_pips = abs(current_price - best_support['price']) * 100
+                    distance_pips = abs(current_price - best_support['price'])
                     logger.info(f"✅ [ZONE SELECTION] Selected SUPPORT: {best_support['price']:.5f} (strength: {best_support['strength']:.1f}, distance: {distance_pips:.1f} pips)")
                     return 'support', best_support
                 else:
@@ -306,19 +306,19 @@ class SmartEntrySystem:
                     if zone['strength'] >= self.min_zone_strength:
                         # ตรวจสอบระยะห่างด้วย Dynamic Distance (ปรับให้สอดคล้องกับ XAUUSD)
                         price_diff = abs(current_price - zone['price'])
-                        distance = price_diff * 100  # แปลงเป็น pips สำหรับ XAUUSD
+                        distance = price_diff  # XAUUSD: ราคา 1 USD = 1 pip (ไม่ต้องคูณ 100)
                         zone_strength = zone.get('strength', 0)
                         
                         # Dynamic Distance ตาม Zone Strength (ปรับให้สอดคล้องกับ validation)
                         # เพิ่มระยะห่างให้มากขึ้นเพื่อให้มีโอกาสมากขึ้น
                         if zone_strength >= 0.8:
-                            max_distance = 20000.0  # Zone แข็งแกร่งมาก = 20000 pips (200.0 USD)
+                            max_distance = 200.0  # Zone แข็งแกร่งมาก = 200 pips (2.0 USD)
                         elif zone_strength >= 0.5:
-                            max_distance = 15000.0  # Zone แข็งแกร่ง = 15000 pips (150.0 USD)
+                            max_distance = 150.0  # Zone แข็งแกร่ง = 150 pips (1.5 USD)
                         elif zone_strength >= 0.2:
-                            max_distance = 10000.0  # Zone ปานกลาง = 10000 pips (100.0 USD)
+                            max_distance = 100.0  # Zone ปานกลาง = 100 pips (1.0 USD)
                         else:
-                            max_distance = 5000.0   # Zone อ่อนแอ = 5000 pips (50.0 USD)
+                            max_distance = 50.0   # Zone อ่อนแอ = 50 pips (0.5 USD)
                         
                         if distance <= max_distance:
                             valid_resistances.append(zone)
@@ -328,7 +328,7 @@ class SmartEntrySystem:
                 if valid_resistances:
                     # เลือก Resistance ที่ใกล้ที่สุดและแข็งแกร่งพอ
                     best_resistance = min(valid_resistances, key=lambda x: abs(current_price - x['price']))
-                    distance_pips = abs(current_price - best_resistance['price']) * 100
+                    distance_pips = abs(current_price - best_resistance['price'])
                     logger.info(f"✅ [ZONE SELECTION] Selected RESISTANCE: {best_resistance['price']:.5f} (strength: {best_resistance['strength']:.1f}, distance: {distance_pips:.1f} pips)")
                     return 'resistance', best_resistance
                 else:
@@ -346,7 +346,7 @@ class SmartEntrySystem:
             if support_zones or resistance_zones:
                 all_zones = support_zones + resistance_zones
                 closest_zone = min(all_zones, key=lambda x: abs(current_price - x['price']))
-                distance_pips = abs(current_price - closest_zone['price']) * 100
+                distance_pips = abs(current_price - closest_zone['price'])
                 zone_type = 'support' if closest_zone in support_zones else 'resistance'
                 logger.warning(f"🔄 [ZONE SELECTION] Final fallback - selecting closest {zone_type.upper()}: {closest_zone['price']:.5f} (strength: {closest_zone['strength']:.1f}, distance: {distance_pips:.1f} pips)")
                 return zone_type, closest_zone
@@ -396,22 +396,22 @@ class SmartEntrySystem:
                     return False
             
             # ตรวจสอบระยะห่างจากราคาปัจจุบัน - Dynamic Distance ตาม Zone Strength
-            # สำหรับ XAUUSD: 1 pip = 0.01, ต้องแปลงเป็น pips
+            # สำหรับ XAUUSD: 1 pip = 0.01, ระยะห่างเป็น pips โดยตรง
             price_diff = abs(current_price - zone['price'])
-            distance = price_diff * 100  # แปลงเป็น pips สำหรับ XAUUSD
+            distance = price_diff  # XAUUSD: ราคา 1 USD = 1 pip (ไม่ต้องคูณ 100)
             
             # 🎯 Dynamic Distance: Zone แข็งแกร่ง = ระยะห่างมากขึ้น (ปรับให้ยืดหยุ่นมากขึ้น)
             zone_strength = zone.get('strength', 0)
             
             # เพิ่มระยะห่างสูงสุดเพื่อให้มีโอกาสมากขึ้น (ปรับให้เหมาะสมกับ XAUUSD)
             if zone_strength >= 0.8:
-                max_distance = 20000.0  # Zone แข็งแกร่งมาก = 20000 pips (200.0 USD)
+                max_distance = 200.0  # Zone แข็งแกร่งมาก = 200 pips (2.0 USD)
             elif zone_strength >= 0.5:
-                max_distance = 15000.0  # Zone แข็งแกร่ง = 15000 pips (150.0 USD)
+                max_distance = 150.0  # Zone แข็งแกร่ง = 150 pips (1.5 USD)
             elif zone_strength >= 0.2:
-                max_distance = 10000.0  # Zone ปานกลาง = 10000 pips (100.0 USD)
+                max_distance = 100.0  # Zone ปานกลาง = 100 pips (1.0 USD)
             else:
-                max_distance = 5000.0   # Zone อ่อนแอ = 5000 pips (50.0 USD)
+                max_distance = 50.0   # Zone อ่อนแอ = 50 pips (0.5 USD)
             
             # 🎯 Market Condition Adjustment: ปรับตามสภาวะตลาด
             # ถ้าราคาอยู่ในช่วง sideways หรือ range ให้เพิ่มระยะห่าง
