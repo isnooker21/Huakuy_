@@ -515,10 +515,10 @@ class SmartEntrySystem:
             # รีเซ็ต daily counter
             self._reset_daily_counter()
             
-            # ตรวจสอบ daily limit
-            if self.daily_trade_count >= self.max_daily_trades:
-                logger.debug("🚫 Daily trade limit reached")
-                return None
+            # 🚫 Daily trade limit removed - No longer blocking entries
+            # if self.daily_trade_count >= self.max_daily_trades:
+            #     logger.debug("🚫 Daily trade limit reached")
+            #     return None
             
             # ทำความสะอาด used_zones (ลบ zones เก่า)
             self._cleanup_used_zones()
