@@ -582,7 +582,35 @@ class SmartEntrySystem:
             if not self._is_valid_entry_zone(selected_zone, current_price, zones):
                 logger.warning(f"🚫 Zone {selected_zone['price']} is not valid for entry")
                 logger.warning(f"   Current Price: {current_price:.2f}, Zone Price: {selected_zone['price']:.2f}")
-                return None
+                
+                # 🎯 Fallback: ลองหา zone อื่นที่ใกล้ที่สุด
+                logger.warning("🔄 [FALLBACK] Trying to find alternative zone...")
+                support_zones = zones.get('support', [])
+                resistance_zones = zones.get('resistance', [])
+                all_zones = support_zones + resistance_zones
+                
+                if all_zones:
+                    # หา zone ที่ใกล้ที่สุดที่ไม่ใช่ zone ที่ถูกปฏิเสธ
+                    alternative_zones = [z for z in all_zones if z['price'] != selected_zone['price']]
+                    if alternative_zones:
+                        closest_alternative = min(alternative_zones, key=lambda x: abs(current_price - x['price']))
+                        distance_pips = abs(current_price - closest_alternative['price'])
+                        zone_type = 'support' if closest_alternative in support_zones else 'resistance'
+                        logger.warning(f"🔄 [FALLBACK] Selected alternative {zone_type.upper()}: {closest_alternative['price']:.5f} (strength: {closest_alternative['strength']:.1f}, distance: {distance_pips:.1f} pips)")
+                        
+                        # ตรวจสอบ zone ใหม่
+                        if self._is_valid_entry_zone(closest_alternative, current_price, zones):
+                            selected_zone = closest_alternative
+                            logger.info(f"✅ [FALLBACK] Alternative zone accepted!")
+                        else:
+                            logger.warning(f"🚫 [FALLBACK] Alternative zone also not valid")
+                            return None
+                    else:
+                        logger.warning("🚫 [FALLBACK] No alternative zones available")
+                        return None
+                else:
+                    logger.warning("🚫 [FALLBACK] No zones available")
+                    return None
             
             # คำนวณ lot size แบบ dynamic
             lot_size = self.calculate_dynamic_lot_size(selected_zone['strength'], selected_zone)
