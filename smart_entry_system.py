@@ -269,13 +269,13 @@ class SmartEntrySystem:
                         # Dynamic Distance ตาม Zone Strength (ปรับให้สอดคล้องกับ validation)
                         # เพิ่มระยะห่างให้มากขึ้นเพื่อให้มีโอกาสมากขึ้น
                         if zone_strength >= 0.8:
-                            max_distance = 1000.0  # Zone แข็งแกร่งมาก = 1000 pips (10.0 USD)
+                            max_distance = 20000.0  # Zone แข็งแกร่งมาก = 20000 pips (200.0 USD)
                         elif zone_strength >= 0.5:
-                            max_distance = 800.0   # Zone แข็งแกร่ง = 800 pips (8.0 USD)
+                            max_distance = 15000.0  # Zone แข็งแกร่ง = 15000 pips (150.0 USD)
                         elif zone_strength >= 0.2:
-                            max_distance = 600.0   # Zone ปานกลาง = 600 pips (6.0 USD)
+                            max_distance = 10000.0  # Zone ปานกลาง = 10000 pips (100.0 USD)
                         else:
-                            max_distance = 400.0   # Zone อ่อนแอ = 400 pips (4.0 USD)
+                            max_distance = 5000.0   # Zone อ่อนแอ = 5000 pips (50.0 USD)
                         
                         if distance <= max_distance:
                             valid_supports.append(zone)
@@ -312,13 +312,13 @@ class SmartEntrySystem:
                         # Dynamic Distance ตาม Zone Strength (ปรับให้สอดคล้องกับ validation)
                         # เพิ่มระยะห่างให้มากขึ้นเพื่อให้มีโอกาสมากขึ้น
                         if zone_strength >= 0.8:
-                            max_distance = 1000.0  # Zone แข็งแกร่งมาก = 1000 pips (10.0 USD)
+                            max_distance = 20000.0  # Zone แข็งแกร่งมาก = 20000 pips (200.0 USD)
                         elif zone_strength >= 0.5:
-                            max_distance = 800.0   # Zone แข็งแกร่ง = 800 pips (8.0 USD)
+                            max_distance = 15000.0  # Zone แข็งแกร่ง = 15000 pips (150.0 USD)
                         elif zone_strength >= 0.2:
-                            max_distance = 600.0   # Zone ปานกลาง = 600 pips (6.0 USD)
+                            max_distance = 10000.0  # Zone ปานกลาง = 10000 pips (100.0 USD)
                         else:
-                            max_distance = 400.0   # Zone อ่อนแอ = 400 pips (4.0 USD)
+                            max_distance = 5000.0   # Zone อ่อนแอ = 5000 pips (50.0 USD)
                         
                         if distance <= max_distance:
                             valid_resistances.append(zone)
@@ -405,13 +405,13 @@ class SmartEntrySystem:
             
             # เพิ่มระยะห่างสูงสุดเพื่อให้มีโอกาสมากขึ้น (ปรับให้เหมาะสมกับ XAUUSD)
             if zone_strength >= 0.8:
-                max_distance = 1000.0  # Zone แข็งแกร่งมาก = 1000 pips (10.0 USD)
+                max_distance = 20000.0  # Zone แข็งแกร่งมาก = 20000 pips (200.0 USD)
             elif zone_strength >= 0.5:
-                max_distance = 800.0   # Zone แข็งแกร่ง = 800 pips (8.0 USD)
+                max_distance = 15000.0  # Zone แข็งแกร่ง = 15000 pips (150.0 USD)
             elif zone_strength >= 0.2:
-                max_distance = 600.0   # Zone ปานกลาง = 600 pips (6.0 USD)
+                max_distance = 10000.0  # Zone ปานกลาง = 10000 pips (100.0 USD)
             else:
-                max_distance = 400.0   # Zone อ่อนแอ = 400 pips (4.0 USD)
+                max_distance = 5000.0   # Zone อ่อนแอ = 5000 pips (50.0 USD)
             
             # 🎯 Market Condition Adjustment: ปรับตามสภาวะตลาด
             # ถ้าราคาอยู่ในช่วง sideways หรือ range ให้เพิ่มระยะห่าง
