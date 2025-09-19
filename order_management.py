@@ -185,9 +185,9 @@ class OrderManager:
             logger.error(error_msg)
             return OrderResult(success=False, error_message=error_msg)
             
-    def close_positions_group(self, positions: List[Position], reason: str = "") -> CloseResult:
+    def close_positions_group_raw(self, positions: List[Position], reason: str = "") -> CloseResult:
         """
-        ปิด Positions เป็นกลุ่ม (Group Close Only)
+        ส่งคำสั่งปิด Positions ไปยัง MT5 โดยตรง (Raw MT5 Command)
         
         Args:
             positions: รายการ Position ที่จะปิด
@@ -212,188 +212,51 @@ class OrderManager:
                     error_message="ไม่สามารถเชื่อมต่อ MT5 ได้"
                 )
             
-            # 🔍 Pre-validate positions exist before attempting to close
-            valid_positions = []
-            
-            # 🎯 DEBUG: Log input position types and tickets
-            logger.info(f"🔍 VALIDATION INPUT: {len(positions)} positions to validate")
-            for i, pos in enumerate(positions[:3]):  # Show first 3
-                pos_type = type(pos).__name__
-                ticket = getattr(pos, 'ticket', 'NO_TICKET')
-                logger.info(f"   Position {i}: Type={pos_type}, Ticket={ticket}")
-            
-            # 🎯 CRITICAL FIX: Get ALL positions from broker directly  
-            current_positions = self.mt5.get_positions()
-            if current_positions:
-                existing_tickets = [p.ticket for p in current_positions if hasattr(p, 'ticket')]
-                logger.info(f"💎 BROKER DIRECT: {len(existing_tickets)} total positions from broker")
-                logger.info(f"🔍 Broker tickets sample: {existing_tickets[:5]}")
-                
-                # ✅ VALIDATION: ตรวจสอบ positions ใน MT5 แต่ยังต้องผ่าน ZERO LOSS POLICY
-                logger.info(f"✅ VALIDATION: Found {len(existing_tickets)} positions from broker")
-                valid_positions = positions  # ใช้ทุกตัวที่ส่งมา
-            else:
-                # If we can't get positions, assume all exist (fallback)
-                logger.warning(f"⚠️ Cannot get current positions - assuming all {len(positions)} positions exist")
-                valid_positions = positions
-            
-            if not valid_positions:
-                return CloseResult(
-                    success=False,
-                    closed_tickets=[],
-                    error_message="No valid positions to close"
-                )
-                
-            logger.info(f"🔍 Position validation: {len(valid_positions)}/{len(positions)} positions still exist")
-                
-            closed_tickets = []
-            total_profit = 0.0
-            errors = []
-            
-            # 🚫 ZERO LOSS POLICY: คำนวณกำไรสุทธิก่อนปิด
-            net_profit_before_close = self._calculate_group_net_profit(valid_positions)
-            safety_buffer = self._calculate_safety_buffer(valid_positions)
-            
-            logger.info(f"💰 PRE-CLOSE ANALYSIS:")
-            logger.info(f"   Net P&L: ${net_profit_before_close:.2f}")
-            logger.info(f"   Safety Buffer: ${safety_buffer:.2f}")
-            logger.info(f"   Final Expected: ${net_profit_before_close - safety_buffer:.2f}")
-            
-            # 🚨 STRICT ZERO LOSS CHECK - บังคับตรวจสอบทุกครั้ง (ยกเว้น Hedge Pairs)
-            if net_profit_before_close < safety_buffer:
-                # ตรวจสอบว่าเป็น Hedge Pair หรือไม่ (มีไม้ทั้ง BUY และ SELL)
-                buy_positions = [pos for pos in valid_positions if getattr(pos, 'type', 0) == 0]
-                sell_positions = [pos for pos in valid_positions if getattr(pos, 'type', 0) == 1]
-                
-                if len(buy_positions) > 0 and len(sell_positions) > 0:
-                    logger.info(f"✅ ZERO LOSS POLICY: Hedge Pair detected - ALLOWING close despite loss")
-                    logger.info(f"   💰 Current Profit: ${net_profit_before_close:.2f} (Loss)")
-                    logger.info(f"   🛡️ Required Buffer: ${safety_buffer:.2f}")
-                    logger.info(f"   📊 Positions: {len(valid_positions)} (BUY: {len(buy_positions)}, SELL: {len(sell_positions)})")
-                    logger.info(f"   🎯 HEDGE PAIR BYPASS: Allowing hedge pair closure")
+            # ดึง tickets จาก positions
+            tickets = []
+            for pos in positions:
+                if isinstance(pos, dict):
+                    ticket = pos.get('ticket')
                 else:
-                    logger.warning(f"🚫 ZERO LOSS POLICY: Rejecting close - would result in loss")
-                    logger.warning(f"   💰 Current Profit: ${net_profit_before_close:.2f}")
-                    logger.warning(f"   🛡️ Required Buffer: ${safety_buffer:.2f}")
-                    logger.warning(f"   📊 Positions: {len(valid_positions)}")
-                    logger.warning(f"   📈 Total Volume: {sum(getattr(pos, 'volume', 0.01) for pos in valid_positions):.2f}")
-                    logger.warning(f"   🚫 FORCE REJECT: No bypass allowed for loss-making positions")
-                    return CloseResult(
-                        success=False,
-                        closed_tickets=[],
-                        total_profit=0.0,
-                        error_message=f"Zero Loss Policy: Insufficient profit (${net_profit_before_close:.2f} < ${safety_buffer:.2f}) - FORCE REJECT"
-                    )
-            else:
-                logger.info(f"✅ ZERO LOSS POLICY: APPROVED for closing")
-                logger.info(f"   💰 Profit: ${net_profit_before_close:.2f} > Buffer: ${safety_buffer:.2f}")
-                logger.info(f"   🎯 Net Expected: ${net_profit_before_close - safety_buffer:.2f}")
+                    ticket = getattr(pos, 'ticket', None)
+                
+                if ticket:
+                    tickets.append(ticket)
             
-            logger.info(f"✅ ZERO LOSS POLICY: Safe to close - profit margin OK")
-            
-            # 🎯 BUSINESS LOGIC: Spread check และ group analysis ที่นี่
-            tickets = [pos['ticket'] if isinstance(pos, dict) else getattr(pos, 'ticket', None) for pos in valid_positions]
-            
-            # 📊 STEP 1: Analyze positions with spread check
-            position_analysis = []
-            total_group_profit = 0.0
-            
-            for pos in valid_positions:
-                try:
-                    # คำนวณกำไรและ spread
-                    ticket = pos['ticket'] if isinstance(pos, dict) else getattr(pos, 'ticket', None)
-                    profit_info = self.mt5.calculate_position_profit_with_spread(ticket)
-                    if profit_info:
-                        position_analysis.append({
-                            'ticket': ticket,
-                            'position': pos,
-                            'profit_info': profit_info,
-                            'should_close': profit_info['should_close'] or profit_info['profit_percentage'] >= -0.5
-                        })
-                        total_group_profit += profit_info['current_profit']
-                    else:
-                        logger.error(f"❌ Cannot analyze Position {ticket}")
-                except Exception as e:
-                    ticket = pos['ticket'] if isinstance(pos, dict) else getattr(pos, 'ticket', None)
-                    logger.error(f"❌ Analysis error for Position {ticket}: {e}")
-            
-            if not position_analysis:
+            if not tickets:
                 return CloseResult(
                     success=False,
                     closed_tickets=[],
-                    error_message="No positions could be analyzed for spread check"
+                    error_message="ไม่พบ Ticket ที่ถูกต้อง"
                 )
             
-            # 📊 STEP 2: Group decision based on analysis
-            group_profit_percentage = (total_group_profit / len(position_analysis)) if position_analysis else 0
-            
-            logger.info(f"💰 GROUP SPREAD ANALYSIS:")
-            logger.info(f"   Total Positions: {len(position_analysis)}")
-            logger.info(f"   Group Profit: ${total_group_profit:.2f} ({group_profit_percentage:.2f}%)")
-            
-            # 🚫 GROUP REJECTION: If group is losing too much (additional safety)
-            if group_profit_percentage < -1.0:
-                logger.warning(f"🚫 SPREAD CHECK REJECTED: Group losing {group_profit_percentage:.2f}%")
-                return CloseResult(
-                    success=False,
-                    closed_tickets=[],
-                    error_message=f"Spread check rejected - group losing {group_profit_percentage:.2f}%"
-                )
-            
-            # 🚫 HELPER-REQUIRED POLICY: NO CLOSING WITHOUT PROFITABLE HELPERS
-            if total_group_profit < 0:
-                logger.warning(f"🚫 HELPER-REQUIRED POLICY: Group profit is negative (${total_group_profit:.2f})")
-                logger.warning(f"   🚫 NO HELPERS DETECTED: Cannot close without profitable helpers")
-                logger.warning(f"   📊 Positions: {len(valid_positions)} - ALL MUST HAVE HELPERS")
-                return CloseResult(
-                    success=False,
-                    closed_tickets=[],
-                    error_message=f"Helper-Required Policy: Group profit is negative (${total_group_profit:.2f}) - HELPERS REQUIRED"
-                )
-            
-            # ✅ STEP 3: Execute raw group closing via MT5Connection
-            logger.info(f"✅ SPREAD CHECK PASSED: Executing raw group close")
+            # ส่งคำสั่งปิดไปยัง MT5
+            logger.info(f"📤 ส่งคำสั่งปิด {len(tickets)} positions ไปยัง MT5")
             group_result = self.mt5.close_positions_group_raw(tickets)
             
             # ประมวลผลลัพธ์
-            closed_tickets = group_result['closed_tickets']
-            rejected_tickets = group_result['rejected_tickets']
-            failed_tickets = group_result['failed_tickets']
-            total_profit = group_result['total_profit']
+            closed_tickets = group_result.get('closed_tickets', [])
+            total_profit = group_result.get('total_profit', 0.0)
             
-            # อัพเดท active positions (ลบที่ปิดสำเร็จ)
+            # อัพเดท active positions
             self.active_positions = [
                 pos for pos in self.active_positions 
                 if (pos['ticket'] if isinstance(pos, dict) else getattr(pos, 'ticket', None)) not in closed_tickets
             ]
             
-            # จัดการ error messages
-            if failed_tickets:
-                errors.extend([f"ไม่สามารถปิด Position {ticket}" for ticket in failed_tickets])
-            
-            # แสดงข้อมูล positions ที่รอกำไรเพิ่ม
-            if rejected_tickets:
-                logger.info(f"⏳ Position ที่รอกำไรเพิ่ม: {len(rejected_tickets)} ตัว")
-                for rejected in rejected_tickets:
-                    logger.info(f"   - Ticket {rejected['ticket']}: {rejected['reason']}")
-                    
-            # สรุปผลลัพธ์
             if closed_tickets:
-                success_msg = f"✅ Closed {len(closed_tickets)} positions - Profit: ${total_profit:.2f}"
-                logger.info(success_msg)
-                
+                logger.info(f"✅ ปิด Position สำเร็จ: {len(closed_tickets)} ตัว - กำไร: ${total_profit:.2f}")
                 return CloseResult(
                     success=True,
                     closed_tickets=closed_tickets,
                     total_profit=total_profit,
                     close_details={
                         'reason': reason,
-                        'positions_count': len(closed_tickets),
-                        'errors': errors
+                        'positions_count': len(closed_tickets)
                     }
                 )
             else:
-                error_msg = f"ไม่สามารถปิด Position ใดได้ - Errors: {'; '.join(errors)}"
+                error_msg = group_result.get('error_message', 'ไม่สามารถปิด Position ได้')
                 return CloseResult(
                     success=False,
                     closed_tickets=[],
@@ -401,7 +264,7 @@ class OrderManager:
                 )
                 
         except Exception as e:
-            error_msg = f"เกิดข้อผิดพลาดในการปิดกลุ่ม Position: {str(e)}"
+            error_msg = f"เกิดข้อผิดพลาดในการปิด Position: {str(e)}"
             logger.error(error_msg)
             return CloseResult(
                 success=False,
@@ -409,43 +272,6 @@ class OrderManager:
                 error_message=error_msg
             )
             
-    def close_positions_by_scaling_ratio(self, positions: List[Position], scaling_type: str = "1:1",
-                                       reason: str = "") -> CloseResult:
-        """
-        ปิด Positions ตามสัดส่วน Scaling (1:1, 1:2, 1:3, 2:3)
-        
-        Args:
-            positions: รายการ Position ทั้งหมด
-            scaling_type: ประเภทการ Scaling
-            reason: เหตุผลในการปิด
-            
-        Returns:
-            CloseResult: ผลลัพธ์การปิด
-        """
-        try:
-            # คำนวณสัดส่วนการปิด
-            scaling_result = ProfitTargetCalculator.calculate_scaling_ratios(positions, scaling_type)
-            positions_to_close = scaling_result['positions_to_close']
-            
-            if not positions_to_close:
-                return CloseResult(
-                    success=False,
-                    closed_tickets=[],
-                    error_message=f"ไม่มี Position ให้ปิดตามสัดส่วน {scaling_type}"
-                )
-                
-            # ปิด Positions ที่เลือก
-            close_reason = f"{reason} (Scaling: {scaling_type})"
-            return self.close_positions_group(positions_to_close, close_reason)
-            
-        except Exception as e:
-            error_msg = f"เกิดข้อผิดพลาดในการปิดตามสัดส่วน {scaling_type}: {str(e)}"
-            logger.error(error_msg)
-            return CloseResult(
-                success=False,
-                closed_tickets=[],
-                error_message=error_msg
-            )
             
     def modify_position_sl_tp(self, ticket: int, new_sl: float = 0, new_tp: float = 0) -> bool:
         """
@@ -639,26 +465,6 @@ class OrderManager:
             'losing_count': losing_count
         }
         
-    def emergency_close_all(self, reason: str = "Emergency Close") -> CloseResult:
-        """
-        ปิด Position ทั้งหมดในกรณีฉุกเฉิน
-        
-        Args:
-            reason: เหตุผลในการปิด
-            
-        Returns:
-            CloseResult: ผลลัพธ์การปิด
-        """
-        logger.warning(f"เริ่มปิด Position ทั้งหมดในกรณีฉุกเฉิน - เหตุผล: {reason}")
-        
-        if not self.active_positions:
-            return CloseResult(
-                success=True,
-                closed_tickets=[],
-                error_message="ไม่มี Position ให้ปิด"
-            )
-            
-        return self.close_positions_group(self.active_positions, reason)
         
     def get_position_statistics(self, account_balance: float) -> Dict[str, Any]:
         """
@@ -714,65 +520,3 @@ class OrderManager:
             'max_position_risk': risk_info['max_position_risk']
         }
     
-    def _calculate_group_net_profit(self, positions: List[Position]) -> float:
-        """🧮 คำนวณกำไรสุทธิของกลุ่ม positions"""
-        try:
-            total_profit = 0.0
-            for pos in positions:
-                # รองรับทั้ง Position objects และ Dictionary
-                if isinstance(pos, dict):
-                    # ถ้าเป็น Dictionary
-                    pos_profit = pos.get('profit', 0)
-                    pos_swap = pos.get('swap', 0)
-                    pos_commission = pos.get('commission', 0)
-                    ticket = pos.get('ticket', 'N/A')
-                else:
-                    # ถ้าเป็น Position object
-                    pos_profit = getattr(pos, 'profit', 0)
-                    pos_swap = getattr(pos, 'swap', 0)
-                    pos_commission = getattr(pos, 'commission', 0)
-                    ticket = getattr(pos, 'ticket', 'N/A')
-                
-                net_pos_profit = pos_profit + pos_swap + pos_commission
-                total_profit += net_pos_profit
-                
-                # Debug log เพื่อตรวจสอบ
-                logger.debug(f"🔍 Position {ticket}: profit=${pos_profit:.2f}, swap=${pos_swap:.2f}, comm=${pos_commission:.2f}")
-                
-            logger.debug(f"🔍 Total calculated profit: ${total_profit:.2f}")
-            return total_profit
-            
-        except Exception as e:
-            logger.error(f"❌ Error calculating group profit: {e}")
-            return 0.0
-    
-    def _calculate_safety_buffer(self, positions: List[Position]) -> float:
-        """🛡️ คำนวณ Safety Buffer ตามต้นทุนการปิด - Realistic for XAUUSD"""
-        try:
-            total_volume = sum(getattr(pos, 'volume', 0.01) for pos in positions)
-            position_count = len(positions)
-            
-            # 🔧 ULTRA LOW COSTS สำหรับ XAUUSD - AGGRESSIVE MODE!
-            spread_cost = total_volume * 0.3   # ลดเพิ่ม: ~$0.3 per lot
-            commission_cost = total_volume * 0.1  # ลดเพิ่ม: ~$0.1 per lot  
-            slippage_cost = position_count * 0.1  # ลดเพิ่ม: ~$0.1 per position
-            
-            # Safety buffer = ต้นทุนรวม + buffer 5% เท่านั้น!
-            total_cost = spread_cost + commission_cost + slippage_cost
-            safety_buffer = total_cost * 1.05  # เพิ่ม 5% buffer เท่านั้น
-            
-            # 🔧 ขั้นต่ำ $0.20 per position - AGGRESSIVE MODE!
-            minimum_buffer = position_count * 0.20
-            
-            final_buffer = max(safety_buffer, minimum_buffer)
-            
-            logger.debug(f"🛡️ Safety Buffer Calculation:")
-            logger.debug(f"   Positions: {position_count}, Volume: {total_volume:.2f}")
-            logger.debug(f"   Spread: ${spread_cost:.2f}, Commission: ${commission_cost:.2f}, Slippage: ${slippage_cost:.2f}")
-            logger.debug(f"   Total Cost: ${total_cost:.2f}, Buffer: ${final_buffer:.2f}")
-            
-            return final_buffer
-            
-        except Exception as e:
-            logger.error(f"❌ Error calculating safety buffer: {e}")
-            return len(positions) * 0.20  # Fallback: $0.20 per position - AGGRESSIVE MODE!

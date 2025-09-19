@@ -367,10 +367,10 @@ class AdaptiveTradingSystemGUI:
                 # Process Simple Breakout for all timeframes - DISABLED (ใช้ Smart Entry System แทน)
                 # self._process_simple_breakout(current_candle)
                 
-                # 🎯 Edge Priority Closing Check (ใหม่) - ตรวจสอบการปิดไม้ขอบ - DISABLED
+                # 🎯 Edge Priority Closing Check - DISABLED
                 # self._check_edge_priority_closing(current_candle)
                 
-                # 🔗 Hedge Pair Closing Check - ตรวจสอบโอกาสปิด Hedge Pairs - DISABLED
+                # 🔗 Hedge Pair Closing Check - DISABLED
                 # self._check_hedge_pair_closing_opportunities(current_candle)
                 
                 # 🚀 Real-time Status Tracking - ตรวจสอบสถานะไม้แบบ Real-time
@@ -715,9 +715,9 @@ class AdaptiveTradingSystemGUI:
                     for helper in helper_positions:
                         # ตรวจสอบว่าสามารถจับคู่กันได้
                         if self._can_form_hedge_group(hedge, dragged, helper):
-                            # ปิดกลุ่มไม้ค้ำ + ไม้โดนลาก + ไม้ช่วย
-                            self._execute_hedge_group_closing(hedge, dragged, helper, current_candle)
-                            return  # ปิดกลุ่มเดียวแล้วออก
+                            # จัดการกลุ่มไม้ค้ำ + ไม้โดนลาก + ไม้ช่วย
+                            self._manage_hedge_group(hedge, dragged, helper, current_candle)
+                            return  # จัดการกลุ่มเดียวแล้วออก
                             
         except Exception as e:
             logger.error(f"🎯 [HEDGE GROUP] Error: {e}")
@@ -730,9 +730,9 @@ class AdaptiveTradingSystemGUI:
                 for helper in helper_positions:
                     # ตรวจสอบว่าสามารถจับคู่กันได้
                     if self._can_form_helper_pair(dragged, helper):
-                        # ปิดคู่ไม้โดนลาก + ไม้ช่วย
-                        self._execute_helper_pair_closing(dragged, helper, current_candle)
-                        return  # ปิดคู่เดียวแล้วออก
+                        # จัดการคู่ไม้โดนลาก + ไม้ช่วย
+                        self._manage_helper_pair(dragged, helper, current_candle)
+                        return  # จัดการคู่เดียวแล้วออก
                         
         except Exception as e:
             logger.error(f"🤝 [HELPER PAIR] Error: {e}")

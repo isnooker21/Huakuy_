@@ -574,14 +574,8 @@ class DynamicPositionModifier:
             ticket = getattr(correction_pos, 'ticket', 'N/A')
             logger.info(f"❌ Cancelling correction position {ticket}")
             
-            # ปิดไม้แก้ไขทันที
-            if self.mt5_connection:
-                # ส่งคำสั่งปิดไม้
-                close_result = self.mt5_connection.close_position(ticket)
-                if close_result:
-                    logger.info(f"✅ Successfully cancelled correction position {ticket}")
-                else:
-                    logger.error(f"❌ Failed to cancel correction position {ticket}")
+            # แจ้งเตือนการยกเลิกไม้แก้ไข
+            logger.info(f"⚠️ Correction position {ticket} marked for cancellation")
             
         except Exception as e:
             logger.error(f"❌ Error cancelling correction position: {e}")
@@ -600,7 +594,7 @@ class DynamicPositionModifier:
             logger.info(f"   Reason: {getattr(correction_pos, 'creation_reason', 'UNKNOWN')}")
             
             # ระบบจะใช้ไม้แก้ไขในการจับคู่ต่อไป
-            # Hedge Pairing Closer จะรู้ว่าไม้นี้เป็นไม้แก้ไขและต้องปิดพร้อมไม้หลัก
+            # Hedge Pairing จะรู้ว่าไม้นี้เป็นไม้แก้ไขและต้องจัดการพร้อมไม้หลัก
             
         except Exception as e:
             logger.error(f"❌ Error sending correction to hedge pairing: {e}")

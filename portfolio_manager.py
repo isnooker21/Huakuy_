@@ -461,7 +461,6 @@ class PortfolioManager:
             return {
                 'should_exit': True,
                 'exit_type': 'profit_target',
-                'positions_to_close': self.order_manager.active_positions,
                 'reason': f'ถึงเป้าหมายกำไร {self.profit_target}% ({current_state.total_profit_percentage:.2f}%)'
             }
             
@@ -470,12 +469,11 @@ class PortfolioManager:
         sell_pct = current_state.buy_sell_ratio['sell_percentage']
         
         if buy_pct >= 85.0 or sell_pct >= 85.0:
-            # ปิดแบบ Scaling เพื่อปรับสมดุล
+            # แจ้งเตือนความไม่สมดุล
             return {
                 'should_exit': True,
-                'exit_type': 'scaling',
-                'scaling_type': '1:2',
-                'reason': f'ปรับสมดุลพอร์ต (Buy: {buy_pct:.1f}%, Sell: {sell_pct:.1f}%)'
+                'exit_type': 'imbalance',
+                'reason': f'พอร์ตไม่สมดุล (Buy: {buy_pct:.1f}%, Sell: {sell_pct:.1f}%)'
             }
             
         return {'should_exit': False}
@@ -498,7 +496,6 @@ class PortfolioManager:
             return {
                 'should_exit': True,
                 'exit_type': 'daily_loss_limit',
-                'positions_to_close': self.order_manager.active_positions,
                 'reason': f'ถึงขาดทุนต่อวันสูงสุด {self.max_daily_loss}% ({daily_pnl_percentage:.2f}%)'
             }
             
@@ -522,7 +519,6 @@ class PortfolioManager:
             return {
                 'should_exit': True,
                 'exit_type': 'max_drawdown',
-                'positions_to_close': self.order_manager.active_positions,
                 'reason': f'ถึง Maximum Drawdown {self.max_drawdown_limit}% ({max_drawdown:.2f}%)'
             }
             
