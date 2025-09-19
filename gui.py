@@ -361,14 +361,14 @@ class TradingGUI:
         notebook = ttk.Notebook(bottom_frame)
         notebook.pack(fill=tk.BOTH, expand=True)
         
-            # แท็บ Positions
-            self.create_positions_tab(notebook)
-            
-            # 🚀 Enhanced Position Status Tab
-            self.create_enhanced_positions_tab(notebook)
-            
-            # 🚀 Performance Monitoring Tab
-            self.create_performance_tab(notebook)
+        # แท็บ Positions
+        self.create_positions_tab(notebook)
+        
+        # 🚀 Enhanced Position Status Tab
+        self.create_enhanced_positions_tab(notebook)
+        
+        # 🚀 Performance Monitoring Tab
+        self.create_performance_tab(notebook)
         
         # แท็บ Trading Log
         self.create_log_tab(notebook)
