@@ -1738,14 +1738,14 @@ class AdaptiveTradingSystemGUI:
         except Exception as e:
             logger.error(f"❌ Error updating zone stats: {e}")
     
-    def _should_update_status(self, current_candle: Dict, current_time: float) -> bool:
+    def _should_update_status(self, current_candle: Any, current_time: float) -> bool:
         """🚀 ตรวจสอบว่าควรอัพเดทสถานะหรือไม่"""
         try:
             if not self.status_tracker or not self.status_manager:
                 return False
             
             # ดึงราคาปัจจุบัน
-            current_price = current_candle.get('close', 0.0)
+            current_price = getattr(current_candle, 'close', 0.0)
             if current_price == 0:
                 return False
             
@@ -1772,19 +1772,19 @@ class AdaptiveTradingSystemGUI:
             logger.error(f"❌ Error checking status update: {e}")
             return False
     
-    def _update_position_status_realtime(self, current_candle: Dict, current_time: float):
+    def _update_position_status_realtime(self, current_candle: Any, current_time: float):
         """🚀 อัพเดทสถานะไม้แบบ Real-time"""
         try:
             if not self.status_manager or not self.market_detector:
                 return
             
             # ดึงราคาปัจจุบัน
-            current_price = current_candle.get('close', 0.0)
+            current_price = getattr(current_candle, 'close', 0.0)
             if current_price == 0:
                 return
             
             # อัพเดทข้อมูลตลาด
-            volume = current_candle.get('volume', 0.0)
+            volume = getattr(current_candle, 'volume', 0.0)
             self.market_detector.update_price_data(current_price, volume, current_time)
             
             # ดึงสภาวะตลาดปัจจุบัน
