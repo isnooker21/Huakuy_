@@ -1027,14 +1027,15 @@ class AdaptiveTradingSystemGUI:
             # จำแนกไม้ตามสถานะ
             position_classification = self._classify_positions(positions)
             
-            # ตรวจสอบโอกาสปิดไม้ต่างๆ
-            self._check_smart_position_pairing(position_classification, current_candle)  # ใหม่: ระบบจับคู่ไม้ที่ฉลาด
-            self._check_lot_size_balancing(position_classification)  # ใหม่: ปรับ lot size ให้สมดุล
-            self._check_far_position_closing(position_classification)  # ใหม่: ปิดไม้ไกลก่อน
-            self._check_profitable_helper_closing(position_classification)
-            self._check_orphan_position_management(position_classification, current_candle)
-            self._check_time_based_closing(position_classification)
-            self._check_market_direction_closing(position_classification, current_candle)
+            # ตรวจสอบโอกาสปิดไม้ต่างๆ - เปิดเฉพาะระบบจับคู่ไม้
+            self._check_smart_position_pairing(position_classification, current_candle)  # ระบบจับคู่ไม้ที่ฉลาด
+            self._check_lot_size_balancing(position_classification)  # ปรับ lot size ให้สมดุล
+            # ปิดระบบที่ปิดไม้เดี่ยว
+            # self._check_far_position_closing(position_classification)  # ปิดไม้ไกลก่อน
+            # self._check_profitable_helper_closing(position_classification)  # ปิดไม้กำไรเดี่ยว
+            # self._check_orphan_position_management(position_classification, current_candle)  # ปิดไม้เดี่ยว
+            # self._check_time_based_closing(position_classification)  # ปิดไม้ตามเวลา
+            # self._check_market_direction_closing(position_classification, current_candle)  # ปิดไม้ตามทิศทางตลาด
             self._check_hedge_pair_creation(position_classification)
             
         except Exception as e:
