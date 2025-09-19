@@ -2,7 +2,7 @@ import MetaTrader5 as mt5
 import numpy as np
 import time
 from datetime import datetime, timedelta
-from typing import List, Dict, Tuple, Optional
+from typing import List, Dict, Tuple, Optional, Any
 import logging
 
 logger = logging.getLogger(__name__)
