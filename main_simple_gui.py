@@ -1014,20 +1014,425 @@ class AdaptiveTradingSystemGUI:
             logger.error(f"❌ Error saving hedge pairs: {e}")
     
     def _check_hedge_pair_closing_opportunities(self, current_candle: CandleData):
-        """🎯 ตรวจสอบโอกาสปิด Hedge Pairs"""
+        """🎯 Smart Position Management System - ระบบจัดการไม้ที่ฉลาดและยืดหยุ่น"""
         try:
-            if not hasattr(self, 'hedge_pairs') or not self.hedge_pairs:
+            if not self.order_manager:
                 return
             
-            # ตรวจสอบแต่ละ hedge pair
-            for hedge_pair in self.hedge_pairs[:]:
-                if self._should_close_hedge_pair(hedge_pair, current_candle):
-                    self._close_hedge_pair(hedge_pair)
-                    # ลบ hedge pair ที่ปิดแล้ว
-                    self.hedge_pairs.remove(hedge_pair)
+            # ดึงข้อมูล Position จาก MT5
+            positions = self.order_manager.sync_positions_from_mt5()
+            if not positions:
+                return
+            
+            # จำแนกไม้ตามสถานะ
+            position_classification = self._classify_positions(positions)
+            
+            # ตรวจสอบโอกาสปิดไม้ต่างๆ
+            self._check_profitable_helper_closing(position_classification)
+            self._check_orphan_position_management(position_classification, current_candle)
+            self._check_time_based_closing(position_classification)
+            self._check_market_direction_closing(position_classification, current_candle)
+            self._check_hedge_pair_creation(position_classification)
+            
+        except Exception as e:
+            logger.error(f"🎯 [SMART POSITION] Error: {e}")
+    
+    def _classify_positions(self, positions: List) -> Dict:
+        """🎯 จำแนกไม้ตามสถานะ - ระบบใหม่ที่ฉลาด"""
+        try:
+            current_time = datetime.now()
+            current_price = getattr(positions[0], 'price_current', 0) if positions else 0
+            
+            classification = {
+                'profitable': [],      # ไม้กำไร
+                'losing': [],          # ไม้ขาดทุน
+                'edge_buy': [],        # ไม้ขอบ BUY
+                'edge_sell': [],       # ไม้ขอบ SELL
+                'middle_buy': [],      # ไม้กลาง BUY
+                'middle_sell': [],     # ไม้กลาง SELL
+                'orphan': [],          # ไม้เดี่ยว
+                'old_positions': [],   # ไม้เก่า
+                'high_risk': []        # ไม้เสี่ยงสูง
+            }
+            
+            for pos in positions:
+                pos_type = getattr(pos, 'type', 0)
+                profit = getattr(pos, 'profit', 0)
+                price_open = getattr(pos, 'price_open', 0)
+                time_open = getattr(pos, 'time', current_time)
+                
+                # คำนวณระยะห่างจากราคาปัจจุบัน
+                distance = abs(price_open - current_price) if current_price > 0 else 0
+                
+                # คำนวณเวลาที่เปิด
+                time_diff = (current_time - time_open).total_seconds() / 60  # นาที
+                
+                # จำแนกตามกำไร/ขาดทุน
+                if profit > 1.0:
+                    classification['profitable'].append(pos)
+                elif profit < -1.0:
+                    classification['losing'].append(pos)
+                
+                # จำแนกตามระยะห่าง (Edge vs Middle)
+                if distance > 2.0:  # ไม้ขอบ
+                    if pos_type == 0:  # BUY
+                        classification['edge_buy'].append(pos)
+                    else:  # SELL
+                        classification['edge_sell'].append(pos)
+                else:  # ไม้กลาง
+                    if pos_type == 0:  # BUY
+                        classification['middle_buy'].append(pos)
+                    else:  # SELL
+                        classification['middle_sell'].append(pos)
+                
+                # ไม้เก่า (เปิดนานเกิน 1 ชั่วโมง)
+                if time_diff > 60:
+                    classification['old_positions'].append(pos)
+                
+                # ไม้เสี่ยงสูง (ขาดทุนมาก + เปิดนาน)
+                if profit < -2.0 and time_diff > 30:
+                    classification['high_risk'].append(pos)
+            
+            # หาไม้เดี่ยว (ไม้ที่ไม่มีคู่กำไร)
+            classification['orphan'] = self._find_orphan_positions(positions)
+            
+            logger.info(f"🎯 [CLASSIFICATION] Profitable: {len(classification['profitable'])}, "
+                       f"Losing: {len(classification['losing'])}, "
+                       f"Edge: {len(classification['edge_buy']) + len(classification['edge_sell'])}, "
+                       f"Old: {len(classification['old_positions'])}, "
+                       f"Orphan: {len(classification['orphan'])}")
+            
+            return classification
+            
+        except Exception as e:
+            logger.error(f"🎯 [CLASSIFICATION] Error: {e}")
+            return {}
+    
+    def _find_orphan_positions(self, positions: List) -> List:
+        """🔍 หาไม้เดี่ยวที่ไม่มีคู่กำไร"""
+        try:
+            orphan_positions = []
+            
+            for pos in positions:
+                profit = getattr(pos, 'profit', 0)
+                
+                # ไม้ขาดทุนที่ไม่มีไม้กำไรมาช่วย
+                if profit < -1.0:
+                    # ตรวจสอบว่ามีไม้กำไรมาช่วยได้หรือไม่
+                    has_helper = False
+                    for other_pos in positions:
+                        if other_pos != pos and getattr(other_pos, 'profit', 0) > 1.0:
+                            # ตรวจสอบว่าสามารถช่วยกันได้หรือไม่
+                            if self._can_positions_help_each_other(pos, other_pos):
+                                has_helper = True
+                                break
+                    
+                    if not has_helper:
+                        orphan_positions.append(pos)
+            
+            return orphan_positions
+            
+        except Exception as e:
+            logger.error(f"🔍 [ORPHAN] Error: {e}")
+            return []
+    
+    def _can_positions_help_each_other(self, losing_pos: Any, helper_pos: Any) -> bool:
+        """🤝 ตรวจสอบว่าไม้สองตัวสามารถช่วยกันได้หรือไม่"""
+        try:
+            losing_profit = getattr(losing_pos, 'profit', 0)
+            helper_profit = getattr(helper_pos, 'profit', 0)
+            
+            # ตรวจสอบว่ากำไรรวม > 0
+            total_profit = losing_profit + helper_profit
+            
+            # ตรวจสอบระยะห่างจากราคาปัจจุบัน
+            current_price = getattr(losing_pos, 'price_current', 0)
+            losing_distance = abs(getattr(losing_pos, 'price_open', 0) - current_price)
+            helper_distance = abs(getattr(helper_pos, 'price_open', 0) - current_price)
+            
+            # เงื่อนไข: กำไรรวม > 0 และระยะห่างไม่ไกลเกินไป
+            return total_profit > 0 and max(losing_distance, helper_distance) < 5.0
+            
+        except Exception as e:
+            logger.error(f"🤝 [HELPER] Error: {e}")
+            return False
+    
+    def _check_profitable_helper_closing(self, classification: Dict):
+        """💰 ตรวจสอบการปิดไม้กำไรมาช่วยไม้ขาดทุน"""
+        try:
+            profitable = classification.get('profitable', [])
+            losing = classification.get('losing', [])
+            
+            if not profitable or not losing:
+                return
+            
+            # หาไม้กำไรที่เหมาะสมมาช่วยไม้ขาดทุน
+            helper_pairs = []
+            
+            for losing_pos in losing:
+                for helper_pos in profitable:
+                    if self._can_positions_help_each_other(losing_pos, helper_pos):
+                        total_profit = getattr(losing_pos, 'profit', 0) + getattr(helper_pos, 'profit', 0)
+                        helper_pairs.append({
+                            'losing': losing_pos,
+                            'helper': helper_pos,
+                            'total_profit': total_profit
+                        })
+            
+            # เรียงตามกำไรรวม (มากที่สุดก่อน)
+            helper_pairs.sort(key=lambda x: x['total_profit'], reverse=True)
+            
+            # ปิดคู่ที่ดีที่สุด 2 คู่
+            for pair in helper_pairs[:2]:
+                self._execute_helper_closing(pair)
+                
+        except Exception as e:
+            logger.error(f"💰 [HELPER CLOSING] Error: {e}")
+    
+    def _execute_helper_closing(self, pair: Dict):
+        """🚀 ปิดไม้ขาดทุนด้วยไม้กำไร"""
+        try:
+            losing_pos = pair['losing']
+            helper_pos = pair['helper']
+            
+            positions_to_close = [losing_pos, helper_pos]
+            result = self.order_manager.close_positions_group(positions_to_close, "Profitable Helper Closing")
+            
+            if result.success:
+                logger.info(f"💰 [HELPER] Successfully closed: Losing ${getattr(losing_pos, 'profit', 0):.2f} + "
+                           f"Helper ${getattr(helper_pos, 'profit', 0):.2f} = ${pair['total_profit']:.2f}")
+            else:
+                logger.warning(f"💰 [HELPER] Failed to close: {result.message}")
+                
+        except Exception as e:
+            logger.error(f"💰 [HELPER] Error executing: {e}")
+    
+    def _check_orphan_position_management(self, classification: Dict, current_candle: CandleData):
+        """👻 ตรวจสอบการจัดการไม้เดี่ยว"""
+        try:
+            orphan_positions = classification.get('orphan', [])
+            
+            if not orphan_positions:
+                return
+            
+            # ปิดไม้เดี่ยวที่ขาดทุนมาก
+            for orphan in orphan_positions:
+                profit = getattr(orphan, 'profit', 0)
+                
+                # ปิดไม้เดี่ยวที่ขาดทุนมากกว่า $3
+                if profit < -3.0:
+                    self._execute_orphan_closing(orphan, "High Loss Orphan")
+                # ปิดไม้เดี่ยวที่ขาดทุนปานกลางและเปิดนาน
+                elif profit < -1.5:
+                    time_open = getattr(orphan, 'time', datetime.now())
+                    time_diff = (datetime.now() - time_open).total_seconds() / 60
+                    
+                    if time_diff > 45:  # เปิดนานกว่า 45 นาที
+                        self._execute_orphan_closing(orphan, "Long Time Orphan")
+                        
+        except Exception as e:
+            logger.error(f"👻 [ORPHAN] Error: {e}")
+    
+    def _execute_orphan_closing(self, orphan: Any, reason: str):
+        """🚀 ปิดไม้เดี่ยว"""
+        try:
+            result = self.order_manager.close_positions_group([orphan], f"Orphan Closing - {reason}")
+            
+            if result.success:
+                profit = getattr(orphan, 'profit', 0)
+                logger.info(f"👻 [ORPHAN] Successfully closed orphan: ${profit:.2f} - {reason}")
+            else:
+                logger.warning(f"👻 [ORPHAN] Failed to close: {result.message}")
+                
+        except Exception as e:
+            logger.error(f"👻 [ORPHAN] Error executing: {e}")
+    
+    def _check_time_based_closing(self, classification: Dict):
+        """⏰ ตรวจสอบการปิดไม้ตามเวลา"""
+        try:
+            old_positions = classification.get('old_positions', [])
+            
+            if not old_positions:
+                return
+            
+            # ปิดไม้เก่าที่เปิดนานเกิน 1 ชั่วโมง
+            for old_pos in old_positions:
+                profit = getattr(old_pos, 'profit', 0)
+                
+                # ปิดไม้เก่าที่ขาดทุนหรือกำไรน้อย
+                if profit < 0.5:  # กำไรน้อยกว่า $0.5
+                    self._execute_time_based_closing(old_pos, "Old Position - Low Profit")
+                elif profit < -1.0:  # ขาดทุนมากกว่า $1
+                    self._execute_time_based_closing(old_pos, "Old Position - High Loss")
                     
         except Exception as e:
-            logger.error(f"❌ Error checking hedge pair closing opportunities: {e}")
+            logger.error(f"⏰ [TIME CLOSING] Error: {e}")
+    
+    def _execute_time_based_closing(self, position: Any, reason: str):
+        """🚀 ปิดไม้ตามเวลา"""
+        try:
+            result = self.order_manager.close_positions_group([position], f"Time-based Closing - {reason}")
+            
+            if result.success:
+                profit = getattr(position, 'profit', 0)
+                logger.info(f"⏰ [TIME] Successfully closed: ${profit:.2f} - {reason}")
+            else:
+                logger.warning(f"⏰ [TIME] Failed to close: {result.message}")
+                
+        except Exception as e:
+            logger.error(f"⏰ [TIME] Error executing: {e}")
+    
+    def _check_market_direction_closing(self, classification: Dict, current_candle: CandleData):
+        """📈 ตรวจสอบการปิดไม้ตามทิศทางตลาด"""
+        try:
+            # วิเคราะห์ทิศทางตลาด
+            market_direction = self._analyze_market_direction(current_candle)
+            
+            if market_direction == 'BUY':
+                # ตลาดเป็น BUY - ปิดไม้ SELL ที่ขาดทุน
+                sell_positions = classification.get('edge_sell', []) + classification.get('middle_sell', [])
+                for sell_pos in sell_positions:
+                    profit = getattr(sell_pos, 'profit', 0)
+                    if profit < -1.0:  # ขาดทุนมากกว่า $1
+                        self._execute_market_direction_closing(sell_pos, "Market Direction - SELL")
+                        
+            elif market_direction == 'SELL':
+                # ตลาดเป็น SELL - ปิดไม้ BUY ที่ขาดทุน
+                buy_positions = classification.get('edge_buy', []) + classification.get('middle_buy', [])
+                for buy_pos in buy_positions:
+                    profit = getattr(buy_pos, 'profit', 0)
+                    if profit < -1.0:  # ขาดทุนมากกว่า $1
+                        self._execute_market_direction_closing(buy_pos, "Market Direction - BUY")
+                        
+        except Exception as e:
+            logger.error(f"📈 [MARKET DIRECTION] Error: {e}")
+    
+    def _analyze_market_direction(self, current_candle: CandleData) -> str:
+        """📊 วิเคราะห์ทิศทางตลาด"""
+        try:
+            # ใช้ข้อมูลจาก candle ปัจจุบัน
+            open_price = current_candle.open
+            close_price = current_candle.close
+            high_price = current_candle.high
+            low_price = current_candle.low
+            
+            # คำนวณ body size และ wick size
+            body_size = abs(close_price - open_price)
+            upper_wick = high_price - max(open_price, close_price)
+            lower_wick = min(open_price, close_price) - low_price
+            
+            # วิเคราะห์ทิศทาง
+            if close_price > open_price:  # Bullish candle
+                if body_size > upper_wick and body_size > lower_wick:
+                    return 'BUY'
+                elif lower_wick > body_size:
+                    return 'BUY'  # Hammer pattern
+            else:  # Bearish candle
+                if body_size > upper_wick and body_size > lower_wick:
+                    return 'SELL'
+                elif upper_wick > body_size:
+                    return 'SELL'  # Shooting star pattern
+            
+            return 'NEUTRAL'
+            
+        except Exception as e:
+            logger.error(f"📊 [MARKET ANALYSIS] Error: {e}")
+            return 'NEUTRAL'
+    
+    def _execute_market_direction_closing(self, position: Any, reason: str):
+        """🚀 ปิดไม้ตามทิศทางตลาด"""
+        try:
+            result = self.order_manager.close_positions_group([position], f"Market Direction Closing - {reason}")
+            
+            if result.success:
+                profit = getattr(position, 'profit', 0)
+                logger.info(f"📈 [MARKET] Successfully closed: ${profit:.2f} - {reason}")
+            else:
+                logger.warning(f"📈 [MARKET] Failed to close: {result.message}")
+                
+        except Exception as e:
+            logger.error(f"📈 [MARKET] Error executing: {e}")
+    
+    def _check_hedge_pair_creation(self, classification: Dict):
+        """🔗 สร้าง Hedge Pairs สำหรับไม้ที่เหลือ"""
+        try:
+            buy_positions = classification.get('middle_buy', []) + classification.get('edge_buy', [])
+            sell_positions = classification.get('middle_sell', []) + classification.get('edge_sell', [])
+            
+            if not buy_positions or not sell_positions:
+                return
+            
+            # หาไม้ที่สามารถจับคู่กันได้
+            hedge_pairs = []
+            
+            for buy_pos in buy_positions:
+                for sell_pos in sell_positions:
+                    # ตรวจสอบว่าสามารถจับคู่กันได้หรือไม่
+                    if self._can_create_hedge_pair(buy_pos, sell_pos):
+                        total_profit = getattr(buy_pos, 'profit', 0) + getattr(sell_pos, 'profit', 0)
+                        hedge_pairs.append({
+                            'buy_position': buy_pos,
+                            'sell_position': sell_pos,
+                            'total_profit': total_profit
+                        })
+            
+            # เรียงตามกำไรรวม (มากที่สุดก่อน)
+            hedge_pairs.sort(key=lambda x: x['total_profit'], reverse=True)
+            
+            # สร้าง Hedge Pairs ที่ดีที่สุด 2 คู่
+            for pair in hedge_pairs[:2]:
+                self._create_hedge_pair(pair)
+                
+        except Exception as e:
+            logger.error(f"🔗 [HEDGE CREATION] Error: {e}")
+    
+    def _can_create_hedge_pair(self, buy_pos: Any, sell_pos: Any) -> bool:
+        """🤝 ตรวจสอบว่าสามารถสร้าง Hedge Pair ได้หรือไม่"""
+        try:
+            buy_profit = getattr(buy_pos, 'profit', 0)
+            sell_profit = getattr(sell_pos, 'profit', 0)
+            
+            # เงื่อนไข: กำไรรวม > 0 และไม่ใช่ไม้ที่ขาดทุนมาก
+            total_profit = buy_profit + sell_profit
+            return total_profit > 0 and buy_profit > -2.0 and sell_profit > -2.0
+            
+        except Exception as e:
+            logger.error(f"🤝 [HEDGE CHECK] Error: {e}")
+            return False
+    
+    def _create_hedge_pair(self, pair: Dict):
+        """🔗 สร้าง Hedge Pair"""
+        try:
+            buy_pos = pair['buy_position']
+            sell_pos = pair['sell_position']
+            
+            # สร้าง Hedge Pair ID
+            pair_id = f"HEDGE_{getattr(buy_pos, 'ticket', 0)}_{getattr(sell_pos, 'ticket', 0)}"
+            
+            # เก็บข้อมูล Hedge Pair
+            hedge_pair = {
+                'pair_id': pair_id,
+                'buy_position': buy_pos,
+                'sell_position': sell_pos,
+                'buy_ticket': getattr(buy_pos, 'ticket', 0),
+                'sell_ticket': getattr(sell_pos, 'ticket', 0),
+                'buy_profit': getattr(buy_pos, 'profit', 0),
+                'sell_profit': getattr(sell_pos, 'profit', 0),
+                'combined_profit': pair['total_profit'],
+                'created_time': datetime.now()
+            }
+            
+            # เก็บใน hedge_pairs
+            if not hasattr(self, 'hedge_pairs'):
+                self.hedge_pairs = []
+            
+            self.hedge_pairs.append(hedge_pair)
+            
+            logger.info(f"🔗 [HEDGE CREATED] Pair {pair_id}: BUY ${hedge_pair['buy_profit']:.2f} + "
+                       f"SELL ${hedge_pair['sell_profit']:.2f} = ${hedge_pair['combined_profit']:.2f}")
+                
+        except Exception as e:
+            logger.error(f"🔗 [HEDGE CREATION] Error: {e}")
     
     def _should_close_hedge_pair(self, hedge_pair: Dict, current_candle: CandleData) -> bool:
         """✅ ตรวจสอบว่าควรปิด Hedge Pair หรือไม่"""
