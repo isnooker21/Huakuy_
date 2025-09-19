@@ -1,8 +1,8 @@
 # -*- coding: utf-8 -*-
 """
-🎯 Test MT5 Simulator
-====================
-ทดสอบ MT5 Simulator แบบง่าย
+🎯 Test Simple Trading Monitor
+=============================
+ทดสอบ Simple Trading Monitor แบบง่าย
 
 AUTHOR: Advanced Trading System
 VERSION: 1.0.0 - Test Edition
@@ -24,43 +24,43 @@ logging.basicConfig(
 
 logger = logging.getLogger(__name__)
 
-def test_simulator():
-    """ทดสอบ Simulator"""
+def test_simple_monitor():
+    """ทดสอบ Simple Trading Monitor"""
     try:
-        print("🎯 Testing MT5 Simulator...")
+        print("🎯 Testing Simple Trading Monitor...")
         
-        # Import simulator
-        from mt5_simulator_gui import MT5SimulatorGUI
+        # Import monitor
+        from simple_trading_monitor import SimpleTradingMonitor
         
-        # สร้าง Simulator
-        simulator = MT5SimulatorGUI()
+        # สร้าง Monitor
+        monitor = SimpleTradingMonitor()
         
-        print("✅ Simulator created successfully")
+        print("✅ Simple Trading Monitor created successfully")
         print("🎮 Starting GUI...")
         
-        # รัน Simulator
-        simulator.run()
+        # รัน Monitor
+        monitor.run()
         
     except ImportError as e:
         print(f"❌ Import Error: {e}")
         print("💡 Please install required dependencies:")
-        print("   pip install matplotlib numpy pandas")
+        print("   pip install tkinter")
         
     except Exception as e:
         print(f"❌ Error: {e}")
-        logger.error(f"❌ Error in test_simulator: {e}")
+        logger.error(f"❌ Error in test_simple_monitor: {e}")
 
 def main():
     """ฟังก์ชันหลัก"""
     try:
         print("=" * 60)
-        print("🎯 MT5 Simulator Test")
+        print("🎯 Simple Trading Monitor Test")
         print("=" * 60)
         print(f"📅 Start Time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
-        print("📊 Testing Simulator GUI...")
+        print("📊 Testing Simple Monitor GUI...")
         print("=" * 60)
         
-        test_simulator()
+        test_simple_monitor()
         
     except Exception as e:
         print(f"❌ Error in main: {e}")
