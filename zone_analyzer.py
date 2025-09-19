@@ -1,5 +1,6 @@
 import MetaTrader5 as mt5
 import numpy as np
+import time
 from datetime import datetime, timedelta
 from typing import List, Dict, Tuple, Optional
 import logging
@@ -15,11 +16,41 @@ class ZoneAnalyzer:
         self.timeframes = [mt5.TIMEFRAME_M1, mt5.TIMEFRAME_M5, mt5.TIMEFRAME_M15, mt5.TIMEFRAME_H1]  # ใช้หลาย timeframe
         # ไม่ใช้ Daily timeframe เพราะมีปัญหา array comparison
         
-        # Multi-Algorithm Zone Detection Parameters - ปรับให้หา zones ได้แม่นยำขึ้น
-        self.min_touches = 2  # เกณฑ์ขั้นต่ำสำหรับการแตะ zone (เพิ่มจาก 1 เพื่อความแม่นยำ)
-        self.zone_tolerance = 0.005  # ความยืดหยุ่นในการรวม zones (ลดจาก 0.01 เพื่อความแม่นยำ)
-        self.min_zone_strength = 0.05  # ความแข็งแรงขั้นต่ำของ zone (เพิ่มจาก 0.01 เพื่อคุณภาพ)
-        self.max_zones_per_type = 150  # จำนวน zone สูงสุดต่อประเภท (ลดจาก 200 เพื่อคุณภาพ)
+        # 🚀 Dynamic Zone Detection Parameters - ปรับตาม Market Condition
+        self.base_min_touches = 2
+        self.base_zone_tolerance = 0.005
+        self.base_min_zone_strength = 0.05
+        self.base_max_zones_per_type = 150
+        
+        # Dynamic Parameters (จะถูกปรับตาม Market Condition)
+        self.min_touches = self.base_min_touches
+        self.zone_tolerance = self.base_zone_tolerance
+        self.min_zone_strength = self.base_min_zone_strength
+        self.max_zones_per_type = self.base_max_zones_per_type
+        
+        # 🎯 Market Condition Based Parameters
+        self.volatility_levels = {
+            'low': {
+                'zone_tolerance': 0.1,      # ยืดหยุ่นมาก
+                'min_zone_strength': 0.03,  # เข้มงวดน้อย
+                'update_frequency': 10      # อัพเดททุก 10 วินาที
+            },
+            'medium': {
+                'zone_tolerance': 0.05,     # ปานกลาง
+                'min_zone_strength': 0.02,  # ปานกลาง
+                'update_frequency': 5       # อัพเดททุก 5 วินาที
+            },
+            'high': {
+                'zone_tolerance': 0.001,    # แม่นยำมาก
+                'min_zone_strength': 0.001, # เข้าได้ง่าย
+                'update_frequency': 2       # อัพเดททุก 2 วินาที
+            }
+        }
+        
+        # 🕐 Update Frequency Management
+        self.last_zone_calculation = 0
+        self.current_volatility_level = 'medium'
+        self.update_frequency = 5  # วินาที
         
         # Multi-TF Analysis (ใช้หลาย timeframe)
         self.tf_weights = {
@@ -41,10 +72,7 @@ class ZoneAnalyzer:
         self.enable_price_levels = True      # วิธีที่ 4: Price Levels (Round Numbers, Psychological Levels)
         self.enable_swing_levels = True      # วิธีที่ 5: Swing High/Low Levels (Key Reversal Points)
         
-        # ปรับให้หา zones ได้แม่นยำขึ้นและมีคุณภาพ
-        self.zone_tolerance = 0.005          # ความยืดหยุ่นในการรวม zones (ลดจาก 0.01 เพื่อความแม่นยำ)
-        self.min_zone_strength = 0.05        # ความแข็งแรงขั้นต่ำของ zone (เพิ่มจาก 0.01 เพื่อคุณภาพ)
-        self.max_zones_per_type = 150        # จำนวน zone สูงสุดต่อประเภท (ลดจาก 200 เพื่อคุณภาพ)
+        # 🚫 REMOVED: Static parameters - ใช้ Dynamic Parameters แทน
         
         # Moving Average Settings (REMOVED - ไม่ใช้แล้ว)
         # self.ma_periods = [10, 20, 50, 100, 200]  # ระยะเวลา Moving Average (เพิ่ม 10)
@@ -80,14 +108,19 @@ class ZoneAnalyzer:
             'volatile': {'pivot_points': 2.0, 'swing_levels': 2.0, 'price_levels': 1.5, 'fibonacci': 2.0, 'volume_profile': 1.8}  # เพิ่มน้ำหนักมากสำหรับตลาดผันผวน
         }
         
-    def analyze_zones(self, symbol: str, lookback_hours: int = 24) -> Dict[str, List[Dict]]:
-        """🔍 วิเคราะห์ Support/Resistance Zones ด้วย Multi-Algorithm + Multi-Timeframe"""
+    def analyze_zones(self, symbol: str, lookback_hours: int = 24, market_condition: str = 'sideways') -> Dict[str, List[Dict]]:
+        """🔍 วิเคราะห์ Support/Resistance Zones ด้วย Multi-Algorithm + Multi-Timeframe + Dynamic Parameters"""
         try:
             self.symbol = symbol  # ตั้งค่า symbol จาก parameter
+            
+            # 🚀 Dynamic Parameter Adjustment
+            self._adjust_zone_parameters(market_condition)
+            
             logger.info(f"🔍 [MULTI-METHOD] Analyzing zones for {self.symbol} (lookback: {lookback_hours}h)")
-            logger.info(f"🔧 [MULTI-METHOD] Settings: tolerance={self.zone_tolerance}, min_strength={self.min_zone_strength}")
+            logger.info(f"🔧 [DYNAMIC] Settings: tolerance={self.zone_tolerance}, min_strength={self.min_zone_strength}")
             logger.info(f"🎯 [MULTI-METHOD] Methods: Pivot={self.enable_pivot_points}, Fib={self.enable_fibonacci}, Volume={self.enable_volume_profile}, Price={self.enable_price_levels}, Swing={self.enable_swing_levels}")
             logger.info(f"⏰ [MULTI-TIMEFRAME] Using timeframes: M1, M5, M15, H1")
+            logger.info(f"🎯 [DYNAMIC] Market condition: {market_condition.upper()}, Volatility level: {self.current_volatility_level.upper()}")
             
             support_zones = []
             resistance_zones = []
@@ -199,6 +232,9 @@ class ZoneAnalyzer:
                 logger.warning("🚫 NO ZONES FOUND AT ALL - ระบบไม่พบ Support หรือ Resistance zones เลย")
                 logger.warning("   📊 ตรวจสอบ: ข้อมูลราคา, เกณฑ์ zone_tolerance, min_zone_strength")
                 logger.warning("   🔧 ปรับแต่ง: ลด zone_tolerance หรือ min_zone_strength เพื่อหา zones ได้มากขึ้น")
+            
+            # 🕐 อัพเดทเวลาการคำนวณ Zone
+            self.last_zone_calculation = time.time()
             
             return {
                 'support': merged_support,
@@ -1607,8 +1643,64 @@ class ZoneAnalyzer:
             logger.error(f"❌ Error detecting market condition: {e}")
             return 'sideways'
     
+    def _adjust_zone_parameters(self, market_condition: str):
+        """🚀 ปรับพารามิเตอร์ Zone ตาม Market Condition แบบ Dynamic"""
+        try:
+            # กำหนดระดับความผันผวนตาม Market Condition
+            if market_condition == 'volatile':
+                self.current_volatility_level = 'high'
+            elif market_condition == 'trending':
+                self.current_volatility_level = 'medium'
+            else:  # sideways
+                self.current_volatility_level = 'low'
+            
+            # ดึงพารามิเตอร์ตามระดับความผันผวน
+            params = self.volatility_levels[self.current_volatility_level]
+            
+            # อัพเดทพารามิเตอร์
+            self.zone_tolerance = params['zone_tolerance']
+            self.min_zone_strength = params['min_zone_strength']
+            self.update_frequency = params['update_frequency']
+            
+            logger.debug(f"🔧 [DYNAMIC] Adjusted parameters for {market_condition} market:")
+            logger.debug(f"   Zone tolerance: {self.zone_tolerance}")
+            logger.debug(f"   Min zone strength: {self.min_zone_strength}")
+            logger.debug(f"   Update frequency: {self.update_frequency}s")
+            
+        except Exception as e:
+            logger.error(f"❌ Error adjusting zone parameters: {e}")
+            # Fallback to default parameters
+            self.zone_tolerance = self.base_zone_tolerance
+            self.min_zone_strength = self.base_min_zone_strength
+            self.update_frequency = 5
+    
+    def should_update_zones(self, current_time: float) -> bool:
+        """🕐 ตรวจสอบว่าควรอัพเดท Zone หรือไม่"""
+        try:
+            time_passed = current_time - self.last_zone_calculation
+            return time_passed >= self.update_frequency
+            
+        except Exception as e:
+            logger.error(f"❌ Error checking zone update: {e}")
+            return True  # Default to update
+    
+    def get_zone_parameters(self) -> Dict[str, Any]:
+        """📊 ดึงพารามิเตอร์ Zone ปัจจุบัน"""
+        try:
+            return {
+                'zone_tolerance': self.zone_tolerance,
+                'min_zone_strength': self.min_zone_strength,
+                'update_frequency': self.update_frequency,
+                'volatility_level': self.current_volatility_level,
+                'last_calculation': self.last_zone_calculation
+            }
+            
+        except Exception as e:
+            logger.error(f"❌ Error getting zone parameters: {e}")
+            return {}
+    
     def _adjust_parameters_for_market(self, market_condition: str):
-        """⚙️ ปรับพารามิเตอร์ตามสภาวะตลาด"""
+        """⚙️ ปรับพารามิเตอร์ตามสภาวะตลาด (Legacy - ใช้ _adjust_zone_parameters แทน)"""
         try:
             if market_condition == 'trending':
                 # Trending Market: เพิ่มความยืดหยุ่น, ลดเกณฑ์
@@ -1660,6 +1752,47 @@ class ZoneAnalyzer:
         except Exception as e:
             logger.error(f"❌ Error applying market weights: {e}")
             return zones
+    
+    def get_zones(self) -> Dict[str, List[Dict]]:
+        """📊 ดึงข้อมูล Zone ปัจจุบัน"""
+        try:
+            # ถ้ายังไม่มีข้อมูล Zone ให้วิเคราะห์ใหม่
+            if not hasattr(self, 'cached_zones') or not self.cached_zones:
+                logger.debug("🔄 [ZONE CACHE] No cached zones, analyzing new zones...")
+                return self.analyze_zones(self.symbol or 'XAUUSD', 24, 'sideways')
+            
+            # ตรวจสอบว่าควรอัพเดท Zone หรือไม่
+            current_time = time.time()
+            if self.should_update_zones(current_time):
+                logger.debug("🔄 [ZONE CACHE] Zones need update, analyzing new zones...")
+                return self.analyze_zones(self.symbol or 'XAUUSD', 24, 'sideways')
+            
+            # Return cached zones
+            logger.debug("📋 [ZONE CACHE] Returning cached zones")
+            return self.cached_zones
+            
+        except Exception as e:
+            logger.error(f"❌ Error getting zones: {e}")
+            return {'support': [], 'resistance': []}
+    
+    def cache_zones(self, zones: Dict[str, List[Dict]]):
+        """💾 เก็บ Zone ไว้ใน Cache"""
+        try:
+            self.cached_zones = zones
+            logger.debug("💾 [ZONE CACHE] Zones cached successfully")
+            
+        except Exception as e:
+            logger.error(f"❌ Error caching zones: {e}")
+    
+    def clear_zone_cache(self):
+        """🧹 ล้าง Zone Cache"""
+        try:
+            if hasattr(self, 'cached_zones'):
+                delattr(self, 'cached_zones')
+            logger.debug("🧹 [ZONE CACHE] Zone cache cleared")
+            
+        except Exception as e:
+            logger.error(f"❌ Error clearing zone cache: {e}")
     
     def get_strongest_zones(self, zones: Dict[str, List[Dict]], count: int = 5) -> Dict[str, List[Dict]]:
         """🏆 หา Zones ที่แข็งแรงที่สุด"""

@@ -46,6 +46,12 @@ class TradingGUI:
         self._last_market_status_update = 0  # สำหรับ market status
         self._last_7d_analysis_update = 0  # สำหรับ 7D analysis
         
+        # 🚀 Real-time Status Tracking
+        self.position_widgets = {}  # เก็บ widget ของแต่ละ position
+        self.status_animations = {}  # เก็บ animation state
+        self.last_status_display = {}  # เก็บสถานะเก่าสำหรับเปรียบเทียบ
+        self.animation_queue = []  # คิว animation
+        
         # สร้าง GUI components
         self.create_widgets()
         self.setup_styles()
@@ -1431,6 +1437,212 @@ class TradingGUI:
                 self.root.quit()
             except:
                 pass
+    
+    def update_position_status(self, status_results: Dict[int, Any]):
+        """🚀 อัพเดทสถานะไม้แบบ Real-time พร้อม Animation"""
+        try:
+            if not status_results:
+                return
+            
+            # ตรวจสอบการเปลี่ยนแปลงสถานะ
+            for ticket, status_obj in status_results.items():
+                old_status = self.last_status_display.get(ticket, {}).get('status')
+                new_status = status_obj.status
+                
+                # ถ้าสถานะเปลี่ยน -> แสดง Animation
+                if old_status != new_status:
+                    self._animate_status_change(ticket, old_status, new_status)
+                
+                # อัพเดท Display
+                self._update_position_widget(ticket, status_obj)
+            
+            # อัพเดทสถานะเก่า
+            self.last_status_display = {
+                ticket: {
+                    'status': status_obj.status,
+                    'last_update': status_obj.last_update
+                }
+                for ticket, status_obj in status_results.items()
+            }
+            
+        except Exception as e:
+            logger.error(f"❌ Error updating position status: {e}")
+    
+    def _animate_status_change(self, ticket: int, old_status: str, new_status: str):
+        """🎬 แสดง Animation เมื่อสถานะเปลี่ยน"""
+        try:
+            if not old_status or not new_status:
+                return
+            
+            # สร้าง Animation Object
+            animation = {
+                'ticket': ticket,
+                'old_status': old_status,
+                'new_status': new_status,
+                'start_time': time.time(),
+                'duration': 2.0,  # 2 วินาที
+                'phase': 'flash'  # flash -> fade -> normal
+            }
+            
+            # เพิ่มใน Animation Queue
+            self.animation_queue.append(animation)
+            
+            # เริ่ม Animation
+            self._start_status_animation(animation)
+            
+        except Exception as e:
+            logger.error(f"❌ Error animating status change: {e}")
+    
+    def _start_status_animation(self, animation: Dict):
+        """🎬 เริ่ม Animation"""
+        try:
+            ticket = animation['ticket']
+            
+            # หา Widget ของ Position
+            widget = self.position_widgets.get(ticket)
+            if not widget:
+                return
+            
+            # Phase 1: Flash สีเหลือง
+            widget.configure(bg='yellow', fg='black')
+            
+            # Phase 2: Fade to normal (หลังจาก 1 วินาที)
+            self.root.after(1000, lambda: self._fade_to_normal(ticket, animation))
+            
+        except Exception as e:
+            logger.error(f"❌ Error starting status animation: {e}")
+    
+    def _fade_to_normal(self, ticket: int, animation: Dict):
+        """🎬 Fade to Normal Color"""
+        try:
+            widget = self.position_widgets.get(ticket)
+            if not widget:
+                return
+            
+            # กำหนดสีตามสถานะใหม่
+            color = self._get_status_color(animation['new_status'])
+            
+            # เปลี่ยนสี
+            widget.configure(bg=color['bg'], fg=color['fg'])
+            
+            # Phase 3: Complete (หลังจาก 1 วินาที)
+            self.root.after(1000, lambda: self._complete_animation(ticket, animation))
+            
+        except Exception as e:
+            logger.error(f"❌ Error fading to normal: {e}")
+    
+    def _complete_animation(self, ticket: int, animation: Dict):
+        """🎬 Complete Animation"""
+        try:
+            # ลบ Animation จาก Queue
+            if animation in self.animation_queue:
+                self.animation_queue.remove(animation)
+            
+            # Log การเปลี่ยนแปลง
+            logger.info(f"🎬 [ANIMATION] #{ticket}: {animation['old_status']} → {animation['new_status']}")
+            
+        except Exception as e:
+            logger.error(f"❌ Error completing animation: {e}")
+    
+    def _get_status_color(self, status: str) -> Dict[str, str]:
+        """🎨 กำหนดสีตามสถานะ"""
+        try:
+            if 'HG' in status:
+                return {'bg': '#ffeb3b', 'fg': '#000000'}  # เหลือง
+            elif 'Support Guard' in status:
+                return {'bg': '#4caf50', 'fg': '#ffffff'}  # เขียว
+            elif 'Protected' in status:
+                return {'bg': '#2196f3', 'fg': '#ffffff'}  # น้ำเงิน
+            elif 'Profit Helper' in status:
+                return {'bg': '#ff9800', 'fg': '#ffffff'}  # ส้ม
+            elif 'Standalone' in status:
+                return {'bg': '#9e9e9e', 'fg': '#ffffff'}  # เทา
+            else:
+                return {'bg': '#ffffff', 'fg': '#000000'}  # ขาว
+                
+        except Exception as e:
+            logger.error(f"❌ Error getting status color: {e}")
+            return {'bg': '#ffffff', 'fg': '#000000'}
+    
+    def _update_position_widget(self, ticket: int, status_obj: Any):
+        """🖥️ อัพเดท Widget ของ Position"""
+        try:
+            # สร้าง Widget ใหม่ถ้ายังไม่มี
+            if ticket not in self.position_widgets:
+                self._create_position_widget(ticket)
+            
+            widget = self.position_widgets[ticket]
+            
+            # อัพเดทข้อมูล
+            status_text = f"#{ticket}: {status_obj.status}"
+            profit_text = f"Profit: ${status_obj.profit:.2f}"
+            direction_text = f"Direction: {status_obj.direction}"
+            
+            # อัพเดท Text
+            widget.configure(text=f"{status_text}\n{profit_text}\n{direction_text}")
+            
+            # อัพเดทสี
+            color = self._get_status_color(status_obj.status)
+            widget.configure(bg=color['bg'], fg=color['fg'])
+            
+        except Exception as e:
+            logger.error(f"❌ Error updating position widget: {e}")
+    
+    def _create_position_widget(self, ticket: int):
+        """🖥️ สร้าง Widget สำหรับ Position"""
+        try:
+            # สร้าง Frame สำหรับ Position
+            frame = tk.Frame(self.root, relief='raised', bd=1)
+            frame.pack(fill='x', padx=5, pady=2)
+            
+            # สร้าง Label สำหรับแสดงข้อมูล
+            label = tk.Label(
+                frame,
+                text=f"#{ticket}: Loading...",
+                font=('Arial', 10),
+                bg='#ffffff',
+                fg='#000000',
+                relief='raised',
+                bd=1,
+                padx=10,
+                pady=5
+            )
+            label.pack(fill='x')
+            
+            # เก็บ Widget
+            self.position_widgets[ticket] = label
+            
+        except Exception as e:
+            logger.error(f"❌ Error creating position widget: {e}")
+    
+    def clear_position_widgets(self):
+        """🧹 ล้าง Position Widgets ทั้งหมด"""
+        try:
+            for widget in self.position_widgets.values():
+                widget.destroy()
+            
+            self.position_widgets.clear()
+            self.status_animations.clear()
+            self.last_status_display.clear()
+            self.animation_queue.clear()
+            
+            logger.info("🧹 [GUI] Cleared all position widgets")
+            
+        except Exception as e:
+            logger.error(f"❌ Error clearing position widgets: {e}")
+    
+    def get_animation_status(self) -> Dict[str, Any]:
+        """📊 ดึงสถานะ Animation"""
+        try:
+            return {
+                'active_animations': len(self.animation_queue),
+                'position_widgets': len(self.position_widgets),
+                'last_status_count': len(self.last_status_display)
+            }
+            
+        except Exception as e:
+            logger.error(f"❌ Error getting animation status: {e}")
+            return {}
 
     def alert(self, message, level='info'):
         """แสดงการแจ้งเตือน"""

@@ -41,6 +41,11 @@ from zone_analyzer import ZoneAnalyzer
 from smart_entry_system import SmartEntrySystem
 # 🚫 REMOVED: from portfolio_anchor import PortfolioAnchor
 
+# 🚀 REAL-TIME STATUS TRACKING SYSTEMS
+from position_status_manager import PositionStatusManager
+from real_time_tracker import RealTimeTracker
+from market_condition_detector import MarketConditionDetector
+
 # 🚀 SIMPLE & CLEAN LOGGING CONFIGURATION
 logging.basicConfig(
     level=logging.INFO,
@@ -139,6 +144,14 @@ class AdaptiveTradingSystemGUI:
         self.zone_analysis_interval = 3  # ทุก 3 วินาที (ปรับให้เร็วขึ้น)
         self._smart_systems_thread = None  # เพิ่ม thread tracking
         
+        # 🚀 REAL-TIME STATUS TRACKING SYSTEMS
+        self.status_manager = None
+        self.real_time_tracker = None
+        self.market_detector = None
+        self.status_tracker = None
+        self.last_status_update = 0
+        self.status_update_interval = 3  # อัพเดทสถานะทุก 3 วินาที
+        
         # 🎯 ZONE DETECTION STATS
         self.zone_stats = {
             'pivot_points': {'support': 0, 'resistance': 0},
@@ -204,6 +217,9 @@ class AdaptiveTradingSystemGUI:
             
             # 🚫 REMOVED: dynamic_adaptive_closer initialization - Replaced by Enhanced 7D Smart Closer
             
+            # 🚀 Initialize Real-time Status Tracking Systems
+            self._initialize_real_time_systems()
+            
             return True
             
         except Exception as e:
@@ -236,6 +252,41 @@ class AdaptiveTradingSystemGUI:
                 
         except Exception as e:
             logger.error(f"เกิดข้อผิดพลาดในการโหลดข้อมูลตลาด: {str(e)}")
+    
+    def _initialize_real_time_systems(self):
+        """🚀 Initialize Real-time Status Tracking Systems"""
+        try:
+            logger.info("🚀 [INIT] Initializing Real-time Status Tracking Systems...")
+            
+            # 1. Initialize Position Status Manager
+            self.status_manager = PositionStatusManager()
+            logger.info("✅ [INIT] Position Status Manager initialized")
+            
+            # 2. Initialize Market Condition Detector
+            self.market_detector = MarketConditionDetector()
+            logger.info("✅ [INIT] Market Condition Detector initialized")
+            
+            # 3. Initialize Real-time Tracker
+            self.real_time_tracker = RealTimeTracker(self)
+            logger.info("✅ [INIT] Real-time Tracker initialized")
+            
+            # 4. Initialize Status Tracker (Simple version)
+            self.status_tracker = {
+                'last_price': 0.0,
+                'last_update': 0.0,
+                'update_threshold': 3.0,
+                'price_change_threshold': 5.0
+            }
+            logger.info("✅ [INIT] Status Tracker initialized")
+            
+            # 5. Start Real-time Monitoring
+            self.real_time_tracker.start_monitoring()
+            logger.info("✅ [INIT] Real-time monitoring started")
+            
+            logger.info("🎯 [INIT] Real-time Status Tracking Systems ready!")
+            
+        except Exception as e:
+            logger.error(f"❌ [INIT] Error initializing real-time systems: {e}")
     
     def start_trading(self):
         """Start trading loop (Same as original structure)"""
@@ -321,6 +372,10 @@ class AdaptiveTradingSystemGUI:
                 
                 # 🔗 Hedge Pair Closing Check - ตรวจสอบโอกาสปิด Hedge Pairs - DISABLED
                 # self._check_hedge_pair_closing_opportunities(current_candle)
+                
+                # 🚀 Real-time Status Tracking - ตรวจสอบสถานะไม้แบบ Real-time
+                if self._should_update_status(current_candle, current_time):
+                    self._update_position_status_realtime(current_candle, current_time)
                 
                 # Position Management (Keep original logic) - Throttle to every 20 seconds (เพิ่มจาก 10)
                 if not hasattr(self, '_last_position_management_time'):
@@ -1682,6 +1737,133 @@ class AdaptiveTradingSystemGUI:
             
         except Exception as e:
             logger.error(f"❌ Error updating zone stats: {e}")
+    
+    def _should_update_status(self, current_candle: Dict, current_time: float) -> bool:
+        """🚀 ตรวจสอบว่าควรอัพเดทสถานะหรือไม่"""
+        try:
+            if not self.status_tracker or not self.status_manager:
+                return False
+            
+            # ดึงราคาปัจจุบัน
+            current_price = current_candle.get('close', 0.0)
+            if current_price == 0:
+                return False
+            
+            # ตรวจสอบการเปลี่ยนแปลงราคา
+            price_change = abs(current_price - self.status_tracker['last_price'])
+            price_change_pips = price_change * 10000  # แปลงเป็น pips
+            
+            # ตรวจสอบเวลาที่ผ่านไป
+            time_passed = current_time - self.status_tracker['last_update']
+            
+            # อัพเดทเมื่อ: ราคาเปลี่ยน > 5 pips หรือ เวลาผ่าน > 3 วินาที
+            should_update = (
+                price_change_pips >= self.status_tracker['price_change_threshold'] or
+                time_passed >= self.status_tracker['update_threshold']
+            )
+            
+            if should_update:
+                logger.debug(f"🔄 [STATUS UPDATE] Price change: {price_change_pips:.1f} pips, "
+                           f"Time passed: {time_passed:.1f}s")
+            
+            return should_update
+            
+        except Exception as e:
+            logger.error(f"❌ Error checking status update: {e}")
+            return False
+    
+    def _update_position_status_realtime(self, current_candle: Dict, current_time: float):
+        """🚀 อัพเดทสถานะไม้แบบ Real-time"""
+        try:
+            if not self.status_manager or not self.market_detector:
+                return
+            
+            # ดึงราคาปัจจุบัน
+            current_price = current_candle.get('close', 0.0)
+            if current_price == 0:
+                return
+            
+            # อัพเดทข้อมูลตลาด
+            volume = current_candle.get('volume', 0.0)
+            self.market_detector.update_price_data(current_price, volume, current_time)
+            
+            # ดึงสภาวะตลาดปัจจุบัน
+            market_condition = self.market_detector.get_current_condition()
+            
+            # ดึง Position ทั้งหมด
+            positions = self.order_manager.get_positions()
+            if not positions:
+                return
+            
+            # ดึง Zone ข้อมูล (ถ้ามี)
+            zones = []
+            if hasattr(self, 'zone_analyzer') and self.zone_analyzer:
+                try:
+                    zones = self.zone_analyzer.get_zones()
+                except:
+                    zones = []
+            
+            # วิเคราะห์สถานะไม้
+            status_results = self.status_manager.analyze_all_positions(
+                positions=positions,
+                current_price=current_price,
+                zones=zones,
+                market_condition=market_condition.condition
+            )
+            
+            # อัพเดท Status Tracker
+            self.status_tracker['last_price'] = current_price
+            self.status_tracker['last_update'] = current_time
+            
+            # Log สถานะพิเศษ
+            self._log_special_statuses(status_results)
+            
+            # อัพเดท GUI (ถ้ามี)
+            if hasattr(self, 'gui') and self.gui:
+                self._update_gui_with_status(status_results)
+            
+        except Exception as e:
+            logger.error(f"❌ Error updating position status: {e}")
+    
+    def _log_special_statuses(self, status_results: Dict[int, Any]):
+        """📝 Log สถานะพิเศษ"""
+        try:
+            special_count = 0
+            for ticket, status_obj in status_results.items():
+                if 'HG' in status_obj.status or 'Support Guard' in status_obj.status:
+                    special_count += 1
+                    if special_count <= 3:  # Log เฉพาะ 3 ไม้แรก
+                        logger.info(f"🎯 [SPECIAL STATUS] #{ticket}: {status_obj.status}")
+            
+            if special_count > 3:
+                logger.info(f"🎯 [SPECIAL STATUS] ... และอีก {special_count - 3} ไม้")
+                
+        except Exception as e:
+            logger.error(f"❌ Error logging special statuses: {e}")
+    
+    def _update_gui_with_status(self, status_results: Dict[int, Any]):
+        """🖥️ อัพเดท GUI ด้วยสถานะ"""
+        try:
+            if not hasattr(self.gui, 'update_position_status'):
+                return
+            
+            # ส่งข้อมูลสถานะไปยัง GUI
+            self.gui.update_position_status(status_results)
+            
+        except Exception as e:
+            logger.error(f"❌ Error updating GUI with status: {e}")
+    
+    def get_current_position_status(self) -> Dict[int, Any]:
+        """📊 ดึงสถานะไม้ปัจจุบัน"""
+        try:
+            if not self.status_manager:
+                return {}
+            
+            return self.status_manager.get_all_statuses()
+            
+        except Exception as e:
+            logger.error(f"❌ Error getting current position status: {e}")
+            return {}
     
     def get_system_status(self) -> Dict[str, Any]:
         """📊 ข้อมูลสถานะระบบสำหรับ GUI"""
