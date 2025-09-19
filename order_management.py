@@ -548,6 +548,15 @@ class OrderManager:
             logger.error(f"เกิดข้อผิดพลาดในการซิงค์ข้อมูล Position: {str(e)}")
             return self.active_positions
             
+    def get_positions(self) -> List[Position]:
+        """
+        ดึง Position ทั้งหมด
+        
+        Returns:
+            List[Position]: รายการ Position ทั้งหมด
+        """
+        return self.active_positions.copy()
+        
     def get_positions_by_symbol(self, symbol: str) -> List[Position]:
         """
         ดึง Position ตามสัญลักษณ์
