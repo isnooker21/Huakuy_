@@ -1202,7 +1202,7 @@ class AdaptiveTradingSystemGUI:
                 logger.info(f"💰 [HELPER] Successfully closed: Losing ${getattr(losing_pos, 'profit', 0):.2f} + "
                            f"Helper ${getattr(helper_pos, 'profit', 0):.2f} = ${pair['total_profit']:.2f}")
             else:
-                logger.warning(f"💰 [HELPER] Failed to close: {result.message}")
+                logger.warning(f"💰 [HELPER] Failed to close: {result.error_message}")
                 
         except Exception as e:
             logger.error(f"💰 [HELPER] Error executing: {e}")
@@ -1242,7 +1242,7 @@ class AdaptiveTradingSystemGUI:
                 profit = getattr(orphan, 'profit', 0)
                 logger.info(f"👻 [ORPHAN] Successfully closed orphan: ${profit:.2f} - {reason}")
             else:
-                logger.warning(f"👻 [ORPHAN] Failed to close: {result.message}")
+                logger.warning(f"👻 [ORPHAN] Failed to close: {result.error_message}")
                 
         except Exception as e:
             logger.error(f"👻 [ORPHAN] Error executing: {e}")
@@ -1277,7 +1277,7 @@ class AdaptiveTradingSystemGUI:
                 profit = getattr(position, 'profit', 0)
                 logger.info(f"⏰ [TIME] Successfully closed: ${profit:.2f} - {reason}")
             else:
-                logger.warning(f"⏰ [TIME] Failed to close: {result.message}")
+                logger.warning(f"⏰ [TIME] Failed to close: {result.error_message}")
                 
         except Exception as e:
             logger.error(f"⏰ [TIME] Error executing: {e}")
@@ -1348,7 +1348,7 @@ class AdaptiveTradingSystemGUI:
                 profit = getattr(position, 'profit', 0)
                 logger.info(f"📈 [MARKET] Successfully closed: ${profit:.2f} - {reason}")
             else:
-                logger.warning(f"📈 [MARKET] Failed to close: {result.message}")
+                logger.warning(f"📈 [MARKET] Failed to close: {result.error_message}")
                 
         except Exception as e:
             logger.error(f"📈 [MARKET] Error executing: {e}")
