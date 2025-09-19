@@ -220,6 +220,9 @@ class AdaptiveTradingSystemGUI:
             # 🚀 Initialize Real-time Status Tracking Systems
             self._initialize_real_time_systems()
             
+            # 🚀 Initialize Position Status Manager for GUI
+            self.position_status_manager = self.status_manager
+            
             return True
             
         except Exception as e:
@@ -1821,6 +1824,18 @@ class AdaptiveTradingSystemGUI:
             # อัพเดท GUI (ถ้ามี)
             if hasattr(self, 'gui') and self.gui:
                 self._update_gui_with_status(status_results)
+                
+                # 🚀 ส่งข้อมูลสถานะไปยัง Enhanced GUI (ถ้ามี)
+                if hasattr(self.gui, 'update_position_status_display'):
+                    self.gui.root.after_idle(
+                        lambda: self.gui.update_position_status_display(status_results)
+                    )
+                
+                # 🚀 ส่งข้อมูลสถานะไปยัง Enhanced GUI
+                if hasattr(self.gui, 'update_position_status_display'):
+                    self.gui.root.after_idle(
+                        lambda: self.gui.update_position_status_display(status_results)
+                    )
             
         except Exception as e:
             logger.error(f"❌ Error updating position status: {e}")

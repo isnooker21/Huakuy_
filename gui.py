@@ -12,6 +12,10 @@ import logging
 from typing import Dict, List, Optional, Any
 from datetime import datetime
 
+# Import enhanced position widgets
+from enhanced_position_widget import PositionStatusWidget, AsyncStatusUpdater, UpdateThrottler, LazyPositionLoader
+from gui_performance_optimizer import GUIPerformanceOptimizer
+
 logger = logging.getLogger(__name__)
 
 class TradingGUI:
@@ -52,12 +56,26 @@ class TradingGUI:
         self.last_status_display = {}  # เก็บสถานะเก่าสำหรับเปรียบเทียบ
         self.animation_queue = []  # คิว animation
         
+        # 🚀 Enhanced Position Status System
+        self.async_status_updater = None  # Background status updater
+        self.position_status_frame = None  # Frame สำหรับแสดง position status
+        self.status_scroll_frame = None  # Scrollable frame
+        self.lazy_loader = LazyPositionLoader(batch_size=20)
+        self.update_throttler = UpdateThrottler(min_interval=2.0)
+        
+        # 🚀 Performance Optimizer
+        self.performance_optimizer = GUIPerformanceOptimizer(max_memory_mb=200)
+        self.performance_optimizer.start_performance_monitoring()
+        
         # สร้าง GUI components
         self.create_widgets()
         self.setup_styles()
         
         # เริ่มต้นการอัพเดทข้อมูลเบาๆ หลังจาก GUI โหลดเสร็จ
         self.root.after(10000, self.start_light_update)  # รอ 10 วินาทีก่อนเริ่มอัพเดท
+        
+        # 🚀 เริ่มการอัพเดท performance stats
+        self.root.after(15000, self.start_performance_monitoring)  # รอ 15 วินาที
         
     def create_widgets(self):
         """สร้าง widgets ทั้งหมด"""
@@ -343,8 +361,14 @@ class TradingGUI:
         notebook = ttk.Notebook(bottom_frame)
         notebook.pack(fill=tk.BOTH, expand=True)
         
-        # แท็บ Positions
-        self.create_positions_tab(notebook)
+            # แท็บ Positions
+            self.create_positions_tab(notebook)
+            
+            # 🚀 Enhanced Position Status Tab
+            self.create_enhanced_positions_tab(notebook)
+            
+            # 🚀 Performance Monitoring Tab
+            self.create_performance_tab(notebook)
         
         # แท็บ Trading Log
         self.create_log_tab(notebook)
@@ -382,6 +406,297 @@ class TradingGUI:
         
         # เพิ่มเมนูคลิกขวา
         self.create_positions_context_menu()
+    
+    def create_enhanced_positions_tab(self, notebook):
+        """🚀 สร้างแท็บ Enhanced Position Status"""
+        try:
+            # สร้าง main frame
+            enhanced_frame = tk.Frame(notebook, bg='#1a1a1a')
+            notebook.add(enhanced_frame, text="🚀 Position Status")
+            
+            # สร้าง header frame
+            header_frame = tk.Frame(enhanced_frame, bg='#2d2d2d', height=60)
+            header_frame.pack(fill='x', padx=5, pady=5)
+            header_frame.pack_propagate(False)
+            
+            # Title
+            title_label = tk.Label(
+                header_frame,
+                text="🎯 Real-time Position Status Tracking",
+                bg='#2d2d2d',
+                fg='#00ff88',
+                font=('Segoe UI', 14, 'bold')
+            )
+            title_label.pack(pady=10)
+            
+            # Status info frame
+            status_info_frame = tk.Frame(header_frame, bg='#2d2d2d')
+            status_info_frame.pack(fill='x', padx=10, pady=5)
+            
+            # Status labels
+            self.status_info_labels = {
+                'total_positions': tk.Label(status_info_frame, text="Total: 0", bg='#2d2d2d', fg='#ffffff', font=('Segoe UI', 9)),
+                'active_hg': tk.Label(status_info_frame, text="HG: 0", bg='#2d2d2d', fg='#FF6B6B', font=('Segoe UI', 9)),
+                'support_guards': tk.Label(status_info_frame, text="Guards: 0", bg='#2d2d2d', fg='#4ECDC4', font=('Segoe UI', 9)),
+                'protected_positions': tk.Label(status_info_frame, text="Protected: 0", bg='#2d2d2d', fg='#45B7D1', font=('Segoe UI', 9)),
+                'last_update': tk.Label(status_info_frame, text="Last Update: Never", bg='#2d2d2d', fg='#cccccc', font=('Segoe UI', 8))
+            }
+            
+            # จัดวาง status labels
+            for i, (key, label) in enumerate(self.status_info_labels.items()):
+                label.grid(row=0, column=i, padx=10, pady=5)
+            
+            # สร้าง scrollable frame สำหรับ position widgets
+            self.position_status_frame = tk.Frame(enhanced_frame, bg='#1a1a1a')
+            self.position_status_frame.pack(fill='both', expand=True, padx=5, pady=5)
+            
+            # สร้าง canvas และ scrollbar
+            canvas = tk.Canvas(self.position_status_frame, bg='#1a1a1a', highlightthickness=0)
+            scrollbar = ttk.Scrollbar(self.position_status_frame, orient="vertical", command=canvas.yview)
+            self.status_scroll_frame = tk.Frame(canvas, bg='#1a1a1a')
+            
+            # Configure scrollable region
+            self.status_scroll_frame.bind(
+                "<Configure>",
+                lambda e: canvas.configure(scrollregion=canvas.bbox("all"))
+            )
+            
+            canvas.create_window((0, 0), window=self.status_scroll_frame, anchor="nw")
+            canvas.configure(yscrollcommand=scrollbar.set)
+            
+            # Pack canvas and scrollbar
+            canvas.pack(side="left", fill="both", expand=True)
+            scrollbar.pack(side="right", fill="y")
+            
+            # Mouse wheel binding
+            def _on_mousewheel(event):
+                canvas.yview_scroll(int(-1*(event.delta/120)), "units")
+            
+            canvas.bind_all("<MouseWheel>", _on_mousewheel)
+            
+            logger.info("✅ Enhanced Position Status tab created")
+            
+        except Exception as e:
+            logger.error(f"❌ Error creating enhanced positions tab: {e}")
+    
+    def create_performance_tab(self, notebook):
+        """🚀 สร้างแท็บ Performance Monitoring"""
+        try:
+            # สร้าง main frame
+            performance_frame = tk.Frame(notebook, bg='#1a1a1a')
+            notebook.add(performance_frame, text="📊 Performance")
+            
+            # สร้าง header frame
+            header_frame = tk.Frame(performance_frame, bg='#2d2d2d', height=60)
+            header_frame.pack(fill='x', padx=5, pady=5)
+            header_frame.pack_propagate(False)
+            
+            # Title
+            title_label = tk.Label(
+                header_frame,
+                text="📊 GUI Performance Monitor",
+                bg='#2d2d2d',
+                fg='#00ff88',
+                font=('Segoe UI', 14, 'bold')
+            )
+            title_label.pack(pady=10)
+            
+            # สร้าง content frame
+            content_frame = tk.Frame(performance_frame, bg='#1a1a1a')
+            content_frame.pack(fill='both', expand=True, padx=5, pady=5)
+            
+            # สร้าง notebook สำหรับ sub-tabs
+            sub_notebook = ttk.Notebook(content_frame)
+            sub_notebook.pack(fill='both', expand=True)
+            
+            # Memory Tab
+            self.create_memory_tab(sub_notebook)
+            
+            # Performance Tab
+            self.create_performance_metrics_tab(sub_notebook)
+            
+            # Status Tab
+            self.create_status_monitoring_tab(sub_notebook)
+            
+            logger.info("✅ Performance monitoring tab created")
+            
+        except Exception as e:
+            logger.error(f"❌ Error creating performance tab: {e}")
+    
+    def create_memory_tab(self, notebook):
+        """สร้าง Memory monitoring tab"""
+        try:
+            memory_frame = tk.Frame(notebook, bg='#1a1a1a')
+            notebook.add(memory_frame, text="💾 Memory")
+            
+            # Memory info labels
+            self.memory_labels = {
+                'current': tk.Label(memory_frame, text="Current: 0 MB", bg='#1a1a1a', fg='#ffffff', font=('Segoe UI', 12)),
+                'average': tk.Label(memory_frame, text="Average: 0 MB", bg='#1a1a1a', fg='#ffffff', font=('Segoe UI', 12)),
+                'maximum': tk.Label(memory_frame, text="Maximum: 0 MB", bg='#1a1a1a', fg='#ffffff', font=('Segoe UI', 12)),
+                'limit': tk.Label(memory_frame, text="Limit: 200 MB", bg='#1a1a1a', fg='#ffaa00', font=('Segoe UI', 12)),
+                'status': tk.Label(memory_frame, text="Status: Healthy", bg='#1a1a1a', fg='#00ff88', font=('Segoe UI', 12, 'bold'))
+            }
+            
+            # จัดวาง labels
+            for i, (key, label) in enumerate(self.memory_labels.items()):
+                label.pack(pady=10, padx=20, anchor='w')
+            
+        except Exception as e:
+            logger.error(f"❌ Error creating memory tab: {e}")
+    
+    def create_performance_metrics_tab(self, notebook):
+        """สร้าง Performance metrics tab"""
+        try:
+            metrics_frame = tk.Frame(notebook, bg='#1a1a1a')
+            notebook.add(metrics_frame, text="⚡ Performance")
+            
+            # Performance metrics labels
+            self.performance_labels = {
+                'avg_response_time': tk.Label(metrics_frame, text="Avg Response: 0 ms", bg='#1a1a1a', fg='#ffffff', font=('Segoe UI', 12)),
+                'max_response_time': tk.Label(metrics_frame, text="Max Response: 0 ms", bg='#1a1a1a', fg='#ffffff', font=('Segoe UI', 12)),
+                'avg_update_duration': tk.Label(metrics_frame, text="Avg Update: 0 s", bg='#1a1a1a', fg='#ffffff', font=('Segoe UI', 12)),
+                'max_update_duration': tk.Label(metrics_frame, text="Max Update: 0 s", bg='#1a1a1a', fg='#ffffff', font=('Segoe UI', 12)),
+                'success_rate': tk.Label(metrics_frame, text="Success Rate: 0%", bg='#1a1a1a', fg='#00ff88', font=('Segoe UI', 12, 'bold'))
+            }
+            
+            # จัดวาง labels
+            for i, (key, label) in enumerate(self.performance_labels.items()):
+                label.pack(pady=10, padx=20, anchor='w')
+            
+        except Exception as e:
+            logger.error(f"❌ Error creating performance metrics tab: {e}")
+    
+    def create_status_monitoring_tab(self, notebook):
+        """สร้าง Status monitoring tab"""
+        try:
+            status_frame = tk.Frame(notebook, bg='#1a1a1a')
+            notebook.add(status_frame, text="📈 Status")
+            
+            # Status monitoring labels
+            self.status_monitor_labels = {
+                'total_operations': tk.Label(status_frame, text="Total Operations: 0", bg='#1a1a1a', fg='#ffffff', font=('Segoe UI', 12)),
+                'error_count': tk.Label(status_frame, text="Errors: 0", bg='#1a1a1a', fg='#ff4444', font=('Segoe UI', 12)),
+                'success_count': tk.Label(status_frame, text="Successes: 0", bg='#1a1a1a', fg='#00ff88', font=('Segoe UI', 12)),
+                'widget_count': tk.Label(status_frame, text="Active Widgets: 0", bg='#1a1a1a', fg='#ffffff', font=('Segoe UI', 12)),
+                'last_update': tk.Label(status_frame, text="Last Update: Never", bg='#1a1a1a', fg='#cccccc', font=('Segoe UI', 10))
+            }
+            
+            # จัดวาง labels
+            for i, (key, label) in enumerate(self.status_monitor_labels.items()):
+                label.pack(pady=10, padx=20, anchor='w')
+            
+            # Refresh button
+            refresh_btn = tk.Button(
+                status_frame,
+                text="🔄 Refresh Stats",
+                command=self.refresh_performance_stats,
+                bg='#4CAF50',
+                fg='white',
+                font=('Segoe UI', 10, 'bold'),
+                relief=tk.RAISED,
+                bd=2
+            )
+            refresh_btn.pack(pady=20)
+            
+        except Exception as e:
+            logger.error(f"❌ Error creating status monitoring tab: {e}")
+    
+    def refresh_performance_stats(self):
+        """รีเฟรชสถิติประสิทธิภาพ"""
+        try:
+            if not hasattr(self, 'performance_optimizer'):
+                return
+            
+            # ดึงรายงานประสิทธิภาพ
+            report = self.performance_optimizer.get_performance_report()
+            
+            if not report:
+                return
+            
+            # อัพเดท memory labels
+            if hasattr(self, 'memory_labels'):
+                memory_info = report.get('memory', {})
+                self.memory_labels['current'].config(text=f"Current: {memory_info.get('current_mb', 0):.1f} MB")
+                self.memory_labels['average'].config(text=f"Average: {memory_info.get('average_mb', 0):.1f} MB")
+                self.memory_labels['maximum'].config(text=f"Maximum: {memory_info.get('max_mb', 0):.1f} MB")
+                
+                # สีตามสถานะ
+                current_mb = memory_info.get('current_mb', 0)
+                limit_mb = memory_info.get('limit_mb', 200)
+                
+                if current_mb > limit_mb * 0.8:
+                    self.memory_labels['status'].config(text="Status: Warning", fg='#ffaa00')
+                elif current_mb > limit_mb * 0.9:
+                    self.memory_labels['status'].config(text="Status: Critical", fg='#ff4444')
+                else:
+                    self.memory_labels['status'].config(text="Status: Healthy", fg='#00ff88')
+            
+            # อัพเดท performance labels
+            if hasattr(self, 'performance_labels'):
+                perf_info = report.get('performance', {})
+                self.performance_labels['avg_response_time'].config(text=f"Avg Response: {perf_info.get('avg_response_time_ms', 0):.1f} ms")
+                self.performance_labels['max_response_time'].config(text=f"Max Response: {perf_info.get('max_response_time_ms', 0):.1f} ms")
+                self.performance_labels['avg_update_duration'].config(text=f"Avg Update: {perf_info.get('avg_update_duration_s', 0):.2f} s")
+                self.performance_labels['max_update_duration'].config(text=f"Max Update: {perf_info.get('max_update_duration_s', 0):.2f} s")
+            
+            # อัพเดท status monitor labels
+            if hasattr(self, 'status_monitor_labels'):
+                reliability_info = report.get('reliability', {})
+                error_count = reliability_info.get('error_count', 0)
+                success_count = reliability_info.get('success_count', 0)
+                success_rate = reliability_info.get('success_rate', 0)
+                
+                self.status_monitor_labels['total_operations'].config(text=f"Total Operations: {error_count + success_count}")
+                self.status_monitor_labels['error_count'].config(text=f"Errors: {error_count}")
+                self.status_monitor_labels['success_count'].config(text=f"Successes: {success_count}")
+                
+                # สี success rate
+                if success_rate >= 95:
+                    color = '#00ff88'
+                elif success_rate >= 90:
+                    color = '#ffaa00'
+                else:
+                    color = '#ff4444'
+                
+                self.status_monitor_labels['success_rate'].config(
+                    text=f"Success Rate: {success_rate:.1f}%",
+                    fg=color
+                )
+                
+                self.status_monitor_labels['widget_count'].config(text=f"Active Widgets: {len(self.position_widgets)}")
+                self.status_monitor_labels['last_update'].config(text=f"Last Update: {datetime.now().strftime('%H:%M:%S')}")
+            
+            logger.debug("📊 Performance stats refreshed")
+            
+        except Exception as e:
+            logger.error(f"❌ Error refreshing performance stats: {e}")
+    
+    def start_performance_monitoring(self):
+        """เริ่มการติดตามประสิทธิภาพแบบอัตโนมัติ"""
+        try:
+            # รีเฟรช stats ครั้งแรก
+            self.refresh_performance_stats()
+            
+            # ตั้งเวลารีเฟรชทุก 30 วินาที
+            self.root.after(30000, self.schedule_performance_refresh)
+            
+            logger.info("🚀 Performance monitoring started")
+            
+        except Exception as e:
+            logger.error(f"❌ Error starting performance monitoring: {e}")
+    
+    def schedule_performance_refresh(self):
+        """กำหนดเวลารีเฟรช performance stats"""
+        try:
+            # รีเฟรช stats
+            self.refresh_performance_stats()
+            
+            # กำหนดครั้งต่อไป
+            self.root.after(30000, self.schedule_performance_refresh)
+            
+        except Exception as e:
+            logger.error(f"❌ Error scheduling performance refresh: {e}")
         
         
         
@@ -1292,6 +1607,10 @@ class TradingGUI:
                     if success:
                         # อัพเดท GUI ใน main thread
                         self.root.after(0, lambda: self.update_trading_status(True))
+                        
+                        # 🚀 เริ่ม Async Status Updater
+                        self.root.after(0, self.start_async_status_updates)
+                        
                         logger.info("เริ่มการเทรดจาก GUI สำเร็จ")
                 except Exception as e:
                     logger.error(f"เกิดข้อผิดพลาดในการเริ่มเทรด: {str(e)}")
@@ -1326,6 +1645,10 @@ class TradingGUI:
             def stop_trading_async():
                 try:
                     self.trading_system.stop_trading()
+                    
+                    # 🚀 หยุด Async Status Updater
+                    self.root.after(0, self.stop_async_status_updates)
+                    
                     # อัพเดท GUI ใน main thread
                     self.root.after(0, lambda: self.update_trading_status(False))
                     logger.info("หยุดการเทรดจาก GUI สำเร็จ")
@@ -1414,6 +1737,9 @@ class TradingGUI:
             # หยุด update thread
             self.stop_update = True
             
+            # 🚀 หยุด Async Status Updater
+            self.stop_async_status_updates()
+            
             # หยุดการเทรดก่อน
             if hasattr(self, 'trading_system') and self.trading_system.is_running:
                 self.trading_system.stop_trading()
@@ -1421,6 +1747,16 @@ class TradingGUI:
             # รอ update thread ให้หยุด
             if self.update_thread and self.update_thread.is_alive():
                 self.update_thread.join(timeout=2)  # เพิ่มเวลารอ
+            
+            # 🧹 ล้าง position widgets
+            self.clear_position_widgets()
+            
+            # 🧹 หยุด performance monitoring
+            if hasattr(self, 'performance_optimizer'):
+                try:
+                    self.performance_optimizer = None
+                except:
+                    pass
                 
             # ตัดการเชื่อมต่อ MT5
             try:
@@ -1626,6 +1962,11 @@ class TradingGUI:
             self.last_status_display.clear()
             self.animation_queue.clear()
             
+            # รีเซ็ต lazy loader
+            self.lazy_loader.loaded_positions.clear()
+            self.lazy_loader.loaded_widgets.clear()
+            self.lazy_loader.load_order.clear()
+            
             logger.info("🧹 [GUI] Cleared all position widgets")
             
         except Exception as e:
@@ -1643,6 +1984,169 @@ class TradingGUI:
         except Exception as e:
             logger.error(f"❌ Error getting animation status: {e}")
             return {}
+    
+    def start_async_status_updates(self):
+        """🚀 เริ่ม Async Status Updates"""
+        try:
+            if not self.trading_system:
+                logger.warning("🚫 No trading system available for status updates")
+                return
+            
+            # ตรวจสอบว่า position_status_manager มีอยู่หรือไม่
+            if not hasattr(self.trading_system, 'status_manager') or not self.trading_system.status_manager:
+                logger.warning("🚫 No status manager available")
+                return
+            
+            # สร้าง AsyncStatusUpdater
+            self.async_status_updater = AsyncStatusUpdater(
+                gui_instance=self,
+                status_manager=self.trading_system.status_manager,
+                update_interval=5.0  # อัพเดททุก 5 วินาที
+            )
+            
+            # เริ่ม background updates
+            self.async_status_updater.start_background_updates()
+            
+            logger.info("🚀 Async Status Updates started")
+            
+        except Exception as e:
+            logger.error(f"❌ Error starting async status updates: {e}")
+    
+    def stop_async_status_updates(self):
+        """🛑 หยุด Async Status Updates"""
+        try:
+            if self.async_status_updater:
+                self.async_status_updater.stop_background_updates()
+                self.async_status_updater = None
+                logger.info("🛑 Async Status Updates stopped")
+            
+        except Exception as e:
+            logger.error(f"❌ Error stopping async status updates: {e}")
+    
+    def update_position_status_display(self, status_results: Dict[int, Any]):
+        """🚀 อัพเดทแสดงผลสถานะ (เรียกจาก Main Thread เท่านั้น)"""
+        start_time = time.time()
+        
+        try:
+            if not self.position_status_frame or not self.status_scroll_frame:
+                logger.debug("🚫 Position status frame not ready")
+                return
+            
+            if not status_results:
+                return
+            
+            # ตรวจสอบ throttling
+            if not self.performance_optimizer.should_update('position_status'):
+                logger.debug("⏱️ Position status update throttled")
+                return
+            
+            # อัพเดท status info labels
+            self._update_status_info_labels(status_results)
+            
+            # อัพเดท position widgets
+            for ticket, status_obj in status_results.items():
+                widget = self.position_widgets.get(ticket)
+                
+                if widget:
+                    # อัพเดท Widget ที่มีอยู่
+                    position_data = self._convert_status_to_position_data(status_obj)
+                    widget.update_status(position_data)
+                else:
+                    # สร้าง Widget ใหม่ (ใช้ lazy loading)
+                    if self.lazy_loader.is_loaded(ticket) or len(self.position_widgets) < 30:
+                        self._create_position_widget(ticket, status_obj)
+            
+            # ลบ widgets ของ positions ที่ปิดแล้ว
+            self._cleanup_closed_positions(status_results)
+            
+            # บันทึกประสิทธิภาพ
+            update_duration = time.time() - start_time
+            self.performance_optimizer.record_update_duration('position_status', update_duration)
+            self.performance_optimizer.record_success('position_status_update')
+            
+            logger.debug(f"🔄 Updated {len(status_results)} position statuses ({update_duration:.3f}s)")
+            
+        except Exception as e:
+            self.performance_optimizer.record_error('position_status_update')
+            logger.error(f"❌ Error updating position status display: {e}")
+    
+    def _update_status_info_labels(self, status_results: Dict[int, Any]):
+        """อัพเดท status info labels"""
+        try:
+            if not hasattr(self, 'status_info_labels'):
+                return
+            
+            total_positions = len(status_results)
+            hg_count = sum(1 for s in status_results.values() if 'HG' in s.status)
+            guard_count = sum(1 for s in status_results.values() if 'Support Guard' in s.status)
+            protected_count = sum(1 for s in status_results.values() if 'Protected' in s.status)
+            
+            # อัพเดท labels
+            self.status_info_labels['total_positions'].config(text=f"Total: {total_positions}")
+            self.status_info_labels['active_hg'].config(text=f"HG: {hg_count}")
+            self.status_info_labels['support_guards'].config(text=f"Guards: {guard_count}")
+            self.status_info_labels['protected_positions'].config(text=f"Protected: {protected_count}")
+            self.status_info_labels['last_update'].config(text=f"Last Update: {datetime.now().strftime('%H:%M:%S')}")
+            
+        except Exception as e:
+            logger.error(f"❌ Error updating status info labels: {e}")
+    
+    def _convert_status_to_position_data(self, status_obj: Any) -> Dict[str, Any]:
+        """แปลง status object เป็น position data สำหรับ widget"""
+        try:
+            return {
+                'ticket': status_obj.ticket,
+                'type': 0 if status_obj.direction == 'BUY' else 1,
+                'volume': 0.01,  # Default volume
+                'price_open': status_obj.price_open,
+                'price_current': status_obj.price_current,
+                'profit': status_obj.profit,
+                'status': status_obj.status,
+                'relationships': status_obj.relationships,
+                'ratio_info': status_obj.ratio_info
+            }
+            
+        except Exception as e:
+            logger.error(f"❌ Error converting status to position data: {e}")
+            return {}
+    
+    def _create_position_widget(self, ticket: int, status_obj: Any):
+        """สร้าง Widget ใหม่สำหรับ Position"""
+        try:
+            # แปลงข้อมูล
+            position_data = self._convert_status_to_position_data(status_obj)
+            
+            # สร้าง widget
+            widget = PositionStatusWidget(self.status_scroll_frame, position_data)
+            
+            # เก็บ widget
+            self.position_widgets[ticket] = widget
+            
+            # วาง widget ในตำแหน่งที่เหมาะสม
+            widget.frame.pack(fill='x', padx=5, pady=2)
+            
+            logger.debug(f"✅ Created position widget for #{ticket}")
+            
+        except Exception as e:
+            logger.error(f"❌ Error creating position widget: {e}")
+    
+    def _cleanup_closed_positions(self, status_results: Dict[int, Any]):
+        """ลบ Widget ของ Position ที่ปิดแล้ว"""
+        try:
+            active_tickets = set(status_results.keys())
+            
+            for ticket in list(self.position_widgets.keys()):
+                if ticket not in active_tickets:
+                    widget = self.position_widgets.pop(ticket)
+                    widget.destroy()
+                    
+                    # อัพเดท lazy loader
+                    self.lazy_loader.unload_position(ticket)
+                    
+                    logger.debug(f"🧹 Cleaned up widget for #{ticket}")
+            
+        except Exception as e:
+            logger.error(f"❌ Error cleaning up closed positions: {e}")
 
     def alert(self, message, level='info'):
         """แสดงการแจ้งเตือน"""
