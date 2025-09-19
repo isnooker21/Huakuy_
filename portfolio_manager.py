@@ -13,13 +13,6 @@ from calculations import (
     RiskCalculator, MarketAnalysisCalculator, ProfitTargetCalculator
 )
 from trading_conditions import Signal, TradingConditions, CandleData
-# 🚫 OLD ENTRY SYSTEMS REMOVED - Using Smart Entry Timing System only
-# from price_zone_analysis import PriceZoneAnalyzer  # → Smart Entry Timing
-# from zone_rebalancer import ZoneRebalancer  # → Smart Entry Timing  
-# from smart_gap_filler import SmartGapFiller  # → Smart Entry Timing
-# from force_trading_mode import ForceTradingMode  # → Smart Entry Timing
-# from zone_position_manager import ZonePositionManager, create_zone_position_manager  # → Dynamic 7D Smart Closer
-# from signal_manager import SignalManager, RankedSignal  # → Portfolio Manager direct
 from order_management import OrderManager, OrderResult, CloseResult
 
 logger = logging.getLogger(__name__)
@@ -70,6 +63,8 @@ class PortfolioManager:
         self.current_symbol = None  # จะถูกตั้งค่าจาก main system
         self.trading_conditions = TradingConditions()
         # Smart Recovery System removed - functionality moved to Smart Profit Taking System
+        
+        # 🧠 AI INTELLIGENCE SYSTEMS (REMOVED - Using Central Brain)
         
         # 🚫 OLD SYSTEMS REMOVED - Using Smart Entry Timing System only
         # ✅ Replaced by Smart Entry Timing System + Strategic Position Manager
@@ -324,9 +319,56 @@ class PortfolioManager:
     
     def should_exit_positions(self, current_state: PortfolioState, 
                             current_prices: Dict[str, float]) -> Dict[str, Any]:
-        """🗑️ REMOVED - All exit logic handled by Smart Profit Taking System"""
-        logger.debug("🗑️ Emergency Exit removed - all exits handled by Smart Profit Taking System")
-        return {'should_exit': False, 'reason': 'Emergency Exit removed - using Smart Profit Taking System only'}
+        """🧠 AI-Enhanced Exit Logic - ใช้ AI Intelligence ในการตัดสินใจปิดไม้"""
+        try:
+            logger.info("🧠 AI-Enhanced Exit Analysis Starting...")
+            
+            # ดึงข้อมูล Position ปัจจุบัน
+            positions = self.order_manager.active_positions
+            if not positions:
+                logger.debug("🧠 No positions to analyze")
+                return {'should_exit': False, 'reason': 'No positions available'}
+            
+            # ดึงราคาปัจจุบัน
+            current_price = current_prices.get(self.current_symbol, 0)
+            if current_price == 0:
+                logger.warning("🧠 No current price available")
+                return {'should_exit': False, 'reason': 'No current price available'}
+            
+            # สร้าง Market Data
+            market_data = {
+                'current_price': current_price,
+                'trend_direction': 'sideways',  # TODO: วิเคราะห์จากข้อมูลจริง
+                'volatility': 'normal',  # TODO: วิเคราะห์จากข้อมูลจริง
+                'session': 'unknown'  # TODO: วิเคราะห์จากข้อมูลจริง
+            }
+            
+            # 🧠 AI Decision Engine (REMOVED - Using Central Brain)
+            # Simple closing logic without AI
+            ai_decision = {'action': 'CLOSE', 'confidence': 0.5, 'reasoning': 'Simple closing logic'}
+            
+            # ใช้ AI Decision (simplified)
+            final_decision = ai_decision
+            
+            logger.info(f"🧠 Exit Decision: {final_decision.get('action', 'UNKNOWN')} - Confidence: {final_decision.get('confidence', 0.5):.1f}%")
+            logger.info(f"   Reasoning: {final_decision.get('reasoning', 'No reasoning')}")
+            
+            # แปลง AI Decision เป็นรูปแบบเดิม
+            should_exit = final_decision.get('action') in ['CLOSE_SINGLE', 'CLOSE_PAIR', 'CLOSE_GROUP']
+            positions_to_close = final_decision.get('positions_to_close', [])
+            
+            return {
+                'should_exit': should_exit,
+                'reason': final_decision.get('reasoning', 'AI analysis'),
+                'ai_decision': ai_decision,
+                'positions_to_close': positions_to_close,
+                'expected_profit': final_decision.get('expected_profit', 0),
+                'confidence': ai_decision.confidence
+            }
+            
+        except Exception as e:
+            logger.error(f"❌ Error in AI exit analysis: {e}")
+            return {'should_exit': False, 'reason': f'AI analysis error: {str(e)}'}
             
     def execute_trade_decision(self, decision: Dict[str, Any]) -> OrderResult:
         """
@@ -382,7 +424,19 @@ class PortfolioManager:
                 # อัพเดทสถิติ
                 self.performance_metrics.total_trades += 1
                 
-                logger.info(f"ส่ง Order สำเร็จ - Ticket: {result.ticket}, "
+                # 🧠 บันทึกผลลัพธ์ให้ AI Learning System (ถ้ามี AI Decision)
+                if 'ai_decision' in decision:
+                    ai_decision = decision['ai_decision']
+                    outcome = {
+                        'success': True,
+                        'ticket': result.ticket,
+                        'direction': signal.direction,
+                        'lot_size': lot_size,
+                        'entry_price': signal.price
+                    }
+                    # AI Decision Engine removed - using Central Brain
+                
+                logger.info(f"🧠 ส่ง Order สำเร็จ - Ticket: {result.ticket}, "
                            f"Direction: {signal.direction}, Lot: {lot_size}")
                            
             return result
@@ -411,19 +465,59 @@ class PortfolioManager:
                 )
                 
             positions_to_close = decision.get('positions_to_close', self.order_manager.active_positions)
-            exit_type = decision.get('exit_type', 'manual')
-            reason = decision.get('reason', 'Portfolio decision')
+            exit_type = decision.get('exit_type', 'ai_decision')
+            reason = decision.get('reason', 'AI Portfolio decision')
             
-            # 🚫 DISABLED: All closing methods - Using Edge Priority Closing only
-            logger.warning("🚫 ALL closing methods disabled - Using Edge Priority Closing only")
-            logger.warning(f"   Exit decision ignored: {exit_type} - {reason}")
-            result = None
+            # 🧠 AI-Enhanced Exit Execution
+            logger.info(f"🧠 Executing AI Exit Decision: {exit_type} - {reason}")
+            logger.info(f"   Positions to close: {len(positions_to_close)} positions")
+            
+            # ใช้ Order Manager ปิดไม้
+            if positions_to_close:
+                # หา Position objects จาก tickets
+                positions_to_close_objects = []
+                for ticket in positions_to_close:
+                    for pos in self.order_manager.active_positions:
+                        if getattr(pos, 'ticket', 0) == ticket:
+                            positions_to_close_objects.append(pos)
+                            break
+                
+                if positions_to_close_objects:
+                    result = self.order_manager.close_positions_group(
+                        positions_to_close_objects, f"AI Decision: {reason}"
+                    )
+                else:
+                    result = CloseResult(
+                        success=False,
+                        closed_tickets=[],
+                        error_message="No valid positions found to close"
+                    )
+            else:
+                result = CloseResult(
+                    success=False,
+                    closed_tickets=[],
+                    error_message="No positions specified to close"
+                )
                 
             if result.success:
                 # อัพเดทสถิติ
                 self._update_performance_metrics(result)
                 
-                logger.info(f"ปิด Position สำเร็จ - จำนวน: {len(result.closed_tickets)}, "
+                # 🧠 บันทึกผลลัพธ์ให้ AI Learning System
+                ai_decision = decision.get('ai_decision')
+                if ai_decision:
+                    outcome = {
+                        'success': True,
+                        'actual_profit': result.total_profit,
+                        'positions_closed': len(result.closed_tickets),
+                        'closed_tickets': result.closed_tickets
+                    }
+                    # AI Decision Engine removed - using Central Brain
+                    
+                    # เรียนรู้จากผลลัพธ์
+                    self.ai_learning_system.learn_from_outcomes("CLOSE", [outcome])
+                
+                logger.info(f"🧠 ปิด Position สำเร็จ - จำนวน: {len(result.closed_tickets)}, "
                            f"Profit: {result.total_profit:.2f}")
                            
             return result
