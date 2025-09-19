@@ -875,11 +875,11 @@ class AdaptiveTradingSystemGUI:
         """🚀 ปิดไม้ตามแผนที่สมดุล"""
         try:
             positions_to_close = closing_plan['all_positions_to_close']
-            
-            # ใช้ระบบปิดไม้เก่าที่มีอยู่
+                    
+                    # ใช้ระบบปิดไม้เก่าที่มีอยู่
             result = self.order_manager.close_positions_group(positions_to_close, "Balanced Edge Priority Closing")
-            
-            if result.success:
+                    
+                    if result.success:
                 # คำนวณผลลัพธ์
                 closed_buy = len([pos for pos in positions_to_close if getattr(pos, 'type', 0) == 0])
                 closed_sell = len([pos for pos in positions_to_close if getattr(pos, 'type', 0) == 1])
@@ -896,7 +896,7 @@ class AdaptiveTradingSystemGUI:
                     'remaining_buy': 0,  # จะคำนวณใหม่จาก positions ที่เหลือ
                     'remaining_sell': 0
                 }
-            else:
+                    else:
                 return {
                     'success': False,
                     'error': result.error_message,
@@ -944,7 +944,7 @@ class AdaptiveTradingSystemGUI:
                 
                 # บันทึก hedge pairs ไว้ใช้ในอนาคต
                 self._save_hedge_pairs(hedge_pairs)
-            else:
+                else:
                 logger.debug("🔗 [HEDGE PAIRING] No optimal hedge pairs found")
                 
         except Exception as e:
@@ -1028,6 +1028,7 @@ class AdaptiveTradingSystemGUI:
             position_classification = self._classify_positions(positions)
             
             # ตรวจสอบโอกาสปิดไม้ต่างๆ
+            self._check_lot_size_balancing(position_classification)  # ใหม่: ปรับ lot size ให้สมดุล
             self._check_far_position_closing(position_classification)  # ใหม่: ปิดไม้ไกลก่อน
             self._check_profitable_helper_closing(position_classification)
             self._check_orphan_position_management(position_classification, current_candle)
@@ -1037,6 +1038,130 @@ class AdaptiveTradingSystemGUI:
             
         except Exception as e:
             logger.error(f"🎯 [SMART POSITION] Error: {e}")
+    
+    def _check_lot_size_balancing(self, classification: Dict):
+        """⚖️ ตรวจสอบและปรับ lot size ให้สมดุล"""
+        try:
+            buy_positions = classification.get('edge_buy', []) + classification.get('middle_buy', []) + classification.get('near_buy', [])
+            sell_positions = classification.get('edge_sell', []) + classification.get('middle_sell', []) + classification.get('near_sell', [])
+            
+            if not buy_positions and not sell_positions:
+                return
+            
+            # วิเคราะห์ lot size ปัจจุบัน
+            lot_analysis = self._analyze_lot_sizes(buy_positions, sell_positions)
+            
+            if lot_analysis['needs_balancing']:
+                logger.info(f"⚖️ [LOT BALANCING] Detected lot size imbalance - BUY: {lot_analysis['buy_lots']}, SELL: {lot_analysis['sell_lots']}")
+                
+                # ปรับ lot size ให้สมดุล
+                self._balance_lot_sizes(lot_analysis)
+                
+        except Exception as e:
+            logger.error(f"⚖️ [LOT BALANCING] Error: {e}")
+    
+    def _analyze_lot_sizes(self, buy_positions: List, sell_positions: List) -> Dict:
+        """📊 วิเคราะห์ lot size ปัจจุบัน"""
+        try:
+            # คำนวณ lot size ของแต่ละฝั่ง
+            buy_lots = [getattr(pos, 'volume', 0.01) for pos in buy_positions]
+            sell_lots = [getattr(pos, 'volume', 0.01) for pos in sell_positions]
+            
+            # คำนวณสถิติ
+            buy_avg = sum(buy_lots) / len(buy_lots) if buy_lots else 0
+            sell_avg = sum(sell_lots) / len(sell_lots) if sell_lots else 0
+            
+            # คำนวณความแตกต่าง
+            buy_variance = max(buy_lots) - min(buy_lots) if buy_lots else 0
+            sell_variance = max(sell_lots) - min(sell_lots) if sell_lots else 0
+            
+            # ตรวจสอบว่าต้องปรับหรือไม่
+            needs_balancing = (buy_variance > 0.01 or sell_variance > 0.01) and (len(buy_lots) > 1 or len(sell_lots) > 1)
+            
+            return {
+                'buy_lots': buy_lots,
+                'sell_lots': sell_lots,
+                'buy_avg': buy_avg,
+                'sell_avg': sell_avg,
+                'buy_variance': buy_variance,
+                'sell_variance': sell_variance,
+                'needs_balancing': needs_balancing,
+                'buy_positions': buy_positions,
+                'sell_positions': sell_positions
+            }
+            
+        except Exception as e:
+            logger.error(f"📊 [LOT ANALYSIS] Error: {e}")
+            return {'needs_balancing': False}
+    
+    def _balance_lot_sizes(self, lot_analysis: Dict):
+        """⚖️ ปรับ lot size ให้สมดุล"""
+        try:
+            buy_positions = lot_analysis['buy_positions']
+            sell_positions = lot_analysis['sell_positions']
+            
+            # คำนวณ lot size เป้าหมาย
+            target_buy_lot = lot_analysis['buy_avg'] if lot_analysis['buy_avg'] > 0 else 0.05
+            target_sell_lot = lot_analysis['sell_avg'] if lot_analysis['sell_avg'] > 0 else 0.05
+            
+            # ปรับ lot size ของไม้ BUY
+            for pos in buy_positions:
+                current_lot = getattr(pos, 'volume', 0.01)
+                if abs(current_lot - target_buy_lot) > 0.01:  # ต่างกันมากกว่า 0.01
+                    self._adjust_position_lot_size(pos, target_buy_lot, "BUY Lot Balancing")
+            
+            # ปรับ lot size ของไม้ SELL
+            for pos in sell_positions:
+                current_lot = getattr(pos, 'volume', 0.01)
+                if abs(current_lot - target_sell_lot) > 0.01:  # ต่างกันมากกว่า 0.01
+                    self._adjust_position_lot_size(pos, target_sell_lot, "SELL Lot Balancing")
+                    
+        except Exception as e:
+            logger.error(f"⚖️ [LOT BALANCING] Error: {e}")
+    
+    def _adjust_position_lot_size(self, position: Any, target_lot: float, reason: str):
+        """🔧 ปรับ lot size ของไม้"""
+        try:
+            current_lot = getattr(position, 'volume', 0.01)
+            ticket = getattr(position, 'ticket', 0)
+            
+            # คำนวณความแตกต่าง
+            lot_diff = target_lot - current_lot
+            
+            if abs(lot_diff) < 0.01:  # ต่างกันน้อยกว่า 0.01 ไม่ต้องปรับ
+                return
+            
+            # ปิดไม้เก่า
+            close_result = self.order_manager.close_positions_group([position], f"Lot Adjustment - {reason}")
+            
+            if close_result.success:
+                # เปิดไม้ใหม่ด้วย lot size ที่ถูกต้อง
+                pos_type = getattr(position, 'type', 0)
+                price_open = getattr(position, 'price_open', 0)
+                symbol = getattr(position, 'symbol', 'XAUUSD')
+                
+                # สร้าง Signal สำหรับเปิดไม้ใหม่
+                from trading_conditions import Signal
+                signal = Signal(
+                    symbol=symbol,
+                    action='BUY' if pos_type == 0 else 'SELL',
+                    price=price_open,
+                    lot_size=target_lot,
+                    reason=f"Lot Size Adjustment - {reason}"
+                )
+                
+                # เปิดไม้ใหม่
+                order_result = self.order_manager.place_order_from_signal(signal)
+                
+                if order_result.success:
+                    logger.info(f"🔧 [LOT ADJUST] Successfully adjusted {symbol} {ticket}: {current_lot:.2f} → {target_lot:.2f}")
+            else:
+                    logger.warning(f"🔧 [LOT ADJUST] Failed to open new position: {order_result.error_message}")
+            else:
+                logger.warning(f"🔧 [LOT ADJUST] Failed to close position {ticket}: {close_result.error_message}")
+            
+        except Exception as e:
+            logger.error(f"🔧 [LOT ADJUST] Error: {e}")
     
     def _check_far_position_closing(self, classification: Dict):
         """🎯 ตรวจสอบการปิดไม้ไกล - เน้นไม้ที่ไกลจากราคาปัจจุบันก่อน"""
