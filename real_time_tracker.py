@@ -521,3 +521,404 @@ class RealTimeTracker:
         self.position_history.clear()
         self.status_history.clear()
         logger.info("🧹 [HISTORY] Cleared all history")
+    
+    # 🚀 ORDER TRACKING & MANAGEMENT FUNCTIONS
+    
+    def track_order(self, order_data: Dict[str, Any]) -> bool:
+        """ติดตาม Order ใหม่"""
+        try:
+            ticket = order_data.get('ticket', 0)
+            if not ticket:
+                logger.error("❌ [ORDER TRACK] No ticket provided")
+                return False
+            
+            # เก็บข้อมูล Order สำหรับติดตาม
+            if not hasattr(self, 'tracked_orders'):
+                self.tracked_orders = {}
+            
+            self.tracked_orders[ticket] = {
+                'ticket': ticket,
+                'symbol': order_data.get('symbol', 'UNKNOWN'),
+                'type': order_data.get('type', 'MARKET'),
+                'direction': order_data.get('direction', 'BUY'),
+                'volume': order_data.get('volume', 0.0),
+                'price': order_data.get('price', 0.0),
+                'sl': order_data.get('sl', 0.0),
+                'tp': order_data.get('tp', 0.0),
+                'comment': order_data.get('comment', ''),
+                'magic': order_data.get('magic', 0),
+                'status': 'PENDING',
+                'created_time': time.time(),
+                'last_update': time.time(),
+                'retry_count': 0,
+                'max_retries': 3
+            }
+            
+            logger.info(f"📝 [ORDER TRACK] Tracking order {ticket}: {order_data.get('direction', 'BUY')} {order_data.get('symbol', 'UNKNOWN')} {order_data.get('volume', 0.0)}")
+            return True
+            
+        except Exception as e:
+            logger.error(f"❌ Error tracking order: {e}")
+            return False
+    
+    def close_order(self, ticket: int, reason: str = "") -> bool:
+        """ปิด Order ตาม Ticket"""
+        try:
+            if not hasattr(self, 'tracked_orders') or ticket not in self.tracked_orders:
+                logger.warning(f"⚠️ [ORDER CLOSE] Order {ticket} not tracked")
+                return False
+            
+            # ใช้ OrderManager ปิด Position
+            if hasattr(self.trading_system, 'order_manager'):
+                # ดึงข้อมูล Position จาก OrderManager
+                positions = self.trading_system.order_manager.get_positions()
+                target_position = None
+                
+                for pos in positions:
+                    if hasattr(pos, 'ticket') and pos.ticket == ticket:
+                        target_position = pos
+                        break
+                
+                if target_position:
+                    # ใช้ close_positions_group เพื่อปิดออเดอร์
+                    result = self.trading_system.order_manager.close_positions_group([target_position], reason)
+                    
+                    if result.success:
+                        logger.info(f"✅ [ORDER CLOSE] Successfully closed order {ticket}: {reason} - Profit: ${result.total_profit:.2f}")
+                        
+                        # อัพเดทสถานะ
+                        self.tracked_orders[ticket]['status'] = 'CLOSED'
+                        self.tracked_orders[ticket]['last_update'] = time.time()
+                        
+                        return True
+                    else:
+                        logger.error(f"❌ [ORDER CLOSE] Failed to close order {ticket}: {result.error_message}")
+                        return False
+                else:
+                    logger.error(f"❌ [ORDER CLOSE] Position {ticket} not found in OrderManager")
+                    return False
+            else:
+                logger.error("❌ [ORDER CLOSE] OrderManager not available")
+                return False
+                
+        except Exception as e:
+            logger.error(f"❌ Error closing order {ticket}: {e}")
+            return False
+    
+    def close_orders_by_status(self, status: str, reason: str = "") -> Dict[str, Any]:
+        """ปิด Order ตามสถานะ"""
+        try:
+            if not hasattr(self, 'tracked_orders'):
+                return {'success': False, 'message': 'No tracked orders'}
+            
+            orders_to_close = []
+            for ticket, order in self.tracked_orders.items():
+                if order.get('status') == status:
+                    orders_to_close.append(ticket)
+            
+            if not orders_to_close:
+                return {'success': True, 'message': f'No orders with status {status} found', 'closed_count': 0}
+            
+            # ใช้ OrderManager ปิดหลาย Order
+            if hasattr(self.trading_system, 'order_manager'):
+                # ดึงข้อมูล Position จาก OrderManager
+                positions = self.trading_system.order_manager.get_positions()
+                target_positions = []
+                
+                for pos in positions:
+                    if hasattr(pos, 'ticket') and pos.ticket in orders_to_close:
+                        target_positions.append(pos)
+                
+                if target_positions:
+                    result = self.trading_system.order_manager.close_positions_group(target_positions, reason)
+                    
+                    if result.success:
+                        # อัพเดทสถานะ
+                        for ticket in orders_to_close:
+                            if ticket in self.tracked_orders:
+                                self.tracked_orders[ticket]['status'] = 'CLOSED'
+                                self.tracked_orders[ticket]['last_update'] = time.time()
+                        
+                        logger.info(f"✅ [ORDER CLOSE] Successfully closed {len(orders_to_close)} orders with status {status} - Profit: ${result.total_profit:.2f}")
+                        return {
+                            'success': True, 
+                            'message': f'Closed {len(orders_to_close)} orders',
+                            'closed_count': len(orders_to_close),
+                            'closed_tickets': orders_to_close,
+                            'total_profit': result.total_profit
+                        }
+                    else:
+                        logger.error(f"❌ [ORDER CLOSE] Failed to close orders: {result.error_message}")
+                        return {'success': False, 'message': result.error_message}
+                else:
+                    logger.error(f"❌ [ORDER CLOSE] No matching positions found for orders with status {status}")
+                    return {'success': False, 'message': f'No matching positions found for orders with status {status}'}
+            else:
+                logger.error("❌ [ORDER CLOSE] OrderManager not available")
+                return {'success': False, 'message': 'OrderManager not available'}
+                
+        except Exception as e:
+            logger.error(f"❌ Error closing orders by status: {e}")
+            return {'success': False, 'message': str(e)}
+    
+    def close_orders_by_profit(self, min_profit: float = 0.0, max_profit: float = None, reason: str = "") -> Dict[str, Any]:
+        """ปิด Order ตาม Profit"""
+        try:
+            if not hasattr(self, 'tracked_orders'):
+                return {'success': False, 'message': 'No tracked orders'}
+            
+            orders_to_close = []
+            current_positions = self._get_current_positions()
+            
+            # สร้าง mapping ของ ticket -> profit
+            position_profits = {}
+            for pos in current_positions:
+                ticket = getattr(pos, 'ticket', 0)
+                profit = getattr(pos, 'profit', 0.0)
+                position_profits[ticket] = profit
+            
+            for ticket, order in self.tracked_orders.items():
+                if order.get('status') == 'FILLED':
+                    profit = position_profits.get(ticket, 0.0)
+                    
+                    # ตรวจสอบเงื่อนไข profit
+                    if max_profit is None:
+                        if profit >= min_profit:
+                            orders_to_close.append(ticket)
+                    else:
+                        if min_profit <= profit <= max_profit:
+                            orders_to_close.append(ticket)
+            
+            if not orders_to_close:
+                return {'success': True, 'message': f'No orders matching profit criteria', 'closed_count': 0}
+            
+            # ใช้ OrderManager ปิดหลาย Order
+            if hasattr(self.trading_system, 'order_manager'):
+                # ดึงข้อมูล Position จาก OrderManager
+                positions = self.trading_system.order_manager.get_positions()
+                target_positions = []
+                
+                for pos in positions:
+                    if hasattr(pos, 'ticket') and pos.ticket in orders_to_close:
+                        target_positions.append(pos)
+                
+                if target_positions:
+                    result = self.trading_system.order_manager.close_positions_group(target_positions, reason)
+                    
+                    if result.success:
+                        # อัพเดทสถานะ
+                        for ticket in orders_to_close:
+                            if ticket in self.tracked_orders:
+                                self.tracked_orders[ticket]['status'] = 'CLOSED'
+                                self.tracked_orders[ticket]['last_update'] = time.time()
+                        
+                        logger.info(f"✅ [ORDER CLOSE] Successfully closed {len(orders_to_close)} orders by profit - Profit: ${result.total_profit:.2f}")
+                        return {
+                            'success': True, 
+                            'message': f'Closed {len(orders_to_close)} orders by profit',
+                            'closed_count': len(orders_to_close),
+                            'closed_tickets': orders_to_close,
+                            'total_profit': result.total_profit
+                        }
+                    else:
+                        logger.error(f"❌ [ORDER CLOSE] Failed to close orders by profit: {result.error_message}")
+                        return {'success': False, 'message': result.error_message}
+                else:
+                    logger.error(f"❌ [ORDER CLOSE] No matching positions found for profit-based orders")
+                    return {'success': False, 'message': 'No matching positions found for profit-based orders'}
+            else:
+                logger.error("❌ [ORDER CLOSE] OrderManager not available")
+                return {'success': False, 'message': 'OrderManager not available'}
+                
+        except Exception as e:
+            logger.error(f"❌ Error closing orders by profit: {e}")
+            return {'success': False, 'message': str(e)}
+    
+    def get_tracked_orders(self) -> Dict[int, Dict[str, Any]]:
+        """ดึง Order ที่ติดตามทั้งหมด"""
+        try:
+            if not hasattr(self, 'tracked_orders'):
+                return {}
+            return self.tracked_orders.copy()
+        except Exception as e:
+            logger.error(f"❌ Error getting tracked orders: {e}")
+            return {}
+    
+    def get_orders_by_status(self, status: str) -> List[Dict[str, Any]]:
+        """ดึง Order ตามสถานะ"""
+        try:
+            if not hasattr(self, 'tracked_orders'):
+                return []
+            
+            return [
+                order for order in self.tracked_orders.values() 
+                if order.get('status') == status
+            ]
+        except Exception as e:
+            logger.error(f"❌ Error getting orders by status: {e}")
+            return []
+    
+    def get_order_statistics(self) -> Dict[str, Any]:
+        """ดึงสถิติ Order"""
+        try:
+            if not hasattr(self, 'tracked_orders'):
+                return {
+                    'total_orders': 0,
+                    'pending_orders': 0,
+                    'filled_orders': 0,
+                    'closed_orders': 0,
+                    'error_orders': 0
+                }
+            
+            total_orders = len(self.tracked_orders)
+            pending_orders = len([o for o in self.tracked_orders.values() if o.get('status') == 'PENDING'])
+            filled_orders = len([o for o in self.tracked_orders.values() if o.get('status') == 'FILLED'])
+            closed_orders = len([o for o in self.tracked_orders.values() if o.get('status') == 'CLOSED'])
+            error_orders = len([o for o in self.tracked_orders.values() if o.get('status') == 'ERROR'])
+            
+            return {
+                'total_orders': total_orders,
+                'pending_orders': pending_orders,
+                'filled_orders': filled_orders,
+                'closed_orders': closed_orders,
+                'error_orders': error_orders,
+                'success_rate': (filled_orders / total_orders * 100) if total_orders > 0 else 0
+            }
+        except Exception as e:
+            logger.error(f"❌ Error getting order statistics: {e}")
+            return {}
+    
+    def update_order_status(self, ticket: int, status: str) -> bool:
+        """อัพเดทสถานะ Order"""
+        try:
+            if not hasattr(self, 'tracked_orders') or ticket not in self.tracked_orders:
+                return False
+            
+            old_status = self.tracked_orders[ticket].get('status')
+            self.tracked_orders[ticket]['status'] = status
+            self.tracked_orders[ticket]['last_update'] = time.time()
+            
+            if old_status != status:
+                logger.info(f"🔄 [ORDER STATUS] #{ticket}: {old_status} → {status}")
+            
+            return True
+        except Exception as e:
+            logger.error(f"❌ Error updating order status: {e}")
+            return False
+    
+    def auto_close_orders_by_condition(self, condition_func: Callable, reason: str = "Auto Close") -> Dict[str, Any]:
+        """ปิดออเดอร์อัตโนมัติตามเงื่อนไขที่กำหนด"""
+        try:
+            if not hasattr(self, 'tracked_orders'):
+                return {'success': False, 'message': 'No tracked orders'}
+            
+            orders_to_close = []
+            current_positions = self._get_current_positions()
+            
+            # สร้าง mapping ของ ticket -> position
+            position_map = {}
+            for pos in current_positions:
+                ticket = getattr(pos, 'ticket', 0)
+                position_map[ticket] = pos
+            
+            for ticket, order in self.tracked_orders.items():
+                if order.get('status') == 'FILLED' and ticket in position_map:
+                    position = position_map[ticket]
+                    
+                    # ตรวจสอบเงื่อนไข
+                    if condition_func(position, order):
+                        orders_to_close.append(ticket)
+            
+            if not orders_to_close:
+                return {'success': True, 'message': 'No orders matching condition', 'closed_count': 0}
+            
+            # ใช้ OrderManager ปิดหลาย Order
+            if hasattr(self.trading_system, 'order_manager'):
+                target_positions = [position_map[ticket] for ticket in orders_to_close if ticket in position_map]
+                
+                if target_positions:
+                    result = self.trading_system.order_manager.close_positions_group(target_positions, reason)
+                    
+                    if result.success:
+                        # อัพเดทสถานะ
+                        for ticket in orders_to_close:
+                            if ticket in self.tracked_orders:
+                                self.tracked_orders[ticket]['status'] = 'CLOSED'
+                                self.tracked_orders[ticket]['last_update'] = time.time()
+                        
+                        logger.info(f"✅ [AUTO CLOSE] Successfully closed {len(orders_to_close)} orders by condition - Profit: ${result.total_profit:.2f}")
+                        return {
+                            'success': True, 
+                            'message': f'Closed {len(orders_to_close)} orders by condition',
+                            'closed_count': len(orders_to_close),
+                            'closed_tickets': orders_to_close,
+                            'total_profit': result.total_profit
+                        }
+                    else:
+                        logger.error(f"❌ [AUTO CLOSE] Failed to close orders by condition: {result.error_message}")
+                        return {'success': False, 'message': result.error_message}
+                else:
+                    logger.error(f"❌ [AUTO CLOSE] No matching positions found for condition-based orders")
+                    return {'success': False, 'message': 'No matching positions found for condition-based orders'}
+            else:
+                logger.error("❌ [AUTO CLOSE] OrderManager not available")
+                return {'success': False, 'message': 'OrderManager not available'}
+                
+        except Exception as e:
+            logger.error(f"❌ Error auto closing orders by condition: {e}")
+            return {'success': False, 'message': str(e)}
+    
+    def close_orders_by_magic_number(self, magic_number: int, reason: str = "") -> Dict[str, Any]:
+        """ปิดออเดอร์ตาม Magic Number"""
+        try:
+            if not hasattr(self, 'tracked_orders'):
+                return {'success': False, 'message': 'No tracked orders'}
+            
+            orders_to_close = []
+            for ticket, order in self.tracked_orders.items():
+                if order.get('magic') == magic_number and order.get('status') == 'FILLED':
+                    orders_to_close.append(ticket)
+            
+            if not orders_to_close:
+                return {'success': True, 'message': f'No orders with magic number {magic_number} found', 'closed_count': 0}
+            
+            # ใช้ OrderManager ปิดหลาย Order
+            if hasattr(self.trading_system, 'order_manager'):
+                positions = self.trading_system.order_manager.get_positions()
+                target_positions = []
+                
+                for pos in positions:
+                    if hasattr(pos, 'ticket') and pos.ticket in orders_to_close:
+                        target_positions.append(pos)
+                
+                if target_positions:
+                    result = self.trading_system.order_manager.close_positions_group(target_positions, reason)
+                    
+                    if result.success:
+                        # อัพเดทสถานะ
+                        for ticket in orders_to_close:
+                            if ticket in self.tracked_orders:
+                                self.tracked_orders[ticket]['status'] = 'CLOSED'
+                                self.tracked_orders[ticket]['last_update'] = time.time()
+                        
+                        logger.info(f"✅ [ORDER CLOSE] Successfully closed {len(orders_to_close)} orders with magic {magic_number} - Profit: ${result.total_profit:.2f}")
+                        return {
+                            'success': True, 
+                            'message': f'Closed {len(orders_to_close)} orders with magic {magic_number}',
+                            'closed_count': len(orders_to_close),
+                            'closed_tickets': orders_to_close,
+                            'total_profit': result.total_profit
+                        }
+                    else:
+                        logger.error(f"❌ [ORDER CLOSE] Failed to close orders with magic {magic_number}: {result.error_message}")
+                        return {'success': False, 'message': result.error_message}
+                else:
+                    logger.error(f"❌ [ORDER CLOSE] No matching positions found for magic {magic_number}")
+                    return {'success': False, 'message': f'No matching positions found for magic {magic_number}'}
+            else:
+                logger.error("❌ [ORDER CLOSE] OrderManager not available")
+                return {'success': False, 'message': 'OrderManager not available'}
+                
+        except Exception as e:
+            logger.error(f"❌ Error closing orders by magic number: {e}")
+            return {'success': False, 'message': str(e)}
