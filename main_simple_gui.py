@@ -1028,6 +1028,7 @@ class AdaptiveTradingSystemGUI:
             position_classification = self._classify_positions(positions)
             
             # ตรวจสอบโอกาสปิดไม้ต่างๆ
+            self._check_far_position_closing(position_classification)  # ใหม่: ปิดไม้ไกลก่อน
             self._check_profitable_helper_closing(position_classification)
             self._check_orphan_position_management(position_classification, current_candle)
             self._check_time_based_closing(position_classification)
@@ -1037,8 +1038,80 @@ class AdaptiveTradingSystemGUI:
         except Exception as e:
             logger.error(f"🎯 [SMART POSITION] Error: {e}")
     
+    def _check_far_position_closing(self, classification: Dict):
+        """🎯 ตรวจสอบการปิดไม้ไกล - เน้นไม้ที่ไกลจากราคาปัจจุบันก่อน"""
+        try:
+            edge_buy = classification.get('edge_buy', [])
+            edge_sell = classification.get('edge_sell', [])
+            
+            if not edge_buy and not edge_sell:
+                return
+            
+            # หาไม้ไกลที่สุด (Edge positions)
+            far_positions = []
+            
+            # เพิ่มไม้ BUY ที่ไกล
+            for pos in edge_buy:
+                far_positions.append({
+                    'position': pos,
+                    'type': 'BUY',
+                    'distance': abs(getattr(pos, 'price_open', 0) - getattr(pos, 'price_current', 0))
+                })
+            
+            # เพิ่มไม้ SELL ที่ไกล
+            for pos in edge_sell:
+                far_positions.append({
+                    'position': pos,
+                    'type': 'SELL',
+                    'distance': abs(getattr(pos, 'price_open', 0) - getattr(pos, 'price_current', 0))
+                })
+            
+            # เรียงตามระยะห่าง (ไกลที่สุดก่อน)
+            far_positions.sort(key=lambda x: x['distance'], reverse=True)
+            
+            # ปิดไม้ไกลที่สุด 2 ตัว (1 BUY + 1 SELL ถ้าเป็นไปได้)
+            buy_closed = False
+            sell_closed = False
+            
+            for pos_info in far_positions:
+                pos = pos_info['position']
+                pos_type = pos_info['type']
+                distance = pos_info['distance']
+                
+                # ปิดไม้ไกลที่ขาดทุน
+                profit = getattr(pos, 'profit', 0)
+                
+                if profit < -1.0:  # ขาดทุนมากกว่า $1
+                    if pos_type == 'BUY' and not buy_closed:
+                        self._execute_far_position_closing(pos, f"Far BUY (Distance: {distance:.2f})")
+                        buy_closed = True
+                    elif pos_type == 'SELL' and not sell_closed:
+                        self._execute_far_position_closing(pos, f"Far SELL (Distance: {distance:.2f})")
+                        sell_closed = True
+                
+                # ถ้าปิดครบทั้งสองฝั่งแล้ว ให้หยุด
+                if buy_closed and sell_closed:
+                    break
+                    
+        except Exception as e:
+            logger.error(f"🎯 [FAR POSITION] Error: {e}")
+    
+    def _execute_far_position_closing(self, position: Any, reason: str):
+        """🚀 ปิดไม้ไกล"""
+        try:
+            result = self.order_manager.close_positions_group([position], f"Far Position Closing - {reason}")
+            
+            if result.success:
+                profit = getattr(position, 'profit', 0)
+                logger.info(f"🎯 [FAR] Successfully closed far position: ${profit:.2f} - {reason}")
+            else:
+                logger.warning(f"🎯 [FAR] Failed to close: {result.error_message}")
+            
+        except Exception as e:
+            logger.error(f"🎯 [FAR] Error executing: {e}")
+    
     def _classify_positions(self, positions: List) -> Dict:
-        """🎯 จำแนกไม้ตามสถานะ - ระบบใหม่ที่ฉลาด"""
+        """🎯 จำแนกไม้ตามสถานะ - ระบบใหม่ที่ฉลาด + เน้นระยะห่าง"""
         try:
             current_time = datetime.now()
             current_price = getattr(positions[0], 'price_current', 0) if positions else 0
@@ -1046,23 +1119,31 @@ class AdaptiveTradingSystemGUI:
             classification = {
                 'profitable': [],      # ไม้กำไร
                 'losing': [],          # ไม้ขาดทุน
-                'edge_buy': [],        # ไม้ขอบ BUY
-                'edge_sell': [],       # ไม้ขอบ SELL
+                'edge_buy': [],        # ไม้ขอบ BUY (ไกลที่สุด)
+                'edge_sell': [],       # ไม้ขอบ SELL (ไกลที่สุด)
                 'middle_buy': [],      # ไม้กลาง BUY
                 'middle_sell': [],     # ไม้กลาง SELL
+                'near_buy': [],        # ไม้ BUY ใกล้ราคาปัจจุบัน
+                'near_sell': [],       # ไม้ SELL ใกล้ราคาปัจจุบัน
                 'orphan': [],          # ไม้เดี่ยว
                 'old_positions': [],   # ไม้เก่า
                 'high_risk': []        # ไม้เสี่ยงสูง
             }
             
+            # คำนวณระยะห่างและจัดเรียงตามระยะห่าง
+            positions_with_distance = []
             for pos in positions:
+                price_open = getattr(pos, 'price_open', 0)
+                distance = abs(price_open - current_price) if current_price > 0 else 0
+                positions_with_distance.append((pos, distance))
+            
+            # เรียงตามระยะห่าง (ไกลที่สุดก่อน)
+            positions_with_distance.sort(key=lambda x: x[1], reverse=True)
+            
+            for pos, distance in positions_with_distance:
                 pos_type = getattr(pos, 'type', 0)
                 profit = getattr(pos, 'profit', 0)
-                price_open = getattr(pos, 'price_open', 0)
                 time_open = getattr(pos, 'time', current_time)
-                
-                # คำนวณระยะห่างจากราคาปัจจุบัน
-                distance = abs(price_open - current_price) if current_price > 0 else 0
                 
                 # คำนวณเวลาที่เปิด
                 time_diff = (current_time - time_open).total_seconds() / 60  # นาที
@@ -1073,17 +1154,22 @@ class AdaptiveTradingSystemGUI:
                 elif profit < -1.0:
                     classification['losing'].append(pos)
                 
-                # จำแนกตามระยะห่าง (Edge vs Middle)
-                if distance > 2.0:  # ไม้ขอบ
+                # จำแนกตามระยะห่าง (ปรับใหม่ให้เน้นไม้ไกล)
+                if distance > 3.0:  # ไม้ไกลมาก (Edge) - ปิดก่อน
                     if pos_type == 0:  # BUY
                         classification['edge_buy'].append(pos)
                     else:  # SELL
                         classification['edge_sell'].append(pos)
-                else:  # ไม้กลาง
+                elif distance > 1.0:  # ไม้กลาง
                     if pos_type == 0:  # BUY
                         classification['middle_buy'].append(pos)
                     else:  # SELL
                         classification['middle_sell'].append(pos)
+                else:  # ไม้ใกล้ราคาปัจจุบัน - เก็บไว้
+                    if pos_type == 0:  # BUY
+                        classification['near_buy'].append(pos)
+                    else:  # SELL
+                        classification['near_sell'].append(pos)
                 
                 # ไม้เก่า (เปิดนานเกิน 1 ชั่วโมง)
                 if time_diff > 60:
@@ -1096,9 +1182,14 @@ class AdaptiveTradingSystemGUI:
             # หาไม้เดี่ยว (ไม้ที่ไม่มีคู่กำไร)
             classification['orphan'] = self._find_orphan_positions(positions)
             
+            # เรียงไม้ขอบตามระยะห่าง (ไกลที่สุดก่อน)
+            classification['edge_buy'].sort(key=lambda x: abs(getattr(x, 'price_open', 0) - current_price), reverse=True)
+            classification['edge_sell'].sort(key=lambda x: abs(getattr(x, 'price_open', 0) - current_price), reverse=True)
+            
             logger.info(f"🎯 [CLASSIFICATION] Profitable: {len(classification['profitable'])}, "
                        f"Losing: {len(classification['losing'])}, "
                        f"Edge: {len(classification['edge_buy']) + len(classification['edge_sell'])}, "
+                       f"Near: {len(classification['near_buy']) + len(classification['near_sell'])}, "
                        f"Old: {len(classification['old_positions'])}, "
                        f"Orphan: {len(classification['orphan'])}")
             
@@ -1158,7 +1249,7 @@ class AdaptiveTradingSystemGUI:
             return False
     
     def _check_profitable_helper_closing(self, classification: Dict):
-        """💰 ตรวจสอบการปิดไม้กำไรมาช่วยไม้ขาดทุน"""
+        """💰 ตรวจสอบการปิดไม้กำไรมาช่วยไม้ขาดทุน - เน้นไม้ไกลก่อน"""
         try:
             profitable = classification.get('profitable', [])
             losing = classification.get('losing', [])
@@ -1166,21 +1257,60 @@ class AdaptiveTradingSystemGUI:
             if not profitable or not losing:
                 return
             
-            # หาไม้กำไรที่เหมาะสมมาช่วยไม้ขาดทุน
-            helper_pairs = []
+            # หาไม้ขาดทุนที่ไกลที่สุดก่อน (Edge positions)
+            edge_losing = []
+            middle_losing = []
             
             for losing_pos in losing:
+                # ตรวจสอบว่าเป็นไม้ขอบหรือไม่
+                if losing_pos in classification.get('edge_buy', []) or losing_pos in classification.get('edge_sell', []):
+                    edge_losing.append(losing_pos)
+                else:
+                    middle_losing.append(losing_pos)
+            
+            # หาไม้กำไรที่เหมาะสมมาช่วยไม้ขาดทุน (เริ่มจากไม้ไกล)
+            helper_pairs = []
+            
+            # เริ่มจากไม้ขอบก่อน (ไกลที่สุด)
+            for losing_pos in edge_losing:
                 for helper_pos in profitable:
                     if self._can_positions_help_each_other(losing_pos, helper_pos):
                         total_profit = getattr(losing_pos, 'profit', 0) + getattr(helper_pos, 'profit', 0)
+                        # คำนวณระยะห่างรวม
+                        current_price = getattr(losing_pos, 'price_current', 0)
+                        losing_distance = abs(getattr(losing_pos, 'price_open', 0) - current_price)
+                        helper_distance = abs(getattr(helper_pos, 'price_open', 0) - current_price)
+                        total_distance = losing_distance + helper_distance
+                        
                         helper_pairs.append({
                             'losing': losing_pos,
                             'helper': helper_pos,
-                            'total_profit': total_profit
+                            'total_profit': total_profit,
+                            'total_distance': total_distance,
+                            'priority': 'edge'  # ไม้ขอบมีลำดับความสำคัญสูง
                         })
             
-            # เรียงตามกำไรรวม (มากที่สุดก่อน)
-            helper_pairs.sort(key=lambda x: x['total_profit'], reverse=True)
+            # ถ้าไม่มีไม้ขอบ ให้ใช้ไม้กลาง
+            if not helper_pairs:
+                for losing_pos in middle_losing:
+                    for helper_pos in profitable:
+                        if self._can_positions_help_each_other(losing_pos, helper_pos):
+                            total_profit = getattr(losing_pos, 'profit', 0) + getattr(helper_pos, 'profit', 0)
+                            current_price = getattr(losing_pos, 'price_current', 0)
+                            losing_distance = abs(getattr(losing_pos, 'price_open', 0) - current_price)
+                            helper_distance = abs(getattr(helper_pos, 'price_open', 0) - current_price)
+                            total_distance = losing_distance + helper_distance
+                            
+                            helper_pairs.append({
+                                'losing': losing_pos,
+                                'helper': helper_pos,
+                                'total_profit': total_profit,
+                                'total_distance': total_distance,
+                                'priority': 'middle'
+                            })
+            
+            # เรียงตามลำดับความสำคัญ: ไม้ขอบก่อน, แล้วตามระยะห่าง (ไกลก่อน)
+            helper_pairs.sort(key=lambda x: (x['priority'] == 'edge', x['total_distance']), reverse=True)
             
             # ปิดคู่ที่ดีที่สุด 2 คู่
             for pair in helper_pairs[:2]:
@@ -1208,27 +1338,56 @@ class AdaptiveTradingSystemGUI:
             logger.error(f"💰 [HELPER] Error executing: {e}")
     
     def _check_orphan_position_management(self, classification: Dict, current_candle: CandleData):
-        """👻 ตรวจสอบการจัดการไม้เดี่ยว"""
+        """👻 ตรวจสอบการจัดการไม้เดี่ยว - เน้นไม้ไกลก่อน"""
         try:
             orphan_positions = classification.get('orphan', [])
             
             if not orphan_positions:
                 return
             
-            # ปิดไม้เดี่ยวที่ขาดทุนมาก
+            # แยกไม้เดี่ยวตามระยะห่าง
+            edge_orphans = []
+            middle_orphans = []
+            near_orphans = []
+            
+            current_price = getattr(orphan_positions[0], 'price_current', 0) if orphan_positions else 0
+            
             for orphan in orphan_positions:
-                profit = getattr(orphan, 'profit', 0)
+                price_open = getattr(orphan, 'price_open', 0)
+                distance = abs(price_open - current_price) if current_price > 0 else 0
                 
-                # ปิดไม้เดี่ยวที่ขาดทุนมากกว่า $3
+                if distance > 3.0:  # ไม้ไกลมาก
+                    edge_orphans.append(orphan)
+                elif distance > 1.0:  # ไม้กลาง
+                    middle_orphans.append(orphan)
+                else:  # ไม้ใกล้
+                    near_orphans.append(orphan)
+            
+            # เรียงตามระยะห่าง (ไกลที่สุดก่อน)
+            edge_orphans.sort(key=lambda x: abs(getattr(x, 'price_open', 0) - current_price), reverse=True)
+            middle_orphans.sort(key=lambda x: abs(getattr(x, 'price_open', 0) - current_price), reverse=True)
+            
+            # ปิดไม้เดี่ยวตามลำดับความสำคัญ
+            all_orphans = edge_orphans + middle_orphans + near_orphans
+            
+            for orphan in all_orphans:
+                profit = getattr(orphan, 'profit', 0)
+                price_open = getattr(orphan, 'price_open', 0)
+                distance = abs(price_open - current_price) if current_price > 0 else 0
+                
+                # ปิดไม้เดี่ยวที่ขาดทุนมาก
                 if profit < -3.0:
-                    self._execute_orphan_closing(orphan, "High Loss Orphan")
+                    self._execute_orphan_closing(orphan, f"High Loss Orphan (Distance: {distance:.2f})")
                 # ปิดไม้เดี่ยวที่ขาดทุนปานกลางและเปิดนาน
                 elif profit < -1.5:
                     time_open = getattr(orphan, 'time', datetime.now())
                     time_diff = (datetime.now() - time_open).total_seconds() / 60
                     
                     if time_diff > 45:  # เปิดนานกว่า 45 นาที
-                        self._execute_orphan_closing(orphan, "Long Time Orphan")
+                        self._execute_orphan_closing(orphan, f"Long Time Orphan (Distance: {distance:.2f})")
+                # ปิดไม้เดี่ยวที่ไกลมาก (แม้จะขาดทุนน้อย)
+                elif distance > 5.0 and profit < 0:
+                    self._execute_orphan_closing(orphan, f"Far Distance Orphan (Distance: {distance:.2f})")
                         
         except Exception as e:
             logger.error(f"👻 [ORPHAN] Error: {e}")
