@@ -319,6 +319,9 @@ class AdaptiveTradingSystemGUI:
                 # 🎯 Edge Priority Closing Check (ใหม่) - ตรวจสอบการปิดไม้ขอบ
                 self._check_edge_priority_closing(current_candle)
                 
+                # 🔗 Hedge Pair Closing Check - ตรวจสอบโอกาสปิด Hedge Pairs
+                self._check_hedge_pair_closing_opportunities(current_candle)
+                
                 # Position Management (Keep original logic) - Throttle to every 20 seconds (เพิ่มจาก 10)
                 if not hasattr(self, '_last_position_management_time'):
                     self._last_position_management_time = 0
@@ -635,7 +638,7 @@ class AdaptiveTradingSystemGUI:
             logger.error(f"❌ Error in simple breakout processing: {e}")
     
     def _check_edge_priority_closing(self, current_candle: CandleData):
-        """🎯 ตรวจสอบการปิดไม้ขอบ - ระบบใหม่ Edge Priority Closing"""
+        """🎯 ตรวจสอบการปิดไม้ขอบ - ระบบใหม่ Balanced Edge Priority Closing"""
         try:
             if not self.order_manager:
                 return
@@ -652,80 +655,430 @@ class AdaptiveTradingSystemGUI:
             if not buy_positions and not sell_positions:
                 return
             
-            logger.info(f"🎯 [EDGE CLOSING] Analyzing {len(buy_positions)} BUY, {len(sell_positions)} SELL positions")
+            logger.info(f"🎯 [BALANCED EDGE] Analyzing {len(buy_positions)} BUY, {len(sell_positions)} SELL positions")
             
-            # 🎯 Edge Priority Closing Logic
-            # 1. จับคู่ไม้ขอบ (BUY ราคาต่ำสุด + BUY ราคาสูงสุด)
-            edge_positions = []
+            # 🎯 Balanced Edge Priority Closing Logic
+            # 1. หาไม้ขอบทั้งสองฝั่ง (BUY + SELL)
+            balanced_edge_pairs = self._find_balanced_edge_pairs(buy_positions, sell_positions)
             
-            # BUY Edge: ราคาต่ำสุด (กำไรมาก) + ราคาสูงสุด (ขาดทุน)
-            if len(buy_positions) >= 2:
-                buy_sorted = sorted(buy_positions, key=lambda x: getattr(x, 'price_open', 0))
-                lowest_buy = buy_sorted[0]  # ราคาต่ำสุด (กำไรมาก)
-                highest_buy = buy_sorted[-1]  # ราคาสูงสุด (ขาดทุน)
-                edge_positions.extend([lowest_buy, highest_buy])
-                logger.info(f"🎯 [EDGE] BUY Edge: {getattr(lowest_buy, 'price_open', 0):.5f} + {getattr(highest_buy, 'price_open', 0):.5f}")
-            
-            # SELL Edge: ราคาสูงสุด (กำไรมาก) + ราคาต่ำสุด (ขาดทุน)
-            if len(sell_positions) >= 2:
-                sell_sorted = sorted(sell_positions, key=lambda x: getattr(x, 'price_open', 0))
-                highest_sell = sell_sorted[-1]  # ราคาสูงสุด (กำไรมาก)
-                lowest_sell = sell_sorted[0]  # ราคาต่ำสุด (ขาดทุน)
-                edge_positions.extend([highest_sell, lowest_sell])
-                logger.info(f"🎯 [EDGE] SELL Edge: {getattr(highest_sell, 'price_open', 0):.5f} + {getattr(lowest_sell, 'price_open', 0):.5f}")
-            
-            if not edge_positions:
-                logger.debug("🎯 [EDGE CLOSING] No edge positions found")
+            if not balanced_edge_pairs:
+                logger.debug("🎯 [BALANCED EDGE] No balanced edge pairs found")
                 return
             
-            # 2. หา Helper (ไม้กำไรอื่นๆ)
-            helper_positions = []
-            edge_tickets = [getattr(pos, 'ticket', 0) for pos in edge_positions]
+            # 2. หา Helper positions (ไม้กำไรอื่นๆ)
+            helper_positions = self._find_helper_positions(positions, balanced_edge_pairs)
             
-            for pos in positions:
+            # 3. สร้าง Balanced Closing Plan
+            closing_plan = self._create_balanced_closing_plan(balanced_edge_pairs, helper_positions)
+            
+            if not closing_plan:
+                logger.debug("🎯 [BALANCED EDGE] No valid closing plan found")
+                return
+            
+            # 4. ตรวจสอบเงื่อนไขการปิด
+            if self._should_execute_balanced_closing(closing_plan):
+                logger.info(f"✅ [BALANCED EDGE] Executing balanced closing plan")
+                
+                # ปิดไม้ตามแผน
+                result = self._execute_balanced_closing(closing_plan)
+                
+                if result['success']:
+                    logger.info(f"✅ [BALANCED EDGE] Successfully closed {result['closed_count']} positions")
+                    logger.info(f"   BUY: {result['buy_closed']}, SELL: {result['sell_closed']}")
+                    logger.info(f"   Total Profit: ${result['total_profit']:.2f}")
+                    logger.info(f"   Remaining Balance: BUY {result['remaining_buy']}, SELL {result['remaining_sell']}")
+                else:
+                    logger.error(f"❌ [BALANCED EDGE] Failed to close: {result['error']}")
+            else:
+                logger.debug(f"🎯 [BALANCED EDGE] Closing conditions not met")
+            
+        except Exception as e:
+            logger.error(f"❌ Error in balanced edge priority closing: {e}")
+    
+    def _find_balanced_edge_pairs(self, buy_positions: List, sell_positions: List) -> List[Dict]:
+        """🔍 หาไม้ขอบที่สมดุลกัน (BUY + SELL)"""
+        try:
+            balanced_pairs = []
+            
+            # หา BUY Edge (ราคาต่ำสุด + ราคาสูงสุด)
+            buy_edge = []
+            if len(buy_positions) >= 2:
+                buy_sorted = sorted(buy_positions, key=lambda x: getattr(x, 'price_open', 0))
+                buy_edge = [buy_sorted[0], buy_sorted[-1]]  # ต่ำสุด + สูงสุด
+                logger.info(f"🎯 [BUY EDGE] Found: {getattr(buy_edge[0], 'price_open', 0):.5f} + {getattr(buy_edge[1], 'price_open', 0):.5f}")
+            
+            # หา SELL Edge (ราคาสูงสุด + ราคาต่ำสุด)
+            sell_edge = []
+            if len(sell_positions) >= 2:
+                sell_sorted = sorted(sell_positions, key=lambda x: getattr(x, 'price_open', 0))
+                sell_edge = [sell_sorted[-1], sell_sorted[0]]  # สูงสุด + ต่ำสุด
+                logger.info(f"🎯 [SELL EDGE] Found: {getattr(sell_edge[0], 'price_open', 0):.5f} + {getattr(sell_edge[1], 'price_open', 0):.5f}")
+            
+            # สร้าง Balanced Pairs
+            if buy_edge and sell_edge:
+                # Pair 1: BUY Edge + SELL Edge (สมดุล)
+                balanced_pairs.append({
+                    'type': 'BALANCED_PAIR',
+                    'buy_positions': buy_edge,
+                    'sell_positions': sell_edge,
+                    'total_positions': len(buy_edge) + len(sell_positions),
+                    'description': 'BUY Edge + SELL Edge'
+                })
+                logger.info(f"✅ [BALANCED PAIR] Created: BUY Edge + SELL Edge")
+            
+            # ถ้ามีไม้ฝั่งเดียวเยอะ ให้สร้าง Pair เพิ่ม
+            if len(buy_positions) >= 4 and len(sell_positions) >= 2:
+                # หา BUY กลางๆ เพิ่ม
+                buy_sorted = sorted(buy_positions, key=lambda x: getattr(x, 'price_open', 0))
+                mid_buy = buy_sorted[len(buy_sorted)//2]  # ไม้กลาง
+                
+                balanced_pairs.append({
+                    'type': 'BUY_HEAVY_PAIR',
+                    'buy_positions': buy_edge + [mid_buy],
+                    'sell_positions': sell_edge,
+                    'total_positions': len(buy_edge) + 1 + len(sell_edge),
+                    'description': 'BUY Heavy + SELL Edge'
+                })
+                logger.info(f"✅ [BUY HEAVY] Created: BUY Heavy + SELL Edge")
+            
+            if len(sell_positions) >= 4 and len(buy_positions) >= 2:
+                # หา SELL กลางๆ เพิ่ม
+                sell_sorted = sorted(sell_positions, key=lambda x: getattr(x, 'price_open', 0))
+                mid_sell = sell_sorted[len(sell_sorted)//2]  # ไม้กลาง
+                
+                balanced_pairs.append({
+                    'type': 'SELL_HEAVY_PAIR',
+                    'buy_positions': buy_edge,
+                    'sell_positions': sell_edge + [mid_sell],
+                    'total_positions': len(buy_edge) + len(sell_edge) + 1,
+                    'description': 'BUY Edge + SELL Heavy'
+                })
+                logger.info(f"✅ [SELL HEAVY] Created: BUY Edge + SELL Heavy")
+            
+            return balanced_pairs
+            
+        except Exception as e:
+            logger.error(f"❌ Error finding balanced edge pairs: {e}")
+            return []
+    
+    def _find_helper_positions(self, all_positions: List, balanced_pairs: List[Dict]) -> List:
+        """🔍 หาไม้ Helper (ไม้กำไรอื่นๆ)"""
+        try:
+            helper_positions = []
+            
+            # หา tickets ที่อยู่ใน balanced pairs
+            used_tickets = set()
+            for pair in balanced_pairs:
+                for pos in pair.get('buy_positions', []) + pair.get('sell_positions', []):
+                    used_tickets.add(getattr(pos, 'ticket', 0))
+            
+            # หาไม้กำไรที่ไม่อยู่ใน pairs
+            for pos in all_positions:
                 ticket = getattr(pos, 'ticket', 0)
                 profit = getattr(pos, 'profit', 0)
                 
-                # ไม่อยู่ใน edge และมีกำไร
-                if ticket not in edge_tickets and profit > 0:
+                if ticket not in used_tickets and profit > 0:
                     helper_positions.append(pos)
             
             # เรียงตามกำไร (มากไปน้อย)
             helper_positions.sort(key=lambda x: getattr(x, 'profit', 0), reverse=True)
+            
             logger.info(f"🎯 [HELPER] Found {len(helper_positions)} helper positions")
-            
-            # 3. คำนวณ % กำไร (5% ต่อ lot)
-            all_positions_to_close = edge_positions + helper_positions
-            total_profit = sum(getattr(pos, 'profit', 0) for pos in all_positions_to_close)
-            total_lot = sum(getattr(pos, 'volume', 0) for pos in all_positions_to_close)
-            
-            if total_lot > 0:
-                # คำนวณ % กำไรต่อ lot (เป้าหมาย: $0.5 ต่อ 0.01 lot = 5%)
-                profit_per_lot = total_profit / total_lot
-                profit_percentage = (profit_per_lot / 0.5) * 5.0  # 5% ต่อ $0.5
-                
-                logger.info(f"🎯 [EDGE CLOSING] Edge: {len(edge_positions)}, Helper: {len(helper_positions)}")
-                logger.info(f"   Total Profit: ${total_profit:.2f}, Lot: {total_lot:.2f}, %: {profit_percentage:.2f}%")
-                
-                # 4. ปิดเมื่อ % กำไร ≥ 5%
-                if profit_percentage >= 5.0:
-                    logger.info(f"✅ [EDGE CLOSING] Profit target reached: {profit_percentage:.2f}% ≥ 5%")
-                    
-                    # ใช้ระบบปิดไม้เก่าที่มีอยู่
-                    result = self.order_manager.close_positions_group(all_positions_to_close, "Edge Priority Closing")
-                    
-                    if result.success:
-                        logger.info(f"✅ [EDGE CLOSING] Successfully closed {len(result.closed_tickets)} positions")
-                        logger.info(f"   Total Profit: ${result.total_profit:.2f}")
-                    else:
-                        logger.error(f"❌ [EDGE CLOSING] Failed to close positions: {result.error_message}")
-                else:
-                    logger.debug(f"🎯 [EDGE CLOSING] Profit not enough: {profit_percentage:.2f}% < 5%")
-            else:
-                logger.debug("🎯 [EDGE CLOSING] No positions to close (total lot = 0)")
+            return helper_positions
             
         except Exception as e:
-            logger.error(f"❌ Error in edge priority closing: {e}")
+            logger.error(f"❌ Error finding helper positions: {e}")
+            return []
+    
+    def _create_balanced_closing_plan(self, balanced_pairs: List[Dict], helper_positions: List) -> Dict:
+        """📋 สร้างแผนการปิดไม้ที่สมดุล"""
+        try:
+            if not balanced_pairs:
+                return None
+            
+            # เลือก pair ที่ดีที่สุด (มีไม้เยอะที่สุด)
+            best_pair = max(balanced_pairs, key=lambda x: x['total_positions'])
+            
+            # สร้าง closing plan
+            closing_plan = {
+                'pair': best_pair,
+                'helper_positions': helper_positions[:3],  # ใช้ helper แค่ 3 ตัวแรก
+                'all_positions_to_close': [],
+                'expected_profit': 0.0,
+                'expected_lot': 0.0,
+                'balance_after_close': {'buy': 0, 'sell': 0}
+            }
+            
+            # รวมไม้ที่จะปิด
+            all_close = []
+            all_close.extend(best_pair.get('buy_positions', []))
+            all_close.extend(best_pair.get('sell_positions', []))
+            all_close.extend(closing_plan['helper_positions'])
+            
+            closing_plan['all_positions_to_close'] = all_close
+            
+            # คำนวณกำไรและ lot
+            total_profit = sum(getattr(pos, 'profit', 0) for pos in all_close)
+            total_lot = sum(getattr(pos, 'volume', 0) for pos in all_close)
+            
+            closing_plan['expected_profit'] = total_profit
+            closing_plan['expected_lot'] = total_lot
+            
+            # คำนวณ balance หลังปิด (ประมาณการ)
+            remaining_buy = len([pos for pos in all_close if getattr(pos, 'type', 0) == 0])
+            remaining_sell = len([pos for pos in all_close if getattr(pos, 'type', 0) == 1])
+            
+            closing_plan['balance_after_close'] = {
+                'buy': remaining_buy,
+                'sell': remaining_sell
+            }
+            
+            logger.info(f"📋 [CLOSING PLAN] {best_pair['description']}")
+            logger.info(f"   Positions: {len(all_close)} (BUY: {remaining_buy}, SELL: {remaining_sell})")
+            logger.info(f"   Expected Profit: ${total_profit:.2f}, Lot: {total_lot:.2f}")
+            
+            return closing_plan
+            
+        except Exception as e:
+            logger.error(f"❌ Error creating balanced closing plan: {e}")
+            return None
+    
+    def _should_execute_balanced_closing(self, closing_plan: Dict) -> bool:
+        """✅ ตรวจสอบว่าควรปิดไม้หรือไม่"""
+        try:
+            if not closing_plan:
+                return False
+            
+            # ตรวจสอบกำไรขั้นต่ำ (5% ต่อ lot)
+            expected_profit = closing_plan['expected_profit']
+            expected_lot = closing_plan['expected_lot']
+            
+            if expected_lot > 0:
+                profit_per_lot = expected_profit / expected_lot
+                profit_percentage = (profit_per_lot / 0.5) * 5.0  # 5% ต่อ $0.5
+                
+                if profit_percentage >= 5.0:
+                    logger.info(f"✅ [BALANCED CLOSING] Profit target reached: {profit_percentage:.2f}% ≥ 5%")
+                    return True
+                else:
+                    logger.debug(f"🎯 [BALANCED CLOSING] Profit not enough: {profit_percentage:.2f}% < 5%")
+                    return False
+            else:
+                logger.debug("🎯 [BALANCED CLOSING] No positions to close (total lot = 0)")
+                return False
+                
+        except Exception as e:
+            logger.error(f"❌ Error checking closing conditions: {e}")
+            return False
+    
+    def _execute_balanced_closing(self, closing_plan: Dict) -> Dict:
+        """🚀 ปิดไม้ตามแผนที่สมดุล"""
+        try:
+            positions_to_close = closing_plan['all_positions_to_close']
+            
+            # ใช้ระบบปิดไม้เก่าที่มีอยู่
+            result = self.order_manager.close_positions_group(positions_to_close, "Balanced Edge Priority Closing")
+            
+            if result.success:
+                # คำนวณผลลัพธ์
+                closed_buy = len([pos for pos in positions_to_close if getattr(pos, 'type', 0) == 0])
+                closed_sell = len([pos for pos in positions_to_close if getattr(pos, 'type', 0) == 1])
+                
+                # 🔄 หลังจากปิดไม้แล้ว ให้สร้าง Hedge Pairs สำหรับไม้ที่เหลือ
+                self._create_hedge_pairs_for_remaining_positions()
+                
+                return {
+                    'success': True,
+                    'closed_count': len(result.closed_tickets),
+                    'buy_closed': closed_buy,
+                    'sell_closed': closed_sell,
+                    'total_profit': result.total_profit,
+                    'remaining_buy': 0,  # จะคำนวณใหม่จาก positions ที่เหลือ
+                    'remaining_sell': 0
+                }
+            else:
+                return {
+                    'success': False,
+                    'error': result.error_message,
+                    'closed_count': 0,
+                    'buy_closed': 0,
+                    'sell_closed': 0,
+                    'total_profit': 0.0
+                }
+                
+        except Exception as e:
+            logger.error(f"❌ Error executing balanced closing: {e}")
+            return {
+                'success': False,
+                'error': str(e),
+                'closed_count': 0,
+                'buy_closed': 0,
+                'sell_closed': 0,
+                'total_profit': 0.0
+            }
+    
+    def _create_hedge_pairs_for_remaining_positions(self):
+        """🔗 สร้าง Hedge Pairs สำหรับไม้ที่เหลือ"""
+        try:
+            if not self.order_manager:
+                return
+            
+            # ดึงข้อมูล Position ที่เหลือ
+            positions = self.order_manager.sync_positions_from_mt5()
+            if not positions or len(positions) < 2:
+                return
+            
+            # แยกไม้ BUY และ SELL
+            buy_positions = [pos for pos in positions if getattr(pos, 'type', 0) == 0]
+            sell_positions = [pos for pos in positions if getattr(pos, 'type', 0) == 1]
+            
+            if not buy_positions or not sell_positions:
+                logger.debug("🔗 [HEDGE PAIRING] No BUY or SELL positions to pair")
+                return
+            
+            # สร้าง Hedge Pairs
+            hedge_pairs = self._find_optimal_hedge_pairs(buy_positions, sell_positions)
+            
+            if hedge_pairs:
+                logger.info(f"🔗 [HEDGE PAIRING] Created {len(hedge_pairs)} hedge pairs for remaining positions")
+                
+                # บันทึก hedge pairs ไว้ใช้ในอนาคต
+                self._save_hedge_pairs(hedge_pairs)
+            else:
+                logger.debug("🔗 [HEDGE PAIRING] No optimal hedge pairs found")
+                
+        except Exception as e:
+            logger.error(f"❌ Error creating hedge pairs: {e}")
+    
+    def _find_optimal_hedge_pairs(self, buy_positions: List, sell_positions: List) -> List[Dict]:
+        """🔍 หา Hedge Pairs ที่เหมาะสมที่สุด"""
+        try:
+            hedge_pairs = []
+            
+            # เรียงไม้ตามกำไร (มากไปน้อย)
+            buy_sorted = sorted(buy_positions, key=lambda x: getattr(x, 'profit', 0), reverse=True)
+            sell_sorted = sorted(sell_positions, key=lambda x: getattr(x, 'profit', 0), reverse=True)
+            
+            # สร้าง pairs โดยจับคู่ไม้ที่กำไรมากที่สุด
+            max_pairs = min(len(buy_sorted), len(sell_sorted))
+            
+            for i in range(max_pairs):
+                buy_pos = buy_sorted[i]
+                sell_pos = sell_sorted[i]
+                
+                buy_profit = getattr(buy_pos, 'profit', 0)
+                sell_profit = getattr(sell_pos, 'profit', 0)
+                combined_profit = buy_profit + sell_profit
+                
+                # สร้าง hedge pair
+                hedge_pair = {
+                    'buy_position': buy_pos,
+                    'sell_position': sell_pos,
+                    'buy_ticket': getattr(buy_pos, 'ticket', 0),
+                    'sell_ticket': getattr(sell_pos, 'ticket', 0),
+                    'buy_profit': buy_profit,
+                    'sell_profit': sell_profit,
+                    'combined_profit': combined_profit,
+                    'pair_id': f"HP_{i+1}",
+                    'created_time': datetime.now()
+                }
+                
+                hedge_pairs.append(hedge_pair)
+                
+                logger.info(f"🔗 [HEDGE PAIR {i+1}] BUY {hedge_pair['buy_ticket']} (${buy_profit:.2f}) + "
+                           f"SELL {hedge_pair['sell_ticket']} (${sell_profit:.2f}) = ${combined_profit:.2f}")
+            
+            return hedge_pairs
+            
+        except Exception as e:
+            logger.error(f"❌ Error finding optimal hedge pairs: {e}")
+            return []
+    
+    def _save_hedge_pairs(self, hedge_pairs: List[Dict]):
+        """💾 บันทึก Hedge Pairs ไว้ใช้ในอนาคต"""
+        try:
+            # เก็บ hedge pairs ไว้ในตัวแปร instance
+            if not hasattr(self, 'hedge_pairs'):
+                self.hedge_pairs = []
+            
+            # เพิ่ม hedge pairs ใหม่
+            self.hedge_pairs.extend(hedge_pairs)
+            
+            # จำกัดจำนวน hedge pairs (เก็บแค่ 10 pairs ล่าสุด)
+            if len(self.hedge_pairs) > 10:
+                self.hedge_pairs = self.hedge_pairs[-10:]
+            
+            logger.info(f"💾 [HEDGE PAIRS] Saved {len(hedge_pairs)} hedge pairs (Total: {len(self.hedge_pairs)})")
+            
+        except Exception as e:
+            logger.error(f"❌ Error saving hedge pairs: {e}")
+    
+    def _check_hedge_pair_closing_opportunities(self, current_candle: CandleData):
+        """🎯 ตรวจสอบโอกาสปิด Hedge Pairs"""
+        try:
+            if not hasattr(self, 'hedge_pairs') or not self.hedge_pairs:
+                return
+            
+            # ตรวจสอบแต่ละ hedge pair
+            for hedge_pair in self.hedge_pairs[:]:
+                if self._should_close_hedge_pair(hedge_pair, current_candle):
+                    self._close_hedge_pair(hedge_pair)
+                    # ลบ hedge pair ที่ปิดแล้ว
+                    self.hedge_pairs.remove(hedge_pair)
+                    
+        except Exception as e:
+            logger.error(f"❌ Error checking hedge pair closing opportunities: {e}")
+    
+    def _should_close_hedge_pair(self, hedge_pair: Dict, current_candle: CandleData) -> bool:
+        """✅ ตรวจสอบว่าควรปิด Hedge Pair หรือไม่"""
+        try:
+            combined_profit = hedge_pair['combined_profit']
+            
+            # เงื่อนไขการปิด Hedge Pair
+            # 1. กำไรรวม ≥ $1.0
+            if combined_profit >= 1.0:
+                logger.info(f"✅ [HEDGE CLOSE] Pair {hedge_pair['pair_id']} profit ${combined_profit:.2f} ≥ $1.0")
+                return True
+            
+            # 2. ไม้ใดไม้หนึ่งขาดทุนมากเกินไป (≥ -$5.0)
+            if hedge_pair['buy_profit'] <= -5.0 or hedge_pair['sell_profit'] <= -5.0:
+                logger.info(f"⚠️ [HEDGE CLOSE] Pair {hedge_pair['pair_id']} has heavy loss - closing for safety")
+                return True
+            
+            # 3. ไม้คู่กันมานานเกินไป (≥ 24 ชั่วโมง)
+            created_time = hedge_pair['created_time']
+            hours_old = (datetime.now() - created_time).total_seconds() / 3600
+            if hours_old >= 24:
+                logger.info(f"⏰ [HEDGE CLOSE] Pair {hedge_pair['pair_id']} is {hours_old:.1f} hours old - closing")
+                return True
+            
+            return False
+            
+        except Exception as e:
+            logger.error(f"❌ Error checking hedge pair closing: {e}")
+            return False
+    
+    def _close_hedge_pair(self, hedge_pair: Dict):
+        """🚀 ปิด Hedge Pair"""
+        try:
+            buy_pos = hedge_pair['buy_position']
+            sell_pos = hedge_pair['sell_position']
+            
+            positions_to_close = [buy_pos, sell_pos]
+            
+            # ปิด hedge pair
+            result = self.order_manager.close_positions_group(positions_to_close, f"Hedge Pair {hedge_pair['pair_id']}")
+            
+            if result.success:
+                logger.info(f"✅ [HEDGE CLOSE] Successfully closed pair {hedge_pair['pair_id']}")
+                logger.info(f"   BUY {hedge_pair['buy_ticket']} (${hedge_pair['buy_profit']:.2f}) + "
+                           f"SELL {hedge_pair['sell_ticket']} (${hedge_pair['sell_profit']:.2f})")
+                logger.info(f"   Total Profit: ${result.total_profit:.2f}")
+            else:
+                logger.error(f"❌ [HEDGE CLOSE] Failed to close pair {hedge_pair['pair_id']}: {result.error_message}")
+                
+        except Exception as e:
+            logger.error(f"❌ Error closing hedge pair: {e}")
     
     def _can_trade_timeframe(self, timeframe: str) -> bool:
         """Check if we can trade this timeframe (one trade per candle rule) - ตรวจสอบแท่งเทียนปิดจริง"""
