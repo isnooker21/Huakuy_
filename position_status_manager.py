@@ -67,7 +67,7 @@ class PositionStatusManager:
         }
         
     def analyze_all_positions(self, positions: List[Any], current_price: float, 
-                            zones: List[Dict], market_condition: str = 'sideways') -> Dict[int, PositionStatus]:
+                            zones: Any, market_condition: str = 'sideways') -> Dict[int, PositionStatus]:
         """
         วิเคราะห์สถานะทุกไม้แบบ Real-time
         
@@ -149,17 +149,30 @@ class PositionStatusManager:
         logger.debug(f"🔧 [ZONE PARAMS] Market: {market_condition}, "
                     f"Tolerance: {self.zone_tolerance}, Min Strength: {self.min_zone_strength}")
     
-    def _classify_position_zone(self, position: Any, current_price: float, zones: List[Dict]) -> Dict[str, Any]:
+    def _classify_position_zone(self, position: Any, current_price: float, zones: Any) -> Dict[str, Any]:
         """จำแนก Zone ของ Position"""
         try:
             position_price = getattr(position, 'price_open', 0.0)
             position_type = getattr(position, 'type', 0)
+            
+            # ตรวจสอบว่า zones เป็น list หรือไม่
+            if not isinstance(zones, list) or not zones:
+                return {
+                    'type': 'standalone',
+                    'level': position_price,
+                    'strength': 0.0,
+                    'distance': float('inf')
+                }
             
             # หา Zone ที่ใกล้ที่สุด
             closest_zone = None
             min_distance = float('inf')
             
             for zone in zones:
+                # ตรวจสอบว่า zone เป็น dict หรือไม่
+                if not isinstance(zone, dict):
+                    continue
+                    
                 zone_level = zone.get('level', 0.0)
                 distance = abs(position_price - zone_level)
                 
