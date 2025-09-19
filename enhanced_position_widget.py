@@ -311,20 +311,20 @@ class PositionStatusWidget:
 class AsyncStatusUpdater:
     """Background Thread สำหรับอัพเดทสถานะ"""
     
-    def __init__(self, gui_instance, status_manager, update_interval: float = 5.0):
+    def __init__(self, gui_instance, status_manager, update_interval: float = 10.0):
         self.gui = gui_instance
         self.status_manager = status_manager
-        self.update_interval = update_interval
+        self.update_interval = update_interval  # เพิ่มเป็น 10 วินาที
         self.stop_flag = False
         self.update_thread = None
         self.last_positions = {}
         self.last_status_results = {}
         
-        # Update throttling
-        self.update_throttler = UpdateThrottler(min_interval=2.0)
+        # Update throttling - เพิ่ม interval
+        self.update_throttler = UpdateThrottler(min_interval=5.0)  # เพิ่มเป็น 5 วินาที
         
-        # Memory management
-        self.max_widgets = 50  # จำกัดจำนวน widgets
+        # Memory management - ลดจำนวน widgets
+        self.max_widgets = 30  # ลดจาก 50 เป็น 30
         
     def start_background_updates(self):
         """เริ่ม Background Updates"""
@@ -357,13 +357,18 @@ class AsyncStatusUpdater:
             logger.error(f"❌ Error stopping async status updater: {e}")
     
     def _background_update_loop(self):
-        """Background update loop"""
+        """Background update loop - ป้องกัน GUI ค้าง"""
         while not self.stop_flag:
             try:
                 # ดึงข้อมูล Positions
                 positions = self._get_positions_async()
                 
                 if not positions:
+                    time.sleep(self.update_interval)
+                    continue
+                
+                # ตรวจสอบ throttling ก่อนวิเคราะห์
+                if not self.update_throttler.should_update('position_status'):
                     time.sleep(self.update_interval)
                     continue
                 
@@ -374,8 +379,8 @@ class AsyncStatusUpdater:
                     # ตรวจสอบการเปลี่ยนแปลง
                     changes_detected = self._detect_status_changes(status_results)
                     
-                    # ส่งผลลัพธ์ไป GUI Thread
-                    self.gui.root.after_idle(
+                    # ส่งผลลัพธ์ไป GUI Thread - ใช้ after แทน after_idle
+                    self.gui.root.after(100, 
                         lambda: self._update_gui_with_results(status_results, changes_detected)
                     )
                 
@@ -384,7 +389,7 @@ class AsyncStatusUpdater:
                 
             except Exception as e:
                 logger.error(f"❌ Background update error: {e}")
-                time.sleep(10)  # รอนานขึ้นเมื่อเกิด error
+                time.sleep(20)  # รอนานขึ้นเมื่อเกิด error
     
     def _get_positions_async(self) -> List[Any]:
         """ดึงข้อมูล Positions แบบ async"""

@@ -18,21 +18,21 @@ class GUIPerformanceOptimizer:
     
     def __init__(self, max_memory_mb: int = 200):
         self.max_memory_mb = max_memory_mb
-        self.max_widgets = 50
-        self.max_history_size = 100
+        self.max_widgets = 30  # ลดจาก 50 เป็น 30
+        self.max_history_size = 50  # ลดจาก 100 เป็น 50
         
         # Memory tracking
-        self.memory_usage_history = deque(maxlen=50)
+        self.memory_usage_history = deque(maxlen=30)  # ลดจาก 50
         self.last_memory_check = 0
-        self.memory_check_interval = 30  # ตรวจสอบทุก 30 วินาที
+        self.memory_check_interval = 60  # เพิ่มเป็น 60 วินาที
         
-        # Update throttling
+        # Update throttling - เพิ่ม intervals เพื่อป้องกัน GUI ค้าง
         self.update_intervals = {
-            'position_status': 5.0,    # อัพเดทสถานะไม้ทุก 5 วินาที
-            'account_info': 60.0,      # อัพเดทข้อมูลบัญชีทุก 60 วินาที
-            'portfolio_info': 120.0,   # อัพเดทข้อมูลพอร์ตทุก 120 วินาที
-            'hedge_analysis': 30.0,    # วิเคราะห์ hedge ทุก 30 วินาที
-            'market_status': 15.0      # อัพเดทสถานะตลาดทุก 15 วินาที
+            'position_status': 10.0,   # เพิ่มเป็น 10 วินาที
+            'account_info': 120.0,     # เพิ่มเป็น 120 วินาที
+            'portfolio_info': 180.0,   # เพิ่มเป็น 180 วินาที
+            'hedge_analysis': 60.0,    # เพิ่มเป็น 60 วินาที
+            'market_status': 30.0      # เพิ่มเป็น 30 วินาที
         }
         
         self.last_updates = {}
@@ -87,24 +87,24 @@ class GUIPerformanceOptimizer:
             logger.error(f"❌ Error starting performance monitoring: {e}")
     
     def _performance_monitoring_loop(self):
-        """ลูปติดตามประสิทธิภาพ"""
+        """ลูปติดตามประสิทธิภาพ - ลดความถี่"""
         while True:
             try:
                 current_time = time.time()
                 
-                # ตรวจสอบ memory
+                # ตรวจสอบ memory - ลดความถี่
                 if self._should_check_memory(current_time):
                     self._check_memory_usage()
                 
-                # ทำความสะอาด
+                # ทำความสะอาด - ลดความถี่
                 self._perform_cleanup(current_time)
                 
-                # รอ 30 วินาที
-                time.sleep(30)
+                # รอ 60 วินาที (เพิ่มจาก 30)
+                time.sleep(60)
                 
             except Exception as e:
                 logger.error(f"❌ Error in performance monitoring loop: {e}")
-                time.sleep(60)
+                time.sleep(120)  # รอนานขึ้นเมื่อเกิด error
     
     def _should_check_memory(self, current_time: float) -> bool:
         """ตรวจสอบว่าควรตรวจสอบ memory หรือไม่"""

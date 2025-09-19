@@ -63,19 +63,19 @@ class TradingGUI:
         self.lazy_loader = LazyPositionLoader(batch_size=20)
         self.update_throttler = UpdateThrottler(min_interval=2.0)
         
-        # 🚀 Performance Optimizer
+        # 🚀 Performance Optimizer - เริ่มช้าเพื่อป้องกัน GUI ค้าง
         self.performance_optimizer = GUIPerformanceOptimizer(max_memory_mb=200)
-        self.performance_optimizer.start_performance_monitoring()
+        # ไม่เริ่ม performance monitoring ทันที - รอให้ GUI โหลดเสร็จก่อน
         
         # สร้าง GUI components
         self.create_widgets()
         self.setup_styles()
         
         # เริ่มต้นการอัพเดทข้อมูลเบาๆ หลังจาก GUI โหลดเสร็จ
-        self.root.after(10000, self.start_light_update)  # รอ 10 วินาทีก่อนเริ่มอัพเดท
+        self.root.after(15000, self.start_light_update)  # รอ 15 วินาทีก่อนเริ่มอัพเดท
         
-        # 🚀 เริ่มการอัพเดท performance stats
-        self.root.after(15000, self.start_performance_monitoring)  # รอ 15 วินาที
+        # 🚀 เริ่มการอัพเดท performance stats - ช้าเพื่อป้องกัน GUI ค้าง
+        self.root.after(30000, self.start_performance_monitoring)  # รอ 30 วินาที
         
     def create_widgets(self):
         """สร้าง widgets ทั้งหมด"""
@@ -675,11 +675,15 @@ class TradingGUI:
     def start_performance_monitoring(self):
         """เริ่มการติดตามประสิทธิภาพแบบอัตโนมัติ"""
         try:
+            # เริ่ม performance optimizer
+            if self.performance_optimizer:
+                self.performance_optimizer.start_performance_monitoring()
+            
             # รีเฟรช stats ครั้งแรก
             self.refresh_performance_stats()
             
-            # ตั้งเวลารีเฟรชทุก 30 วินาที
-            self.root.after(30000, self.schedule_performance_refresh)
+            # ตั้งเวลารีเฟรชทุก 60 วินาที (ลดความถี่เพื่อป้องกัน GUI ค้าง)
+            self.root.after(60000, self.schedule_performance_refresh)
             
             logger.info("🚀 Performance monitoring started")
             
@@ -692,8 +696,8 @@ class TradingGUI:
             # รีเฟรช stats
             self.refresh_performance_stats()
             
-            # กำหนดครั้งต่อไป
-            self.root.after(30000, self.schedule_performance_refresh)
+            # กำหนดครั้งต่อไป - ลดความถี่เป็น 60 วินาที
+            self.root.after(60000, self.schedule_performance_refresh)
             
         except Exception as e:
             logger.error(f"❌ Error scheduling performance refresh: {e}")
@@ -873,27 +877,35 @@ class TradingGUI:
             self.update_thread.start()
             
     def light_update_loop(self):
-        """Loop อัพเดทแบบเบา - OPTIMIZED"""
+        """Loop อัพเดทแบบเบา - FIXED GUI FREEZING"""
         update_counter = 0
         while not self.stop_update:
             try:
                 if not self.stop_update:
-                    # 🚀 OPTIMIZED: อัพเดท connection status ทุกครั้ง
-                    self.root.after_idle(self.update_connection_status_light)
+                    # 🔧 FIX: รวมการอัพเดทเป็นครั้งเดียวเพื่อป้องกัน GUI ค้าง
+                    def safe_update_batch():
+                        try:
+                            # อัพเดท connection status
+                            self.update_connection_status_light()
+                            
+                            # อัพเดทข้อมูลอื่นๆ แบบสลับกัน
+                            if update_counter % 6 == 0:  # ทุก 120 วินาที
+                                self.update_account_info()
+                                self.update_trading_status_data()
+                            
+                            if update_counter % 8 == 0:  # ทุก 160 วินาที
+                                self.update_positions_display_light()
+                            
+                            if update_counter % 10 == 0:  # ทุก 200 วินาที
+                                self.update_7d_closer_status()
+                        except Exception as e:
+                            logger.debug(f"Batch update error: {e}")
                     
-                    # 🚀 OPTIMIZED: อัพเดทข้อมูลอื่นๆ แบบสลับกัน - ลดความถี่มากขึ้น
-                    if update_counter % 6 == 0:  # ทุก 120 วินาที (เพิ่มมากขึ้น)
-                        self.root.after_idle(self.update_account_info)
-                        self.root.after_idle(self.update_trading_status_data)
-                    
-                    if update_counter % 8 == 0:  # ทุก 160 วินาที (เพิ่มมากขึ้น)
-                        self.root.after_idle(self.update_positions_display_light)
-                    
-                    if update_counter % 10 == 0:  # ทุก 200 วินาที (เพิ่มมากขึ้น)
-                        self.root.after_idle(self.update_7d_closer_status)
-                    
+                    # เรียกอัพเดทครั้งเดียว
+                    self.root.after_idle(safe_update_batch)
                     update_counter += 1
-                time.sleep(30)  # อัพเดททุก 30 วินาที (เพิ่มจาก 20)
+                
+                time.sleep(30)  # อัพเดททุก 30 วินาที
             except Exception as e:
                 logger.debug(f"Light update error: {str(e)}")
                 time.sleep(60)  # รอนานขึ้นเมื่อเกิด error
@@ -1986,7 +1998,7 @@ class TradingGUI:
             return {}
     
     def start_async_status_updates(self):
-        """🚀 เริ่ม Async Status Updates"""
+        """🚀 เริ่ม Async Status Updates - ป้องกัน GUI ค้าง"""
         try:
             if not self.trading_system:
                 logger.warning("🚫 No trading system available for status updates")
@@ -1997,20 +2009,29 @@ class TradingGUI:
                 logger.warning("🚫 No status manager available")
                 return
             
+            # รอ 5 วินาทีก่อนเริ่มเพื่อให้ GUI เสถียร
+            self.root.after(5000, self._delayed_start_async_updates)
+            
+        except Exception as e:
+            logger.error(f"❌ Error starting async status updates: {e}")
+    
+    def _delayed_start_async_updates(self):
+        """เริ่ม Async Updates แบบล่าช้า"""
+        try:
             # สร้าง AsyncStatusUpdater
             self.async_status_updater = AsyncStatusUpdater(
                 gui_instance=self,
                 status_manager=self.trading_system.status_manager,
-                update_interval=5.0  # อัพเดททุก 5 วินาที
+                update_interval=10.0  # เพิ่มเป็น 10 วินาทีเพื่อลด load
             )
             
             # เริ่ม background updates
             self.async_status_updater.start_background_updates()
             
-            logger.info("🚀 Async Status Updates started")
+            logger.info("🚀 Async Status Updates started (delayed)")
             
         except Exception as e:
-            logger.error(f"❌ Error starting async status updates: {e}")
+            logger.error(f"❌ Error in delayed async status updates: {e}")
     
     def stop_async_status_updates(self):
         """🛑 หยุด Async Status Updates"""

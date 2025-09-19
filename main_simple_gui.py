@@ -376,9 +376,16 @@ class AdaptiveTradingSystemGUI:
                 # 🔗 Hedge Pair Closing Check - DISABLED
                 # self._check_hedge_pair_closing_opportunities(current_candle)
                 
-                # 🚀 Real-time Status Tracking - ตรวจสอบสถานะไม้แบบ Real-time
+                # 🚀 Real-time Status Tracking - ตรวจสอบสถานะไม้แบบ Real-time (ลดความถี่)
                 if self._should_update_status(current_candle, current_time):
-                    self._update_position_status_realtime(current_candle, current_time)
+                    # รันใน background thread เพื่อไม่ให้ GUI ค้าง
+                    def update_status_worker():
+                        try:
+                            self._update_position_status_realtime(current_candle, current_time)
+                        except Exception as e:
+                            logger.error(f"❌ Status update error: {e}")
+                    
+                    threading.Thread(target=update_status_worker, daemon=True).start()
                 
                 # Position Management (Keep original logic) - Throttle to every 20 seconds (เพิ่มจาก 10)
                 if not hasattr(self, '_last_position_management_time'):
@@ -450,8 +457,8 @@ class AdaptiveTradingSystemGUI:
                     threading.Thread(target=dynamic_closing_worker, daemon=True).start()
                     self._last_dynamic_closing_time = current_time
                 
-                # 🎯 Smart Trading Systems - Handle every 3 seconds (Smart Entry เป็นหลัก)
-                if current_time - getattr(self, '_last_smart_systems_time', 0) >= 3:  # 3 วินาที (Smart Entry เป็นหลัก)
+                # 🎯 Smart Trading Systems - Handle every 5 seconds (เพิ่ม interval เพื่อป้องกัน GUI ค้าง)
+                if current_time - getattr(self, '_last_smart_systems_time', 0) >= 5:  # เพิ่มเป็น 5 วินาที
                     # ตรวจสอบว่า Smart Systems ทำงานอยู่หรือไม่ก่อนเริ่มใหม่
                     if not hasattr(self, '_smart_systems_running') or not self._smart_systems_running:
                         logger.info(f"🎯 Starting Smart Systems (interval: {current_time - getattr(self, '_last_smart_systems_time', 0):.1f}s)")
@@ -461,8 +468,8 @@ class AdaptiveTradingSystemGUI:
                     else:
                         logger.debug("🎯 Smart Systems already running, skipping...")
                 
-                # Sleep - เพิ่มเป็น 5 วินาที เพื่อลด CPU usage มากขึ้น
-                time.sleep(5.0)  # ตรวจสอบแท่งเทียนทุก 5 วินาที (ลด GUI freeze มากขึ้น)
+                # Sleep - เพิ่มเป็น 8 วินาที เพื่อลด CPU usage และป้องกัน GUI ค้าง
+                time.sleep(8.0)  # ตรวจสอบแท่งเทียนทุก 8 วินาที
                 
             except Exception as e:
                 logger.error(f"❌ เกิดข้อผิดพลาดในลูปเทรด: {e}")
