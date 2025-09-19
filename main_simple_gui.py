@@ -1028,6 +1028,7 @@ class AdaptiveTradingSystemGUI:
             position_classification = self._classify_positions(positions)
             
             # ตรวจสอบโอกาสปิดไม้ต่างๆ
+            self._check_smart_position_pairing(position_classification, current_candle)  # ใหม่: ระบบจับคู่ไม้ที่ฉลาด
             self._check_lot_size_balancing(position_classification)  # ใหม่: ปรับ lot size ให้สมดุล
             self._check_far_position_closing(position_classification)  # ใหม่: ปิดไม้ไกลก่อน
             self._check_profitable_helper_closing(position_classification)
@@ -1038,6 +1039,200 @@ class AdaptiveTradingSystemGUI:
             
         except Exception as e:
             logger.error(f"🎯 [SMART POSITION] Error: {e}")
+    
+    def _check_smart_position_pairing(self, classification: Dict, current_candle: CandleData):
+        """🎯 Smart Position Pairing System - ระบบจับคู่ไม้ที่ฉลาด"""
+        try:
+            # หาไม้ที่โดนลาก (ติดลบ + ห่างจากราคาปัจจุบัน)
+            dragged_positions = self._find_dragged_positions(classification, current_candle)
+            
+            if not dragged_positions:
+                return
+            
+            # หาไม้ฝั่งตรงข้ามที่อยู่ใกล้ๆ
+            for dragged_pos in dragged_positions:
+                self._find_and_pair_opposite_positions(dragged_pos, classification, current_candle)
+                
+        except Exception as e:
+            logger.error(f"🎯 [SMART PAIRING] Error: {e}")
+    
+    def _find_dragged_positions(self, classification: Dict, current_candle: CandleData) -> List:
+        """🔍 หาไม้ที่โดนลาก (ติดลบ + ห่างจากราคาปัจจุบัน)"""
+        try:
+            dragged_positions = []
+            current_price = current_candle.close
+            
+            # ตรวจสอบไม้ทุกประเภท
+            all_positions = (classification.get('edge_buy', []) + 
+                           classification.get('middle_buy', []) + 
+                           classification.get('near_buy', []) +
+                           classification.get('edge_sell', []) + 
+                           classification.get('middle_sell', []) + 
+                           classification.get('near_sell', []))
+            
+            for pos in all_positions:
+                profit = getattr(pos, 'profit', 0)
+                price_open = getattr(pos, 'price_open', 0)
+                distance = abs(price_open - current_price)
+                
+                # เงื่อนไขไม้โดนลาก: ขาดทุน + ห่างจากราคาปัจจุบัน
+                if profit < -1.0 and distance > 2.0:
+                    dragged_positions.append({
+                        'position': pos,
+                        'profit': profit,
+                        'distance': distance,
+                        'type': 'BUY' if getattr(pos, 'type', 0) == 0 else 'SELL'
+                    })
+            
+            # เรียงตามความเสี่ยง (ขาดทุนมาก + ไกลมาก = เสี่ยงมาก)
+            dragged_positions.sort(key=lambda x: (x['profit'], -x['distance']))
+            
+            logger.info(f"🔍 [DRAGGED] Found {len(dragged_positions)} dragged positions")
+            return dragged_positions
+            
+        except Exception as e:
+            logger.error(f"🔍 [DRAGGED] Error: {e}")
+            return []
+    
+    def _find_and_pair_opposite_positions(self, dragged_pos_info: Dict, classification: Dict, current_candle: CandleData):
+        """🤝 หาไม้ฝั่งตรงข้ามที่อยู่ใกล้ๆ และจับคู่"""
+        try:
+            dragged_pos = dragged_pos_info['position']
+            dragged_type = dragged_pos_info['type']
+            current_price = current_candle.close
+            
+            # หาไม้ฝั่งตรงข้ามที่อยู่ใกล้ราคาปัจจุบัน
+            if dragged_type == 'SELL':
+                # หา BUY ที่อยู่ใกล้ราคาปัจจุบัน
+                opposite_positions = (classification.get('near_buy', []) + 
+                                    classification.get('middle_buy', []))
+            else:  # BUY
+                # หา SELL ที่อยู่ใกล้ราคาปัจจุบัน
+                opposite_positions = (classification.get('near_sell', []) + 
+                                    classification.get('middle_sell', []))
+            
+            if not opposite_positions:
+                logger.debug(f"🤝 [PAIRING] No opposite positions found for {dragged_type}")
+                return
+            
+            # หาไม้ที่เหมาะสมที่สุด
+            best_pair = self._find_best_pairing(dragged_pos, opposite_positions, current_price)
+            
+            if best_pair:
+                self._create_position_pair(dragged_pos, best_pair, current_price)
+                
+        except Exception as e:
+            logger.error(f"🤝 [PAIRING] Error: {e}")
+    
+    def _find_best_pairing(self, dragged_pos: Any, opposite_positions: List, current_price: float) -> Any:
+        """🎯 หาไม้ที่เหมาะสมที่สุดสำหรับจับคู่"""
+        try:
+            best_pair = None
+            best_score = -999999
+            
+            dragged_profit = getattr(dragged_pos, 'profit', 0)
+            dragged_lot = getattr(dragged_pos, 'volume', 0.01)
+            
+            for opposite_pos in opposite_positions:
+                opposite_profit = getattr(opposite_pos, 'profit', 0)
+                opposite_lot = getattr(opposite_pos, 'volume', 0.01)
+                opposite_price = getattr(opposite_pos, 'price_open', 0)
+                
+                # คำนวณคะแนนการจับคู่
+                score = self._calculate_pairing_score(
+                    dragged_profit, dragged_lot,
+                    opposite_profit, opposite_lot,
+                    current_price, opposite_price
+                )
+                
+                if score > best_score:
+                    best_score = score
+                    best_pair = opposite_pos
+            
+            logger.debug(f"🎯 [BEST PAIR] Best pairing score: {best_score:.2f}")
+            return best_pair
+            
+        except Exception as e:
+            logger.error(f"🎯 [BEST PAIR] Error: {e}")
+            return None
+    
+    def _calculate_pairing_score(self, dragged_profit: float, dragged_lot: float,
+                               opposite_profit: float, opposite_lot: float,
+                               current_price: float, opposite_price: float) -> float:
+        """📊 คำนวณคะแนนการจับคู่"""
+        try:
+            # คำนวณกำไรรวม
+            total_profit = dragged_profit + opposite_profit
+            
+            # คำนวณระยะห่างจากราคาปัจจุบัน
+            distance = abs(opposite_price - current_price)
+            
+            # คำนวณอัตราส่วน lot
+            lot_ratio = min(dragged_lot, opposite_lot) / max(dragged_lot, opposite_lot)
+            
+            # คำนวณคะแนน (กำไรรวมมาก + ใกล้ราคาปัจจุบัน + lot ratio ดี = คะแนนสูง)
+            score = (total_profit * 0.5) + ((10 - distance) * 0.3) + (lot_ratio * 0.2)
+            
+            return score
+            
+        except Exception as e:
+            logger.error(f"📊 [SCORE] Error: {e}")
+            return -999999
+    
+    def _create_position_pair(self, dragged_pos: Any, opposite_pos: Any, current_price: float):
+        """🔗 สร้างไม้คู่และตรวจสอบการปิด"""
+        try:
+            dragged_profit = getattr(dragged_pos, 'profit', 0)
+            opposite_profit = getattr(opposite_pos, 'profit', 0)
+            total_profit = dragged_profit + opposite_profit
+            
+            # ตรวจสอบว่าควรปิดหรือไม่
+            if total_profit > 1.0:  # กำไรรวม > $1
+                self._execute_position_pair_closing(dragged_pos, opposite_pos, total_profit)
+            else:
+                # เก็บไม้คู่ไว้ใช้ในอนาคต
+                self._store_position_pair(dragged_pos, opposite_pos, total_profit)
+                
+        except Exception as e:
+            logger.error(f"🔗 [PAIR] Error: {e}")
+    
+    def _execute_position_pair_closing(self, dragged_pos: Any, opposite_pos: Any, total_profit: float):
+        """🚀 ปิดไม้คู่ที่กำไรรวม > $1"""
+        try:
+            positions_to_close = [dragged_pos, opposite_pos]
+            result = self.order_manager.close_positions_group(positions_to_close, "Smart Position Pairing")
+            
+            if result.success:
+                dragged_ticket = getattr(dragged_pos, 'ticket', 0)
+                opposite_ticket = getattr(opposite_pos, 'ticket', 0)
+                logger.info(f"🚀 [PAIR CLOSE] Successfully closed pair: {dragged_ticket} + {opposite_ticket} = ${total_profit:.2f}")
+            else:
+                logger.warning(f"🚀 [PAIR CLOSE] Failed to close pair: {result.error_message}")
+                
+        except Exception as e:
+            logger.error(f"🚀 [PAIR CLOSE] Error: {e}")
+    
+    def _store_position_pair(self, dragged_pos: Any, opposite_pos: Any, total_profit: float):
+        """💾 เก็บไม้คู่ไว้ใช้ในอนาคต"""
+        try:
+            if not hasattr(self, 'position_pairs'):
+                self.position_pairs = []
+            
+            pair = {
+                'dragged_position': dragged_pos,
+                'opposite_position': opposite_pos,
+                'total_profit': total_profit,
+                'created_time': datetime.now()
+            }
+            
+            self.position_pairs.append(pair)
+            
+            dragged_ticket = getattr(dragged_pos, 'ticket', 0)
+            opposite_ticket = getattr(opposite_pos, 'ticket', 0)
+            logger.debug(f"💾 [PAIR STORE] Stored pair: {dragged_ticket} + {opposite_ticket} = ${total_profit:.2f}")
+            
+        except Exception as e:
+            logger.error(f"💾 [PAIR STORE] Error: {e}")
     
     def _check_lot_size_balancing(self, classification: Dict):
         """⚖️ ตรวจสอบและปรับ lot size ให้สมดุล"""
