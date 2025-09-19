@@ -875,11 +875,11 @@ class AdaptiveTradingSystemGUI:
         """🚀 ปิดไม้ตามแผนที่สมดุล"""
         try:
             positions_to_close = closing_plan['all_positions_to_close']
-                    
-                    # ใช้ระบบปิดไม้เก่าที่มีอยู่
+            
+            # ใช้ระบบปิดไม้เก่าที่มีอยู่
             result = self.order_manager.close_positions_group(positions_to_close, "Balanced Edge Priority Closing")
-                    
-                    if result.success:
+            
+            if result.success:
                 # คำนวณผลลัพธ์
                 closed_buy = len([pos for pos in positions_to_close if getattr(pos, 'type', 0) == 0])
                 closed_sell = len([pos for pos in positions_to_close if getattr(pos, 'type', 0) == 1])
@@ -896,7 +896,7 @@ class AdaptiveTradingSystemGUI:
                     'remaining_buy': 0,  # จะคำนวณใหม่จาก positions ที่เหลือ
                     'remaining_sell': 0
                 }
-                    else:
+            else:
                 return {
                     'success': False,
                     'error': result.error_message,
@@ -944,7 +944,7 @@ class AdaptiveTradingSystemGUI:
                 
                 # บันทึก hedge pairs ไว้ใช้ในอนาคต
                 self._save_hedge_pairs(hedge_pairs)
-                else:
+            else:
                 logger.debug("🔗 [HEDGE PAIRING] No optimal hedge pairs found")
                 
         except Exception as e:
@@ -1350,7 +1350,7 @@ class AdaptiveTradingSystemGUI:
                 
                 if order_result.success:
                     logger.info(f"🔧 [LOT ADJUST] Successfully adjusted {symbol} {ticket}: {current_lot:.2f} → {target_lot:.2f}")
-            else:
+                else:
                     logger.warning(f"🔧 [LOT ADJUST] Failed to open new position: {order_result.error_message}")
             else:
                 logger.warning(f"🔧 [LOT ADJUST] Failed to close position {ticket}: {close_result.error_message}")
