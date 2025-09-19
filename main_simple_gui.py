@@ -875,8 +875,8 @@ class AdaptiveTradingSystemGUI:
         """🚀 ปิดไม้ตามแผนที่สมดุล"""
         try:
             positions_to_close = closing_plan['all_positions_to_close']
-            
-            # ใช้ระบบปิดไม้เก่าที่มีอยู่
+                    
+                    # ใช้ระบบปิดไม้เก่าที่มีอยู่
             result = self.order_manager.close_positions_group(positions_to_close, "Balanced Edge Priority Closing")
             
             if result.success:
@@ -1041,23 +1041,65 @@ class AdaptiveTradingSystemGUI:
             logger.error(f"🎯 [SMART POSITION] Error: {e}")
     
     def _check_smart_position_pairing(self, classification: Dict, current_candle: CandleData):
-        """🎯 Smart Position Pairing System - ระบบจับคู่ไม้ที่ฉลาด"""
+        """🎯 Smart Hedge Management System - ระบบจัดการไม้ค้ำและไม้ช่วย"""
         try:
-            # หาไม้ที่โดนลาก (ติดลบ + ห่างจากราคาปัจจุบัน)
+            # 1. หาไม้ค้ำ (ไม้ที่ทำหน้าที่ค้ำอยู่)
+            hedge_positions = self._find_hedge_positions(classification, current_candle)
+            
+            # 2. หาไม้โดนลาก (ไม้ที่ติดลบและรอไม้ช่วย)
             dragged_positions = self._find_dragged_positions(classification, current_candle)
             
-            if not dragged_positions:
-                return
+            # 3. หาไม้ช่วย (ไม้ใหม่ที่มีกำไรมาช่วย)
+            helper_positions = self._find_helper_positions(classification, current_candle)
             
-            # หาไม้ฝั่งตรงข้ามที่อยู่ใกล้ๆ
-            for dragged_pos in dragged_positions:
-                self._find_and_pair_opposite_positions(dragged_pos, classification, current_candle)
+            # 4. จัดการไม้ค้ำ + ไม้โดนลาก + ไม้ช่วย
+            if hedge_positions and dragged_positions and helper_positions:
+                self._manage_hedge_group(hedge_positions, dragged_positions, helper_positions, current_candle)
+            elif dragged_positions and helper_positions:
+                # กรณีไม่มีไม้ค้ำ แต่มีไม้ช่วย
+                self._manage_dragged_with_helper(dragged_positions, helper_positions, current_candle)
                 
         except Exception as e:
-            logger.error(f"🎯 [SMART PAIRING] Error: {e}")
+            logger.error(f"🎯 [HEDGE MANAGEMENT] Error: {e}")
+    
+    def _find_hedge_positions(self, classification: Dict, current_candle: CandleData) -> List:
+        """🛡️ หาไม้ค้ำ (ไม้ที่ทำหน้าที่ค้ำอยู่)"""
+        try:
+            hedge_positions = []
+            current_price = current_candle.close
+            
+            # ตรวจสอบไม้ทุกประเภท
+            all_positions = (classification.get('edge_buy', []) + 
+                           classification.get('middle_buy', []) + 
+                           classification.get('near_buy', []) +
+                           classification.get('edge_sell', []) + 
+                           classification.get('middle_sell', []) + 
+                           classification.get('near_sell', []))
+            
+            for pos in all_positions:
+                profit = getattr(pos, 'profit', 0)
+                price_open = getattr(pos, 'price_open', 0)
+                pos_type = getattr(pos, 'type', 0)
+                
+                # เงื่อนไขไม้ค้ำ: ไม้ที่ทำหน้าที่ค้ำ (ไม่จำเป็นต้องใกล้ราคาปัจจุบัน)
+                # ไม้ค้ำ = ไม้ที่อยู่ฝั่งตรงข้ามกับไม้โดนลาก
+                if profit > -5.0:  # ไม่ขาดทุนมากเกินไป
+                    hedge_positions.append({
+                        'position': pos,
+                        'profit': profit,
+                        'price_open': price_open,
+                        'type': 'BUY' if pos_type == 0 else 'SELL'
+                    })
+            
+            logger.info(f"🛡️ [HEDGE] Found {len(hedge_positions)} hedge positions")
+            return hedge_positions
+            
+        except Exception as e:
+            logger.error(f"🛡️ [HEDGE] Error: {e}")
+            return []
     
     def _find_dragged_positions(self, classification: Dict, current_candle: CandleData) -> List:
-        """🔍 หาไม้ที่โดนลาก (ติดลบ + ห่างจากราคาปัจจุบัน)"""
+        """🔍 หาไม้โดนลาก (ไม้ที่ติดลบและรอไม้ช่วย)"""
         try:
             dragged_positions = []
             current_price = current_candle.close
@@ -1073,19 +1115,19 @@ class AdaptiveTradingSystemGUI:
             for pos in all_positions:
                 profit = getattr(pos, 'profit', 0)
                 price_open = getattr(pos, 'price_open', 0)
-                distance = abs(price_open - current_price)
+                pos_type = getattr(pos, 'type', 0)
                 
-                # เงื่อนไขไม้โดนลาก: ขาดทุน + ห่างจากราคาปัจจุบัน
-                if profit < -1.0 and distance > 2.0:
+                # เงื่อนไขไม้โดนลาก: ขาดทุน + รอไม้ช่วย
+                if profit < -1.0:  # ขาดทุน
                     dragged_positions.append({
                         'position': pos,
                         'profit': profit,
-                        'distance': distance,
-                        'type': 'BUY' if getattr(pos, 'type', 0) == 0 else 'SELL'
+                        'price_open': price_open,
+                        'type': 'BUY' if pos_type == 0 else 'SELL'
                     })
             
-            # เรียงตามความเสี่ยง (ขาดทุนมาก + ไกลมาก = เสี่ยงมาก)
-            dragged_positions.sort(key=lambda x: (x['profit'], -x['distance']))
+            # เรียงตามความเสี่ยง (ขาดทุนมาก = เสี่ยงมาก)
+            dragged_positions.sort(key=lambda x: x['profit'])
             
             logger.info(f"🔍 [DRAGGED] Found {len(dragged_positions)} dragged positions")
             return dragged_positions
@@ -1094,145 +1136,164 @@ class AdaptiveTradingSystemGUI:
             logger.error(f"🔍 [DRAGGED] Error: {e}")
             return []
     
-    def _find_and_pair_opposite_positions(self, dragged_pos_info: Dict, classification: Dict, current_candle: CandleData):
-        """🤝 หาไม้ฝั่งตรงข้ามที่อยู่ใกล้ๆ และจับคู่"""
+    def _find_helper_positions(self, classification: Dict, current_candle: CandleData) -> List:
+        """🤝 หาไม้ช่วย (ไม้ใหม่ที่มีกำไรมาช่วย)"""
         try:
-            dragged_pos = dragged_pos_info['position']
-            dragged_type = dragged_pos_info['type']
-            current_price = current_candle.close
+            helper_positions = []
             
-            # หาไม้ฝั่งตรงข้ามที่อยู่ใกล้ราคาปัจจุบัน
-            if dragged_type == 'SELL':
-                # หา BUY ที่อยู่ใกล้ราคาปัจจุบัน
-                opposite_positions = (classification.get('near_buy', []) + 
-                                    classification.get('middle_buy', []))
-            else:  # BUY
-                # หา SELL ที่อยู่ใกล้ราคาปัจจุบัน
-                opposite_positions = (classification.get('near_sell', []) + 
-                                    classification.get('middle_sell', []))
+            # ตรวจสอบไม้กำไร
+            profitable_positions = classification.get('profitable', [])
             
-            if not opposite_positions:
-                logger.debug(f"🤝 [PAIRING] No opposite positions found for {dragged_type}")
+            for pos in profitable_positions:
+                profit = getattr(pos, 'profit', 0)
+                price_open = getattr(pos, 'price_open', 0)
+                pos_type = getattr(pos, 'type', 0)
+                
+                # เงื่อนไขไม้ช่วย: ไม้ที่มีกำไร
+                if profit > 1.0:  # มีกำไร
+                    helper_positions.append({
+                        'position': pos,
+                        'profit': profit,
+                        'price_open': price_open,
+                        'type': 'BUY' if pos_type == 0 else 'SELL'
+                    })
+            
+            # เรียงตามกำไร (กำไรมาก = ช่วยได้มาก)
+            helper_positions.sort(key=lambda x: -x['profit'])
+            
+            logger.info(f"🤝 [HELPER] Found {len(helper_positions)} helper positions")
+            return helper_positions
+            
+        except Exception as e:
+            logger.error(f"🤝 [HELPER] Error: {e}")
+            return []
+    
+    def _manage_hedge_group(self, hedge_positions: List, dragged_positions: List, helper_positions: List, current_candle: CandleData):
+        """🎯 จัดการกลุ่มไม้ค้ำ + ไม้โดนลาก + ไม้ช่วย"""
+        try:
+            # จับคู่ไม้ค้ำ + ไม้โดนลาก + ไม้ช่วย
+            for hedge in hedge_positions:
+                for dragged in dragged_positions:
+                    for helper in helper_positions:
+                        # ตรวจสอบว่าสามารถจับคู่กันได้
+                        if self._can_form_hedge_group(hedge, dragged, helper):
+                            # ปิดกลุ่มไม้ค้ำ + ไม้โดนลาก + ไม้ช่วย
+                            self._execute_hedge_group_closing(hedge, dragged, helper, current_candle)
+                            return  # ปิดกลุ่มเดียวแล้วออก
+                            
+        except Exception as e:
+            logger.error(f"🎯 [HEDGE GROUP] Error: {e}")
+    
+    def _manage_dragged_with_helper(self, dragged_positions: List, helper_positions: List, current_candle: CandleData):
+        """🤝 จัดการไม้โดนลาก + ไม้ช่วย (กรณีไม่มีไม้ค้ำ)"""
+        try:
+            # จับคู่ไม้โดนลาก + ไม้ช่วย
+            for dragged in dragged_positions:
+                for helper in helper_positions:
+                    # ตรวจสอบว่าสามารถจับคู่กันได้
+                    if self._can_form_helper_pair(dragged, helper):
+                        # ปิดคู่ไม้โดนลาก + ไม้ช่วย
+                        self._execute_helper_pair_closing(dragged, helper, current_candle)
+                        return  # ปิดคู่เดียวแล้วออก
+                        
+        except Exception as e:
+            logger.error(f"🤝 [HELPER PAIR] Error: {e}")
+    
+    def _can_form_hedge_group(self, hedge: Dict, dragged: Dict, helper: Dict) -> bool:
+        """🔍 ตรวจสอบว่าสามารถจับคู่กลุ่มไม้ค้ำได้"""
+        try:
+            # เงื่อนไข: ไม้ค้ำ + ไม้โดนลาก + ไม้ช่วย ต้องเป็นฝั่งเดียวกัน
+            if hedge['type'] == dragged['type'] == helper['type']:
+                # ตรวจสอบว่าการปิดจะได้กำไร
+                total_profit = hedge['profit'] + dragged['profit'] + helper['profit']
+                return total_profit > 0
+            return False
+            
+        except Exception as e:
+            logger.error(f"🔍 [HEDGE GROUP CHECK] Error: {e}")
+            return False
+    
+    def _can_form_helper_pair(self, dragged: Dict, helper: Dict) -> bool:
+        """🔍 ตรวจสอบว่าสามารถจับคู่ไม้ช่วยได้"""
+        try:
+            # เงื่อนไข: ไม้โดนลาก + ไม้ช่วย ต้องเป็นฝั่งเดียวกัน
+            if dragged['type'] == helper['type']:
+                # ตรวจสอบว่าการปิดจะได้กำไร
+                total_profit = dragged['profit'] + helper['profit']
+                return total_profit > 0
+            return False
+            
+        except Exception as e:
+            logger.error(f"🔍 [HELPER PAIR CHECK] Error: {e}")
+            return False
+    
+    def _execute_hedge_group_closing(self, hedge: Dict, dragged: Dict, helper: Dict, current_candle: CandleData):
+        """🎯 ปิดกลุ่มไม้ค้ำ + ไม้โดนลาก + ไม้ช่วย"""
+        try:
+            hedge_pos = hedge['position']
+            dragged_pos = dragged['position']
+            helper_pos = helper['position']
+            
+            # ปิดไม้ค้ำ
+            hedge_result = self.order_manager.close_position(hedge_pos.ticket)
+            if hedge_result.success:
+                logger.info(f"🎯 [HEDGE GROUP] Closed hedge position: {hedge_pos.ticket}")
+            else:
+                logger.error(f"🎯 [HEDGE GROUP] Failed to close hedge: {hedge_result.error_message}")
                 return
             
-            # หาไม้ที่เหมาะสมที่สุด
-            best_pair = self._find_best_pairing(dragged_pos, opposite_positions, current_price)
+            # ปิดไม้โดนลาก
+            dragged_result = self.order_manager.close_position(dragged_pos.ticket)
+            if dragged_result.success:
+                logger.info(f"🎯 [HEDGE GROUP] Closed dragged position: {dragged_pos.ticket}")
+            else:
+                logger.error(f"🎯 [HEDGE GROUP] Failed to close dragged: {dragged_result.error_message}")
+                return
             
-            if best_pair:
-                self._create_position_pair(dragged_pos, best_pair, current_price)
-                
-        except Exception as e:
-            logger.error(f"🤝 [PAIRING] Error: {e}")
-    
-    def _find_best_pairing(self, dragged_pos: Any, opposite_positions: List, current_price: float) -> Any:
-        """🎯 หาไม้ที่เหมาะสมที่สุดสำหรับจับคู่"""
-        try:
-            best_pair = None
-            best_score = -999999
+            # ปิดไม้ช่วย
+            helper_result = self.order_manager.close_position(helper_pos.ticket)
+            if helper_result.success:
+                logger.info(f"🎯 [HEDGE GROUP] Closed helper position: {helper_pos.ticket}")
+            else:
+                logger.error(f"🎯 [HEDGE GROUP] Failed to close helper: {helper_result.error_message}")
+                return
             
-            dragged_profit = getattr(dragged_pos, 'profit', 0)
-            dragged_lot = getattr(dragged_pos, 'volume', 0.01)
-            
-            for opposite_pos in opposite_positions:
-                opposite_profit = getattr(opposite_pos, 'profit', 0)
-                opposite_lot = getattr(opposite_pos, 'volume', 0.01)
-                opposite_price = getattr(opposite_pos, 'price_open', 0)
-                
-                # คำนวณคะแนนการจับคู่
-                score = self._calculate_pairing_score(
-                    dragged_profit, dragged_lot,
-                    opposite_profit, opposite_lot,
-                    current_price, opposite_price
-                )
-                
-                if score > best_score:
-                    best_score = score
-                    best_pair = opposite_pos
-            
-            logger.debug(f"🎯 [BEST PAIR] Best pairing score: {best_score:.2f}")
-            return best_pair
-            
-        except Exception as e:
-            logger.error(f"🎯 [BEST PAIR] Error: {e}")
-            return None
-    
-    def _calculate_pairing_score(self, dragged_profit: float, dragged_lot: float,
-                               opposite_profit: float, opposite_lot: float,
-                               current_price: float, opposite_price: float) -> float:
-        """📊 คำนวณคะแนนการจับคู่"""
-        try:
             # คำนวณกำไรรวม
-            total_profit = dragged_profit + opposite_profit
-            
-            # คำนวณระยะห่างจากราคาปัจจุบัน
-            distance = abs(opposite_price - current_price)
-            
-            # คำนวณอัตราส่วน lot
-            lot_ratio = min(dragged_lot, opposite_lot) / max(dragged_lot, opposite_lot)
-            
-            # คำนวณคะแนน (กำไรรวมมาก + ใกล้ราคาปัจจุบัน + lot ratio ดี = คะแนนสูง)
-            score = (total_profit * 0.5) + ((10 - distance) * 0.3) + (lot_ratio * 0.2)
-            
-            return score
+            total_profit = hedge['profit'] + dragged['profit'] + helper['profit']
+            logger.info(f"🎯 [HEDGE GROUP] Successfully closed group with total profit: {total_profit:.2f}")
             
         except Exception as e:
-            logger.error(f"📊 [SCORE] Error: {e}")
-            return -999999
+            logger.error(f"🎯 [HEDGE GROUP EXECUTE] Error: {e}")
     
-    def _create_position_pair(self, dragged_pos: Any, opposite_pos: Any, current_price: float):
-        """🔗 สร้างไม้คู่และตรวจสอบการปิด"""
+    def _execute_helper_pair_closing(self, dragged: Dict, helper: Dict, current_candle: CandleData):
+        """🤝 ปิดคู่ไม้โดนลาก + ไม้ช่วย"""
         try:
-            dragged_profit = getattr(dragged_pos, 'profit', 0)
-            opposite_profit = getattr(opposite_pos, 'profit', 0)
-            total_profit = dragged_profit + opposite_profit
+            dragged_pos = dragged['position']
+            helper_pos = helper['position']
             
-            # ตรวจสอบว่าควรปิดหรือไม่
-            if total_profit > 1.0:  # กำไรรวม > $1
-                self._execute_position_pair_closing(dragged_pos, opposite_pos, total_profit)
+            # ปิดไม้โดนลาก
+            dragged_result = self.order_manager.close_position(dragged_pos.ticket)
+            if dragged_result.success:
+                logger.info(f"🤝 [HELPER PAIR] Closed dragged position: {dragged_pos.ticket}")
             else:
-                # เก็บไม้คู่ไว้ใช้ในอนาคต
-                self._store_position_pair(dragged_pos, opposite_pos, total_profit)
-                
-        except Exception as e:
-            logger.error(f"🔗 [PAIR] Error: {e}")
-    
-    def _execute_position_pair_closing(self, dragged_pos: Any, opposite_pos: Any, total_profit: float):
-        """🚀 ปิดไม้คู่ที่กำไรรวม > $1"""
-        try:
-            positions_to_close = [dragged_pos, opposite_pos]
-            result = self.order_manager.close_positions_group(positions_to_close, "Smart Position Pairing")
+                logger.error(f"🤝 [HELPER PAIR] Failed to close dragged: {dragged_result.error_message}")
+                return
             
-            if result.success:
-                dragged_ticket = getattr(dragged_pos, 'ticket', 0)
-                opposite_ticket = getattr(opposite_pos, 'ticket', 0)
-                logger.info(f"🚀 [PAIR CLOSE] Successfully closed pair: {dragged_ticket} + {opposite_ticket} = ${total_profit:.2f}")
+            # ปิดไม้ช่วย
+            helper_result = self.order_manager.close_position(helper_pos.ticket)
+            if helper_result.success:
+                logger.info(f"🤝 [HELPER PAIR] Closed helper position: {helper_pos.ticket}")
             else:
-                logger.warning(f"🚀 [PAIR CLOSE] Failed to close pair: {result.error_message}")
-                
+                logger.error(f"🤝 [HELPER PAIR] Failed to close helper: {helper_result.error_message}")
+                return
+            
+            # คำนวณกำไรรวม
+            total_profit = dragged['profit'] + helper['profit']
+            logger.info(f"🤝 [HELPER PAIR] Successfully closed pair with total profit: {total_profit:.2f}")
+            
         except Exception as e:
-            logger.error(f"🚀 [PAIR CLOSE] Error: {e}")
+            logger.error(f"🤝 [HELPER PAIR EXECUTE] Error: {e}")
     
-    def _store_position_pair(self, dragged_pos: Any, opposite_pos: Any, total_profit: float):
-        """💾 เก็บไม้คู่ไว้ใช้ในอนาคต"""
-        try:
-            if not hasattr(self, 'position_pairs'):
-                self.position_pairs = []
-            
-            pair = {
-                'dragged_position': dragged_pos,
-                'opposite_position': opposite_pos,
-                'total_profit': total_profit,
-                'created_time': datetime.now()
-            }
-            
-            self.position_pairs.append(pair)
-            
-            dragged_ticket = getattr(dragged_pos, 'ticket', 0)
-            opposite_ticket = getattr(opposite_pos, 'ticket', 0)
-            logger.debug(f"💾 [PAIR STORE] Stored pair: {dragged_ticket} + {opposite_ticket} = ${total_profit:.2f}")
-            
-        except Exception as e:
-            logger.error(f"💾 [PAIR STORE] Error: {e}")
     
     def _check_lot_size_balancing(self, classification: Dict):
         """⚖️ ตรวจสอบและปรับ lot size ให้สมดุล"""
