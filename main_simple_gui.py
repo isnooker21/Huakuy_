@@ -30,6 +30,11 @@ from calculations import Position, PercentageCalculator, LotSizeCalculator
 from trading_conditions import TradingConditions, Signal, CandleData
 from order_management import OrderManager
 from portfolio_manager import PortfolioManager, PortfolioState
+
+# 🚀 Web GUI แทน Tkinter GUI เพื่อป้องกันการค้าง
+from web_gui import create_web_gui
+
+# Import Tkinter GUI เป็น fallback
 from gui import TradingGUI
 
 # ✅ KEEP POSITION MANAGEMENT & CLOSING SYSTEMS
@@ -1702,13 +1707,27 @@ class AdaptiveTradingSystemGUI:
         except Exception as e:
             logger.error(f"❌ Error in smart systems: {e}")
     
-    def start_gui(self):
-        """Start GUI (Same as original)"""
+    def start_gui(self, use_web_gui=True):
+        """Start GUI - Web GUI หรือ Tkinter GUI"""
         try:
-            self.gui = TradingGUI(self)
-            self.gui.run()
+            if use_web_gui:
+                logger.info("🚀 Starting Web GUI (Fast & Stable)")
+                self.gui = create_web_gui(self, host='0.0.0.0', port=8080)
+                self.gui.run()
+            else:
+                logger.info("🖥️ Starting Tkinter GUI (Fallback)")
+                self.gui = TradingGUI(self)
+                self.gui.run()
         except Exception as e:
             logger.error(f"เกิดข้อผิดพลาดใน GUI: {str(e)}")
+            # Fallback to Tkinter if Web GUI fails
+            if use_web_gui:
+                logger.info("⚠️ Web GUI failed, falling back to Tkinter GUI")
+                try:
+                    self.gui = TradingGUI(self)
+                    self.gui.run()
+                except Exception as e2:
+                    logger.error(f"Tkinter GUI also failed: {str(e2)}")
     
     def shutdown(self):
         """Shutdown system (Same as original)"""
