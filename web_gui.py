@@ -43,14 +43,14 @@ class WebTradingGUI:
             'logs': []
         }
         
-        # Update intervals (วินาที)
+        # Update intervals (วินาที) - ปรับให้เร็วขึ้นและลดหน่วง
         self.update_intervals = {
-            'account_info': 30,      # 30 วินาที
-            'trading_status': 10,    # 10 วินาที
-            'positions': 5,          # 5 วินาที
-            'position_status': 5,    # 5 วินาที
-            'performance': 60,       # 1 นาที
-            'logs': 2                # 2 วินาที
+            'account_info': 60,      # 1 นาที - ลดความถี่
+            'trading_status': 15,    # 15 วินาที - เพิ่มช่วงเวลา
+            'positions': 10,         # 10 วินาที - เพิ่มช่วงเวลา
+            'position_status': 15,   # 15 วินาที - เพิ่มช่วงเวลา
+            'performance': 120,      # 2 นาที - ลดความถี่
+            'logs': 5                # 5 วินาที - เพิ่มช่วงเวลา
         }
         
         self.last_updates = {}
@@ -238,33 +238,52 @@ class WebTradingGUI:
         self.websocket_connections -= disconnected
     
     async def background_updates(self):
-        """Background updates loop"""
+        """Background updates loop - ปรับปรุงประสิทธิภาพ"""
         while self.running:
             try:
                 current_time = time.time()
                 
-                # อัพเดทข้อมูลต่างๆ
-                await self.update_account_info(current_time)
-                await self.update_trading_status(current_time)
-                await self.update_positions(current_time)
-                await self.update_position_status(current_time)
-                await self.update_performance(current_time)
-                await self.update_logs(current_time)
+                # อัพเดทข้อมูลแบบ staggered เพื่อลด load
+                update_tasks = []
                 
-                # รอ 1 วินาทีก่อนรอบถัดไป
-                await asyncio.sleep(1)
+                # Account info - ทุก 60 วินาที
+                if current_time - self.last_updates.get('account_info', 0) >= self.update_intervals['account_info']:
+                    update_tasks.append(self.update_account_info(current_time))
+                
+                # Trading status - ทุก 15 วินาที
+                if current_time - self.last_updates.get('trading_status', 0) >= self.update_intervals['trading_status']:
+                    update_tasks.append(self.update_trading_status(current_time))
+                
+                # Positions - ทุก 10 วินาที
+                if current_time - self.last_updates.get('positions', 0) >= self.update_intervals['positions']:
+                    update_tasks.append(self.update_positions(current_time))
+                
+                # Position status - ทุก 15 วินาที
+                if current_time - self.last_updates.get('position_status', 0) >= self.update_intervals['position_status']:
+                    update_tasks.append(self.update_position_status(current_time))
+                
+                # Performance - ทุก 2 นาที
+                if current_time - self.last_updates.get('performance', 0) >= self.update_intervals['performance']:
+                    update_tasks.append(self.update_performance(current_time))
+                
+                # Logs - ทุก 5 วินาที
+                if current_time - self.last_updates.get('logs', 0) >= self.update_intervals['logs']:
+                    update_tasks.append(self.update_logs(current_time))
+                
+                # รัน tasks พร้อมกัน (concurrent) เพื่อลดเวลา
+                if update_tasks:
+                    await asyncio.gather(*update_tasks, return_exceptions=True)
+                
+                # รอ 3 วินาทีก่อนรอบถัดไป - ลด CPU usage เพิ่มเติม
+                await asyncio.sleep(3)
                 
             except Exception as e:
                 logger.error(f"❌ Error in background updates: {e}")
-                await asyncio.sleep(5)
+                await asyncio.sleep(10)
     
     async def update_account_info(self, current_time):
-        """อัพเดทข้อมูลบัญชี"""
+        """อัพเดทข้อมูลบัญชี - ไม่ต้องตรวจสอบ interval แล้ว"""
         try:
-            last_update = self.last_updates.get('account_info', 0)
-            if current_time - last_update < self.update_intervals['account_info']:
-                return
-            
             if self.trading_system and hasattr(self.trading_system, 'mt5_connection'):
                 account_info = self.trading_system.mt5_connection.get_account_info()
                 if account_info:
@@ -280,12 +299,8 @@ class WebTradingGUI:
             logger.error(f"❌ Error updating account info: {e}")
     
     async def update_trading_status(self, current_time):
-        """อัพเดทสถานะการเทรด"""
+        """อัพเดทสถานะการเทรด - ไม่ต้องตรวจสอบ interval แล้ว"""
         try:
-            last_update = self.last_updates.get('trading_status', 0)
-            if current_time - last_update < self.update_intervals['trading_status']:
-                return
-            
             if self.trading_system:
                 trading_status = {
                     'is_running': self.trading_system.is_running,
@@ -319,12 +334,8 @@ class WebTradingGUI:
             logger.error(f"❌ Error updating trading status: {e}")
     
     async def update_positions(self, current_time):
-        """อัพเดท positions"""
+        """อัพเดท positions - ไม่ต้องตรวจสอบ interval แล้ว"""
         try:
-            last_update = self.last_updates.get('positions', 0)
-            if current_time - last_update < self.update_intervals['positions']:
-                return
-            
             positions_data = []
             
             if self.trading_system and hasattr(self.trading_system, 'order_manager'):
@@ -647,6 +658,23 @@ class WebTradingGUI:
         
         .info-value.negative {
             color: #ff4444;
+        }
+        
+        /* เพิ่ม CSS สำหรับ smooth transitions */
+        .info-value, .log-entry, .positions-table tr {
+            transition: all 0.2s ease-in-out;
+        }
+        
+        /* เพิ่ม CSS สำหรับ loading states */
+        .loading-skeleton {
+            background: linear-gradient(90deg, #2d2d2d 25%, #3d3d3d 50%, #2d2d2d 75%);
+            background-size: 200% 100%;
+            animation: loading 1.5s infinite;
+        }
+        
+        @keyframes loading {
+            0% { background-position: 200% 0; }
+            100% { background-position: -200% 0; }
         }
         
         .tabs {
@@ -989,6 +1017,23 @@ class WebTradingGUI:
             }
         }
         
+        // Debounce function เพื่อลดการอัพเดทบ่อยเกินไป
+        function debounce(func, wait) {
+            let timeout;
+            return function executedFunction(...args) {
+                const later = () => {
+                    clearTimeout(timeout);
+                    func(...args);
+                };
+                clearTimeout(timeout);
+                timeout = setTimeout(later, wait);
+            };
+        }
+        
+        // สร้าง debounced versions ของ update functions
+        const debouncedUpdatePositions = debounce(updatePositions, 100);
+        const debouncedUpdateLogs = debounce(updateLogs, 200);
+        
         function handleWebSocketMessage(message) {
             switch (message.type) {
                 case 'initial_data':
@@ -1005,7 +1050,7 @@ class WebTradingGUI:
                     break;
                 case 'positions_update':
                     data.positions = message.data;
-                    updatePositions();
+                    debouncedUpdatePositions();
                     break;
                 case 'position_status_update':
                     data.position_status = message.data;
@@ -1017,7 +1062,7 @@ class WebTradingGUI:
                     break;
                 case 'logs_update':
                     data.logs = message.data;
-                    updateLogs();
+                    debouncedUpdateLogs();
                     break;
                 case 'command_result':
                     handleCommandResult(message.command, message.success);
@@ -1092,8 +1137,12 @@ class WebTradingGUI:
                 return;
             }
             
-            tbody.innerHTML = positions.map(pos => `
-                <tr>
+            // ใช้ DocumentFragment เพื่อลด DOM manipulation
+            const fragment = document.createDocumentFragment();
+            
+            positions.forEach(pos => {
+                const row = document.createElement('tr');
+                row.innerHTML = `
                     <td>#${pos.ticket}</td>
                     <td>${pos.symbol}</td>
                     <td>${pos.type}</td>
@@ -1102,8 +1151,12 @@ class WebTradingGUI:
                     <td>${pos.price_current.toFixed(5)}</td>
                     <td class="${pos.profit >= 0 ? 'positive' : 'negative'}">$${pos.profit.toFixed(2)}</td>
                     <td class="${pos.profit_pct >= 0 ? 'positive' : 'negative'}">${pos.profit_pct.toFixed(2)}%</td>
-                </tr>
-            `).join('');
+                `;
+                fragment.appendChild(row);
+            });
+            
+            tbody.innerHTML = '';
+            tbody.appendChild(fragment);
         }
         
         function updatePositionStatus() {
@@ -1139,11 +1192,22 @@ class WebTradingGUI:
             const logs = data.logs || [];
             const container = document.getElementById('log-container');
             
-            container.innerHTML = logs.map(log => `
-                <div class="log-entry ${log.level.toLowerCase()}">
-                    [${log.timestamp}] ${log.level}: ${log.message}
-                </div>
-            `).join('');
+            // จำกัดจำนวน logs ที่แสดง (ป้องกัน memory leak)
+            const maxLogs = 50;
+            const recentLogs = logs.slice(-maxLogs);
+            
+            // ใช้ DocumentFragment เพื่อลด DOM manipulation
+            const fragment = document.createDocumentFragment();
+            
+            recentLogs.forEach(log => {
+                const logEntry = document.createElement('div');
+                logEntry.className = `log-entry ${log.level.toLowerCase()}`;
+                logEntry.textContent = `[${log.timestamp}] ${log.level}: ${log.message}`;
+                fragment.appendChild(logEntry);
+            });
+            
+            container.innerHTML = '';
+            container.appendChild(fragment);
             
             // Auto-scroll to bottom
             container.scrollTop = container.scrollHeight;
@@ -1189,12 +1253,12 @@ class WebTradingGUI:
         document.addEventListener('DOMContentLoaded', function() {
             connectWebSocket();
             
-            // Send ping every 30 seconds to keep connection alive
+            // Send ping every 60 seconds to keep connection alive - ลดความถี่
             setInterval(() => {
                 if (ws && ws.readyState === WebSocket.OPEN) {
                     ws.send(JSON.stringify({type: 'ping'}));
                 }
-            }, 30000);
+            }, 60000);
         });
     </script>
 </body>
