@@ -1517,8 +1517,8 @@ class TradingGUI:
                         # อัพเดท GUI ใน main thread
                         self.root.after(0, lambda: self.update_trading_status(True))
                         
-                        # 🚀 เริ่ม Async Status Updater
-                        self.root.after(0, self.start_async_status_updates)
+                        # 🚀 เริ่ม Async Status Updater (ลบออกแล้ว - ใช้ระบบเดิม)
+                        # self.root.after(0, self.start_async_status_updates)
                         
                         logger.info("เริ่มการเทรดจาก GUI สำเร็จ")
                 except Exception as e:
