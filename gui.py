@@ -32,7 +32,7 @@ class TradingGUI:
         
         # สร้าง main window
         self.root = tk.Tk()
-        self.root.title("🚀 Enhanced 7D Smart Trading System")
+        self.root.title("🚀 Enhanced 7D Smart Trading System - Connect Only")
         self.root.geometry("1200x800")
         self.root.configure(bg='#1a1a1a')
         
@@ -78,20 +78,14 @@ class TradingGUI:
         self.root.after(30000, self.start_performance_monitoring)  # รอ 30 วินาที
         
     def create_widgets(self):
-        """สร้าง widgets ทั้งหมด"""
+        """สร้าง widgets ทั้งหมด - แบบง่าย Connect เท่านั้น"""
         try:
             # สร้าง main frame
             main_frame = tk.Frame(self.root, bg='#1a1a1a')
             main_frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
             
-            # สร้าง top frame สำหรับการเชื่อมต่อและควบคุม
+            # สร้าง control panel สำหรับการเชื่อมต่อและควบคุม
             self.create_control_panel(main_frame)
-            
-            # สร้าง middle frame สำหรับข้อมูลหลัก
-            self.create_main_info_panel(main_frame)
-            
-            # สร้าง bottom frame สำหรับ positions และ log
-            self.create_bottom_panel(main_frame)
             
         except Exception as e:
             logger.error(f"เกิดข้อผิดพลาดในการสร้าง widgets: {str(e)}")
@@ -147,6 +141,11 @@ class TradingGUI:
         
         tk.Label(emergency_frame, text="🚨 Emergency", bg='#2d2d2d', fg='#ff4444', 
                                                     font=('Segoe UI', 8, 'bold')).pack(pady=4)
+        
+        self.emergency_btn = tk.Button(emergency_frame, text="Emergency Stop", 
+                                     command=self.emergency_stop_all, bg='#d32f2f', fg='white',
+                                     font=('Segoe UI', 8, 'bold'), relief=tk.RAISED, bd=2)
+        self.emergency_btn.pack(pady=4)
         
         self.close_all_btn = tk.Button(emergency_frame, text="🛑 Close All Positions", 
                                      command=self.close_all_positions, bg='#d32f2f', fg='white',
@@ -406,7 +405,7 @@ class TradingGUI:
         
         # เพิ่มเมนูคลิกขวา
         self.create_positions_context_menu()
-    
+        
     def create_enhanced_positions_tab(self, notebook):
         """🚀 สร้างแท็บ Enhanced Position Status"""
         try:
@@ -2182,3 +2181,26 @@ class TradingGUI:
                 messagebox.showinfo("Info", message)
         except Exception as e:
             logger.error(f"Error showing alert: {e}")
+    
+    
+    def emergency_stop_all(self):
+        """หยุดฉุกเฉินทั้งหมด"""
+        try:
+            result = messagebox.askyesno(
+                "Emergency Stop",
+                "Are you sure you want to emergency stop?\nThis will stop trading and disconnect!"
+            )
+            
+            if result:
+                logger.warning("🚨 Emergency stop activated!")
+                
+                # หยุดการเทรด
+                if hasattr(self, 'trading_system') and self.trading_system:
+                    self.trading_system.stop_trading()
+                
+                messagebox.showinfo("Emergency Stop", "Emergency stop completed!")
+                logger.warning("🚨 Emergency stop completed")
+                
+        except Exception as e:
+            logger.error(f"❌ Error in emergency stop: {e}")
+            messagebox.showerror("Error", f"Emergency stop error: {e}")
