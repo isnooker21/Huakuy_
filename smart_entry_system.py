@@ -18,23 +18,23 @@ class SmartEntrySystem:
         self.support_buy_enabled = True      # เปิด Support entries (BUY ที่ Support)
         self.resistance_sell_enabled = True  # เปิด Resistance entries (SELL ที่ Resistance)
         
-        # Enhanced Zone Selection Parameters - ปรับให้แม่นยำขึ้น
+        # Enhanced Zone Selection Parameters - ปรับให้เหมาะสมกับ Zone Strength สูง
         self.profit_target_pips = 35  # เพิ่มเป้าหมายกำไรเป็น 35 pips (ลดความถี่การออกไม้)
         self.loss_threshold_pips = 30  # เพิ่มเกณฑ์ขาดทุนเป็น 30 pips (ลดความถี่การออกไม้)
         self.recovery_zone_strength = 10  # เพิ่ม Zone strength สำหรับ Recovery
-        self.min_zone_strength = 0.08  # เพิ่ม Zone strength ขั้นต่ำ (เลือกเฉพาะ Zone แข็งแกร่ง)
-        self.min_zone_touches = 3  # Zone ต้องแตะอย่างน้อย 3 ครั้ง
-        self.min_algorithms_detected = 2  # Zone ต้องถูกพบจากอย่างน้อย 2 algorithms
+        self.min_zone_strength = 0.05  # Zone strength ขั้นต่ำ (0.05 = 5% จาก 100)
+        self.min_zone_touches = 1  # ลดจำนวน touches เป็น 1 ครั้ง (Zone Strength สูง = แตะน้อยก็ได้)
+        self.min_algorithms_detected = 0  # ไม่จำกัด algorithms (Zone Strength สูง = พบจากวิธีเดียวก็ได้)
         
         # Enhanced Risk Management - ปรับให้เหมาะสมกับการเทรดคุณภาพ
         self.risk_percent_per_trade = 0.015  # ลดเป็น 1.5% ของ balance ต่อ trade (คุณภาพเหนือปริมาณ)
-        self.max_daily_trades = 15  # ลดจำนวน trade ต่อวัน (คุณภาพเหนือปริมาณ)
+        self.max_daily_trades = 25  # เพิ่มจำนวน trade ต่อวันเป็น 25 (ให้เทรดได้มากขึ้น)
         
-        # Zone Quality Filters - กรอง Zone ให้แม่นยำขึ้น
-        self.min_zone_distance_pips = 30  # Zone ต้องห่างจากราคาปัจจุบันอย่างน้อย 30 pips
-        self.max_zone_distance_pips = 150  # Zone ไม่ควรห่างเกิน 150 pips
-        self.zone_cooldown_hours = 6  # Zone ใช้แล้วต้องรอ 6 ชั่วโมงถึงจะใช้ใหม่
-        self.min_time_between_trades = 120  # รออย่างน้อย 2 นาทีระหว่าง trades
+        # Zone Quality Filters - ปรับให้เหมาะสมกับ Zone Strength สูง
+        self.min_zone_distance_pips = 5  # ลดระยะห่างขั้นต่ำเป็น 5 pips (Zone Strength สูง = ใกล้ก็ได้)
+        self.max_zone_distance_pips = 200  # ระยะห่างสูงสุด 200 pips
+        self.zone_cooldown_hours = 2  # ลด cooldown เป็น 2 ชั่วโมง (Zone Strength สูง = ใช้ได้บ่อย)
+        self.min_time_between_trades = 30  # ลดเวลาระหว่าง trades เป็น 30 วินาที (Zone Strength สูง = เทรดได้บ่อย)
         
         # Market Condition Filters - ปรับการเข้าไม้ตามสภาพตลาด
         self.volatility_threshold = 0.8  # เกณฑ์ความผันผวน (ต่ำกว่า = ตลาดนิ่ง, สูงกว่า = ตลาดผันผวน)
@@ -238,10 +238,23 @@ class SmartEntrySystem:
             
             if not filtered_supports and not filtered_resistances:
                 logger.warning("🚫 [ENHANCED ZONE SELECTION] No high-quality zones found after filtering")
-                return None, None
+                logger.info("🔄 [FALLBACK] Trying relaxed criteria...")
+                
+                # Fallback: ลดเกณฑ์ลงเพื่อหา Zone
+                relaxed_supports = self._filter_relaxed_zones(support_zones, current_price, 'support')
+                relaxed_resistances = self._filter_relaxed_zones(resistance_zones, current_price, 'resistance')
+                
+                if not relaxed_supports and not relaxed_resistances:
+                    logger.warning("🚫 [FALLBACK] No zones found even with relaxed criteria")
+                    return None, None
+                
+                # ใช้ relaxed zones
+                filtered_supports = relaxed_supports
+                filtered_resistances = relaxed_resistances
+                logger.info(f"🔄 [FALLBACK] Using relaxed criteria: {len(filtered_supports)} support, {len(filtered_resistances)} resistance")
             
             # ตรวจสอบระยะห่างระหว่าง support และ resistance ที่ใกล้ที่สุด
-            min_distance_pips = 60.0  # เพิ่มระยะห่างขั้นต่ำเป็น 60 pips
+            min_distance_pips = 30.0  # ลดระยะห่างขั้นต่ำเป็น 30 pips (ให้ยืดหยุ่นขึ้น)
             if filtered_supports and filtered_resistances:
                 closest_support_price = min(filtered_supports, key=lambda x: abs(x['price'] - current_price))['price']
                 closest_resistance_price = min(filtered_resistances, key=lambda x: abs(x['price'] - current_price))['price']
@@ -278,42 +291,51 @@ class SmartEntrySystem:
             return None, None
     
     def _filter_high_quality_zones(self, zones: List[Dict], current_price: float, zone_type: str) -> List[Dict]:
-        """🎯 กรอง Zone ให้เหลือเฉพาะ Zone คุณภาพสูง"""
+        """🎯 กรอง Zone แบบง่าย - เน้น Zone Strength เป็นหลัก"""
         try:
             filtered_zones = []
             
             for zone in zones:
-                # 1. ตรวจสอบ Zone Strength
-                if zone.get('strength', 0) < self.min_zone_strength:
+                zone_price = zone.get('price', 0)
+                zone_strength_raw = zone.get('strength', 0)
+                touches = zone.get('touches', 0)
+                algorithms_used = zone.get('algorithms_used', [])
+                distance_pips = abs(zone_price - current_price) * 10000
+                
+                # เงื่อนไขหลัก: Zone Strength ต้องผ่านเกณฑ์ (แปลง 0-100 เป็น 0-1)
+                zone_strength_normalized = zone_strength_raw / 100.0
+                if zone_strength_normalized < self.min_zone_strength:
                     continue
                 
-                # 2. ตรวจสอบจำนวน Touches
-                touches = zone.get('touches', 0)
+                # เงื่อนไขรอง: ตรวจสอบพื้นฐาน
                 if touches < self.min_zone_touches:
                     continue
                 
-                # 3. ตรวจสอบจำนวน Algorithms ที่พบ Zone นี้
-                algorithms_used = zone.get('algorithms_used', [])
                 if isinstance(algorithms_used, list) and len(algorithms_used) < self.min_algorithms_detected:
                     continue
                 
-                # 4. ตรวจสอบระยะห่างจากราคาปัจจุบัน
-                distance_pips = abs(zone['price'] - current_price) * 10000
                 if distance_pips < self.min_zone_distance_pips or distance_pips > self.max_zone_distance_pips:
                     continue
                 
-                # 5. ตรวจสอบว่า Zone ใช้แล้วหรือยัง (Cooldown)
+                # เงื่อนไขสุดท้าย: Cooldown และ Validity
                 if self._is_zone_on_cooldown(zone):
                     continue
                 
-                # 6. ตรวจสอบ Zone Validity
-                if self._is_valid_entry_zone(zone, current_price):
-                    filtered_zones.append(zone)
+                if not self._is_valid_entry_zone(zone, current_price):
+                    continue
+                
+                # Zone ผ่านทุกเงื่อนไข
+                filtered_zones.append(zone)
             
             # เรียงตาม Quality Score (Strength + Touches + Algorithms)
             filtered_zones.sort(key=lambda x: self._calculate_zone_quality_score(x), reverse=True)
             
             logger.info(f"🔍 [ZONE FILTERING] {zone_type.upper()}: {len(zones)} → {len(filtered_zones)} zones after filtering")
+            if filtered_zones:
+                best_zone = filtered_zones[0]
+                raw_strength = best_zone.get('strength', 0)
+                normalized_strength = raw_strength / 100.0
+                logger.info(f"🔍 [ZONE FILTERING] Best zone: {best_zone['price']:.5f} (Raw: {raw_strength:.1f}, Normalized: {normalized_strength:.3f})")
             
             return filtered_zones
             
@@ -321,10 +343,101 @@ class SmartEntrySystem:
             logger.error(f"❌ Error filtering high-quality zones: {e}")
             return []
     
+    def _filter_relaxed_zones(self, zones: List[Dict], current_price: float, zone_type: str) -> List[Dict]:
+        """🔄 กรอง Zone แบบ Relaxed - เกณฑ์ผ่อนปรน"""
+        try:
+            filtered_zones = []
+            
+            for zone in zones:
+                # 1. ตรวจสอบ Zone Strength (ลดเกณฑ์ - แปลงจาก 0-100 เป็น 0-1)
+                zone_strength_raw = zone.get('strength', 0)
+                zone_strength_normalized = zone_strength_raw / 100.0  # แปลงจาก 0-100 เป็น 0-1
+                if zone_strength_normalized < 0.03:  # ลดจาก 0.05 เป็น 0.03
+                    continue
+                
+                # 2. ตรวจสอบจำนวน Touches (ลดเกณฑ์)
+                touches = zone.get('touches', 0)
+                if touches < 1:  # ลดจาก 2 เป็น 1
+                    continue
+                
+                # 3. ตรวจสอบจำนวน Algorithms (ลดเกณฑ์)
+                algorithms_used = zone.get('algorithms_used', [])
+                if isinstance(algorithms_used, list) and len(algorithms_used) < 1:  # ลดจาก 2 เป็น 1
+                    continue
+                
+                # 4. ตรวจสอบระยะห่างจากราคาปัจจุบัน (เพิ่มเกณฑ์)
+                distance_pips = abs(zone['price'] - current_price) * 10000
+                if distance_pips < 10 or distance_pips > 300:  # ลดจาก 20-200 เป็น 10-300
+                    continue
+                
+                # 5. ตรวจสอบว่า Zone ใช้แล้วหรือยัง (ลด Cooldown)
+                if self._is_zone_on_relaxed_cooldown(zone):
+                    continue
+                
+                # 6. ตรวจสอบ Zone Validity (ลดเกณฑ์)
+                if self._is_valid_entry_zone_relaxed(zone, current_price):
+                    filtered_zones.append(zone)
+            
+            # เรียงตาม Quality Score (Strength + Touches + Algorithms)
+            filtered_zones.sort(key=lambda x: self._calculate_zone_quality_score(x), reverse=True)
+            
+            logger.info(f"🔄 [RELAXED FILTERING] {zone_type.upper()}: {len(zones)} → {len(filtered_zones)} zones after relaxed filtering")
+            
+            return filtered_zones
+            
+        except Exception as e:
+            logger.error(f"❌ Error filtering relaxed zones: {e}")
+            return []
+    
+    def _is_zone_on_relaxed_cooldown(self, zone: Dict) -> bool:
+        """🕒 ตรวจสอบ Zone Cooldown แบบ Relaxed"""
+        try:
+            zone_key = self._generate_zone_key(zone)
+            
+            if zone_key in self.used_zones:
+                last_used = self.used_zones[zone_key]['timestamp']
+                time_since_used = datetime.now() - last_used
+                
+                # ลด cooldown เป็น 2 ชั่วโมง
+                relaxed_cooldown_hours = 2
+                if time_since_used.total_seconds() < (relaxed_cooldown_hours * 3600):
+                    logger.debug(f"🕒 Zone {zone['price']} on relaxed cooldown: {time_since_used.total_seconds()/3600:.1f}h < {relaxed_cooldown_hours}h")
+                    return True
+            
+            return False
+            
+        except Exception as e:
+            logger.error(f"❌ Error checking relaxed zone cooldown: {e}")
+            return False
+    
+    def _is_valid_entry_zone_relaxed(self, zone: Dict, current_price: float) -> bool:
+        """✅ ตรวจสอบ Zone แบบ Relaxed"""
+        try:
+            # ตรวจสอบระยะห่างจากคำสั่งที่เปิดอยู่แล้ว (ลดเกณฑ์)
+            min_distance_from_existing = 15.0  # ลดจาก 35 เป็น 15 pips
+            if hasattr(self, 'order_manager') and self.order_manager and self.symbol:
+                try:
+                    existing_positions = self.order_manager.get_positions_by_symbol(self.symbol)
+                    for position in existing_positions:
+                        if hasattr(position, 'price') and position.price > 0:
+                            distance_from_existing = abs(zone['price'] - position.price) * 10000
+                            if distance_from_existing < min_distance_from_existing:
+                                logger.debug(f"🚫 Zone {zone['price']} too close to existing position: {distance_from_existing:.1f} pips")
+                                return False
+                except Exception as e:
+                    logger.debug(f"⚠️ Could not check existing positions: {e}")
+            
+            return True
+            
+        except Exception as e:
+            logger.error(f"❌ Error validating relaxed entry zone: {e}")
+            return False
+    
     def _calculate_zone_quality_score(self, zone: Dict) -> float:
         """🎯 คำนวณ Quality Score ของ Zone"""
         try:
-            strength = zone.get('strength', 0)
+            strength_raw = zone.get('strength', 0)
+            strength_normalized = strength_raw / 100.0  # แปลงจาก 0-100 เป็น 0-1
             touches = zone.get('touches', 0)
             algorithms_used = zone.get('algorithms_used', [])
             zone_count = zone.get('zone_count', 1)
@@ -332,8 +445,8 @@ class SmartEntrySystem:
             # คำนวณ Score
             score = 0.0
             
-            # Strength Score (40%)
-            score += strength * 40
+            # Strength Score (40%) - ใช้ค่า normalized
+            score += strength_normalized * 40
             
             # Touches Score (30%)
             score += min(touches, 10) * 3  # สูงสุด 10 touches
@@ -381,7 +494,7 @@ class SmartEntrySystem:
             return None
     
     def _is_zone_on_cooldown(self, zone: Dict) -> bool:
-        """🕒 ตรวจสอบว่า Zone อยู่ในช่วง Cooldown หรือไม่"""
+        """🕒 ตรวจสอบว่า Zone อยู่ในช่วง Cooldown หรือไม่ - ปรับตาม Zone Strength"""
         try:
             zone_key = self._generate_zone_key(zone)
             
@@ -389,8 +502,17 @@ class SmartEntrySystem:
                 last_used = self.used_zones[zone_key]['timestamp']
                 time_since_used = datetime.now() - last_used
                 
-                if time_since_used.total_seconds() < (self.zone_cooldown_hours * 3600):
-                    logger.debug(f"🕒 Zone {zone['price']} on cooldown: {time_since_used.total_seconds()/3600:.1f}h < {self.zone_cooldown_hours}h")
+                # ปรับ cooldown ตาม Zone Strength
+                zone_strength_raw = zone.get('strength', 0)
+                if zone_strength_raw > 70:  # Zone Strength สูงมาก = cooldown สั้น
+                    cooldown_hours = 1
+                elif zone_strength_raw > 50:  # Zone Strength สูง = cooldown ปานกลาง
+                    cooldown_hours = 2
+                else:  # Zone Strength ปกติ = cooldown ปกติ
+                    cooldown_hours = self.zone_cooldown_hours
+                
+                if time_since_used.total_seconds() < (cooldown_hours * 3600):
+                    logger.debug(f"🕒 Zone {zone['price']} on cooldown: {time_since_used.total_seconds()/3600:.1f}h < {cooldown_hours}h")
                     return True
             
             return False
@@ -421,10 +543,10 @@ class SmartEntrySystem:
                 # คำนวณระยะห่างระหว่าง Support/Resistance
                 range_size = abs(closest_resistance['price'] - closest_support['price']) * 10000  # pips
                 
-                # วิเคราะห์ความผันผวน
-                if range_size > 200:  # Range กว้าง = ตลาดผันผวน
+                # วิเคราะห์ความผันผวน (ปรับให้ยืดหยุ่นขึ้น)
+                if range_size > 300:  # เพิ่มเกณฑ์เป็น 300 pips = ตลาดผันผวน
                     market_conditions['volatility'] = 'high'
-                elif range_size < 80:  # Range แคบ = ตลาดนิ่ง
+                elif range_size < 50:  # ลดเกณฑ์เป็น 50 pips = ตลาดนิ่ง
                     market_conditions['volatility'] = 'low'
                 
                 # วิเคราะห์เทรนด์
@@ -434,11 +556,11 @@ class SmartEntrySystem:
                 elif current_price < pivot_point * 0.998:  # ราคาต่ำกว่า Pivot มาก = Downtrend
                     market_conditions['trend'] = 'downtrend'
                 
-                # ให้คำแนะนำการเข้าไม้
-                if market_conditions['volatility'] == 'low' and market_conditions['trend'] == 'sideways':
+                # ให้คำแนะนำการเข้าไม้ (ปรับใหม่ - ตลาดวิ่ง = โอกาสดี)
+                if market_conditions['volatility'] == 'high':
+                    market_conditions['entry_recommendation'] = 'high_volatility'  # ตลาดวิ่ง = โอกาสดีในการออกไม้
+                elif market_conditions['volatility'] == 'low' and market_conditions['trend'] == 'sideways':
                     market_conditions['entry_recommendation'] = 'favorable'  # ตลาดนิ่ง = เข้าไม้ได้ดี
-                elif market_conditions['volatility'] == 'high':
-                    market_conditions['entry_recommendation'] = 'caution'  # ตลาดผันผวน = ระวัง
                 elif market_conditions['trend'] in ['uptrend', 'downtrend']:
                     market_conditions['entry_recommendation'] = 'trend_following'  # ตลาดมีเทรนด์ = ตามเทรนด์
             
@@ -457,10 +579,11 @@ class SmartEntrySystem:
             volatility = market_conditions.get('volatility', 'normal')
             trend = market_conditions.get('trend', 'sideways')
             
-            # กรณีที่ตลาดผันผวนมาก - ห้ามเข้าไม้
-            if volatility == 'high':
-                logger.warning("🚫 [MARKET FILTER] High volatility - skipping entry")
-                return False
+            # กรณีที่ตลาดวิ่ง (High Volatility) - โอกาสดีในการออกไม้
+            if recommendation == 'high_volatility':
+                logger.info("🚀 [MARKET FILTER] High volatility detected - GREAT opportunity for profit taking!")
+                logger.info("💡 [MARKET FILTER] Market moving = More chances to close positions at profit")
+                return True
             
             # กรณีที่ตลาดนิ่งมาก - อนุญาตเข้าไม้
             if recommendation == 'favorable':
@@ -476,18 +599,17 @@ class SmartEntrySystem:
                     logger.info("✅ [MARKET FILTER] Downtrend + Resistance zone - good for SELL")
                     return True
                 else:
-                    logger.warning(f"🚫 [MARKET FILTER] Trend ({trend}) doesn't match zone type ({zone_type})")
-                    return False
+                    logger.info(f"✅ [MARKET FILTER] Trend following - allowing entry (trend: {trend}, zone: {zone_type})")
+                    return True  # อนุญาตเข้าไม้ในเทรนด์
             
             # กรณีปกติ - อนุญาตเข้าไม้
             if recommendation == 'neutral':
                 logger.info("✅ [MARKET FILTER] Normal market conditions - allowing entry")
                 return True
             
-            # กรณีอื่นๆ - ระวัง
-            if recommendation == 'caution':
-                logger.warning("⚠️ [MARKET FILTER] Market conditions require caution - skipping entry")
-                return False
+            # กรณีอื่นๆ - อนุญาตเข้าไม้ (ไม่บล็อก)
+            logger.info("✅ [MARKET FILTER] Allowing entry - no blocking conditions")
+            return True
             
             return True
             
@@ -496,28 +618,23 @@ class SmartEntrySystem:
             return True  # Default to allowing entry if error
     
     def _is_valid_entry_zone(self, zone: Dict, current_price: float) -> bool:
-        """✅ ตรวจสอบว่า Zone ใช้ได้หรือไม่"""
+        """✅ ตรวจสอบว่า Zone ใช้ได้หรือไม่ - แบบง่าย ไม่ซ้ำซ้อนกับเงื่อนไขอื่น"""
         try:
-            # ตรวจสอบ Zone Strength
-            if zone.get('strength', 0) < self.min_zone_strength:
-                logger.info(f"🚫 Zone {zone['price']} too weak: {zone.get('strength', 0)} < {self.min_zone_strength}")
-                return False
-            
-            # ตรวจสอบว่าใช้ Zone นี้แล้วหรือยัง
+            # ตรวจสอบว่าใช้ Zone นี้แล้วหรือยัง (Cooldown)
             zone_key = self._generate_zone_key(zone)
             if zone_key in self.used_zones:
-                logger.info(f"🚫 Zone {zone['price']} already used")
+                logger.debug(f"🚫 Zone {zone['price']} already used")
                 return False
             
-            # ตรวจสอบระยะห่างจากราคาปัจจุบัน
-            distance = abs(current_price - zone['price'])
-            max_distance = 200.0  # ระยะห่างสูงสุด 200 pips (เพิ่มจาก 50)
-            if distance > max_distance:
-                logger.info(f"🚫 Zone {zone['price']} too far: {distance:.1f} pips (max: {max_distance})")
-                return False
-            
-            # ตรวจสอบระยะห่างจากคำสั่งที่เปิดอยู่แล้ว (ป้องกันการเปิดคำสั่งใกล้กันเกินไป)
-            min_distance_from_existing = 35.0  # เพิ่มระยะห่างขั้นต่ำเป็น 35 pips จากคำสั่งที่มีอยู่
+            # ตรวจสอบระยะห่างจากคำสั่งที่เปิดอยู่แล้ว (ปรับตาม Zone Strength)
+            zone_strength_raw = zone.get('strength', 0)
+            if zone_strength_raw > 60:  # Zone Strength สูง = ลดระยะห่าง
+                min_distance_from_existing = 15.0
+            elif zone_strength_raw > 40:  # Zone Strength ปานกลาง
+                min_distance_from_existing = 25.0
+            else:  # Zone Strength ต่ำ = ระยะห่างปกติ
+                min_distance_from_existing = 35.0
+                
             if hasattr(self, 'order_manager') and self.order_manager and self.symbol:
                 try:
                     existing_positions = self.order_manager.get_positions_by_symbol(self.symbol)
@@ -525,7 +642,7 @@ class SmartEntrySystem:
                         if hasattr(position, 'price') and position.price > 0:
                             distance_from_existing = abs(zone['price'] - position.price) * 10000  # แปลงเป็น pips
                             if distance_from_existing < min_distance_from_existing:
-                                logger.warning(f"🚫 Zone {zone['price']} too close to existing position at {position.price}: {distance_from_existing:.1f} pips < {min_distance_from_existing} pips")
+                                logger.debug(f"🚫 Zone {zone['price']} too close to existing position: {distance_from_existing:.1f} pips < {min_distance_from_existing} pips")
                                 return False
                 except Exception as e:
                     logger.debug(f"⚠️ Could not check existing positions: {e}")
@@ -623,8 +740,9 @@ class SmartEntrySystem:
                     distance = abs(zone['price'] - current_price)
                     logger.warning(f"      {i}. {zone['price']:.5f} (Strength: {zone['strength']:.1f}, Distance: {distance:.5f})")
                 
-                logger.warning(f"🔧 [SMART ENTRY] Min Zone Strength: {self.min_zone_strength}")
-                logger.warning("🔧 [SMART ENTRY] Suggestion: ลด min_zone_strength หรือเพิ่ม zone_tolerance")
+                logger.warning(f"🔧 [SMART ENTRY] Min Zone Strength: {self.min_zone_strength} (normalized from 0-100 scale)")
+                logger.warning("🔧 [SMART ENTRY] Zone Strength Scale: Raw values 0-100, Normalized to 0-1 for comparison")
+                logger.warning("🔧 [SMART ENTRY] Example: Zone with strength 67.8 = 0.678 normalized")
                 return None
             
             # ตรวจสอบว่า Zone ใช้ได้หรือไม่
@@ -643,24 +761,30 @@ class SmartEntrySystem:
             # คำนวณ lot size แบบ dynamic (ปรับตาม Market Conditions)
             lot_size = self.calculate_dynamic_lot_size(selected_zone['strength'], selected_zone)
             
-            # ปรับ lot size ตาม Market Conditions
-            if market_conditions.get('volatility') == 'high':
-                lot_size *= 0.7  # ลด lot size ในตลาดผันผวน
-                logger.info(f"📊 [LOT ADJUSTMENT] High volatility - reduced lot size by 30%")
+            # ปรับ lot size ตาม Market Conditions (ปรับใหม่ - ตลาดวิ่ง = โอกาสดี)
+            if market_conditions.get('entry_recommendation') == 'high_volatility':
+                lot_size *= 1.3  # เพิ่ม lot size ในตลาดวิ่ง (โอกาสดีในการออกไม้)
+                logger.info(f"📊 [LOT ADJUSTMENT] High volatility - increased lot size by 30% (great opportunity!)")
             elif market_conditions.get('entry_recommendation') == 'favorable':
                 lot_size *= 1.2  # เพิ่ม lot size ในตลาดที่ดี
                 logger.info(f"📊 [LOT ADJUSTMENT] Favorable conditions - increased lot size by 20%")
+            elif market_conditions.get('volatility') == 'low':
+                lot_size *= 0.9  # ลด lot size ในตลาดนิ่ง
+                logger.info(f"📊 [LOT ADJUSTMENT] Low volatility - reduced lot size by 10%")
             
             # คำนวณเป้าหมายกำไรแบบ dynamic (ปรับตาม Market Conditions)
             profit_target = self.calculate_dynamic_profit_target(lot_size)
             
-            # ปรับ profit target ตาม Market Conditions
-            if market_conditions.get('volatility') == 'high':
-                profit_target *= 1.3  # เพิ่ม profit target ในตลาดผันผวน
-                logger.info(f"📊 [PROFIT ADJUSTMENT] High volatility - increased profit target by 30%")
+            # ปรับ profit target ตาม Market Conditions (ปรับใหม่ - ตลาดวิ่ง = โอกาสดี)
+            if market_conditions.get('entry_recommendation') == 'high_volatility':
+                profit_target *= 1.5  # เพิ่ม profit target ในตลาดวิ่ง (โอกาสดีในการออกไม้)
+                logger.info(f"📊 [PROFIT ADJUSTMENT] High volatility - increased profit target by 50% (great opportunity!)")
             elif market_conditions.get('entry_recommendation') == 'favorable':
                 profit_target *= 0.9  # ลด profit target ในตลาดที่ดี (ออกไม้เร็วขึ้น)
                 logger.info(f"📊 [PROFIT ADJUSTMENT] Favorable conditions - reduced profit target by 10%")
+            elif market_conditions.get('volatility') == 'low':
+                profit_target *= 1.1  # เพิ่ม profit target ในตลาดนิ่ง (ออกไม้ช้าขึ้น)
+                logger.info(f"📊 [PROFIT ADJUSTMENT] Low volatility - increased profit target by 10%")
             
             # สร้าง entry opportunity
             if zone_type == 'support':
@@ -694,6 +818,11 @@ class SmartEntrySystem:
             logger.info(f"📊 Market Conditions: {market_conditions.get('volatility', 'unknown')} volatility, "
                        f"{market_conditions.get('trend', 'unknown')} trend, "
                        f"Recommendation: {market_conditions.get('entry_recommendation', 'neutral')}")
+            
+            # เพิ่มข้อมูลพิเศษสำหรับตลาดวิ่ง
+            if market_conditions.get('entry_recommendation') == 'high_volatility':
+                logger.info(f"🚀 [HIGH VOLATILITY TRADE] Market is moving - Great opportunity for profit taking!")
+                logger.info(f"💡 [STRATEGY] Enter now to catch the movement and close at higher profit!")
             logger.info(f"🎯 Zone Quality: {selected_zone.get('touches', 0)} touches, "
                        f"{len(selected_zone.get('algorithms_used', []))} algorithms, "
                        f"Quality Score: {self._calculate_zone_quality_score(selected_zone):.1f}")
