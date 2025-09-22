@@ -12,9 +12,7 @@ import logging
 from typing import Dict, List, Optional, Any
 from datetime import datetime
 
-# Import enhanced position widgets
-from enhanced_position_widget import PositionStatusWidget, AsyncStatusUpdater, UpdateThrottler, LazyPositionLoader
-from gui_performance_optimizer import GUIPerformanceOptimizer
+# GUI แบบง่าย - ไม่มี enhanced widgets
 
 logger = logging.getLogger(__name__)
 
@@ -57,15 +55,8 @@ class TradingGUI:
         self.animation_queue = []  # คิว animation
         
         # 🚀 Enhanced Position Status System
-        self.async_status_updater = None  # Background status updater
         self.position_status_frame = None  # Frame สำหรับแสดง position status
         self.status_scroll_frame = None  # Scrollable frame
-        self.lazy_loader = LazyPositionLoader(batch_size=20)
-        self.update_throttler = UpdateThrottler(min_interval=2.0)
-        
-        # 🚀 Performance Optimizer - เริ่มช้าเพื่อป้องกัน GUI ค้าง
-        self.performance_optimizer = GUIPerformanceOptimizer(max_memory_mb=200)
-        # ไม่เริ่ม performance monitoring ทันที - รอให้ GUI โหลดเสร็จก่อน
         
         # สร้าง GUI components
         self.create_widgets()
@@ -74,8 +65,7 @@ class TradingGUI:
         # เริ่มต้นการอัพเดทข้อมูลเบาๆ หลังจาก GUI โหลดเสร็จ
         self.root.after(15000, self.start_light_update)  # รอ 15 วินาทีก่อนเริ่มอัพเดท
         
-        # 🚀 เริ่มการอัพเดท performance stats - ช้าเพื่อป้องกัน GUI ค้าง
-        self.root.after(30000, self.start_performance_monitoring)  # รอ 30 วินาที
+        # GUI แบบง่าย - ไม่มี performance monitoring
         
     def create_widgets(self):
         """สร้าง widgets ทั้งหมด - แบบง่าย Connect เท่านั้น"""
@@ -604,106 +594,14 @@ class TradingGUI:
     def refresh_performance_stats(self):
         """รีเฟรชสถิติประสิทธิภาพ"""
         try:
-            if not hasattr(self, 'performance_optimizer'):
-                return
-            
-            # ดึงรายงานประสิทธิภาพ
-            report = self.performance_optimizer.get_performance_report()
-            
-            if not report:
-                return
-            
-            # อัพเดท memory labels
-            if hasattr(self, 'memory_labels'):
-                memory_info = report.get('memory', {})
-                self.memory_labels['current'].config(text=f"Current: {memory_info.get('current_mb', 0):.1f} MB")
-                self.memory_labels['average'].config(text=f"Average: {memory_info.get('average_mb', 0):.1f} MB")
-                self.memory_labels['maximum'].config(text=f"Maximum: {memory_info.get('max_mb', 0):.1f} MB")
-                
-                # สีตามสถานะ
-                current_mb = memory_info.get('current_mb', 0)
-                limit_mb = memory_info.get('limit_mb', 200)
-                
-                if current_mb > limit_mb * 0.8:
-                    self.memory_labels['status'].config(text="Status: Warning", fg='#ffaa00')
-                elif current_mb > limit_mb * 0.9:
-                    self.memory_labels['status'].config(text="Status: Critical", fg='#ff4444')
-                else:
-                    self.memory_labels['status'].config(text="Status: Healthy", fg='#00ff88')
-            
-            # อัพเดท performance labels
-            if hasattr(self, 'performance_labels'):
-                perf_info = report.get('performance', {})
-                self.performance_labels['avg_response_time'].config(text=f"Avg Response: {perf_info.get('avg_response_time_ms', 0):.1f} ms")
-                self.performance_labels['max_response_time'].config(text=f"Max Response: {perf_info.get('max_response_time_ms', 0):.1f} ms")
-                self.performance_labels['avg_update_duration'].config(text=f"Avg Update: {perf_info.get('avg_update_duration_s', 0):.2f} s")
-                self.performance_labels['max_update_duration'].config(text=f"Max Update: {perf_info.get('max_update_duration_s', 0):.2f} s")
-            
-            # อัพเดท status monitor labels
-            if hasattr(self, 'status_monitor_labels'):
-                reliability_info = report.get('reliability', {})
-                error_count = reliability_info.get('error_count', 0)
-                success_count = reliability_info.get('success_count', 0)
-                success_rate = reliability_info.get('success_rate', 0)
-                
-                self.status_monitor_labels['total_operations'].config(text=f"Total Operations: {error_count + success_count}")
-                self.status_monitor_labels['error_count'].config(text=f"Errors: {error_count}")
-                self.status_monitor_labels['success_count'].config(text=f"Successes: {success_count}")
-                
-                # สี success rate
-                if success_rate >= 95:
-                    color = '#00ff88'
-                elif success_rate >= 90:
-                    color = '#ffaa00'
-                else:
-                    color = '#ff4444'
-                
-                self.status_monitor_labels['success_rate'].config(
-                    text=f"Success Rate: {success_rate:.1f}%",
-                    fg=color
-                )
-                
-                self.status_monitor_labels['widget_count'].config(text=f"Active Widgets: {len(self.position_widgets)}")
-                self.status_monitor_labels['last_update'].config(text=f"Last Update: {datetime.now().strftime('%H:%M:%S')}")
-            
-            logger.debug("📊 Performance stats refreshed")
+            # GUI แบบง่าย - ไม่มี performance monitoring
+            return
             
         except Exception as e:
             logger.error(f"❌ Error refreshing performance stats: {e}")
     
-    def start_performance_monitoring(self):
-        """เริ่มการติดตามประสิทธิภาพแบบอัตโนมัติ"""
-        try:
-            # เริ่ม performance optimizer
-            if self.performance_optimizer:
-                self.performance_optimizer.start_performance_monitoring()
-            
-            # รีเฟรช stats ครั้งแรก
-            self.refresh_performance_stats()
-            
-            # ตั้งเวลารีเฟรชทุก 60 วินาที (ลดความถี่เพื่อป้องกัน GUI ค้าง)
-            self.root.after(60000, self.schedule_performance_refresh)
-            
-            logger.info("🚀 Performance monitoring started")
-            
-        except Exception as e:
-            logger.error(f"❌ Error starting performance monitoring: {e}")
+    # GUI แบบง่าย - ไม่มี performance monitoring
     
-    def schedule_performance_refresh(self):
-        """กำหนดเวลารีเฟรช performance stats"""
-        try:
-            # รีเฟรช stats
-            self.refresh_performance_stats()
-            
-            # กำหนดครั้งต่อไป - ลดความถี่เป็น 60 วินาที
-            self.root.after(60000, self.schedule_performance_refresh)
-            
-        except Exception as e:
-            logger.error(f"❌ Error scheduling performance refresh: {e}")
-        
-        
-        
-        
         
     def create_positions_context_menu(self):
         """สร้างเมนูคลิกขวาสำหรับ Positions"""
@@ -1658,7 +1556,7 @@ class TradingGUI:
                     self.trading_system.stop_trading()
                     
                     # 🚀 หยุด Async Status Updater
-                    self.root.after(0, self.stop_async_status_updates)
+                    # GUI แบบง่าย - ไม่มี async status updates
                     
                     # อัพเดท GUI ใน main thread
                     self.root.after(0, lambda: self.update_trading_status(False))
@@ -1749,7 +1647,7 @@ class TradingGUI:
             self.stop_update = True
             
             # 🚀 หยุด Async Status Updater
-            self.stop_async_status_updates()
+            # GUI แบบง่าย - ไม่มี async status updates
             
             # หยุดการเทรดก่อน
             if hasattr(self, 'trading_system') and self.trading_system.is_running:
@@ -1763,11 +1661,7 @@ class TradingGUI:
             self.clear_position_widgets()
             
             # 🧹 หยุด performance monitoring
-            if hasattr(self, 'performance_optimizer'):
-                try:
-                    self.performance_optimizer = None
-                except:
-                    pass
+            # GUI แบบง่าย - ไม่มี performance optimizer
                 
             # ตัดการเชื่อมต่อ MT5
             try:
@@ -1996,52 +1890,8 @@ class TradingGUI:
             logger.error(f"❌ Error getting animation status: {e}")
             return {}
     
-    def start_async_status_updates(self):
-        """🚀 เริ่ม Async Status Updates - ป้องกัน GUI ค้าง"""
-        try:
-            if not self.trading_system:
-                logger.warning("🚫 No trading system available for status updates")
-                return
-            
-            # ตรวจสอบว่า position_status_manager มีอยู่หรือไม่
-            if not hasattr(self.trading_system, 'status_manager') or not self.trading_system.status_manager:
-                logger.warning("🚫 No status manager available")
-                return
-            
-            # รอ 5 วินาทีก่อนเริ่มเพื่อให้ GUI เสถียร
-            self.root.after(5000, self._delayed_start_async_updates)
-            
-        except Exception as e:
-            logger.error(f"❌ Error starting async status updates: {e}")
+    # GUI แบบง่าย - ไม่มี async status updates
     
-    def _delayed_start_async_updates(self):
-        """เริ่ม Async Updates แบบล่าช้า"""
-        try:
-            # สร้าง AsyncStatusUpdater
-            self.async_status_updater = AsyncStatusUpdater(
-                gui_instance=self,
-                status_manager=self.trading_system.status_manager,
-                update_interval=10.0  # เพิ่มเป็น 10 วินาทีเพื่อลด load
-            )
-            
-            # เริ่ม background updates
-            self.async_status_updater.start_background_updates()
-            
-            logger.info("🚀 Async Status Updates started (delayed)")
-            
-        except Exception as e:
-            logger.error(f"❌ Error in delayed async status updates: {e}")
-    
-    def stop_async_status_updates(self):
-        """🛑 หยุด Async Status Updates"""
-        try:
-            if self.async_status_updater:
-                self.async_status_updater.stop_background_updates()
-                self.async_status_updater = None
-                logger.info("🛑 Async Status Updates stopped")
-            
-        except Exception as e:
-            logger.error(f"❌ Error stopping async status updates: {e}")
     
     def update_position_status_display(self, status_results: Dict[int, Any]):
         """🚀 อัพเดทแสดงผลสถานะ (เรียกจาก Main Thread เท่านั้น)"""
@@ -2056,9 +1906,7 @@ class TradingGUI:
                 return
             
             # ตรวจสอบ throttling
-            if not self.performance_optimizer.should_update('position_status'):
-                logger.debug("⏱️ Position status update throttled")
-                return
+            # GUI แบบง่าย - ไม่มี throttling
             
             # อัพเดท status info labels
             self._update_status_info_labels(status_results)
@@ -2081,13 +1929,12 @@ class TradingGUI:
             
             # บันทึกประสิทธิภาพ
             update_duration = time.time() - start_time
-            self.performance_optimizer.record_update_duration('position_status', update_duration)
-            self.performance_optimizer.record_success('position_status_update')
+            # GUI แบบง่าย - ไม่มี performance metrics
             
             logger.debug(f"🔄 Updated {len(status_results)} position statuses ({update_duration:.3f}s)")
             
         except Exception as e:
-            self.performance_optimizer.record_error('position_status_update')
+            # GUI แบบง่าย - ไม่มี error recording
             logger.error(f"❌ Error updating position status display: {e}")
     
     def _update_status_info_labels(self, status_results: Dict[int, Any]):
