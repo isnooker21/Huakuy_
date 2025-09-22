@@ -1053,6 +1053,7 @@ class AdaptiveTradingSystemGUI:
         except Exception as e:
             logger.error(f"🔗 [HEDGE CREATION] Error: {e}")
     
+
     def _can_create_hedge_pair(self, buy_pos: Any, sell_pos: Any) -> bool:
         """🤝 ตรวจสอบว่าสามารถสร้าง Hedge Pair ได้หรือไม่"""
         try:
@@ -1097,9 +1098,10 @@ class AdaptiveTradingSystemGUI:
             
             logger.info(f"🔗 [HEDGE CREATED] Pair {pair_id}: BUY ${hedge_pair['buy_profit']:.2f} + "
                        f"SELL ${hedge_pair['sell_profit']:.2f} = ${hedge_pair['combined_profit']:.2f}")
-                
+            
         except Exception as e:
             logger.error(f"🔗 [HEDGE CREATION] Error: {e}")
+
     
     def _should_close_hedge_pair(self, hedge_pair: Dict, current_candle: CandleData) -> bool:
         """✅ ตรวจสอบว่าควรปิด Hedge Pair หรือไม่"""

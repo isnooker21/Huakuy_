@@ -48,24 +48,39 @@ class GroupClosingManager:
         self.order_manager = order_manager
         self.mt5_connection = mt5_connection
         
-        # 🎯 Dynamic Minimum Profit Configuration
+        # 🎯 Enhanced Dynamic Minimum Profit Configuration - เครียไม้ได้ไวไม่ปิดติดลบ
         self.min_profit_config = {
-            'base_amount': 2.0,      # กำไรขั้นต่ำพื้นฐาน
-            'multiplier': 1.5,       # คูณตามจำนวนไม้
-            'max_amount': 20.0,      # กำไรสูงสุด
+            'base_amount': 0.5,      # ลดกำไรขั้นต่ำจาก $2.0 เป็น $0.5
+            'multiplier': 0.8,       # ลดคูณจาก 1.5 เป็น 0.8
+            'max_amount': 10.0,      # ลดกำไรสูงสุดจาก $20.0 เป็น $10.0
             'group_type_multipliers': {
-                'PROTECTED_HG': 1.0,
-                'PROTECTED_HG_HELPER': 1.2,
-                'MULTI_GROUP': 1.5
+                'PERFECT_BALANCE': 0.5,      # 1:1 ratio - ปิดเร็ว
+                'NEAR_BALANCE': 0.7,         # 2:1, 1:2 ratio
+                'DISTANCE_PRIORITY': 0.3,    # ไม้ไกลจากราคาปัจจุบัน
+                'RESCUE_PAIRING': 0.8,       # ช่วยไม้ขาดทุน
+                'EMERGENCY_PAIRING': 1.0,    # ฉุกเฉิน
+                'FLEXIBLE_PAIRING': 1.2,     # ยืดหยุ่นสูงสุด
+                'PROTECTED_HG': 0.6,
+                'PROTECTED_HG_HELPER': 0.8,
+                'MULTI_GROUP': 1.0
             }
         }
         
-        # 📊 Group Formation Settings
+        # 📊 Enhanced Group Formation Settings - จับคู่ได้หลากหลายไม่จำกัด
         self.group_settings = {
-            'max_group_size': 10,        # จำนวนไม้สูงสุดในกลุ่ม
-            'min_profit_margin': 0.1,    # กำไรขั้นต่ำ 10%
-            'max_loss_tolerance': -5.0,  # ขาดทุนสูงสุดที่ยอมรับ
-            'helper_selection_radius': 50.0  # ระยะห่างสูงสุดสำหรับเลือก Helper
+            'max_group_size': 15,        # เพิ่มจาก 10 เป็น 15 ไม้
+            'min_profit_margin': 0.05,   # ลดจาก 10% เป็น 5%
+            'max_loss_tolerance': -8.0,  # เพิ่มจาก -5.0 เป็น -8.0
+            'helper_selection_radius': 80.0,  # เพิ่มจาก 50.0 เป็น 80.0
+            'enable_flexible_pairing': True,   # เปิดการจับคู่ยืดหยุ่น
+            'enable_distance_priority': True,  # เปิดการจับคู่ตามระยะห่าง
+            'enable_multi_position_groups': True,  # เปิดกลุ่มไม้หลายตัว
+            'max_pairs_per_cycle': 20,   # สร้างคู่ได้สูงสุด 20 คู่ต่อรอบ
+            'time_based_closing': {
+                'quick_profit_hours': 6,     # ปิดไม้กำไรที่ 6 ชั่วโมง
+                'standard_hours': 12,        # ปิดไม้มาตรฐานที่ 12 ชั่วโมง
+                'emergency_hours': 24        # ปิดไม้ฉุกเฉินที่ 24 ชั่วโมง
+            }
         }
         
         # 🔄 Tracking
@@ -284,42 +299,388 @@ class GroupClosingManager:
             logger.error(f"❌ [HELPER SELECTION] Error selecting helpers: {e}")
             return ProfitHelperSelection([], 0.0, [], f"Error: {e}")
     
-    def calculate_dynamic_minimum_profit(self, position_count: int, group_type: str) -> float:
+    def calculate_dynamic_minimum_profit(self, position_count: int, group_type: str, current_price: float = None) -> float:
         """
-        คำนวณกำไรขั้นต่ำแบบ Dynamic
+        คำนวณกำไรขั้นต่ำแบบ Dynamic แบบยืดหยุ่น - เครียไม้ได้ไวไม่ปิดติดลบ
         
         Args:
             position_count: int - จำนวนไม้ในกลุ่ม
             group_type: str - ประเภทกลุ่ม
+            current_price: float - ราคาปัจจุบัน (สำหรับคำนวณระยะห่าง)
             
         Returns:
             float - กำไรขั้นต่ำที่ต้องการ
         """
         try:
-            # กำไรพื้นฐาน
+            # กำไรพื้นฐาน (ลดลงแล้ว)
             base_amount = self.min_profit_config['base_amount']
             
-            # คูณตามจำนวนไม้
+            # คูณตามจำนวนไม้ (ลดลงแล้ว)
             multiplier = self.min_profit_config['multiplier']
             position_multiplier = (position_count - 1) * multiplier
             
-            # คูณตามประเภทกลุ่ม
+            # คูณตามประเภทกลุ่ม (เพิ่มประเภทใหม่)
             group_multiplier = self.min_profit_config['group_type_multipliers'].get(group_type, 1.0)
             
             # คำนวณกำไรขั้นต่ำ
             min_profit = (base_amount + position_multiplier) * group_multiplier
             
+            # 🎯 เงื่อนไขพิเศษตามประเภทกลุ่ม
+            
+            # Distance Priority - ปิดไม้ไกลจากราคาปัจจุบันก่อน
+            if group_type == 'DISTANCE_PRIORITY' and current_price:
+                min_profit = min(min_profit, 0.3)  # ลดเหลือ $0.3
+            
+            # Rescue Pairing - ช่วยไม้ขาดทุน
+            elif group_type == 'RESCUE_PAIRING':
+                min_profit = max(min_profit, -1.0)  # อนุญาตติดลบ -$1.0
+            
+            # Emergency Pairing - ฉุกเฉิน
+            elif group_type == 'EMERGENCY_PAIRING':
+                min_profit = max(min_profit, -2.0)  # อนุญาตติดลบ -$2.0
+            
+            # Flexible Pairing - ยืดหยุ่นสูงสุด
+            elif group_type == 'FLEXIBLE_PAIRING':
+                min_profit = max(min_profit, -3.0)  # อนุญาตติดลบ -$3.0
+            
+            # Perfect Balance - ปิดเร็ว
+            elif group_type == 'PERFECT_BALANCE':
+                min_profit = min(min_profit, 0.2)  # ลดเหลือ $0.2
+            
+            # Near Balance - ปิดเร็วขึ้น
+            elif group_type == 'NEAR_BALANCE':
+                min_profit = min(min_profit, 0.4)  # ลดเหลือ $0.4
+            
             # จำกัดไม่เกินค่าสูงสุด
             max_amount = self.min_profit_config['max_amount']
             min_profit = min(min_profit, max_amount)
             
-            logger.debug(f"💰 [MIN PROFIT] Position count: {position_count}, Group type: {group_type}, Min profit: ${min_profit:.2f}")
+            logger.debug(f"💰 [ENHANCED MIN PROFIT] Position count: {position_count}, Group type: {group_type}, Min profit: ${min_profit:.2f}")
             
             return min_profit
             
         except Exception as e:
-            logger.error(f"❌ [MIN PROFIT] Error calculating minimum profit: {e}")
+            logger.error(f"❌ [ENHANCED MIN PROFIT] Error calculating minimum profit: {e}")
             return self.min_profit_config['base_amount']
+    
+    def analyze_enhanced_closing_opportunities(self, positions: List[Any], position_statuses: Dict, 
+                                             current_price: float) -> List[ClosingGroup]:
+        """
+        วิเคราะห์โอกาสปิดออเดอร์แบบยืดหยุ่น - เครียไม้ได้ไวไม่ปิดติดลบ
+        """
+        try:
+            logger.info(f"🎯 [ENHANCED CLOSING] Starting enhanced analysis with {len(positions)} positions")
+            
+            # 1. จับคู่แบบ Perfect Balance (1:1)
+            perfect_groups = self._form_perfect_balance_groups(positions, position_statuses, current_price)
+            
+            # 2. จับคู่แบบ Near Balance (2:1, 1:2)
+            near_groups = self._form_near_balance_groups(positions, position_statuses, current_price)
+            
+            # 3. จับคู่แบบ Distance Priority (ไม้ไกลจากราคาปัจจุบัน)
+            distance_groups = self._form_distance_priority_groups(positions, position_statuses, current_price)
+            
+            # 4. จับคู่แบบ Rescue Pairing (ช่วยไม้ขาดทุน)
+            rescue_groups = self._form_rescue_pairing_groups(positions, position_statuses, current_price)
+            
+            # 5. จับคู่แบบ Emergency Pairing (ฉุกเฉิน)
+            emergency_groups = self._form_emergency_pairing_groups(positions, position_statuses, current_price)
+            
+            # 6. จับคู่แบบ Flexible Pairing (ยืดหยุ่นสูงสุด)
+            flexible_groups = self._form_flexible_pairing_groups(positions, position_statuses, current_price)
+            
+            # รวมกลุ่มทั้งหมด
+            all_groups = perfect_groups + near_groups + distance_groups + rescue_groups + emergency_groups + flexible_groups
+            
+            # เรียงตาม priority และกำไร
+            all_groups.sort(key=lambda x: (x.priority if hasattr(x, 'priority') else 0, x.total_profit), reverse=True)
+            
+            # จำกัดจำนวนกลุ่ม
+            max_groups = self.group_settings.get('max_pairs_per_cycle', 20)
+            selected_groups = all_groups[:max_groups]
+            
+            logger.info(f"🎯 [ENHANCED CLOSING] Found {len(selected_groups)} enhanced closing opportunities")
+            
+            return selected_groups
+            
+        except Exception as e:
+            logger.error(f"❌ [ENHANCED CLOSING] Error in enhanced analysis: {e}")
+            return []
+    
+    def _form_perfect_balance_groups(self, positions: List[Any], position_statuses: Dict, current_price: float) -> List[ClosingGroup]:
+        """สร้างกลุ่ม Perfect Balance (1:1 ratio)"""
+        try:
+            groups = []
+            buy_positions = [p for p in positions if getattr(p, 'type', 0) == 0]
+            sell_positions = [p for p in positions if getattr(p, 'type', 0) == 1]
+            
+            # จับคู่ 1:1
+            for i in range(min(len(buy_positions), len(sell_positions))):
+                buy_pos = buy_positions[i]
+                sell_pos = sell_positions[i]
+                
+                total_profit = getattr(buy_pos, 'profit', 0) + getattr(sell_pos, 'profit', 0)
+                min_profit_required = self.calculate_dynamic_minimum_profit(2, 'PERFECT_BALANCE', current_price)
+                
+                if total_profit >= min_profit_required:
+                    group = ClosingGroup(
+                        group_id=f"PERFECT_BALANCE_{getattr(buy_pos, 'ticket', 0)}_{getattr(sell_pos, 'ticket', 0)}",
+                        group_type="PERFECT_BALANCE",
+                        positions=[buy_pos, sell_pos],
+                        total_profit=total_profit,
+                        min_profit_required=min_profit_required,
+                        can_close=True,
+                        reason=f"Perfect Balance (1:1) - Profit: ${total_profit:.2f}",
+                        protected_positions=[],
+                        hg_positions=[],
+                        helper_positions=[],
+                        created_time=time.time()
+                    )
+                    groups.append(group)
+            
+            return groups
+            
+        except Exception as e:
+            logger.error(f"❌ [PERFECT BALANCE] Error forming groups: {e}")
+            return []
+    
+    def _form_near_balance_groups(self, positions: List[Any], position_statuses: Dict, current_price: float) -> List[ClosingGroup]:
+        """สร้างกลุ่ม Near Balance (2:1, 1:2 ratio)"""
+        try:
+            groups = []
+            buy_positions = [p for p in positions if getattr(p, 'type', 0) == 0]
+            sell_positions = [p for p in positions if getattr(p, 'type', 0) == 1]
+            
+            # จับคู่ 2:1
+            for i in range(min(len(buy_positions) // 2, len(sell_positions))):
+                buy_pos1 = buy_positions[i * 2]
+                buy_pos2 = buy_positions[i * 2 + 1]
+                sell_pos = sell_positions[i]
+                
+                total_profit = (getattr(buy_pos1, 'profit', 0) + 
+                              getattr(buy_pos2, 'profit', 0) + 
+                              getattr(sell_pos, 'profit', 0))
+                min_profit_required = self.calculate_dynamic_minimum_profit(3, 'NEAR_BALANCE', current_price)
+                
+                if total_profit >= min_profit_required:
+                    group = ClosingGroup(
+                        group_id=f"NEAR_BALANCE_2:1_{getattr(buy_pos1, 'ticket', 0)}_{getattr(sell_pos, 'ticket', 0)}",
+                        group_type="NEAR_BALANCE",
+                        positions=[buy_pos1, buy_pos2, sell_pos],
+                        total_profit=total_profit,
+                        min_profit_required=min_profit_required,
+                        can_close=True,
+                        reason=f"Near Balance (2:1) - Profit: ${total_profit:.2f}",
+                        protected_positions=[],
+                        hg_positions=[],
+                        helper_positions=[],
+                        created_time=time.time()
+                    )
+                    groups.append(group)
+            
+            # จับคู่ 1:2
+            for i in range(min(len(buy_positions), len(sell_positions) // 2)):
+                buy_pos = buy_positions[i]
+                sell_pos1 = sell_positions[i * 2]
+                sell_pos2 = sell_positions[i * 2 + 1]
+                
+                total_profit = (getattr(buy_pos, 'profit', 0) + 
+                              getattr(sell_pos1, 'profit', 0) + 
+                              getattr(sell_pos2, 'profit', 0))
+                min_profit_required = self.calculate_dynamic_minimum_profit(3, 'NEAR_BALANCE', current_price)
+                
+                if total_profit >= min_profit_required:
+                    group = ClosingGroup(
+                        group_id=f"NEAR_BALANCE_1:2_{getattr(buy_pos, 'ticket', 0)}_{getattr(sell_pos1, 'ticket', 0)}",
+                        group_type="NEAR_BALANCE",
+                        positions=[buy_pos, sell_pos1, sell_pos2],
+                        total_profit=total_profit,
+                        min_profit_required=min_profit_required,
+                        can_close=True,
+                        reason=f"Near Balance (1:2) - Profit: ${total_profit:.2f}",
+                        protected_positions=[],
+                        hg_positions=[],
+                        helper_positions=[],
+                        created_time=time.time()
+                    )
+                    groups.append(group)
+            
+            return groups
+            
+        except Exception as e:
+            logger.error(f"❌ [NEAR BALANCE] Error forming groups: {e}")
+            return []
+    
+    def _form_distance_priority_groups(self, positions: List[Any], position_statuses: Dict, current_price: float) -> List[ClosingGroup]:
+        """สร้างกลุ่ม Distance Priority (ไม้ไกลจากราคาปัจจุบัน)"""
+        try:
+            groups = []
+            
+            # หาไม้ที่ไกลจากราคาปัจจุบัน
+            distant_positions = []
+            for pos in positions:
+                price_open = getattr(pos, 'price_open', 0)
+                distance = abs(price_open - current_price) if current_price else 0
+                
+                if distance >= 20.0:  # ไม้ไกลจากราคาปัจจุบัน 20 points ขึ้นไป
+                    distant_positions.append((pos, distance))
+            
+            # เรียงตามระยะห่าง (ไกลที่สุดก่อน)
+            distant_positions.sort(key=lambda x: x[1], reverse=True)
+            
+            # จับคู่ไม้ไกล
+            buy_distant = [p for p, d in distant_positions if getattr(p, 'type', 0) == 0]
+            sell_distant = [p for p, d in distant_positions if getattr(p, 'type', 0) == 1]
+            
+            for i in range(min(len(buy_distant), len(sell_distant))):
+                buy_pos = buy_distant[i]
+                sell_pos = sell_distant[i]
+                
+                total_profit = getattr(buy_pos, 'profit', 0) + getattr(sell_pos, 'profit', 0)
+                min_profit_required = self.calculate_dynamic_minimum_profit(2, 'DISTANCE_PRIORITY', current_price)
+                
+                if total_profit >= min_profit_required:
+                    group = ClosingGroup(
+                        group_id=f"DISTANCE_PRIORITY_{getattr(buy_pos, 'ticket', 0)}_{getattr(sell_pos, 'ticket', 0)}",
+                        group_type="DISTANCE_PRIORITY",
+                        positions=[buy_pos, sell_pos],
+                        total_profit=total_profit,
+                        min_profit_required=min_profit_required,
+                        can_close=True,
+                        reason=f"Distance Priority - Profit: ${total_profit:.2f}",
+                        protected_positions=[],
+                        hg_positions=[],
+                        helper_positions=[],
+                        created_time=time.time()
+                    )
+                    groups.append(group)
+            
+            return groups
+            
+        except Exception as e:
+            logger.error(f"❌ [DISTANCE PRIORITY] Error forming groups: {e}")
+            return []
+    
+    def _form_rescue_pairing_groups(self, positions: List[Any], position_statuses: Dict, current_price: float) -> List[ClosingGroup]:
+        """สร้างกลุ่ม Rescue Pairing (ช่วยไม้ขาดทุน)"""
+        try:
+            groups = []
+            
+            # หาไม้ขาดทุน
+            losing_positions = [p for p in positions if getattr(p, 'profit', 0) <= -5.0]
+            profitable_positions = [p for p in positions if getattr(p, 'profit', 0) > 0]
+            
+            # จับคู่ไม้ขาดทุนกับไม้กำไร
+            for losing_pos in losing_positions:
+                for profit_pos in profitable_positions:
+                    total_profit = getattr(losing_pos, 'profit', 0) + getattr(profit_pos, 'profit', 0)
+                    min_profit_required = self.calculate_dynamic_minimum_profit(2, 'RESCUE_PAIRING', current_price)
+                    
+                    if total_profit >= min_profit_required:
+                        group = ClosingGroup(
+                            group_id=f"RESCUE_PAIRING_{getattr(losing_pos, 'ticket', 0)}_{getattr(profit_pos, 'ticket', 0)}",
+                            group_type="RESCUE_PAIRING",
+                            positions=[losing_pos, profit_pos],
+                            total_profit=total_profit,
+                            min_profit_required=min_profit_required,
+                            can_close=True,
+                            reason=f"Rescue Pairing - Profit: ${total_profit:.2f}",
+                            protected_positions=[],
+                            hg_positions=[],
+                            helper_positions=[],
+                            created_time=time.time()
+                        )
+                        groups.append(group)
+                        break  # ใช้ไม้กำไรตัวหนึ่งช่วยไม้ขาดทุนตัวหนึ่ง
+            
+            return groups
+            
+        except Exception as e:
+            logger.error(f"❌ [RESCUE PAIRING] Error forming groups: {e}")
+            return []
+    
+    def _form_emergency_pairing_groups(self, positions: List[Any], position_statuses: Dict, current_price: float) -> List[ClosingGroup]:
+        """สร้างกลุ่ม Emergency Pairing (ฉุกเฉิน)"""
+        try:
+            groups = []
+            
+            # หาไม้ที่ขาดทุนมาก
+            emergency_positions = [p for p in positions if getattr(p, 'profit', 0) <= -10.0]
+            
+            # จับคู่ไม้ฉุกเฉิน
+            buy_emergency = [p for p in emergency_positions if getattr(p, 'type', 0) == 0]
+            sell_emergency = [p for p in emergency_positions if getattr(p, 'type', 0) == 1]
+            
+            for i in range(min(len(buy_emergency), len(sell_emergency))):
+                buy_pos = buy_emergency[i]
+                sell_pos = sell_emergency[i]
+                
+                total_profit = getattr(buy_pos, 'profit', 0) + getattr(sell_pos, 'profit', 0)
+                min_profit_required = self.calculate_dynamic_minimum_profit(2, 'EMERGENCY_PAIRING', current_price)
+                
+                if total_profit >= min_profit_required:
+                    group = ClosingGroup(
+                        group_id=f"EMERGENCY_PAIRING_{getattr(buy_pos, 'ticket', 0)}_{getattr(sell_pos, 'ticket', 0)}",
+                        group_type="EMERGENCY_PAIRING",
+                        positions=[buy_pos, sell_pos],
+                        total_profit=total_profit,
+                        min_profit_required=min_profit_required,
+                        can_close=True,
+                        reason=f"Emergency Pairing - Profit: ${total_profit:.2f}",
+                        protected_positions=[],
+                        hg_positions=[],
+                        helper_positions=[],
+                        created_time=time.time()
+                    )
+                    groups.append(group)
+            
+            return groups
+            
+        except Exception as e:
+            logger.error(f"❌ [EMERGENCY PAIRING] Error forming groups: {e}")
+            return []
+    
+    def _form_flexible_pairing_groups(self, positions: List[Any], position_statuses: Dict, current_price: float) -> List[ClosingGroup]:
+        """สร้างกลุ่ม Flexible Pairing (ยืดหยุ่นสูงสุด)"""
+        try:
+            groups = []
+            
+            # หาไม้ที่เหลือทั้งหมด
+            remaining_positions = positions
+            
+            # จับคู่แบบยืดหยุ่น (ไม่จำกัดอัตราส่วน)
+            buy_positions = [p for p in remaining_positions if getattr(p, 'type', 0) == 0]
+            sell_positions = [p for p in remaining_positions if getattr(p, 'type', 0) == 1]
+            
+            # จับคู่ไม้ที่เหลือ
+            for i in range(min(len(buy_positions), len(sell_positions))):
+                buy_pos = buy_positions[i]
+                sell_pos = sell_positions[i]
+                
+                total_profit = getattr(buy_pos, 'profit', 0) + getattr(sell_pos, 'profit', 0)
+                min_profit_required = self.calculate_dynamic_minimum_profit(2, 'FLEXIBLE_PAIRING', current_price)
+                
+                if total_profit >= min_profit_required:
+                    group = ClosingGroup(
+                        group_id=f"FLEXIBLE_PAIRING_{getattr(buy_pos, 'ticket', 0)}_{getattr(sell_pos, 'ticket', 0)}",
+                        group_type="FLEXIBLE_PAIRING",
+                        positions=[buy_pos, sell_pos],
+                        total_profit=total_profit,
+                        min_profit_required=min_profit_required,
+                        can_close=True,
+                        reason=f"Flexible Pairing - Profit: ${total_profit:.2f}",
+                        protected_positions=[],
+                        hg_positions=[],
+                        helper_positions=[],
+                        created_time=time.time()
+                    )
+                    groups.append(group)
+            
+            return groups
+            
+        except Exception as e:
+            logger.error(f"❌ [FLEXIBLE PAIRING] Error forming groups: {e}")
+            return []
     
     def execute_group_closing(self, closing_group: ClosingGroup) -> Dict[str, Any]:
         """

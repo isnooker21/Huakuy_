@@ -601,7 +601,7 @@ class TradingGUI:
             logger.error(f"❌ Error refreshing performance stats: {e}")
     
     # GUI แบบง่าย - ไม่มี performance monitoring
-    
+        
         
     def create_positions_context_menu(self):
         """สร้างเมนูคลิกขวาสำหรับ Positions"""
@@ -1808,11 +1808,8 @@ class TradingGUI:
     def _update_position_widget(self, ticket: int, status_obj: Any):
         """🖥️ อัพเดท Widget ของ Position"""
         try:
-            # สร้าง Widget ใหม่ถ้ายังไม่มี
-            if ticket not in self.position_widgets:
-                self._create_position_widget(ticket)
-            
-            widget = self.position_widgets[ticket]
+            # GUI แบบง่าย - ไม่มี position widget
+            return
             
             # อัพเดทข้อมูล
             status_text = f"#{ticket}: {status_obj.status}"
@@ -1829,32 +1826,7 @@ class TradingGUI:
         except Exception as e:
             logger.error(f"❌ Error updating position widget: {e}")
     
-    def _create_position_widget(self, ticket: int):
-        """🖥️ สร้าง Widget สำหรับ Position"""
-        try:
-            # สร้าง Frame สำหรับ Position
-            frame = tk.Frame(self.root, relief='raised', bd=1)
-            frame.pack(fill='x', padx=5, pady=2)
-            
-            # สร้าง Label สำหรับแสดงข้อมูล
-            label = tk.Label(
-                frame,
-                text=f"#{ticket}: Loading...",
-                font=('Arial', 10),
-                bg='#ffffff',
-                fg='#000000',
-                relief='raised',
-                bd=1,
-                padx=10,
-                pady=5
-            )
-            label.pack(fill='x')
-            
-            # เก็บ Widget
-            self.position_widgets[ticket] = label
-            
-        except Exception as e:
-            logger.error(f"❌ Error creating position widget: {e}")
+    # GUI แบบง่าย - ไม่มี position widget
     
     def clear_position_widgets(self):
         """🧹 ล้าง Position Widgets ทั้งหมด"""
@@ -1867,10 +1839,7 @@ class TradingGUI:
             self.last_status_display.clear()
             self.animation_queue.clear()
             
-            # รีเซ็ต lazy loader
-            self.lazy_loader.loaded_positions.clear()
-            self.lazy_loader.loaded_widgets.clear()
-            self.lazy_loader.load_order.clear()
+            # GUI แบบง่าย - ไม่มี lazy loader
             
             logger.info("🧹 [GUI] Cleared all position widgets")
             
@@ -1920,12 +1889,10 @@ class TradingGUI:
                     position_data = self._convert_status_to_position_data(status_obj)
                     widget.update_status(position_data)
                 else:
-                    # สร้าง Widget ใหม่ (ใช้ lazy loading)
-                    if self.lazy_loader.is_loaded(ticket) or len(self.position_widgets) < 30:
-                        self._create_position_widget(ticket, status_obj)
+                    # GUI แบบง่าย - ไม่มี position widget
+                    pass
             
-            # ลบ widgets ของ positions ที่ปิดแล้ว
-            self._cleanup_closed_positions(status_results)
+            # GUI แบบง่าย - ไม่มี position widgets
             
             # บันทึกประสิทธิภาพ
             update_duration = time.time() - start_time

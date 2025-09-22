@@ -1,7 +1,7 @@
 import MetaTrader5 as mt5
 import numpy as np
 from datetime import datetime, timedelta
-from typing import List, Dict, Tuple, Optional
+from typing import List, Dict, Tuple, Optional, Any
 import logging
 
 logger = logging.getLogger(__name__)
@@ -14,19 +14,32 @@ class SmartEntrySystem:
         self.zone_analyzer = zone_analyzer
         self.symbol = None  # จะถูกตั้งค่าจาก main system
         
-        # Entry Parameters (ปรับใหม่ตาม Demand & Supply)
+        # Entry Parameters (ปรับใหม่ให้แม่นยำขึ้น)
         self.support_buy_enabled = True      # เปิด Support entries (BUY ที่ Support)
         self.resistance_sell_enabled = True  # เปิด Resistance entries (SELL ที่ Resistance)
         
-        # Dynamic Calculation Parameters - ปรับให้แม่นยำขึ้น
-        self.profit_target_pips = 25  # เป้าหมายกำไร 25 pips ต่อ lot (ลดเพื่อความแม่นยำ)
-        self.loss_threshold_pips = 25  # เกณฑ์ขาดทุน 25 pips ต่อ lot (ลดเพื่อความแม่นยำ)
-        self.recovery_zone_strength = 8  # Zone strength สำหรับ Recovery (เพิ่มเพื่อคุณภาพ)
-        self.min_zone_strength = 0.05  # Zone strength ขั้นต่ำสำหรับเข้าไม้ (เพิ่มเพื่อคุณภาพ)
+        # Enhanced Zone Selection Parameters - ปรับให้แม่นยำขึ้น
+        self.profit_target_pips = 35  # เพิ่มเป้าหมายกำไรเป็น 35 pips (ลดความถี่การออกไม้)
+        self.loss_threshold_pips = 30  # เพิ่มเกณฑ์ขาดทุนเป็น 30 pips (ลดความถี่การออกไม้)
+        self.recovery_zone_strength = 10  # เพิ่ม Zone strength สำหรับ Recovery
+        self.min_zone_strength = 0.08  # เพิ่ม Zone strength ขั้นต่ำ (เลือกเฉพาะ Zone แข็งแกร่ง)
+        self.min_zone_touches = 3  # Zone ต้องแตะอย่างน้อย 3 ครั้ง
+        self.min_algorithms_detected = 2  # Zone ต้องถูกพบจากอย่างน้อย 2 algorithms
         
-        # Risk Management (Dynamic) - ปรับให้เหมาะสมกับ XAUUSD
-        self.risk_percent_per_trade = 0.02  # เพิ่มเป็น 2% ของ balance ต่อ trade (เพิ่ม lot size)
-        self.max_daily_trades = 30  # ลดจำนวน trade ต่อวัน (คุณภาพเหนือปริมาณ)
+        # Enhanced Risk Management - ปรับให้เหมาะสมกับการเทรดคุณภาพ
+        self.risk_percent_per_trade = 0.015  # ลดเป็น 1.5% ของ balance ต่อ trade (คุณภาพเหนือปริมาณ)
+        self.max_daily_trades = 15  # ลดจำนวน trade ต่อวัน (คุณภาพเหนือปริมาณ)
+        
+        # Zone Quality Filters - กรอง Zone ให้แม่นยำขึ้น
+        self.min_zone_distance_pips = 30  # Zone ต้องห่างจากราคาปัจจุบันอย่างน้อย 30 pips
+        self.max_zone_distance_pips = 150  # Zone ไม่ควรห่างเกิน 150 pips
+        self.zone_cooldown_hours = 6  # Zone ใช้แล้วต้องรอ 6 ชั่วโมงถึงจะใช้ใหม่
+        self.min_time_between_trades = 120  # รออย่างน้อย 2 นาทีระหว่าง trades
+        
+        # Market Condition Filters - ปรับการเข้าไม้ตามสภาพตลาด
+        self.volatility_threshold = 0.8  # เกณฑ์ความผันผวน (ต่ำกว่า = ตลาดนิ่ง, สูงกว่า = ตลาดผันผวน)
+        self.trend_strength_threshold = 0.6  # เกณฑ์ความแข็งแกร่งของเทรนด์
+        self.volume_threshold = 1.2  # เกณฑ์ Volume (ต่ำกว่า = Volume ต่ำ, สูงกว่า = Volume สูง)
         
         # Lot Size Management
         self.min_lot_size = 0.01
@@ -203,77 +216,284 @@ class SmartEntrySystem:
             return current_price  # fallback
     
     def select_zone_by_pivot_and_strength(self, current_price: float, zones: Dict[str, List[Dict]]) -> Tuple[Optional[str], Optional[Dict]]:
-        """🎯 เลือก Zone ตาม Pivot Point + Zone Strength (วิธี C) - ปรับปรุงให้ตรวจสอบระยะห่าง"""
+        """🎯 เลือก Zone แบบ Enhanced - กรอง Zone ให้แม่นยำขึ้น"""
         try:
             # คำนวณ Pivot Point
             pivot_point = self.calculate_pivot_point(current_price, zones)
             support_zones = zones.get('support', [])
             resistance_zones = zones.get('resistance', [])
             
-            # แสดงราคาใกล้เคียงกับ current_price (ลด log)
-            if support_zones:
-                closest_support = min(support_zones, key=lambda x: abs(x['price'] - current_price))
-                distance_support = abs(closest_support['price'] - current_price)
-            if resistance_zones:
-                closest_resistance = min(resistance_zones, key=lambda x: abs(x['price'] - current_price))
-                distance_resistance = abs(closest_resistance['price'] - current_price)
-            
-            logger.info(f"🔍 [ZONE SELECTION] Price: {current_price:.5f}, Pivot: {pivot_point:.5f}")
-            logger.info(f"🔍 [ZONE SELECTION] Zones: {len(support_zones)} support, {len(resistance_zones)} resistance")
-            if support_zones:
-                logger.info(f"🔍 [ZONE SELECTION] Closest support: {closest_support['price']:.5f} (distance: {distance_support:.5f})")
-            if resistance_zones:
-                logger.info(f"🔍 [ZONE SELECTION] Closest resistance: {closest_resistance['price']:.5f} (distance: {distance_resistance:.5f})")
+            logger.info(f"🔍 [ENHANCED ZONE SELECTION] Price: {current_price:.5f}, Pivot: {pivot_point:.5f}")
+            logger.info(f"🔍 [ENHANCED ZONE SELECTION] Raw Zones: {len(support_zones)} support, {len(resistance_zones)} resistance")
             
             if not support_zones or not resistance_zones:
-                logger.warning("🚫 [ZONE SELECTION] No support or resistance zones available")
+                logger.warning("🚫 [ENHANCED ZONE SELECTION] No support or resistance zones available")
+                return None, None
+            
+            # 🎯 Enhanced Zone Filtering - กรอง Zone ให้แม่นยำขึ้น
+            filtered_supports = self._filter_high_quality_zones(support_zones, current_price, 'support')
+            filtered_resistances = self._filter_high_quality_zones(resistance_zones, current_price, 'resistance')
+            
+            logger.info(f"🔍 [ENHANCED ZONE SELECTION] Filtered Zones: {len(filtered_supports)} support, {len(filtered_resistances)} resistance")
+            
+            if not filtered_supports and not filtered_resistances:
+                logger.warning("🚫 [ENHANCED ZONE SELECTION] No high-quality zones found after filtering")
                 return None, None
             
             # ตรวจสอบระยะห่างระหว่าง support และ resistance ที่ใกล้ที่สุด
-            min_distance_pips = 50.0  # ระยะห่างขั้นต่ำ 50 pips
-            if support_zones and resistance_zones:
-                closest_support_price = min(support_zones, key=lambda x: abs(x['price'] - current_price))['price']
-                closest_resistance_price = min(resistance_zones, key=lambda x: abs(x['price'] - current_price))['price']
+            min_distance_pips = 60.0  # เพิ่มระยะห่างขั้นต่ำเป็น 60 pips
+            if filtered_supports and filtered_resistances:
+                closest_support_price = min(filtered_supports, key=lambda x: abs(x['price'] - current_price))['price']
+                closest_resistance_price = min(filtered_resistances, key=lambda x: abs(x['price'] - current_price))['price']
                 distance_between_zones = abs(closest_support_price - closest_resistance_price) * 10000  # แปลงเป็น pips
                 
-                logger.info(f"🔍 [ZONE SELECTION] Distance between closest zones: {distance_between_zones:.1f} pips")
+                logger.info(f"🔍 [ENHANCED ZONE SELECTION] Distance between closest zones: {distance_between_zones:.1f} pips")
                 
                 if distance_between_zones < min_distance_pips:
-                    logger.warning(f"🚫 [ZONE SELECTION] Zones too close: {distance_between_zones:.1f} pips < {min_distance_pips} pips")
-                    logger.warning(f"🚫 [ZONE SELECTION] Support: {closest_support_price:.5f}, Resistance: {closest_resistance_price:.5f}")
+                    logger.warning(f"🚫 [ENHANCED ZONE SELECTION] Zones too close: {distance_between_zones:.1f} pips < {min_distance_pips} pips")
                     return None, None
             
-            # เลือก Zone ตาม Pivot Point (ปรับให้เลือกที่ใกล้ที่สุด)
+            # 🎯 เลือก Zone ตาม Pivot Point + Quality Score
             if current_price < pivot_point:
-                # ราคาต่ำกว่า Pivot → หา Support ที่ใกล้ที่สุด
-                valid_supports = [zone for zone in support_zones if zone['strength'] >= self.min_zone_strength]
-                logger.info(f"🔍 [ZONE SELECTION] Looking for SUPPORT zones. Valid: {len(valid_supports)} (min_strength: {self.min_zone_strength})")
-                
-                if valid_supports:
-                    # เลือก Support ที่ใกล้ที่สุดและแข็งแกร่งพอ
-                    best_support = min(valid_supports, key=lambda x: abs(current_price - x['price']))
-                    logger.info(f"✅ [ZONE SELECTION] Selected SUPPORT: {best_support['price']:.5f} (strength: {best_support['strength']:.1f})")
-                    return 'support', best_support
-                else:
-                    logger.warning("🚫 [ZONE SELECTION] No valid SUPPORT zones found")
+                # ราคาต่ำกว่า Pivot → หา Support ที่ดีที่สุด
+                if filtered_supports:
+                    best_support = self._select_best_zone(filtered_supports, current_price)
+                    if best_support:
+                        logger.info(f"✅ [ENHANCED ZONE SELECTION] Selected SUPPORT: {best_support['price']:.5f} (strength: {best_support['strength']:.1f}, touches: {best_support.get('touches', 0)})")
+                        return 'support', best_support
+                logger.warning("🚫 [ENHANCED ZONE SELECTION] No valid SUPPORT zones found")
             else:
-                # ราคาสูงกว่า Pivot → หา Resistance ที่ใกล้ที่สุด
-                valid_resistances = [zone for zone in resistance_zones if zone['strength'] >= self.min_zone_strength]
-                logger.info(f"🔍 [ZONE SELECTION] Looking for RESISTANCE zones. Valid: {len(valid_resistances)} (min_strength: {self.min_zone_strength})")
-                
-                if valid_resistances:
-                    # เลือก Resistance ที่ใกล้ที่สุดและแข็งแกร่งพอ
-                    best_resistance = min(valid_resistances, key=lambda x: abs(current_price - x['price']))
-                    logger.info(f"✅ [ZONE SELECTION] Selected RESISTANCE: {best_resistance['price']:.5f} (strength: {best_resistance['strength']:.1f})")
-                    return 'resistance', best_resistance
-                else:
-                    logger.warning("🚫 [ZONE SELECTION] No valid RESISTANCE zones found")
+                # ราคาสูงกว่า Pivot → หา Resistance ที่ดีที่สุด
+                if filtered_resistances:
+                    best_resistance = self._select_best_zone(filtered_resistances, current_price)
+                    if best_resistance:
+                        logger.info(f"✅ [ENHANCED ZONE SELECTION] Selected RESISTANCE: {best_resistance['price']:.5f} (strength: {best_resistance['strength']:.1f}, touches: {best_resistance.get('touches', 0)})")
+                        return 'resistance', best_resistance
+                logger.warning("🚫 [ENHANCED ZONE SELECTION] No valid RESISTANCE zones found")
             
             return None, None
             
         except Exception as e:
-            logger.error(f"❌ Error selecting zone by pivot and strength: {e}")
+            logger.error(f"❌ Error in enhanced zone selection: {e}")
             return None, None
+    
+    def _filter_high_quality_zones(self, zones: List[Dict], current_price: float, zone_type: str) -> List[Dict]:
+        """🎯 กรอง Zone ให้เหลือเฉพาะ Zone คุณภาพสูง"""
+        try:
+            filtered_zones = []
+            
+            for zone in zones:
+                # 1. ตรวจสอบ Zone Strength
+                if zone.get('strength', 0) < self.min_zone_strength:
+                    continue
+                
+                # 2. ตรวจสอบจำนวน Touches
+                touches = zone.get('touches', 0)
+                if touches < self.min_zone_touches:
+                    continue
+                
+                # 3. ตรวจสอบจำนวน Algorithms ที่พบ Zone นี้
+                algorithms_used = zone.get('algorithms_used', [])
+                if isinstance(algorithms_used, list) and len(algorithms_used) < self.min_algorithms_detected:
+                    continue
+                
+                # 4. ตรวจสอบระยะห่างจากราคาปัจจุบัน
+                distance_pips = abs(zone['price'] - current_price) * 10000
+                if distance_pips < self.min_zone_distance_pips or distance_pips > self.max_zone_distance_pips:
+                    continue
+                
+                # 5. ตรวจสอบว่า Zone ใช้แล้วหรือยัง (Cooldown)
+                if self._is_zone_on_cooldown(zone):
+                    continue
+                
+                # 6. ตรวจสอบ Zone Validity
+                if self._is_valid_entry_zone(zone, current_price):
+                    filtered_zones.append(zone)
+            
+            # เรียงตาม Quality Score (Strength + Touches + Algorithms)
+            filtered_zones.sort(key=lambda x: self._calculate_zone_quality_score(x), reverse=True)
+            
+            logger.info(f"🔍 [ZONE FILTERING] {zone_type.upper()}: {len(zones)} → {len(filtered_zones)} zones after filtering")
+            
+            return filtered_zones
+            
+        except Exception as e:
+            logger.error(f"❌ Error filtering high-quality zones: {e}")
+            return []
+    
+    def _calculate_zone_quality_score(self, zone: Dict) -> float:
+        """🎯 คำนวณ Quality Score ของ Zone"""
+        try:
+            strength = zone.get('strength', 0)
+            touches = zone.get('touches', 0)
+            algorithms_used = zone.get('algorithms_used', [])
+            zone_count = zone.get('zone_count', 1)
+            
+            # คำนวณ Score
+            score = 0.0
+            
+            # Strength Score (40%)
+            score += strength * 40
+            
+            # Touches Score (30%)
+            score += min(touches, 10) * 3  # สูงสุด 10 touches
+            
+            # Algorithms Score (20%)
+            score += len(algorithms_used) * 2
+            
+            # Zone Count Score (10%)
+            score += min(zone_count, 5) * 2  # สูงสุด 5 zones
+            
+            return score
+            
+        except Exception as e:
+            logger.error(f"❌ Error calculating zone quality score: {e}")
+            return 0.0
+    
+    def _select_best_zone(self, zones: List[Dict], current_price: float) -> Optional[Dict]:
+        """🎯 เลือก Zone ที่ดีที่สุดจากรายการ Zone ที่กรองแล้ว"""
+        try:
+            if not zones:
+                return None
+            
+            # เลือก Zone ที่มี Quality Score สูงสุดและไม่ไกลเกินไป
+            best_zone = None
+            best_score = -1
+            
+            for zone in zones[:5]:  # ดูแค่ 5 Zone แรก (เรียงตาม Quality Score แล้ว)
+                quality_score = self._calculate_zone_quality_score(zone)
+                distance_pips = abs(zone['price'] - current_price) * 10000
+                
+                # ให้คะแนนเพิ่มสำหรับ Zone ที่ไม่ไกลเกินไป
+                if distance_pips <= 80:  # Zone ที่ใกล้ (≤80 pips)
+                    quality_score *= 1.2
+                elif distance_pips <= 120:  # Zone ที่ปานกลาง (≤120 pips)
+                    quality_score *= 1.1
+                
+                if quality_score > best_score:
+                    best_score = quality_score
+                    best_zone = zone
+            
+            return best_zone
+            
+        except Exception as e:
+            logger.error(f"❌ Error selecting best zone: {e}")
+            return None
+    
+    def _is_zone_on_cooldown(self, zone: Dict) -> bool:
+        """🕒 ตรวจสอบว่า Zone อยู่ในช่วง Cooldown หรือไม่"""
+        try:
+            zone_key = self._generate_zone_key(zone)
+            
+            if zone_key in self.used_zones:
+                last_used = self.used_zones[zone_key]['timestamp']
+                time_since_used = datetime.now() - last_used
+                
+                if time_since_used.total_seconds() < (self.zone_cooldown_hours * 3600):
+                    logger.debug(f"🕒 Zone {zone['price']} on cooldown: {time_since_used.total_seconds()/3600:.1f}h < {self.zone_cooldown_hours}h")
+                    return True
+            
+            return False
+            
+        except Exception as e:
+            logger.error(f"❌ Error checking zone cooldown: {e}")
+            return False
+    
+    def _analyze_market_conditions(self, current_price: float, zones: Dict[str, List[Dict]]) -> Dict[str, Any]:
+        """📊 วิเคราะห์สภาพตลาดเพื่อปรับการเข้าไม้"""
+        try:
+            market_conditions = {
+                'volatility': 'normal',
+                'trend': 'sideways',
+                'volume': 'normal',
+                'entry_recommendation': 'neutral'
+            }
+            
+            # คำนวณความผันผวนจาก Support/Resistance
+            support_zones = zones.get('support', [])
+            resistance_zones = zones.get('resistance', [])
+            
+            if support_zones and resistance_zones:
+                # หา Support และ Resistance ที่ใกล้ที่สุด
+                closest_support = min(support_zones, key=lambda x: abs(x['price'] - current_price))
+                closest_resistance = min(resistance_zones, key=lambda x: abs(x['price'] - current_price))
+                
+                # คำนวณระยะห่างระหว่าง Support/Resistance
+                range_size = abs(closest_resistance['price'] - closest_support['price']) * 10000  # pips
+                
+                # วิเคราะห์ความผันผวน
+                if range_size > 200:  # Range กว้าง = ตลาดผันผวน
+                    market_conditions['volatility'] = 'high'
+                elif range_size < 80:  # Range แคบ = ตลาดนิ่ง
+                    market_conditions['volatility'] = 'low'
+                
+                # วิเคราะห์เทรนด์
+                pivot_point = self.calculate_pivot_point(current_price, zones)
+                if current_price > pivot_point * 1.002:  # ราคาสูงกว่า Pivot มาก = Uptrend
+                    market_conditions['trend'] = 'uptrend'
+                elif current_price < pivot_point * 0.998:  # ราคาต่ำกว่า Pivot มาก = Downtrend
+                    market_conditions['trend'] = 'downtrend'
+                
+                # ให้คำแนะนำการเข้าไม้
+                if market_conditions['volatility'] == 'low' and market_conditions['trend'] == 'sideways':
+                    market_conditions['entry_recommendation'] = 'favorable'  # ตลาดนิ่ง = เข้าไม้ได้ดี
+                elif market_conditions['volatility'] == 'high':
+                    market_conditions['entry_recommendation'] = 'caution'  # ตลาดผันผวน = ระวัง
+                elif market_conditions['trend'] in ['uptrend', 'downtrend']:
+                    market_conditions['entry_recommendation'] = 'trend_following'  # ตลาดมีเทรนด์ = ตามเทรนด์
+            
+            logger.info(f"📊 [MARKET CONDITIONS] Volatility: {market_conditions['volatility']}, Trend: {market_conditions['trend']}, Recommendation: {market_conditions['entry_recommendation']}")
+            
+            return market_conditions
+            
+        except Exception as e:
+            logger.error(f"❌ Error analyzing market conditions: {e}")
+            return {'volatility': 'normal', 'trend': 'sideways', 'volume': 'normal', 'entry_recommendation': 'neutral'}
+    
+    def _should_enter_based_on_market_conditions(self, market_conditions: Dict[str, Any], zone_type: str) -> bool:
+        """🎯 ตัดสินใจว่าควรเข้าไม้หรือไม่ตามสภาพตลาด"""
+        try:
+            recommendation = market_conditions.get('entry_recommendation', 'neutral')
+            volatility = market_conditions.get('volatility', 'normal')
+            trend = market_conditions.get('trend', 'sideways')
+            
+            # กรณีที่ตลาดผันผวนมาก - ห้ามเข้าไม้
+            if volatility == 'high':
+                logger.warning("🚫 [MARKET FILTER] High volatility - skipping entry")
+                return False
+            
+            # กรณีที่ตลาดนิ่งมาก - อนุญาตเข้าไม้
+            if recommendation == 'favorable':
+                logger.info("✅ [MARKET FILTER] Market conditions favorable for entry")
+                return True
+            
+            # กรณีที่ตลาดมีเทรนด์ - ตรวจสอบทิศทาง
+            if recommendation == 'trend_following':
+                if trend == 'uptrend' and zone_type == 'support':
+                    logger.info("✅ [MARKET FILTER] Uptrend + Support zone - good for BUY")
+                    return True
+                elif trend == 'downtrend' and zone_type == 'resistance':
+                    logger.info("✅ [MARKET FILTER] Downtrend + Resistance zone - good for SELL")
+                    return True
+                else:
+                    logger.warning(f"🚫 [MARKET FILTER] Trend ({trend}) doesn't match zone type ({zone_type})")
+                    return False
+            
+            # กรณีปกติ - อนุญาตเข้าไม้
+            if recommendation == 'neutral':
+                logger.info("✅ [MARKET FILTER] Normal market conditions - allowing entry")
+                return True
+            
+            # กรณีอื่นๆ - ระวัง
+            if recommendation == 'caution':
+                logger.warning("⚠️ [MARKET FILTER] Market conditions require caution - skipping entry")
+                return False
+            
+            return True
+            
+        except Exception as e:
+            logger.error(f"❌ Error checking market conditions for entry: {e}")
+            return True  # Default to allowing entry if error
     
     def _is_valid_entry_zone(self, zone: Dict, current_price: float) -> bool:
         """✅ ตรวจสอบว่า Zone ใช้ได้หรือไม่"""
@@ -297,7 +517,7 @@ class SmartEntrySystem:
                 return False
             
             # ตรวจสอบระยะห่างจากคำสั่งที่เปิดอยู่แล้ว (ป้องกันการเปิดคำสั่งใกล้กันเกินไป)
-            min_distance_from_existing = 20.0  # ระยะห่างขั้นต่ำ 20 pips จากคำสั่งที่มีอยู่
+            min_distance_from_existing = 35.0  # เพิ่มระยะห่างขั้นต่ำเป็น 35 pips จากคำสั่งที่มีอยู่
             if hasattr(self, 'order_manager') and self.order_manager and self.symbol:
                 try:
                     existing_positions = self.order_manager.get_positions_by_symbol(self.symbol)
@@ -342,12 +562,16 @@ class SmartEntrySystem:
             expired_zones = []
             
             for zone_key, zone_data in self.used_zones.items():
-                # ลบ zones ที่ใช้แล้วเกิน 24 ชั่วโมง
-                if current_time - zone_data['timestamp'] > timedelta(hours=24):
+                # ลบ zones ที่ใช้แล้วเกิน cooldown period
+                cooldown_hours = self.zone_cooldown_hours + 12  # เพิ่ม 12 ชั่วโมงเพื่อให้แน่ใจว่าใช้ได้
+                if current_time - zone_data['timestamp'] > timedelta(hours=cooldown_hours):
                     expired_zones.append(zone_key)
             
             for zone_key in expired_zones:
                 del self.used_zones[zone_key]
+                
+            if expired_zones:
+                logger.info(f"🧹 [ZONE CLEANUP] Removed {len(expired_zones)} expired zones from cooldown")
                 
         except Exception as e:
             logger.error(f"❌ Error cleaning up used zones: {e}")
@@ -373,9 +597,8 @@ class SmartEntrySystem:
             # ตรวจสอบเวลาระหว่างคำสั่งซื้อและขาย (ป้องกันการเปิดคำสั่งใกล้กันเกินไป)
             if hasattr(self, 'last_trade_time') and self.last_trade_time is not None:
                 time_since_last_trade = (datetime.now() - self.last_trade_time).total_seconds()
-                min_time_between_trades = 30.0  # ระยะเวลาขั้นต่ำ 30 วินาที
-                if time_since_last_trade < min_time_between_trades:
-                    logger.debug(f"🚫 Too soon since last trade: {time_since_last_trade:.1f}s < {min_time_between_trades}s")
+                if time_since_last_trade < self.min_time_between_trades:
+                    logger.debug(f"🚫 Too soon since last trade: {time_since_last_trade:.1f}s < {self.min_time_between_trades}s")
                     return None
             
             # 🎯 เลือก Zone ตาม Pivot Point + Zone Strength (วิธี C)
@@ -410,11 +633,34 @@ class SmartEntrySystem:
                 logger.warning(f"   Current Price: {current_price:.2f}, Zone Price: {selected_zone['price']:.2f}")
                 return None
             
-            # คำนวณ lot size แบบ dynamic
+            # 🎯 ตรวจสอบ Market Conditions ก่อนเข้าไม้
+            market_conditions = self._analyze_market_conditions(current_price, zones)
+            if not self._should_enter_based_on_market_conditions(market_conditions, zone_type):
+                logger.warning(f"🚫 [MARKET FILTER] Entry blocked by market conditions")
+                logger.warning(f"   Market: {market_conditions.get('volatility', 'unknown')} volatility, {market_conditions.get('trend', 'unknown')} trend")
+                return None
+            
+            # คำนวณ lot size แบบ dynamic (ปรับตาม Market Conditions)
             lot_size = self.calculate_dynamic_lot_size(selected_zone['strength'], selected_zone)
             
-            # คำนวณเป้าหมายกำไรแบบ dynamic
+            # ปรับ lot size ตาม Market Conditions
+            if market_conditions.get('volatility') == 'high':
+                lot_size *= 0.7  # ลด lot size ในตลาดผันผวน
+                logger.info(f"📊 [LOT ADJUSTMENT] High volatility - reduced lot size by 30%")
+            elif market_conditions.get('entry_recommendation') == 'favorable':
+                lot_size *= 1.2  # เพิ่ม lot size ในตลาดที่ดี
+                logger.info(f"📊 [LOT ADJUSTMENT] Favorable conditions - increased lot size by 20%")
+            
+            # คำนวณเป้าหมายกำไรแบบ dynamic (ปรับตาม Market Conditions)
             profit_target = self.calculate_dynamic_profit_target(lot_size)
+            
+            # ปรับ profit target ตาม Market Conditions
+            if market_conditions.get('volatility') == 'high':
+                profit_target *= 1.3  # เพิ่ม profit target ในตลาดผันผวน
+                logger.info(f"📊 [PROFIT ADJUSTMENT] High volatility - increased profit target by 30%")
+            elif market_conditions.get('entry_recommendation') == 'favorable':
+                profit_target *= 0.9  # ลด profit target ในตลาดที่ดี (ออกไม้เร็วขึ้น)
+                logger.info(f"📊 [PROFIT ADJUSTMENT] Favorable conditions - reduced profit target by 10%")
             
             # สร้าง entry opportunity
             if zone_type == 'support':
@@ -435,12 +681,22 @@ class SmartEntrySystem:
                 'zone_type': zone_type,
                 'lot_size': lot_size,
                 'profit_target': profit_target,
-                'loss_threshold': self.calculate_dynamic_loss_threshold(lot_size)
+                'loss_threshold': self.calculate_dynamic_loss_threshold(lot_size),
+                'market_conditions': market_conditions,  # เพิ่มข้อมูล Market Conditions
+                'zone_touches': selected_zone.get('touches', 0),
+                'zone_algorithms': len(selected_zone.get('algorithms_used', [])),
+                'quality_score': self._calculate_zone_quality_score(selected_zone)
             }
             
             logger.info(f"🎯 Entry Opportunity: {direction.upper()} at {current_price:.5f} "
                        f"(Zone: {selected_zone['price']:.5f}, Strength: {selected_zone['strength']}, "
                        f"Lot: {lot_size:.2f}, Target: ${profit_target:.2f})")
+            logger.info(f"📊 Market Conditions: {market_conditions.get('volatility', 'unknown')} volatility, "
+                       f"{market_conditions.get('trend', 'unknown')} trend, "
+                       f"Recommendation: {market_conditions.get('entry_recommendation', 'neutral')}")
+            logger.info(f"🎯 Zone Quality: {selected_zone.get('touches', 0)} touches, "
+                       f"{len(selected_zone.get('algorithms_used', []))} algorithms, "
+                       f"Quality Score: {self._calculate_zone_quality_score(selected_zone):.1f}")
             
             logger.info(f"✅ [SMART ENTRY] Entry opportunity created successfully - Ready for execution")
             return entry_opportunity
